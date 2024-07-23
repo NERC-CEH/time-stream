@@ -1,7 +1,7 @@
-mypackage
+dritimeseriesprocessor
 =========
 
 .. toctree::
    :maxdepth: 4
 
-   mypackage
+   dritimeseriesprocessor

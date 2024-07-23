@@ -66,14 +66,14 @@ pip install -e .[dev]
 
 ### Making it Your Own
 
-This repo has a single package in the `./src/...` path called `mypackage` (creative I know). Change this to the name of your package and update it in:
+This repo has a single package in the `./src/...` path called `dritimeseriesprocessor` (creative I know). Change this to the name of your package and update it in:
 
 * `docs/conf.py`
 * `src/**/*.py`
 * `tests/**/*.py`
 * `pyproject.toml`
 
-To make thing move a bit faster, use the script `./rename-package.sh` to rename all references of `mypackage` to whatever you like. For example:
+To make thing move a bit faster, use the script `./rename-package.sh` to rename all references of `dritimeseriesprocessor` to whatever you like. For example:
 
 ```
 ./rename-package.sh "acoolnewname"
@@ -88,7 +88,7 @@ cd docs
 make apidoc
 ```
 
-To keep your documentation in sync with the package name. You may need to delete a file called `mypackage.rst` from `./docs/sources/...`
+To keep your documentation in sync with the package name. You may need to delete a file called `dritimeseriesprocessor.rst` from `./docs/sources/...`
 
 ### Deploying Docs to GitHub Pages
 

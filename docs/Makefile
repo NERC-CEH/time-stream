@@ -20,4 +20,4 @@ help:
 	@$(SPHINXBUILD) -M $@ "$(SOURCEDIR)" "$(BUILDDIR)" $(SPHINXOPTS) $(O)
 
 apidoc:
-	@sphinx-apidoc -f ../src/mypackage -o sources
+	@sphinx-apidoc -f ../src/dritimeseriesprocessor -o sources

@@ -1,13 +1,13 @@
-mypackage package
+dritimeseriesprocessor package
 =================
 
 Submodules
 ----------
 
-mypackage.module module
+dritimeseriesprocessor.module module
 -----------------------
 
-.. automodule:: mypackage.module
+.. automodule:: dritimeseriesprocessor.module
    :members:
    :undoc-members:
    :show-inheritance:
@@ -15,7 +15,7 @@ mypackage.module module
 Module contents
 ---------------
 
-.. automodule:: mypackage
+.. automodule:: dritimeseriesprocessor
    :members:
    :undoc-members:
    :show-inheritance:
