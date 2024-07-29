@@ -5,7 +5,8 @@ requires = ["setuptools >= 61.0", "autosemver"]
 [project]
 requires-python = ">=3.12"
 dependencies = [
-    "autosemver"
+    "autosemver",
+    "pydantic>=2.8.2",
 ]
 name = "dritimeseriesprocessor"
 dynamic = ["version"]
