@@ -24,7 +24,6 @@ authors = [
     {name = "Richard Smith", email = "ricsmi@ceh.ac.uk"},
 ]
 description = "Timeseries processor service for FDRI."
-requires-python = ">=3.12"
 readme = "README.md"
 license = {text = "NO LICENSE"}
 
