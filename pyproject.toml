@@ -67,4 +67,3 @@ select = ["F", "E", "W", "A", "PLC", "PLE", "PLW", "I", "N816", "ANN001", "ANN20
 
 [tool.ruff.lint.flake8-type-checking]
 strict = true
-[tool.pdm]
