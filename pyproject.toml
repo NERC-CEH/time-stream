@@ -10,7 +10,6 @@ dependencies = [
     "config>=0.5.1",
     "moto>=5.0.10",
     "polars>=1.1.0",
-    "pandas>=2.2.2",
     "pyarrow>=17.0.0",
     "pydantic>=2.8.2",
 ]
@@ -40,6 +39,9 @@ version = { attr = "dritimeseriesprocessor.__version__" }
 [tool.setuptools.packages.find]
 where = ["src"]
 include = ["dritimeseriesprocessor*"]
+
+[tool.setuptools.package-data]
+"*" = ["*.*"]
 
 [tool.pytest.ini_options]
 addopts = "--cov=dritimeseriesprocessor"
