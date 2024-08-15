@@ -31,8 +31,6 @@ pip install '.[dev]'
 python -m dritimeseriesprocessor
 ```
 
-Reading from s3 is managed by `__assets__/filter_config.json`. `columns` is optional - if no key then all columns will be read in.
-
 ## Linting
 Linting uses ruff using the config in pyproject.toml
 ```
