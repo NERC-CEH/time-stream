@@ -58,7 +58,7 @@ git config --local core.hooksPath .githooks/
 ## localstack
 Local stack is used to create local AWS resources for testing the app locally. `localstack-setup.sh` is run when the container is initialised which creates the buckets and loads the sample parquet files.
 
-Run ```docker compose --profile tsp_localstack up``` to build.
+Run ```docker compose up``` to build.
 
 # How to Develop This App
 
