@@ -23,7 +23,7 @@ source .myenv/bin/activate
 ### Installing the App
 
 ```commandline
-pip install '.[dev]'
+pip install -e '.[dev]'
 ```
 
 ## Running the app
