@@ -16,8 +16,8 @@ brew install python@3.12
 
 ### Setting up and activating a virtual environment
 ```commandline
-python -m venv .myvenv
-source .myenv/bin/activate
+python -m venv .venv
+source .venv/bin/activate
 ```
 
 ### Installing the App
@@ -28,6 +28,7 @@ pip install -e '.[dev]'
 
 ## Running the app
 ```commandline
+docker compose up -d
 python -m dritimeseriesprocessor
 ```
 
