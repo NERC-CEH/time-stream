@@ -21,11 +21,6 @@ The datetime() method will return the ordinal value "n" for all
 all datetime objects where:
     datetime >= period.datetime( n ) and
     datetime < period.datetime( n+1 )
-
-The Period abstract class is the public face of this module. Ideally
-all external code will only ever use this class and the methods and
-properties that it exposes.  Everything else in this module should
-be considered private and subject to change.
 """
 # pylint: disable=consider-using-f-string,too-many-lines
 from abc import (
@@ -49,27 +44,11 @@ import datetime as dt
 import re
 
 def _naive( datetime_obj: dt.datetime ) -> dt.datetime:
-    """Return a datetime object without a tzinfo
-
-    Args:
-        datetime_obj: The input datetime object
-
-    Returns:
-        A datetime object where tzinfo is None
-    """
     if datetime_obj.tzinfo is None:
         return datetime_obj
     return datetime_obj.replace( tzinfo = None )
 
 def _gregorian_seconds( datetime_obj: dt.datetime ) -> int:
-    """Calculate number of seconds since the "day epoch"
-
-    Args:
-        datetime_obj: The input datetime object
-
-    Returns:
-        The number of seconds between the suppled datetime and the "day epoch"
-    """
     return (
         ( datetime_obj.toordinal() * 86_400 ) +
         ( ( datetime_obj.hour * 60 + datetime_obj.minute ) * 60 +
@@ -77,19 +56,6 @@ def _gregorian_seconds( datetime_obj: dt.datetime ) -> int:
         )
 
 def _period_regex( prefix: str ) -> str:
-    """Return a regular expression string for matching an ISO 8601 duration
-       (but without the initial "P" character)
-
-    Args:
-        prefix: The name prefix used for Python regex group names
-
-    The _period_match function can be used to extract data from such
-    a regular expression.
-
-    Returns:
-        A string containing a regular expression that can be used to
-        parse an ISO 8601 duration
-    """
     return (
         fr"(?:(?P<{prefix}_years>\d+)[Yy])?"
         fr"(?:(?P<{prefix}_months>\d+)[Mm])?"
@@ -106,14 +72,7 @@ def _period_regex( prefix: str ) -> str:
 # DateTimeAdjusters
 # ------------------------------------------------------------------------------
 def year_shift( date_time: dt.datetime , shift_amount: int ) -> dt.datetime:
-    """Shift a datetime object by a given number of years (+ve or -ve)
-
-    Args:
-        date_time: The date_time object to be shifted
-
-    Returns:
-        A datetime object
-    """
+    """Shift datetime by given number of years"""
     if shift_amount == 0:
         return date_time
     year = date_time.year
@@ -127,14 +86,7 @@ def year_shift( date_time: dt.datetime , shift_amount: int ) -> dt.datetime:
                               day = min( day , days_in_month ) )
 
 def month_shift( date_time: dt.datetime , shift_amount: int ) -> dt.datetime:
-    """Shift a datetime object by a given number of months (+ve or -ve)
-
-    Args:
-        date_time: The date_time object to be shifted
-
-    Returns:
-        A datetime object
-    """
+    """Shift datetime by given number of months"""
     if shift_amount == 0:
         return date_time
     year = date_time.year
@@ -162,16 +114,7 @@ class DateTimeAdjusters:
 
     @staticmethod
     def of_month_offset( month_offset: int ) -> Optional["DateTimeAdjusters"]:
-        """Return a DateTimeAdjusters object for a given month offset,
-           or return None if the month offset is 0
-
-        Args:
-            month_offset: The number of months the DateTimeAdjusters object
-                          is to shift datetime objects
-
-        Returns:
-            The required DateTimeAdjusters object, or None if there is no shift
-        """
+        """Return a DateTimeAdjusters instance for a month offset"""
         if month_offset == 0:
             return None
         years , months_in_year = divmod( month_offset , 12 )
@@ -187,16 +130,7 @@ class DateTimeAdjusters:
     def of_microsecond_offset(
             microsecond_offset: int
             ) -> Optional["DateTimeAdjusters"]:
-        """Return a DateTimeAdjusters object for a given microsecond offset,
-           or return None if the microsecond offset is 0
-
-        Args:
-            microsecond_offset: The number of microseconds the DateTimeAdjusters object
-                                is to shift datetime objects
-
-        Returns:
-            The required DateTimeAdjusters object, or None if there is no shift
-        """
+        """Return a DateTimeAdjusters instance for a microsecond offset"""
         if microsecond_offset == 0:
             return None
         timedelta = dt.timedelta( microseconds = microsecond_offset )
@@ -209,18 +143,9 @@ class DateTimeAdjusters:
             month_offset: int ,
             microsecond_offset: int
             ) -> "DateTimeAdjusters":
-        """Return a DateTimeAdjusters object for a given month offset
-           and microsecond offset.
-           At least one of the arguments must be non-zero
-
-        Args:
-            month_offset: The number of months the DateTimeAdjusters object
-                          is to shift datetime objects
-            microsecond_offset: The number of microseconds the DateTimeAdjusters object
-                                is to shift datetime objects
-
-        Returns:
-            The required DateTimeAdjusters object
+        """
+        Return a DateTimeAdjusters instance for a month
+        and microsecond offset.
         """
         month_adjusters = DateTimeAdjusters.of_month_offset( month_offset )
         microsecond_adjusters = DateTimeAdjusters.of_microsecond_offset( microsecond_offset )
@@ -246,17 +171,6 @@ class DateTimeAdjusters:
 # Properties
 # ------------------------------------------------------------------------------
 def _second_string( seconds: int , microseconds: int ) -> str:
-    """Convert seconds and microseconds (0-999_999)
-       to a string that can be used to format an ISO 8601
-       duration string.
-
-    Args:
-        seconds: The number of seconds
-        microseconds: The number of microseconds
-
-    Returns:
-        A string
-    """
     if microseconds == 0:
         return str( seconds )
     return "%d.%s" % (
@@ -268,18 +182,6 @@ def _append_second_elems(
         seconds: int ,
         microseconds: int
         ) -> list[str]:
-    """Append total seconds and microseconds
-       to a list of strings that, when joined, produce an ISO 8601
-       duration string.
-
-    Args:
-        elems: The list of strings
-        seconds: The number of seconds
-        microseconds: The number of microseconds
-
-    Returns:
-        The amended list of strings
-    """
     days , seconds_in_day = divmod( seconds , 86_400 )
     if days > 0:
         elems.append( f"{days}D" )
@@ -297,17 +199,6 @@ def _append_second_elems(
     return elems
 
 def _append_month_elems( elems: list[str] , months: int ) -> list[str]:
-    """Append total number of months
-       to a list of strings that, when joined, produce an ISO 8601
-       duration string.
-
-    Args:
-        elems: The list of strings
-        months: The total number of months
-
-    Returns:
-        The amended list of strings
-    """
     years , months_in_year = divmod( months , 12 )
     if years > 0:
         elems.append( f"{years}Y" )
@@ -316,43 +207,13 @@ def _append_month_elems( elems: list[str] , months: int ) -> list[str]:
     return elems
 
 def _get_microsecond_period_name( total_microseconds: int ) -> str:
-    """Return an ISO 8601 duration string
-       from a total number of microseconds in a period
-
-    Args:
-        total_microseconds: The total number of microseconds
-
-    Returns:
-        The ISO 8601 duration string representing a period
-        of n-microseconds
-    """
     seconds , microseconds = divmod( total_microseconds , 1_000_000 )
     return "".join( _append_second_elems( [ "P" ] , seconds , microseconds ) )
 
 def _get_second_period_name( seconds: int ) -> str:
-    """Return an ISO 8601 duration string
-       from a total number of seconds in a period
-
-    Args:
-        seconds: The total number of seconds
-
-    Returns:
-        The ISO 8601 duration string representing a period
-        of n-seconds
-    """
     return "".join( _append_second_elems( [ "P" ] , seconds , 0 ) )
 
 def _get_month_period_name( months: int ) -> str:
-    """Return an ISO 8601 duration string
-       from a total number of months in a period
-
-    Args:
-        months: The total number of months
-
-    Returns:
-        The ISO 8601 duration string representing a period
-        of n-months
-    """
     return "".join( _append_month_elems( [ "P" ] , months ) )
 
 _RE_REPR = re.compile(
@@ -385,7 +246,6 @@ def _fmt_naive_microsecond( obj: dt.datetime , separator: str ) -> str:
         )
 
 def _fmt_naive_millisecond( obj: dt.datetime , separator: str ) -> str:
-    """Convert a datetime to an ISO 8601 format string"""
     millisecond: int = obj.microsecond // 1_000
     return (
         f"{obj.year:04}-{obj.month:02}-{obj.day:02}"
@@ -395,7 +255,6 @@ def _fmt_naive_millisecond( obj: dt.datetime , separator: str ) -> str:
         )
 
 def _fmt_naive_second( obj: dt.datetime , separator: str ) -> str:
-    """Convert a datetime to an ISO 8601 format string"""
     return (
         f"{obj.year:04}-{obj.month:02}-{obj.day:02}"
         f"{separator}"
@@ -403,7 +262,6 @@ def _fmt_naive_second( obj: dt.datetime , separator: str ) -> str:
         )
 
 def _fmt_naive_minute( obj: dt.datetime , separator: str ) -> str:
-    """Convert a datetime to an ISO 8601 format string"""
     return (
         f"{obj.year:04}-{obj.month:02}-{obj.day:02}"
         f"{separator}"
@@ -411,7 +269,6 @@ def _fmt_naive_minute( obj: dt.datetime , separator: str ) -> str:
         )
 
 def _fmt_naive_hour( obj: dt.datetime , separator: str ) -> str:
-    """Convert a datetime to an ISO 8601 format string"""
     return (
         f"{obj.year:04}-{obj.month:02}-{obj.day:02}"
         f"{separator}"
@@ -419,28 +276,15 @@ def _fmt_naive_hour( obj: dt.datetime , separator: str ) -> str:
         )
 
 def _fmt_naive_day( obj: dt.datetime ) -> str:
-    """Convert a datetime to an ISO 8601 format string"""
     return f"{obj.year:04}-{obj.month:02}-{obj.day:02}"
 
 def _fmt_naive_month( obj: dt.datetime ) -> str:
-    """Convert a datetime to an ISO 8601 format string"""
     return f"{obj.year:04}-{obj.month:02}"
 
 def _fmt_naive_year( obj: dt.datetime ) -> str:
-    """Convert a datetime to an ISO 8601 format string"""
     return f"{obj.year:04}"
 
 def _fmt_tzdelta( delta: dt.timedelta ) -> str:
-    """Convert a timedelta which represents a timezone
-       to a string that respresents that timezone
-
-    Args:
-        delta: The timedelta
-
-    Returns:
-        A string that can be used to represent a timezone
-        in an ISO 8601 format string
-    """
     seconds = int( delta.total_seconds() )
     if seconds == 0:
         return "Z"
@@ -453,16 +297,6 @@ def _fmt_tzdelta( delta: dt.timedelta ) -> str:
     return f"{sign}{hours:02}:{minutes:02}"
 
 def _fmt_tzinfo( tz: Optional[dt.tzinfo] ) -> str:
-    """Convert an optional tzinfo object into a string that
-       can be used to represent the timezone in an ISO 8601 format
-
-    Args:
-        tz: The tzinfo object, or None
-
-    Returns:
-        A string that can be used to represent a timezone
-        in an ISO 8601 format string
-    """
     if tz is not None:
         delta = tz.utcoffset( dt.datetime.min )
         if delta is not None:
@@ -470,7 +304,6 @@ def _fmt_tzinfo( tz: Optional[dt.tzinfo] ) -> str:
     return ""
 
 def _fmt_aware_microsecond( obj: dt.datetime , separator: str ) -> str:
-    """Convert a datetime to an ISO 8601 format string"""
     tz_str: str = _fmt_tzinfo( obj.tzinfo )
     return (
         f"{obj.year:04}-{obj.month:02}-{obj.day:02}"
@@ -481,7 +314,6 @@ def _fmt_aware_microsecond( obj: dt.datetime , separator: str ) -> str:
         )
 
 def _fmt_aware_millisecond( obj: dt.datetime , separator: str ) -> str:
-    """Convert a datetime to an ISO 8601 format string"""
     millisecond: int = obj.microsecond // 1_000
     tz_str: str = _fmt_tzinfo( obj.tzinfo )
     return (
@@ -493,7 +325,6 @@ def _fmt_aware_millisecond( obj: dt.datetime , separator: str ) -> str:
         )
 
 def _fmt_aware_second( obj: dt.datetime , separator: str ) -> str:
-    """Convert a datetime to an ISO 8601 format string"""
     tz_str: str = _fmt_tzinfo( obj.tzinfo )
     return (
         f"{obj.year:04}-{obj.month:02}-{obj.day:02}"
@@ -503,7 +334,6 @@ def _fmt_aware_second( obj: dt.datetime , separator: str ) -> str:
         )
 
 def _fmt_aware_minute( obj: dt.datetime , separator: str ) -> str:
-    """Convert a datetime to an ISO 8601 format string"""
     tz_str: str = _fmt_tzinfo( obj.tzinfo )
     return (
         f"{obj.year:04}-{obj.month:02}-{obj.day:02}"
@@ -513,7 +343,6 @@ def _fmt_aware_minute( obj: dt.datetime , separator: str ) -> str:
         )
 
 def _fmt_aware_hour( obj: dt.datetime , separator: str ) -> str:
-    """Convert a datetime to an ISO 8601 format string"""
     tz_str: str = _fmt_tzinfo( obj.tzinfo )
     return (
         f"{obj.year:04}-{obj.month:02}-{obj.day:02}"
@@ -526,13 +355,8 @@ def _fmt_aware_hour( obj: dt.datetime , separator: str ) -> str:
 class Properties:
     """
     The basic properties of a period. Each specific Period
-    subclass uses the parts that are relevant to it to implement
-    the Period abstract base class.
-
-    Properties objects are:
-    - Immutable
-    - Sortable
-    - Hashable (can be used in sets and as keys in dictionaries, etc.)
+    class uses the parts that are relevant to it to implement
+    the Period interface.
     """
     step: int
     multiplier: int
@@ -543,37 +367,37 @@ class Properties:
 
     @staticmethod
     def of_years( no_of_years: int ) -> "Properties":
-        """Return Properties object for an "n"-year period"""
+        """Return "n"-year Properties"""
         return Properties.of_months( no_of_years * 12 )
 
     @staticmethod
     def of_months( no_of_months: int ) -> "Properties":
-        """Return Properties object for an "n"-month period"""
+        """Return "n"-month Properties"""
         return Properties.of_step_and_multiplier( _STEP_MONTHS , no_of_months )
 
     @staticmethod
     def of_days( no_of_days: int ) -> "Properties":
-        """Return Properties object for an "n"-day period"""
+        """Return "n"-day Properties"""
         return Properties.of_seconds( no_of_days * 86_400 )
 
     @staticmethod
     def of_hours( no_of_hours: int ) -> "Properties":
-        """Return Properties object for an "n"-hour period"""
+        """Return "n"-hour Properties"""
         return Properties.of_seconds( no_of_hours * 3_600 )
 
     @staticmethod
     def of_minutes( no_of_minutes: int ) -> "Properties":
-        """Return Properties object for an "n"-minute period"""
+        """Return "n"-minute Properties"""
         return Properties.of_seconds( no_of_minutes * 60 )
 
     @staticmethod
     def of_seconds( no_of_seconds: int ) -> "Properties":
-        """Return Properties object for an "n"-second period"""
+        """Return "n"-second Properties"""
         return Properties.of_step_and_multiplier( _STEP_SECONDS , no_of_seconds )
 
     @staticmethod
     def of_microseconds( no_of_microseconds: int ) -> "Properties":
-        """Return Properties object for an "n"-microsecond period"""
+        """Return "n"-microsecond Properties"""
         seconds , microseconds = divmod( no_of_microseconds , 1_000_000 )
         if microseconds == 0:
             return Properties.of_seconds( seconds )
@@ -581,34 +405,7 @@ class Properties:
 
     @staticmethod
     def of_step_and_multiplier( step: int , multiplier: int ) -> "Properties":
-        """Return a Properties object that represents a period of the given
-           step and multiplier
-
-           The step represents the basic "unit" of the period and can be one of:
-               _STEP_MICROSECONDS
-               _STEP_SECONDS
-               _STEP_MONTHS
-
-           The multiplier is the number of 'steps' in the period.
-
-        Args:
-            step: The step of the period:
-            multiplier: The multiplier, or the number of steps
-                        in the period
-
-        Examples:
-            A period of one year (P1Y) has:
-                step = _STEP_MONTHS and multiplier = 12
-            A period of one day (P1D) has:
-                step = _STEP_SECONDS and multiplier = 24*60*60
-            A period of fifteen minutes (PT15M) has:
-                step = _STEP_SECONDS and multiplier = 15*60
-            A period of 25Hz (PT0.04S) has:
-                step = _STEP_MICROSECONDS and multiplier = 1_000_000/25
-
-        Returns:
-            A Properties object
-        """
+        """Return a basic Properties object"""
         return Properties(
             step = step ,
             multiplier = multiplier ,
@@ -632,26 +429,8 @@ class Properties:
             raise AssertionError( "Illegal month offset for non-month step" )
 
     def normalise_offsets( self ) -> "Properties":
-        """Return an equivalent Properties object where
-           month_offset and microsecond_offset are within the
-           bounds of the step and multiplier
-
-           For a period of n-months the normalised month_offset
-           is month_offset%n
-
-           For a period of n-seconds the normalised microsecond_offset
-           is microsecond_offset%(n*1_000_000)
-
-           For a period of n-microseconds the normalised microsecond_offset
-           is microsecond_offset%n
-
-           Example: A one year period with an offset of 13 months is
-           normalised to a one year period with an offset of 1 month,
-           as the net effect of the offsets is the same regarding how they
-           split the timeline into intervals.
-
-        Returns:
-            A Properties object
+        """
+        Return Properties with equivalent normalised offsets
         """
         new_month_offset: int = self.month_offset
         new_microsecond_offset: int = self.microsecond_offset
@@ -681,19 +460,7 @@ class Properties:
             ordinal_shift = 0 )
 
     def with_month_offset( self , month_amount: int ) -> "Properties":
-        """Return a Properties object derived from this one with
-           the given month_offset
-
-           The ordinal_shift for the new Properties object will be
-           set to 0 as the new month_offset will render the
-           previous value meaningless.
-
-        Args:
-            month_amount: The amount to add to the month_offset
-
-        Returns:
-            A Properties object
-        """
+        """Return derived properties with specified month offset"""
         return Properties(
             step = self.step ,
             multiplier = self.multiplier ,
@@ -703,19 +470,7 @@ class Properties:
             ordinal_shift = 0 ).normalise_offsets()
 
     def with_microsecond_offset( self , microsecond_amount: int ) -> "Properties":
-        """Return a Properties object derived from this one with
-           the given microsecond_offset
-
-           The ordinal_shift for the new Properties object will be
-           set to 0 as the new microsecond_offset will render the
-           previous value meaningless.
-
-        Args:
-            microsecond_amount: The amount to add to the microsecond_offset
-
-        Returns:
-            A Properties object
-        """
+        """Return derived properties with specified microsecond offset"""
         return Properties(
             step = self.step ,
             multiplier = self.multiplier ,
@@ -725,15 +480,7 @@ class Properties:
             ordinal_shift = 0 ).normalise_offsets()
 
     def with_tzinfo( self , tzinfo: Optional[dt.tzinfo] ) -> "Properties":
-        """Return a Properties object derived from this one with
-           the given datetime tzinfo object (time zone)
-
-        Args:
-            tzinfo: The tzinfo object (or None) of the new Properties
-
-        Returns:
-            A Properties object
-        """
+        """Return derived properties with specified tzinfo"""
         return Properties(
             step = self.step ,
             multiplier = self.multiplier ,
@@ -743,17 +490,7 @@ class Properties:
             ordinal_shift = self.ordinal_shift )
 
     def with_ordinal_shift( self , ordinal_shift: int ) -> "Properties":
-        """Return a Properties object derived from this one with
-           the given ordinal shift value.
-
-        Args:
-            ordinal_shift: The amount by which ordinal values are shifted
-                           in a Period object created from the new
-                           Properties object
-
-        Returns:
-            A Properties object
-        """
+        """Return derived properties with specified ordinal shift"""
         return Properties(
             step = self.step ,
             multiplier = self.multiplier ,
@@ -766,16 +503,7 @@ class Properties:
             self ,
             offset_period_fields: "PeriodFields"
             ) -> "Properties":
-        """Return a Properties object derived from this one with
-           new month and microsecond offsets
-
-        Args:
-            offset_period_fields: A PeriodFields object that is used
-                        to calculate the month and microsecond offsets
-
-        Returns:
-            A Properties object
-        """
+        """Return derived properties with specified offset"""
         return self.with_offset_months_seconds(
             offset_period_fields.get_months_seconds() )
 
@@ -783,16 +511,7 @@ class Properties:
             self ,
             offset_months_seconds: "MonthsSeconds"
             ) -> "Properties":
-        """Return a Properties object derived from this one with
-           new month and microsecond offsets
-
-        Args:
-            offset_months_seconds: A MonthsSeconds object that is used
-                        to calculate the month and microsecond offsets
-
-        Returns:
-            A Properties object
-        """
+        """Return derived properties with specified offset"""
         return Properties(
             step = self.step ,
             multiplier = self.multiplier ,
@@ -802,12 +521,7 @@ class Properties:
             ordinal_shift = 0 ).normalise_offsets()
 
     def get_iso8601( self ) -> str:
-        """Return the ISO 8601 duration string of the period
-           defined by this Properties object
-
-        Returns:
-            A Properties object
-        """
+        """Return ISO 8601 duration string of properties, excluding offset"""
         step = self.step
         if step == _STEP_MICROSECONDS:
             return _get_microsecond_period_name( self.multiplier )
@@ -818,15 +532,7 @@ class Properties:
         raise AssertionError( f"Illegal step: {step}" )
 
     def get_timedelta( self ) -> Optional[dt.timedelta]:
-        """Return a timedelta object that matches the duration
-           of this period, or None if no such timedelta exists
-
-        The is no timedelta for mothnly or yearly periods, as
-        these are not of a fixed length.
-
-        Returns:
-            A timedelta object, or None
-        """
+        """Return timedelta, or None if there is no equivalent timedelta"""
         step = self.step
         if step == _STEP_MICROSECONDS:
             seconds , microseconds = divmod( self.multiplier , 1_000_000 )
@@ -839,11 +545,6 @@ class Properties:
         raise AssertionError( f"Illegal step: {step}" )
 
     def _append_step_elems( self , elems: list[str] ) -> None:
-        """Add elements to a list of string that describe the
-           step and multiplier
-
-        The list of strings is used to calcluate the repr string
-        """
         step = self.step
         multiplier = self.multiplier
         if step == _STEP_MICROSECONDS:
@@ -857,11 +558,6 @@ class Properties:
             raise AssertionError( f"Illegal step: {step}" )
 
     def _append_offset_elems( self , elems: list[str] ) -> None:
-        """Add elements to a list of string that describe the
-           month and microsecond offsets
-
-        The list of strings is used to calcluate the repr string
-        """
         month_offset = self.month_offset
         microsecond_offset = self.microsecond_offset
         if ( ( month_offset == 0 ) and ( microsecond_offset == 0 ) ):
@@ -875,11 +571,6 @@ class Properties:
         return
 
     def _append_tz_elems( self , elems: list[str] ) -> None:
-        """Add elements to a list of string that describe the
-           tzinfo object
-
-        The list of strings is used to calcluate the repr string
-        """
         elems.append( "[" )
         if self.tzinfo is not None:
             delta = self.tzinfo.utcoffset( dt.datetime.min )
@@ -888,11 +579,6 @@ class Properties:
         elems.append( "]" )
 
     def _append_shift_elems( self , elems: list[str] ) -> None:
-        """Add elements to a list of string that describe the
-           ordinal shift
-
-        The list of strings is used to calcluate the repr string
-        """
         if self.ordinal_shift != 0:
             elems.append( str( self.ordinal_shift ) )
 
@@ -900,16 +586,9 @@ class Properties:
             self ,
             separator: str = "T"
             ) -> Callable[[dt.datetime],str]:
-        """Return a datetime formatter suitable for formatting
-           naive datetime objects of this period
-
-        Args:
-            separator: The character used to separate the ISO 8601
-                       date and time parts
-
-        Returns:
-            A function that takes a single datetime argument and
-            returns a string
+        """
+        Return a datetime formatter suitable for formatting
+        naive datetime objects of this period.
         """
         o_total_milliseconds , o_microseconds_nnn = divmod( self.microsecond_offset , 1_000 )
         if o_microseconds_nnn != 0:
@@ -960,16 +639,9 @@ class Properties:
             self ,
             separator: str = "T"
             ) -> Callable[[dt.datetime],str]:
-        """Return a datetime formatter suitable for formatting
-           timezone aware datetime objects of this period
-
-        Args:
-            separator: The character used to separate the ISO 8601
-                       date and time parts
-
-        Returns:
-            A function that takes a single datetime argument and
-            returns a string
+        """
+        Return a datetime formatter suitable for formatting
+        timezone aware datetime objects of this period.
         """
         o_total_milliseconds , o_microseconds_nnn = divmod( self.microsecond_offset , 1_000 )
         if o_microseconds_nnn != 0:
@@ -1009,20 +681,6 @@ class Properties:
         return lambda dt: _fmt_aware_hour( dt , separator )
 
     def dataframe_frequency( self ) -> str:
-        """Return a string that captures the step and multiplier
-           of this period and which is suitable for use with
-           Polars DataFrames
-
-        The returned string is defined using the Polars duration
-        string language, and can be used in method calls such as:
-
-            polars.DataFrame.group_by_dynamic(..., every=string,...)
-
-            polars.datetime_ranges(...,interval=string,...)
-
-        Returns:
-            A string suitable for use with Polars DataFrames
-        """
         step = self.step
         multiplier = self.multiplier
         if step == _STEP_MICROSECONDS:
@@ -1035,43 +693,11 @@ class Properties:
             raise AssertionError( f"Illegal step: {step}" )
 
     def dataframe_offset( self ) -> str:
-        """Return a string that captures the month and microsecond
-           offsets of this period and which is suitable for use with
-           Polars DataFrames
-
-        The returned string is defined using the Polars duration
-        string language, and can be used in method calls such as:
-
-            polars.Expr.dt.offset_by( by=string )
-
-        Returns:
-            A string suitable for use with Polars DataFrames
-        """
         month_offset = self.month_offset
         microsecond_offset = self.microsecond_offset
         return f"{month_offset}mo{microsecond_offset}us"
 
     def is_epoch_agnostic( self ) -> bool:
-        """Return True if the way that this period splits the
-           timeline does not depend on the epoch used to perform
-           calculations
-
-        This method assumes that the epoch will always be midnight
-        at the start of the first day of the year.
-
-        Most commonly used periods such as P1Y, P1M, P1D, PT15M and
-        so are epoch agnostic.
-
-        A period such as P7D is not epoch agnostic however. The
-        calculation will typically be done using modulus arithmetic
-        on the number of days since the epoch, and this will split
-        the timeline into different 7-day intervals depending on the
-        epoch.
-
-        Returns:
-            True if this period plits the timeline into the same
-            intervals regardless of the epoch, False otherwise.
-        """
         step = self.step
         multiplier = self.multiplier
         if step == _STEP_MICROSECONDS:
@@ -1126,15 +752,8 @@ class MonthsSeconds:
             raise ValueError( f"Illegal period: {self.string}" )
 
     def get_step_and_multiplier( self ) -> tuple[int,int]:
-        """Return a tuple of two integers containing the
-           calculated step and multiplier
-
-        Raise an error if a valid step and multiplier
-        cannot be created.  This happens, for example,
-        if boths months and seconds are >0.
-
-        Returns:
-            A tuple of (step,multiplier)
+        """
+        Return a step (month or second) and multiplier.
         """
         months = self.months
         seconds = self.seconds
@@ -1153,24 +772,12 @@ class MonthsSeconds:
         raise ValueError( f"Illegal period: {self.string}" )
 
     def total_microseconds( self ) -> int:
-        """Return total microseconds from the seconds
-           and microseconds fields
-
-        Returns:
-            The total number of microseconds
-        """
+        """Return total microseconds"""
         return self.seconds * 1_000_000 + self.microseconds
 
     def get_base_properties( self ) -> Properties:
-        """Return a basic Properties object from the months
-           and (seconds,microseconds) fields
-
-        Raise an error if it is not possible to create
-        a valid Properties object.  This happens if,
-        for example, both months and seconds are >0.
-
-        Returns:
-            A Properties object
+        """
+        Return a Properties object.
         """
         step , multiplier = self.get_step_and_multiplier()
         return Properties(
@@ -1187,8 +794,8 @@ class MonthsSeconds:
 @dataclass( frozen=True )
 class PeriodFields:
     """
-    A set of fields that can be read from an ISO 8601 format
-    duration string.
+    A set of fields that can be read from an ISO-8601 format
+    period string.
     """
 # pylint: disable=too-many-instance-attributes
     string: str
@@ -1213,12 +820,7 @@ class PeriodFields:
             raise ValueError( f"Illegal period: {self.string}" )
 
     def get_months_seconds( self ) -> MonthsSeconds:
-        """Return a MonthsSeconds object from the fields
-           of an ISO 8601 duration
-
-        Returns:
-            A MonthsSeconds object
-        """
+        """Convert PeriodFields to MonthsSeconds"""
         months = self.years * 12 + self.months
         seconds = (
             ( self.days * 86_400 ) +
@@ -1232,14 +834,8 @@ class PeriodFields:
             microseconds = self.microseconds )
 
     def get_base_properties( self ) -> Properties:
-        """Return a basic Properties object from the fields
-           of an ISO 8601 duration
-
-        Raise an error if it is not possible to create
-        a valid Properties object.
-
-        Returns:
-            A Properties object
+        """
+        Return a Properties object.
         """
         return self.get_months_seconds().get_base_properties()
 
@@ -1249,52 +845,14 @@ _RE_PERIOD = re.compile(
     r"$" )
 
 def _str2int( num: Optional[str] , default: int = 0 ) -> int:
-    """Convert string to int, None becomes 0 (or default if specified)
-
-    Args:
-        num: The string to be converted, or None
-        default: Default int value to use if num is None
-                 (defaults to 0)
-
-    Converting the string to an int may raise the usual Python error(s)
-
-    Returns:
-        The int value read from the input string
-    """
+    """Convert string to int, None becomes 0 (or default if specified)"""
     return default if num is None else int( num )
 
 def _str2microseconds( num: Optional[str] , default: int = 0 ) -> int:
-    """Convert string to microseconds, None becomes 0 (or default if specified)
-
-    Args:
-        num: The string to be converted, or None
-        default: Default int value to use if num is None
-                 (defaults to 0)
-
-    A seconds + microseconds string looks like "nn.uuu". This function
-    converts the "uuu" part (from 1 to 6 digits) to an int value
-    between 0 and 999_999.
-
-    Converting the string to an int may raise the usual Python error(s)
-
-    Returns:
-        The int value read from the input string
-    """
+    """Convert string to microseconds, None becomes 0 (or default if specified)"""
     return default if num is None else int( ( num + "00000" )[:6] )
 
 def _period_match( prefix: str , matcher: re.Match[str] ) -> PeriodFields:
-    """Return a PeriodFields object from a regex Matcher object
-
-    Args:
-        prefix: The name prefix used when creating the regex (
-        matcher: The regex Matcher object
-
-    The regex Pattern that create the matcher is assumed to have been
-    created from a string returned by the _period_regex function.
-
-    Returns:
-        The PeriodFields object
-    """
     return PeriodFields(
         string = matcher.string ,
         years = _str2int( matcher.group( f"{prefix}_years" ) ) ,
@@ -1312,14 +870,6 @@ _RE_PERIOD_OFFSET = re.compile(
     r"$" )
 
 def _total_microseconds( delta: dt.timedelta ) -> int:
-    """Return total number of microseconds in a timedelta
-
-    Args:
-        delta: A datetime timedelta object
-
-    Returns:
-        The total number of microseconds in a timedelta
-    """
     return ( delta.days * 86_400 + delta.seconds ) * 1_000_000 + delta.microseconds
 
 # ------------------------------------------------------------------------------
@@ -1327,216 +877,76 @@ def _total_microseconds( delta: dt.timedelta ) -> int:
 # ------------------------------------------------------------------------------
 class Period(ABC):
     """
-    A period in time that can be used to split the gregorian timeline
-    into intervals.
-
-    This is an abstract class and it is not possible to create Period
-    instances directly.  Use one of the static methods in this class to
-    create a Period instance.
-
-    Period instances are immutable.
-
-    Period instances are hashable and can be used in sets and as keys
-    in dictionaries.
-
-    Period instances are sortable, though the sort order may not make
-    sense in all cases.  Periods contain optional tzinfo objects, and
-    the same caveats that apply to sorting datetime objects also apply
-    to Period objects; depending on the tzinfo values you may get a
-    Python error rather than a sorted collection of Periods.
+    A period in time
     """
 # pylint: disable=too-many-public-methods
 
     @staticmethod
     def of( period_string: str ) -> "Period":
-        """Return a Period from the supplied string.
-
-        Args:
-            period_string: A string containing a period
-                           definition
-
-        Raises an error if there is no such Period.
-
-        Returns:
-            A Period object defined by the supplied string
+        """
+        Return a Period from the supplied string.
+        Raise an error if there is no such Period.
         """
         return _of( period_string )
 
     @staticmethod
     def of_iso_duration( iso_8601_duration: str ) -> "Period":
-        """Return a Period from an ISO 8601 duration string
-
-        Args:
-            iso_8601_duration: An ISO 8601 duration string such
-                               as "P1Y" or "PT15M"
-
-        Raises an error if the string does not contain a valid
-        ISO 8601 duration value
-
-        Returns:
-            A Period object defined by the supplied ISO 8601
-            duration string
-        """
+        """Return a Period from an ISO 8601 duration string"""
         return _of_iso_duration( iso_8601_duration )
 
     @staticmethod
     def of_duration( duration: str ) -> "Period":
-        """Return a Period from an (extended) ISO 8601 duration string
-
-        Args:
-            duration: An ISO 8601 duration string such as "P1Y" or
-                      "PT15M"
-
-        Raises an error if the string does not contain a valid
-        (extended) ISO 8601 duration value
-
-        Returns:
-            A Period object defined by the supplied (extended)
-            ISO 8601 duration string
-        """
+        """Return a Period from an (extended) ISO 8601 duration string"""
         return _of_duration( duration )
 
     @staticmethod
     def of_date_and_duration( date_duration: str ) -> "Period":
-        """Return a Period from date/duration string
-
-        Args:
-            date_duration: An ISO 8601 duration string of the form
-                           <start>/<duration>
-
-        Raises an error if the string does not contain a valid value
-
-        Returns:
-            A Period object defined by the supplied ISO 8601
-            duration string
-        """
+        """Return a Period from date/duration string"""
         return _of_date_and_duration( date_duration )
 
     @staticmethod
     def of_repr( repr_string: str ) -> "Period":
-        """Return a Period from a __repr__ string
-
-        Args:
-            repr_string: The repr string of a Period object
-
-        Raises an error if the string does not contain a valid value
-
-        Returns:
-            A Period object that is identical (as much as possible
-            anyway) to the Period object that produced the repr string.
-        """
+        """Return a Period from a __repr__ string"""
         return _of_repr( repr_string )
 
     @staticmethod
     def of_years( no_of_years: int ) -> "Period":
-        """Return an "n"-year Period
-
-        Args:
-            no_of_years: The number of years in the period
-
-        Returns:
-            A Period object
-        """
-        if no_of_years <= 0:
-            raise ValueError( f"Illegal no_of_years: {no_of_years}" )
+        """Return "n"-year Period"""
         return _get_base_period( Properties.of_years( no_of_years ) )
 
     @staticmethod
     def of_months( no_of_months: int ) -> "Period":
-        """Return an "n"-month Period
-
-        Args:
-            no_of_months: The number of months in the period
-
-        Returns:
-            A Period object
-        """
-        if no_of_months <= 0:
-            raise ValueError( f"Illegal no_of_months: {no_of_months}" )
+        """Return "n"-month Period"""
         return _get_base_period( Properties.of_months( no_of_months ) )
 
     @staticmethod
     def of_days( no_of_days: int ) -> "Period":
-        """Return an "n"-day Period
-
-        Args:
-            no_of_days: The number of days in the period
-
-        Returns:
-            A Period object
-        """
-        if no_of_days <= 0:
-            raise ValueError( f"Illegal no_of_days: {no_of_days}" )
+        """Return "n"-day Period"""
         return _get_base_period( Properties.of_days( no_of_days ) )
 
     @staticmethod
     def of_hours( no_of_hours: int ) -> "Period":
-        """Return an "n"-hour Period
-
-        Args:
-            no_of_hours: The number of hours in the period
-
-        Returns:
-            A Period object
-        """
-        if no_of_hours <= 0:
-            raise ValueError( f"Illegal no_of_hours: {no_of_hours}" )
+        """Return "n"-hour Period"""
         return _get_base_period( Properties.of_hours( no_of_hours ) )
 
     @staticmethod
     def of_minutes( no_of_minutes: int ) -> "Period":
-        """Return an "n"-minute Period
-
-        Args:
-            no_of_minutes: The number of minutes in the period
-
-        Returns:
-            A Period object
-        """
-        if no_of_minutes <= 0:
-            raise ValueError( f"Illegal no_of_minutes: {no_of_minutes}" )
+        """Return "n"-minute Period"""
         return _get_base_period( Properties.of_minutes( no_of_minutes ) )
 
     @staticmethod
     def of_seconds( no_of_seconds: int ) -> "Period":
-        """Return an "n"-second Period
-
-        Args:
-            no_of_seconds: The number of seconds in the period
-
-        Returns:
-            A Period object
-        """
-        if no_of_seconds <= 0:
-            raise ValueError( f"Illegal no_of_seconds: {no_of_seconds}" )
+        """Return "n"-second Period"""
         return _get_base_period( Properties.of_seconds( no_of_seconds ) )
 
     @staticmethod
     def of_microseconds( no_of_microseconds: int ) -> "Period":
-        """Return an "n"-microsecond Period
-
-        Args:
-            no_of_microseconds: The number of microseconds in the period
-
-        Returns:
-            A Period object
-        """
-        if no_of_microseconds <= 0:
-            raise ValueError( f"Illegal no_of_microseconds: {no_of_microseconds}" )
+        """Return "n"-microsecond Period"""
         return _get_base_period( Properties.of_microseconds( no_of_microseconds ) )
 
     @staticmethod
     def of_timedelta( timedelta: dt.timedelta ) -> "Period":
-        """Return a Period that matches a timedelta
-
-        Args:
-            timedelta: The timedelta of the period
-
-        Returns:
-            A Period object
-        """
-        if ( timedelta / dt.timedelta( microseconds = 1 ) <= 0:
-            raise ValueError( f"Illegal timedelta: {timedelta}" )
+        """Return a Period that matches a timedelta"""
         return _get_base_period(
             Properties.of_microseconds( _total_microseconds( timedelta ) ) )
 
@@ -1559,12 +969,12 @@ class Period(ABC):
 
     @property
     def tzinfo( self ) -> Optional[dt.tzinfo]:
-        """Get the tzinfo property"""
+        """Return tzinfo"""
         return self._properties.tzinfo
 
     @property
     def min_ordinal( self ) -> int:
-        """Get the minimum valid ordinal"""
+        """Return minimum valid ordinal"""
         min_ordinal: int
         try:
             min_ordinal = self.ordinal( dt.datetime.min )
@@ -1581,87 +991,31 @@ class Period(ABC):
 
     @property
     def max_ordinal( self ) -> int:
-        """Get the maximum valid ordinal"""
+        """Return maximum valid ordinal"""
         return self.ordinal( dt.datetime.max )
 
     @property
     def timedelta( self ) -> Optional[dt.timedelta]:
-        """Get the equivalent timedelta, or None"""
+        """Return timedelta, or None"""
         return self._timedelta
 
     @property
     def dataframe_frequency( self ) -> str:
-        """A string that captures the step and multiplier
-           of this period and which is suitable for use with
-           Polars DataFrames
-
-        The returned string is defined using the Polars duration
-        string language, and can be used in method calls such as:
-
-            polars.DataFrame.group_by_dynamic(..., every=string,...)
-
-            polars.datetime_ranges(...,interval=string,...)
-
-        Returns:
-            A string suitable for use with Polars DataFrames
-        """
-        return self._properties.dataframe_frequency()
+            return self._properties.dataframe_frequency()
 
     @property
     def dataframe_offset( self ) -> str:
-        """A string that captures the month and microsecond
-           offsets of this period and which is suitable for use with
-           Polars DataFrames
-
-        The returned string is defined using the Polars duration
-        string language, and can be used in method calls such as:
-
-            polars.Expr.dt.offset_by( by=string )
-
-        Returns:
-            A string suitable for use with Polars DataFrames
-        """
-        return self._properties.dataframe_offset()
+            return self._properties.dataframe_offset()
 
     @property
     def is_epoch_agnostic( self ) -> bool:
-        """True if the way that this period splits the
-           timeline does not depend on the epoch used to perform
-           calculations
-
-        This method assumes that the epoch will always be midnight
-        at the start of the first day of the year.
-
-        Most commonly used periods such as P1Y, P1M, P1D, PT15M and
-        so are epoch agnostic.
-
-        A period such as P7D is not epoch agnostic however. The
-        calculation will typically be done using modulus arithmetic
-        on the number of days since the epoch, and this will split
-        the timeline into different 7-day intervals depending on the
-        epoch.
-
-        Returns:
-            True if this period plits the timeline into the same
-            intervals regardless of the epoch, False otherwise.
-        """
-        return self._properties.is_epoch_agnostic()
+            return self._properties.is_epoch_agnostic()
 
     def naive_formatter(
             self ,
             separator: str = "T"
             ) -> Callable[[dt.datetime],str]:
-        """Return a datetime formatter suitable for formatting
-           naive datetime objects of this period
-
-        Args:
-            separator: The character used to separate the ISO 8601
-                       date and time parts
-
-        Returns:
-            A function that takes a single datetime argument and
-            returns a string
-        """
+        """Return naive date/time formatter"""
         if separator not in ( " " , "T" , "t" ):
             raise ValueError( f"Illegal separator: {separator}" )
         return self._properties.get_naive_formatter( separator )
@@ -1670,17 +1024,7 @@ class Period(ABC):
             self ,
             separator: str = "T"
             ) -> Callable[[dt.datetime],str]:
-        """Return a datetime formatter suitable for formatting
-           timezone aware datetime objects of this period
-
-        Args:
-            separator: The character used to separate the ISO 8601
-                       date and time parts
-
-        Returns:
-            A function that takes a single datetime argument and
-            returns a string
-        """
+        """Return time zone aware date/time formatter"""
         if separator not in ( " " , "T" , "t" ):
             raise ValueError( f"Illegal separator: {separator}" )
         return self._properties.get_aware_formatter( separator )
@@ -1689,17 +1033,7 @@ class Period(ABC):
             self ,
             separator: str = "T"
             ) -> Callable[[dt.datetime],str]:
-        """Return a datetime formatter suitable for formatting
-           datetime objects produced by this Period
-
-        Args:
-            separator: The character used to separate the ISO 8601
-                       date and time parts
-
-        Returns:
-            A function that takes a single datetime argument and
-            returns a string
-        """
+        """Return date/time formatter"""
         if separator not in ( " " , "T" , "t" ):
             raise ValueError( f"Illegal separator: {separator}" )
         return (
@@ -1710,28 +1044,12 @@ class Period(ABC):
 
     @abstractmethod
     def ordinal( self , datetime_obj: dt.datetime ) -> int:
-        """Return an integer ordinal value from the supplied
-           datetime argument
-
-        Args:
-            datetime_obj: The datetime object
-
-        Returns:
-            An integer ordinal value
-        """
+        """Return ordinal from datetime"""
         raise NotImplementedError( "ordinal method must be overridden" )
 
     @abstractmethod
     def datetime( self , ordinal: int ) -> dt.datetime:
-        """Return a datetime object from the supplied
-           integer ordinal
-
-        Args:
-            ordinal: The integer ordinal
-
-        Returns:
-            A datetime object
-        """
+        """Return datetime from ordinal"""
         raise NotImplementedError( "datetime method must be overridden" )
 
     def is_aligned( self , datetime_obj: dt.datetime ) -> bool:
@@ -2566,39 +1884,3 @@ def _of_repr( repr_string: str ) -> Period:
     if matcher:
         return _match_repr( matcher )
     raise ValueError( f"Illegal repr string: {repr_string}" )
-
-# ------------------------------------------------------------------------------
-# Miscellaneous utilities
-# ------------------------------------------------------------------------------
-DateTimeRange = tuple[dt.datetime,dt.datetime]
-
-def split_date_time_range(
-        date_range: DateTimeRange ,
-        period: Optional[Period] ,
-        delta: dt.timedelta = dt.timedelta( seconds = 0 )
-        ) -> list[DateTimeRange]:
-    """
-    Split a datetime range into multiple ranges using the supplied
-    Period object.
-    If period is None just return the supplied range, otherwise use
-    period to split the range into sub-ranges.
-
-    Returns a list of tuple[datetime.datetime,datetime.datetime].
-    """
-    if period is None:
-        return [ date_range ]
-    start_datetime: dt.datetime = date_range[0]
-    end_datetime: dt.datetime = date_range[1]
-    start_ordinal: int = period.ordinal( start_datetime )
-    end_ordinal: int = period.ordinal( end_datetime )
-    ordinal: int
-    range_list = []
-    for ordinal in range( start_ordinal , end_ordinal ):
-        next_start: dt.datetime = period.datetime( ordinal + 1 )
-        r_end: dt.datetime = next_start - delta
-        if r_end >= start_datetime:
-            range_list.append( ( start_datetime , r_end ) )
-        start_datetime = next_start
-    if end_datetime >= start_datetime:
-        range_list.append( ( start_datetime , end_datetime ) )
-    return range_list
