@@ -2676,7 +2676,7 @@ def _time_match( prefix: str , matcher: re.Match[str] ) -> dt.time:
         microsecond = _str2microseconds( matcher.group( f"{prefix}_MS" ) ) ,
         tzinfo = _tzinfo_match( prefix , matcher ) )
 
-def _timezone( utc_offset: str ) -> Optional[dt.tzinfo]:
+def _timezone( utc_offset: Optional[str] ) -> Optional[dt.tzinfo]:
     """Convert an optional string into an optional tzinfo
     object
 
