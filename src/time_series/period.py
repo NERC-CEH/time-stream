@@ -80,11 +80,16 @@ def _naive( datetime_obj: dt.datetime ) -> dt.datetime:
 def _gregorian_seconds( datetime_obj: dt.datetime ) -> int:
     """Calculate number of seconds since the "day epoch"
 
+    The "day epoch" is midnight on day "0" of the proleptic
+    Gregorian ordinal (i.e. midnight at the start of the day before
+    January 1 of year 1).  See the toordinal() and fromordinal()
+    methods of the datetime.date and datetime.datetime classes.
+
     Args:
         datetime_obj: The input datetime object
 
     Returns:
-        The number of seconds between the suppled datetime and the "day epoch"
+        The number of seconds between the supplied datetime and the "day epoch"
     """
     return (
         ( datetime_obj.toordinal() * 86_400 ) +
@@ -96,11 +101,11 @@ def _period_regex( prefix: str ) -> str:
     """Return a regular expression string for matching an ISO 8601 duration
     (but without the initial "P" character)
 
-    Args:
-        prefix: The name prefix used for Python regex group names
-
     The _period_match function can be used to extract data from such
     a regular expression.
+
+    Args:
+        prefix: The name prefix used for Python regex group names
 
     Returns:
         A string containing a regular expression that can be used to
@@ -126,6 +131,7 @@ def year_shift( date_time: dt.datetime , shift_amount: int ) -> dt.datetime:
 
     Args:
         date_time: The date_time object to be shifted
+        shift_amount: The number of years by which to shift date_time
 
     Returns:
         A datetime object
@@ -147,6 +153,7 @@ def month_shift( date_time: dt.datetime , shift_amount: int ) -> dt.datetime:
 
     Args:
         date_time: The date_time object to be shifted
+        shift_amount: The number of months by which to shift date_time
 
     Returns:
         A datetime object
@@ -270,7 +277,8 @@ def _second_string( seconds: int , microseconds: int ) -> str:
         microseconds: The number of microseconds
 
     Returns:
-        A string
+        A string representing seconds and microseconds that
+        can be used in an ISO 8601 duration string
     """
     if microseconds == 0:
         return str( seconds )
@@ -370,42 +378,23 @@ def _get_month_period_name( months: int ) -> str:
     """
     return "".join( _append_month_elems( [ "P" ] , months ) )
 
-#
-# A regular expression Pattern used to parse a Period
-# __repr__ string.
-#
-# The intent is that the repr string can be passed into the
-# Period.of_repr() static method to recreated the Period
-# object.  The current format achives this, up to a point,
-# but tzinfo objects cause problems as there is no standard
-# way to convert tzinfo objects to/from strings.
-#
-# It might be best to remove the Period.of_repr() method
-# completely.
-#
-_RE_REPR = re.compile(
-    r"^"
-    r"[Pp]" + _period_regex( "period" ) +
-    r"(?:" # start optional offset
-    r"(?P<offset>\+)" + _period_regex( "offset" ) +
-    r")?" # end optional offset
-    r"\[" # start timezone
-    r"(?:"
-    r"(?P<zone>[Zz]|(?:[+-]\d{1,2}(?::\d{1,2})?))"
-    r")?"
-    r"\]" # end timezone
-    r"(?:" # start optional ordinal shift
-    r"(?P<shift>-?\d+)"
-    r")?" # end optional ordinal shift
-    r"$" )
-
 _STEP_MICROSECONDS = 1
 _STEP_SECONDS = 2
 _STEP_MONTHS = 3
 _VALID_STEPS = frozenset( [ _STEP_MICROSECONDS , _STEP_SECONDS , _STEP_MONTHS ] )
 
 def _fmt_naive_microsecond( obj: dt.datetime , separator: str ) -> str:
-    """Convert a datetime to an ISO 8601 format string"""
+    """Convert a datetime to an ISO 8601 format string
+
+    Args:
+        obj: The datetime object to be formatted.
+        separator: The character used to separate the date and time
+                   parts of the formatted output
+
+    Returns:
+        The ISO 8601 string representation of the datetime:
+            yyyy-mm-dd{separator}hh:mm:ss.ssssss
+    """
     return (
         f"{obj.year:04}-{obj.month:02}-{obj.day:02}"
         f"{separator}"
@@ -414,7 +403,17 @@ def _fmt_naive_microsecond( obj: dt.datetime , separator: str ) -> str:
         )
 
 def _fmt_naive_millisecond( obj: dt.datetime , separator: str ) -> str:
-    """Convert a datetime to an ISO 8601 format string"""
+    """Convert a datetime to an ISO 8601 format string
+
+    Args:
+        obj: The datetime object to be formatted.
+        separator: The character used to separate the date and time
+                   parts of the formatted output
+
+    Returns:
+        The ISO 8601 string representation of the datetime:
+            yyyy-mm-dd{separator}hh:mm:ss.sss
+    """
     millisecond: int = obj.microsecond // 1_000
     return (
         f"{obj.year:04}-{obj.month:02}-{obj.day:02}"
@@ -424,7 +423,17 @@ def _fmt_naive_millisecond( obj: dt.datetime , separator: str ) -> str:
         )
 
 def _fmt_naive_second( obj: dt.datetime , separator: str ) -> str:
-    """Convert a datetime to an ISO 8601 format string"""
+    """Convert a datetime to an ISO 8601 format string
+
+    Args:
+        obj: The datetime object to be formatted.
+        separator: The character used to separate the date and time
+                   parts of the formatted output
+
+    Returns:
+        The ISO 8601 string representation of the datetime:
+            yyyy-mm-dd{separator}hh:mm:ss
+    """
     return (
         f"{obj.year:04}-{obj.month:02}-{obj.day:02}"
         f"{separator}"
@@ -432,7 +441,17 @@ def _fmt_naive_second( obj: dt.datetime , separator: str ) -> str:
         )
 
 def _fmt_naive_minute( obj: dt.datetime , separator: str ) -> str:
-    """Convert a datetime to an ISO 8601 format string"""
+    """Convert a datetime to an ISO 8601 format string
+
+    Args:
+        obj: The datetime object to be formatted.
+        separator: The character used to separate the date and time
+                   parts of the formatted output
+
+    Returns:
+        The ISO 8601 string representation of the datetime:
+            yyyy-mm-dd{separator}hh:mm
+    """
     return (
         f"{obj.year:04}-{obj.month:02}-{obj.day:02}"
         f"{separator}"
@@ -440,7 +459,17 @@ def _fmt_naive_minute( obj: dt.datetime , separator: str ) -> str:
         )
 
 def _fmt_naive_hour( obj: dt.datetime , separator: str ) -> str:
-    """Convert a datetime to an ISO 8601 format string"""
+    """Convert a datetime to an ISO 8601 format string
+
+    Args:
+        obj: The datetime object to be formatted.
+        separator: The character used to separate the date and time
+                   parts of the formatted output
+
+    Returns:
+        The ISO 8601 string representation of the datetime:
+            yyyy-mm-dd{separator}hh
+    """
     return (
         f"{obj.year:04}-{obj.month:02}-{obj.day:02}"
         f"{separator}"
@@ -448,15 +477,39 @@ def _fmt_naive_hour( obj: dt.datetime , separator: str ) -> str:
         )
 
 def _fmt_naive_day( obj: dt.datetime ) -> str:
-    """Convert a datetime to an ISO 8601 format string"""
+    """Convert a datetime to an ISO 8601 format string
+
+    Args:
+        obj: The datetime object to be formatted.
+
+    Returns:
+        The ISO 8601 string representation of the datetime:
+            yyyy-mm-dd
+    """
     return f"{obj.year:04}-{obj.month:02}-{obj.day:02}"
 
 def _fmt_naive_month( obj: dt.datetime ) -> str:
-    """Convert a datetime to an ISO 8601 format string"""
+    """Convert a datetime to an ISO 8601 format string
+
+    Args:
+        obj: The datetime object to be formatted.
+
+    Returns:
+        The ISO 8601 string representation of the datetime:
+            yyyy-mm
+    """
     return f"{obj.year:04}-{obj.month:02}"
 
 def _fmt_naive_year( obj: dt.datetime ) -> str:
-    """Convert a datetime to an ISO 8601 format string"""
+    """Convert a datetime to an ISO 8601 format string
+
+    Args:
+        obj: The datetime object to be formatted.
+
+    Returns:
+        The ISO 8601 string representation of the datetime:
+            yyyy
+    """
     return f"{obj.year:04}"
 
 def _fmt_tzdelta( delta: dt.timedelta ) -> str:
@@ -499,7 +552,17 @@ def _fmt_tzinfo( tz: Optional[dt.tzinfo] ) -> str:
     return ""
 
 def _fmt_aware_microsecond( obj: dt.datetime , separator: str ) -> str:
-    """Convert a datetime to an ISO 8601 format string"""
+    """Convert a datetime to an ISO 8601 format string
+
+    Args:
+        obj: The datetime object to be formatted.
+        separator: The character used to separate the date and time
+                   parts of the formatted output
+
+    Returns:
+        The ISO 8601 string representation of the datetime:
+            yyyy-mm-dd{separator}hh:mm:ss.ssssss{tz}
+    """
     tz_str: str = _fmt_tzinfo( obj.tzinfo )
     return (
         f"{obj.year:04}-{obj.month:02}-{obj.day:02}"
@@ -510,7 +573,17 @@ def _fmt_aware_microsecond( obj: dt.datetime , separator: str ) -> str:
         )
 
 def _fmt_aware_millisecond( obj: dt.datetime , separator: str ) -> str:
-    """Convert a datetime to an ISO 8601 format string"""
+    """Convert a datetime to an ISO 8601 format string
+
+    Args:
+        obj: The datetime object to be formatted.
+        separator: The character used to separate the date and time
+                   parts of the formatted output
+
+    Returns:
+        The ISO 8601 string representation of the datetime:
+            yyyy-mm-dd{separator}hh:mm:ss.sss{tz}
+    """
     millisecond: int = obj.microsecond // 1_000
     tz_str: str = _fmt_tzinfo( obj.tzinfo )
     return (
@@ -522,7 +595,17 @@ def _fmt_aware_millisecond( obj: dt.datetime , separator: str ) -> str:
         )
 
 def _fmt_aware_second( obj: dt.datetime , separator: str ) -> str:
-    """Convert a datetime to an ISO 8601 format string"""
+    """Convert a datetime to an ISO 8601 format string
+
+    Args:
+        obj: The datetime object to be formatted.
+        separator: The character used to separate the date and time
+                   parts of the formatted output
+
+    Returns:
+        The ISO 8601 string representation of the datetime:
+            yyyy-mm-dd{separator}hh:mm:ss{tz}
+    """
     tz_str: str = _fmt_tzinfo( obj.tzinfo )
     return (
         f"{obj.year:04}-{obj.month:02}-{obj.day:02}"
@@ -532,7 +615,17 @@ def _fmt_aware_second( obj: dt.datetime , separator: str ) -> str:
         )
 
 def _fmt_aware_minute( obj: dt.datetime , separator: str ) -> str:
-    """Convert a datetime to an ISO 8601 format string"""
+    """Convert a datetime to an ISO 8601 format string
+
+    Args:
+        obj: The datetime object to be formatted.
+        separator: The character used to separate the date and time
+                   parts of the formatted output
+
+    Returns:
+        The ISO 8601 string representation of the datetime:
+            yyyy-mm-dd{separator}hh:mm{tz}
+    """
     tz_str: str = _fmt_tzinfo( obj.tzinfo )
     return (
         f"{obj.year:04}-{obj.month:02}-{obj.day:02}"
@@ -542,7 +635,17 @@ def _fmt_aware_minute( obj: dt.datetime , separator: str ) -> str:
         )
 
 def _fmt_aware_hour( obj: dt.datetime , separator: str ) -> str:
-    """Convert a datetime to an ISO 8601 format string"""
+    """Convert a datetime to an ISO 8601 format string
+
+    Args:
+        obj: The datetime object to be formatted.
+        separator: The character used to separate the date and time
+                   parts of the formatted output
+
+    Returns:
+        The ISO 8601 string representation of the datetime:
+            yyyy-mm-dd{separator}hh{tz}
+    """
     tz_str: str = _fmt_tzinfo( obj.tzinfo )
     return (
         f"{obj.year:04}-{obj.month:02}-{obj.day:02}"
@@ -563,8 +666,8 @@ class Properties:
     - Hashable (can be used in sets and as keys in dictionaries, etc.)
 
     Each Period subclass contains a Properties instance and forwards
-    the releveant methods to it, which means that Period objects
-    are also sortable and hashable (and immutable).
+    the relevant methods to it, which means that Period objects
+    are also sortable and hashable (they are also immutable).
     """
     step: int
     multiplier: int
@@ -575,37 +678,86 @@ class Properties:
 
     @staticmethod
     def of_years( no_of_years: int ) -> "Properties":
-        """Return Properties object for an "n"-year period"""
+        """Return Properties object for an "n"-year period
+
+        Args:
+            no_of_years: The number of years in the period
+
+        Returns:
+            A Properties object
+        """
         return Properties.of_months( no_of_years * 12 )
 
     @staticmethod
     def of_months( no_of_months: int ) -> "Properties":
-        """Return Properties object for an "n"-month period"""
+        """Return Properties object for an "n"-month period
+
+        Args:
+            no_of_months: The number of months in the period
+
+        Returns:
+            A Properties object
+        """
         return Properties.of_step_and_multiplier( _STEP_MONTHS , no_of_months )
 
     @staticmethod
     def of_days( no_of_days: int ) -> "Properties":
-        """Return Properties object for an "n"-day period"""
+        """Return Properties object for an "n"-day period
+
+        Args:
+            no_of_days: The number of days in the period
+
+        Returns:
+            A Properties object
+        """
         return Properties.of_seconds( no_of_days * 86_400 )
 
     @staticmethod
     def of_hours( no_of_hours: int ) -> "Properties":
-        """Return Properties object for an "n"-hour period"""
+        """Return Properties object for an "n"-hour period
+
+        Args:
+            no_of_hours: The number of hours in the period
+
+        Returns:
+            A Properties object
+        """
         return Properties.of_seconds( no_of_hours * 3_600 )
 
     @staticmethod
     def of_minutes( no_of_minutes: int ) -> "Properties":
-        """Return Properties object for an "n"-minute period"""
+        """Return Properties object for an "n"-minute period
+
+        Args:
+            no_of_minutes: The number of minutes in the period
+
+        Returns:
+            A Properties object
+        """
         return Properties.of_seconds( no_of_minutes * 60 )
 
     @staticmethod
     def of_seconds( no_of_seconds: int ) -> "Properties":
-        """Return Properties object for an "n"-second period"""
+        """Return Properties object for an "n"-second period
+
+        Args:
+            no_of_seconds: The number of seconds in the period
+
+        Returns:
+            A Properties object
+        """
         return Properties.of_step_and_multiplier( _STEP_SECONDS , no_of_seconds )
 
     @staticmethod
     def of_microseconds( no_of_microseconds: int ) -> "Properties":
-        """Return Properties object for an "n"-microsecond period"""
+        """Return Properties object for an "n"-microsecond period
+
+        Args:
+            no_of_microseconds: The number of microseconds in the period
+
+        Returns:
+            A Properties object
+        """
         seconds , microseconds = divmod( no_of_microseconds , 1_000_000 )
         if microseconds == 0:
             return Properties.of_seconds( seconds )
@@ -838,7 +990,7 @@ class Properties:
         defined by this Properties object
 
         Returns:
-            A Properties object
+            The ISO 8601 duration string of this Period
         """
         step = self.step
         if step == _STEP_MICROSECONDS:
@@ -875,7 +1027,7 @@ class Properties:
         step and multiplier and can be joined to form an ISO 8601
         duration string
 
-        The list of strings is used to calcluate the repr string
+        The list of strings is used to calculate the repr string
         """
         step = self.step
         multiplier = self.multiplier
@@ -1162,12 +1314,13 @@ class MonthsSeconds:
         """Return a tuple of two integers containing the
         calculated step and multiplier
 
-        Raise an error if a valid step and multiplier
-        cannot be created.  This happens, for example,
-        if boths months and seconds are >0.
-
         Returns:
             A tuple of (step,multiplier)
+
+        Raises:
+            ValueError if a valid step and multiplier
+            cannot be created.  This happens, for example,
+            if boths months and seconds are >0.
         """
         months = self.months
         seconds = self.seconds
@@ -1275,15 +1428,6 @@ class PeriodFields:
         """
         return self.get_months_seconds().get_base_properties()
 
-#
-# A regular expression Pattern used to parse an ISO 8601 duration
-# string such as P1Y, P7M, P5Y3M, P8D9H1M4S, etc.
-#
-_RE_PERIOD = re.compile(
-    r"^"
-    r"[Pp]" + _period_regex( "period" ) +
-    r"$" )
-
 def _str2int( num: Optional[str] , default: int = 0 ) -> int:
     """Convert string to int, None becomes 0 (or default if specified)
 
@@ -1302,16 +1446,16 @@ def _str2int( num: Optional[str] , default: int = 0 ) -> int:
 def _str2microseconds( num: Optional[str] , default: int = 0 ) -> int:
     """Convert string to microseconds, None becomes 0 (or default if specified)
 
-    Args:
-        num: The string to be converted, or None
-        default: Default int value to use if num is None
-                 (defaults to 0)
-
     A seconds + microseconds string looks like "nn.uuu". This function
     converts the "uuu" part (from 1 to 6 digits) to an int value
     between 0 and 999_999.
 
     Converting the string to an int may raise the usual Python error(s)
+
+    Args:
+        num: The string to be converted, or None
+        default: Default int value to use if num is None
+                 (defaults to 0)
 
     Returns:
         The int value read from the input string
@@ -1321,12 +1465,12 @@ def _str2microseconds( num: Optional[str] , default: int = 0 ) -> int:
 def _period_match( prefix: str , matcher: re.Match[str] ) -> PeriodFields:
     """Return a PeriodFields object from a regex Matcher object
 
+    The regex Pattern that create the matcher is assumed to have been
+    created from a string returned by the _period_regex function.
+
     Args:
         prefix: The name prefix used when creating the regex (
         matcher: The regex Matcher object
-
-    The regex Pattern that create the matcher is assumed to have been
-    created from a string returned by the _period_regex function.
 
     Returns:
         The PeriodFields object
@@ -1340,20 +1484,6 @@ def _period_match( prefix: str , matcher: re.Match[str] ) -> PeriodFields:
         minutes = _str2int( matcher.group( f"{prefix}_minutes" ) ) ,
         seconds = _str2int( matcher.group( f"{prefix}_seconds" ) ) ,
         microseconds = _str2microseconds( matcher.group( f"{prefix}_microseconds" ) ) )
-
-#
-# A regular expression Pattern used to parse an extended
-# ISO 8601 duration string such as P2Y+3M, P1Y+9M9H.
-#
-# This format has been invented by me (os) and is totally
-# non-standard, but something like this is needed as
-# ISO duration strings have no concept of a date/time offset.
-#
-_RE_PERIOD_OFFSET = re.compile(
-    r"^"
-    r"[Pp]" + _period_regex( "period" ) +
-    r"\+" + _period_regex( "offset" ) +
-    r"$" )
 
 def _total_microseconds( delta: dt.timedelta ) -> int:
     """Return total number of microseconds in a timedelta
@@ -1407,10 +1537,11 @@ class Period(ABC):
             period_string: A string containing a period
                            definition
 
-        Raises an error if there is no such Period.
-
         Returns:
             A Period object defined by the supplied string
+
+        Raises:
+            ValueError if there is no such Period.
         """
         return _of( period_string )
 
@@ -1422,12 +1553,13 @@ class Period(ABC):
             iso_8601_duration: An ISO 8601 duration string such
                                as "P1Y" or "PT15M"
 
-        Raises an error if the string does not contain a valid
-        ISO 8601 duration value
-
         Returns:
             A Period object defined by the supplied ISO 8601
             duration string
+
+        Raises:
+            ValueError if the string does not contain a valid
+            ISO 8601 duration value
         """
         return _of_iso_duration( iso_8601_duration )
 
@@ -1439,12 +1571,13 @@ class Period(ABC):
             duration: An ISO 8601 duration string such as "P1Y" or
                       "PT15M"
 
-        Raises an error if the string does not contain a valid
-        (extended) ISO 8601 duration value
-
         Returns:
             A Period object defined by the supplied (extended)
             ISO 8601 duration string
+
+        Raises:
+            ValueError if the string does not contain a valid
+            (extended) ISO 8601 duration value
         """
         return _of_duration( duration )
 
@@ -1456,11 +1589,13 @@ class Period(ABC):
             date_duration: An ISO 8601 duration string of the form
                            <start>/<duration>
 
-        Raises an error if the string does not contain a valid value
-
         Returns:
             A Period object defined by the supplied ISO 8601
             duration string
+
+        Raises:
+            ValueError if the string does not contain a valid
+            <start>/<duration> value
         """
         return _of_date_and_duration( date_duration )
 
@@ -1471,11 +1606,13 @@ class Period(ABC):
         Args:
             repr_string: The repr string of a Period object
 
-        Raises an error if the string does not contain a valid value
-
         Returns:
             A Period object that is identical (as much as possible
             anyway) to the Period object that produced the repr string.
+
+        Raises:
+            ValueError if the string does not contain a valid
+            __repr__ string
         """
         return _of_repr( repr_string )
 
@@ -1846,11 +1983,11 @@ class Period(ABC):
         """Return True if datetime is aligned to the start of an
         interval
 
-        The tzinfo of the Period and the datetime are oth ignored.
+        The tzinfo of the Period and the datetime are both ignored.
 
         Returns:
             True if the supplied datetime lies at the start of an
-            interval ,False otherwise
+            interval, False otherwise
         """
         ordinal = self.ordinal( datetime_obj )
         datetime_obj2 = self.datetime( ordinal )
@@ -1985,8 +2122,7 @@ class Period(ABC):
         specified tzinfo
 
         Args:
-            tzinfo: The tzinfo to apply to the new Period,
-                    or None if the Period is to be 'naive'
+            tzinfo: The tzinfo to apply to the new Period
 
         Returns:
             A Period object
@@ -2637,6 +2773,17 @@ class ShiftedPeriod(Period):
 def _datetime_regex( prefix: str ) -> str:
     """Return a regular expression that can parse an ISO 8601
     format datetime
+
+    All the regular expression groups are given a name which
+    is prefix by the string argument.
+
+    Args:
+        prefix: The prefix to apply to the regular expression
+                group names
+
+    Returns:
+        A regular expression string that can parse an
+        ISO 8601 format datetime
     """
     return (
         fr"(?P<{prefix}_yyyy>\d{{4}})"
@@ -2654,6 +2801,15 @@ def _date_match( prefix: str , matcher: re.Match[str] ) -> dt.date:
     """Extract a date object out of a regular expression matcher that
     has parsed an ISO 8601 format datetime
 
+    The matcher argument is assumed to come from a regular expression
+    created by the _datetime_regex() function.
+
+    Args:
+        prefix: The prefix to apply to the regular expression
+                group names
+        matcher: A regular expression Match object from which
+                 to extract the various date fields
+
     Returns:
         A date object
     """
@@ -2665,6 +2821,15 @@ def _date_match( prefix: str , matcher: re.Match[str] ) -> dt.date:
 def _time_match( prefix: str , matcher: re.Match[str] ) -> dt.time:
     """Extract a time object out of a regular expression matcher that
     has parsed an ISO 8601 format datetime
+
+    The matcher argument is assumed to come from a regular expression
+    created by the _datetime_regex() function.
+
+    Args:
+        prefix: The prefix to apply to the regular expression
+                group names
+        matcher: A regular expression Match object from which
+                 to extract the various time fields
 
     Returns:
         A time object
@@ -2679,6 +2844,9 @@ def _time_match( prefix: str , matcher: re.Match[str] ) -> dt.time:
 def _timezone( utc_offset: Optional[str] ) -> Optional[dt.tzinfo]:
     """Convert an optional string into an optional tzinfo
     object
+
+    Args:
+        utc_offset: A string containing the timezone offset
 
     Returns:
         A tzinfo object, or None
@@ -2702,6 +2870,15 @@ def _tzinfo_match( prefix: str , matcher: re.Match[str] ) -> Optional[dt.tzinfo]
     """Extract a tzinfo object out of a regular expression matcher that
     has parsed an ISO 8601 format datetime
 
+    The matcher argument is assumed to come from a regular expression
+    created by the _datetime_regex() function.
+
+    Args:
+        prefix: The prefix to apply to the regular expression
+                group names
+        matcher: A regular expression Match object from which
+                 to extract the various tzinfo fields
+
     Returns:
         A tzinfo object, or None
     """
@@ -2711,6 +2888,15 @@ def _datetime_match( prefix: str , matcher: re.Match[str] ) -> dt.datetime:
     """Extract a datetime object out of a regular expression matcher that
     has parsed an ISO 8601 format datetime
 
+    The matcher argument is assumed to come from a regular expression
+    created by the _datetime_regex() function.
+
+    Args:
+        prefix: The prefix to apply to the regular expression
+                group names
+        matcher: A regular expression Match object from which
+                 to extract the various date and time fields
+
     Returns:
         A datetime object
     """
@@ -2718,20 +2904,16 @@ def _datetime_match( prefix: str , matcher: re.Match[str] ) -> dt.datetime:
         date = _date_match( prefix , matcher ) ,
         time = _time_match( prefix , matcher ) )
 
-#
-# A regular expression Pattern used to parse an ISO 8601 duration
-# string of the format <start>/<duration> such as "1883-01-01/P1D".
-#
-_RE_DATETIME_PERIOD = re.compile(
-    r"^"
-  + _datetime_regex( "d" ) +
-    r"/"
-    r"[Pp]" + _period_regex( "period" ) +
-    r"$" )
-
 def _match_period( matcher: re.Match[str] ) -> Period:
     """Return a Period object from a regular expression matcher that
     has parsed an ISO 8601 duration format string
+
+    The matcher argument is assumed to come from a regular expression
+    created using the _period_regex() function.
+
+    Args:
+        matcher: A regular expression Match object from which
+                 to extract the various date and time fields
 
     Returns:
         A Period object
@@ -2744,6 +2926,13 @@ def _match_period_offset( matcher: re.Match[str] ) -> Period:
     """Return a Period object from a regular expression matcher that
     has parsed an ISO 8601 duration format string that may include
     a non-standard offset
+
+    The matcher argument is assumed to come from a regular expression
+    created using the _period_regex() function.
+
+    Args:
+        matcher: A regular expression Match object from which
+                 to extract the various date and time fields
 
     Returns:
         A Period object
@@ -2758,6 +2947,14 @@ def _match_datetime_period( matcher: re.Match[str] ) -> Period:
     """Return a Period object from a regular expression matcher that
     has parsed an ISO 8601 duration string of the form <start>/<duration>
 
+    The matcher argument is assumed to come from a regular expression
+    created using the _datetime_regex() and _period_regex() functions.
+
+    Args:
+        matcher: A regular expression Match object from which
+                 to extract the various date, time and period
+                 fields
+
     Returns:
         A Period object
     """
@@ -2769,6 +2966,11 @@ def _match_datetime_period( matcher: re.Match[str] ) -> Period:
 def _match_repr( matcher: re.Match[str] ) -> Period:
     """Return a Period object from a regular expression matcher that
     has parsed a repr string from some other Period object
+
+    Args:
+        matcher: A regular expression Match object from which
+                 to extract the various fields required to
+                 recreate a Period from a __repr__ string
 
     Returns:
         A Period object
@@ -2794,6 +2996,69 @@ def _match_repr( matcher: re.Match[str] ) -> Period:
     if ordinal_shift != 0:
         properties = properties.with_ordinal_shift( ordinal_shift )
     return _get_shifted_period( properties )
+
+#
+# A regular expression Pattern used to parse an ISO 8601 duration
+# string such as P1Y, P7M, P5Y3M, P8D9H1M4S, etc.
+#
+_RE_PERIOD = re.compile(
+    r"^"
+    r"[Pp]" + _period_regex( "period" ) +
+    r"$" )
+
+#
+# A regular expression Pattern used to parse an extended
+# ISO 8601 duration string such as P2Y+3M, P1Y+9M9H.
+#
+# This format has been invented by me (os) and is totally
+# non-standard, but something like this is needed as
+# ISO duration strings have no concept of a date/time offset.
+#
+_RE_PERIOD_OFFSET = re.compile(
+    r"^"
+    r"[Pp]" + _period_regex( "period" ) +
+    r"\+" + _period_regex( "offset" ) +
+    r"$" )
+
+#
+# A regular expression Pattern used to parse an ISO 8601 duration
+# string of the format <start>/<duration> such as "1883-01-01/P1D".
+#
+_RE_DATETIME_PERIOD = re.compile(
+    r"^"
+  + _datetime_regex( "d" ) +
+    r"/"
+    r"[Pp]" + _period_regex( "period" ) +
+    r"$" )
+
+#
+# A regular expression Pattern used to parse a Period
+# __repr__ string.
+#
+# The intent is that the repr string can be passed into the
+# Period.of_repr() static method to recreated the Period
+# object.  The current format achives this, up to a point,
+# but tzinfo objects cause problems as there is no standard
+# way to convert tzinfo objects to/from strings.
+#
+# It might be best to remove the Period.of_repr() method
+# completely.
+#
+_RE_REPR = re.compile(
+    r"^"
+    r"[Pp]" + _period_regex( "period" ) +
+    r"(?:" # start optional offset
+    r"(?P<offset>\+)" + _period_regex( "offset" ) +
+    r")?" # end optional offset
+    r"\[" # start timezone
+    r"(?:"
+    r"(?P<zone>[Zz]|(?:[+-]\d{1,2}(?::\d{1,2})?))"
+    r")?"
+    r"\]" # end timezone
+    r"(?:" # start optional ordinal shift
+    r"(?P<shift>-?\d+)"
+    r")?" # end optional ordinal shift
+    r"$" )
 
 #
 # A list of tuples used to parse a string into a Period
@@ -2854,13 +3119,14 @@ def _of( period_string: str ) -> Period:
 def _of_iso_duration( iso_8601_duration: str ) -> Period:
     """Return a Period object from an ISO 8601 duration string
 
-    Raises an error of the string does not contain a valid
-    ISO 8601 duration.
-    Not all legal ISO 8601 duration strings can be converted to
-    a Period object. Raises an error for any such illegal string.
-
     Returns:
         A Period object
+
+    Raises:
+        ValueError if the string does not contain a valid
+        ISO 8601 duration.
+        ValueError if the string contains a valid ISO 8601
+        duration that cannot be converted into a Period object
     """
     matcher: Optional[re.Match[str]] = _RE_PERIOD.match( iso_8601_duration )
     if matcher:
@@ -2872,10 +3138,14 @@ def _of_duration( duration: str ) -> Period:
 
     Both plain and extended ISO 8601 duration strings are supported.
     Not all legal ISO 8601 duration strings can be converted to
-    a Period object. Raises an error for any such illegal string.
+    a Period object.
 
     Returns:
         A Period object
+
+    Raises:
+        ValueError if duration does not contains a valid duration
+        string
     """
     matcher: Optional[re.Match[str]] = _RE_PERIOD_OFFSET.match( duration )
     if matcher:
@@ -2889,13 +3159,14 @@ def _of_date_and_duration( date_duration: str ) -> Period:
     """Return a Period object from an ISO 8601 duration string
     of the form <start>/<duration>
 
-    Raises an error of the string does not contain a valid
-    ISO 8601 datetime and/or duration.
     Not all legal ISO 8601 duration strings can be converted to
-    a Period object. Raises an error for any such illegal string.
+    a Period object.
 
     Returns:
         A Period object
+
+    Raises:
+        ValueError if date_duration does not contains a valid value
     """
     matcher: Optional[re.Match[str]] = _RE_DATETIME_PERIOD.match( date_duration )
     if matcher:
@@ -2905,11 +3176,11 @@ def _of_date_and_duration( date_duration: str ) -> Period:
 def _of_repr( repr_string: str ) -> Period:
     """Return a Period from a Period __repr__ string
 
-    Raises an error of the string does not contain a valid
-    repr string.
-
     Returns:
         A Period object
+
+    Raises:
+        ValueError if the string does not contain a valid repr string
     """
     matcher: Optional[re.Match[str]] = _RE_REPR.match( repr_string )
     if matcher:
