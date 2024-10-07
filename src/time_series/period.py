@@ -374,8 +374,14 @@ def _get_month_period_name( months: int ) -> str:
 # A regular expression Pattern used to parse a Period
 # __repr__ string.
 #
-# This format is a bit lacking and could probably use
-# some improvement.
+# The intent is that the repr string can be passed into the
+# Period.of_repr() static method to recreated the Period
+# object.  The current format achives this, up to a point,
+# but tzinfo objects cause problems as there is no standard
+# way to convert tzinfo objects to/from strings.
+#
+# It might be best to remove the Period.of_repr() method
+# completely.
 #
 _RE_REPR = re.compile(
     r"^"
@@ -399,6 +405,7 @@ _STEP_MONTHS = 3
 _VALID_STEPS = frozenset( [ _STEP_MICROSECONDS , _STEP_SECONDS , _STEP_MONTHS ] )
 
 def _fmt_naive_microsecond( obj: dt.datetime , separator: str ) -> str:
+    """Convert a datetime to an ISO 8601 format string"""
     return (
         f"{obj.year:04}-{obj.month:02}-{obj.day:02}"
         f"{separator}"
@@ -927,7 +934,7 @@ class Properties:
             self ,
             separator: str = "T"
             ) -> Callable[[dt.datetime],str]:
-        """Return a datetime formatter suitable for formatting
+        """Return a datetime formatter function suitable for formatting
         naive datetime objects of this period
 
         Args:
@@ -987,7 +994,7 @@ class Properties:
             self ,
             separator: str = "T"
             ) -> Callable[[dt.datetime],str]:
-        """Return a datetime formatter suitable for formatting
+        """Return a datetime formatter function suitable for formatting
         timezone aware datetime objects of this period
 
         Args:
@@ -1387,6 +1394,8 @@ class Period(ABC):
     ordinal() and datetime() methods, and the Properties object,
     contain all the low-level operations and data upon which all
     other functionality is built.
+
+    This class contains the public interface of the period module.
     """
 # pylint: disable=too-many-public-methods
 
@@ -1781,7 +1790,7 @@ class Period(ABC):
             ordinal value, which are sequential.
 
             The ordinal() method returns the ordinal within
-            which the datetime lies.
+            which the specified datetime lies.
 
             The datetime() method returns the start of the
             interval identified by the ordinal.
@@ -1790,16 +1799,16 @@ class Period(ABC):
 
         Will raise an error if an out-of-bounds datetime object
         is involved in any calculation (a datetime outside of
-        year range 0001-9999(
+        year range 0001-9999)
 
         The tzinfo property of the supplied datetime object is
         ignored.
 
         The ordinal values returned by this method are only
         meaningful to the datetime() method of the same
-        Period instance. You cannot pass an ordinal created from
+        Period instance. Passing an ordinal created from
         one Period instance into the datetime() method of another
-        Period instance.
+        Period instance will not yield a meaningful result.
 
         Returns:
             An integer ordinal value
@@ -1821,7 +1830,7 @@ class Period(ABC):
 
         Will raise an error if an out-of-bounds datetime object
         is involved in any calculation (a datetime outside of
-        year range 0001-9999(
+        year range 0001-9999)
 
         See the ordinal() method for an example.
 
@@ -1837,7 +1846,7 @@ class Period(ABC):
         """Return True if datetime is aligned to the start of an
         interval
 
-        And tzinfo of the Period and the datetime are ignored.
+        The tzinfo of the Period and the datetime are oth ignored.
 
         Returns:
             True if the supplied datetime lies at the start of an
@@ -2498,8 +2507,8 @@ def _get_base_period( properties: Properties ) -> Period:
     """Return a Period with no month or second
     offset and no ordinal_shift.
 
-    Examines the supplied Properties and chooses a subclass
-    of Period that can perform the required interval
+    Examines the supplied Properties object and chooses a
+    subclass of Period that can perform the required interval
     calculations.
 
     Returns:
