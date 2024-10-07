@@ -44,25 +44,25 @@ Example usage:
 
 """
 # pylint: disable=consider-using-f-string,too-many-lines
-from abc import (
-    ABC ,
-    abstractmethod ,
-    )
-from collections.abc import (
-    Callable ,
-    )
-from dataclasses import (
-    dataclass ,
-    )
-from typing import (
-    Any ,
-    Optional ,
-    override ,
-    )
-
 import calendar
 import datetime as dt
 import re
+from abc import (
+    ABC,
+    abstractmethod,
+)
+from collections.abc import (
+    Callable,
+)
+from dataclasses import (
+    dataclass,
+)
+from typing import (
+    Any,
+    Optional,
+    override,
+)
+
 
 def _naive( datetime_obj: dt.datetime ) -> dt.datetime:
     """Return a datetime object without a tzinfo
