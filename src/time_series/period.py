@@ -387,7 +387,7 @@ _VALID_STEPS = frozenset([_STEP_MICROSECONDS, _STEP_SECONDS, _STEP_MONTHS])
 
 
 def _fmt_naive_microsecond(obj: dt.datetime, separator: str) -> str:
-    """Convert a datetime to an ISO 8601 format string
+    """Convert a naive datetime to an ISO 8601 format string
 
     Args:
         obj: The datetime object to be formatted.
@@ -407,7 +407,7 @@ def _fmt_naive_microsecond(obj: dt.datetime, separator: str) -> str:
 
 
 def _fmt_naive_millisecond(obj: dt.datetime, separator: str) -> str:
-    """Convert a datetime to an ISO 8601 format string
+    """Convert a naive datetime to an ISO 8601 format string
 
     Args:
         obj: The datetime object to be formatted.
@@ -428,7 +428,7 @@ def _fmt_naive_millisecond(obj: dt.datetime, separator: str) -> str:
 
 
 def _fmt_naive_second(obj: dt.datetime, separator: str) -> str:
-    """Convert a datetime to an ISO 8601 format string
+    """Convert a naive datetime to an ISO 8601 format string
 
     Args:
         obj: The datetime object to be formatted.
@@ -443,7 +443,7 @@ def _fmt_naive_second(obj: dt.datetime, separator: str) -> str:
 
 
 def _fmt_naive_minute(obj: dt.datetime, separator: str) -> str:
-    """Convert a datetime to an ISO 8601 format string
+    """Convert a naive datetime to an ISO 8601 format string
 
     Args:
         obj: The datetime object to be formatted.
@@ -458,7 +458,7 @@ def _fmt_naive_minute(obj: dt.datetime, separator: str) -> str:
 
 
 def _fmt_naive_hour(obj: dt.datetime, separator: str) -> str:
-    """Convert a datetime to an ISO 8601 format string
+    """Convert a naive datetime to an ISO 8601 format string
 
     Args:
         obj: The datetime object to be formatted.
@@ -473,7 +473,7 @@ def _fmt_naive_hour(obj: dt.datetime, separator: str) -> str:
 
 
 def _fmt_naive_day(obj: dt.datetime) -> str:
-    """Convert a datetime to an ISO 8601 format string
+    """Convert a naive datetime to an ISO 8601 format string
 
     Args:
         obj: The datetime object to be formatted.
@@ -486,7 +486,7 @@ def _fmt_naive_day(obj: dt.datetime) -> str:
 
 
 def _fmt_naive_month(obj: dt.datetime) -> str:
-    """Convert a datetime to an ISO 8601 format string
+    """Convert a naive datetime to an ISO 8601 format string
 
     Args:
         obj: The datetime object to be formatted.
@@ -499,7 +499,7 @@ def _fmt_naive_month(obj: dt.datetime) -> str:
 
 
 def _fmt_naive_year(obj: dt.datetime) -> str:
-    """Convert a datetime to an ISO 8601 format string
+    """Convert a naive datetime to an ISO 8601 format string
 
     Args:
         obj: The datetime object to be formatted.
@@ -553,7 +553,8 @@ def _fmt_tzinfo(tz: Optional[dt.tzinfo]) -> str:
 
 
 def _fmt_aware_microsecond(obj: dt.datetime, separator: str) -> str:
-    """Convert a datetime to an ISO 8601 format string
+    """Convert a datetime which includes a timezone to an ISO 8601
+    format string
 
     Args:
         obj: The datetime object to be formatted.
@@ -573,9 +574,9 @@ def _fmt_aware_microsecond(obj: dt.datetime, separator: str) -> str:
         f"{tz_str}"
     )
 
-
 def _fmt_aware_millisecond(obj: dt.datetime, separator: str) -> str:
-    """Convert a datetime to an ISO 8601 format string
+    """Convert a datetime which includes a timezone to an ISO 8601
+    format string
 
     Args:
         obj: The datetime object to be formatted.
@@ -598,7 +599,8 @@ def _fmt_aware_millisecond(obj: dt.datetime, separator: str) -> str:
 
 
 def _fmt_aware_second(obj: dt.datetime, separator: str) -> str:
-    """Convert a datetime to an ISO 8601 format string
+    """Convert a datetime which includes a timezone to an ISO 8601
+    format string
 
     Args:
         obj: The datetime object to be formatted.
@@ -619,7 +621,8 @@ def _fmt_aware_second(obj: dt.datetime, separator: str) -> str:
 
 
 def _fmt_aware_minute(obj: dt.datetime, separator: str) -> str:
-    """Convert a datetime to an ISO 8601 format string
+    """Convert a datetime which includes a timezone to an ISO 8601
+    format string
 
     Args:
         obj: The datetime object to be formatted.
@@ -635,7 +638,8 @@ def _fmt_aware_minute(obj: dt.datetime, separator: str) -> str:
 
 
 def _fmt_aware_hour(obj: dt.datetime, separator: str) -> str:
-    """Convert a datetime to an ISO 8601 format string
+    """Convert a datetime which includes a timezone to an ISO 8601
+    format string
 
     Args:
         obj: The datetime object to be formatted.
