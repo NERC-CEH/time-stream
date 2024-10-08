@@ -574,6 +574,7 @@ def _fmt_aware_microsecond(obj: dt.datetime, separator: str) -> str:
         f"{tz_str}"
     )
 
+
 def _fmt_aware_millisecond(obj: dt.datetime, separator: str) -> str:
     """Convert a datetime which includes a timezone to an ISO 8601
     format string
