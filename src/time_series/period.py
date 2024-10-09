@@ -1799,9 +1799,8 @@ class Period(ABC):
         """
         return self._properties.pl_offset()
 
-    @property
     def is_epoch_agnostic(self) -> bool:
-        """True if the way that this period splits the
+        """Return True if the way that this period splits the
         timeline does not depend on the epoch used to perform
         calculations
 
