@@ -45,7 +45,7 @@ class TimeSeriesPolars(TimeSeries):
         original_times_no_offset = original_times.dt.offset_by("-" + self.resolution.dataframe_offset)
 
         # Round the (non offset) datetime series to the given resolution interval and add the offset back on
-        rounded_times = original_times_no_offset.dt.round(self.resolution.dataframe_frequency)
+        rounded_times = original_times_no_offset.dt.truncate(self.resolution.dataframe_frequency)
         rounded_times_with_offset = rounded_times.dt.offset_by(self.resolution.dataframe_offset)
 
         # Compare the original series to the rounded series.  If they don't match, then the
