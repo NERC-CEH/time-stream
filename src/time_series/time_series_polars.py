@@ -60,25 +60,27 @@ class TimeSeriesPolars(TimeSeries):
         """ Periodicity defines the allowed frequency of the datetimes
         """
         if self.periodicity is None:
-            # Default to a resolution that accepts all datetimes
+            # Default to a periodicity that accepts all datetimes
             self._periodicity = Period.of_microseconds(1)
 
+        if not self.periodicity.is_epoch_agnostic:
+            # E.g. 5 hours, 7 days, 9 months, etc.
+            raise NotImplementedError("Not available for non-epoch agnostic periodicity")
+
+        # Get the datetime series, and remove any offset
         original_times = self.df[self.time_name]
+        original_times_no_offset = original_times.dt.offset_by("-" + self.periodicity.dataframe_offset)
 
-        rounded_times = original_times.dt.truncate(self.periodicity.dataframe_frequency)
+        # Round the (non offset) datetime series to the given periodicity interval and add the offset back on
+        rounded_times = original_times_no_offset.dt.truncate(self.periodicity.dataframe_frequency)
+        rounded_times_with_offset = rounded_times.dt.offset_by(self.periodicity.dataframe_offset)
 
-        # periodicity_counts = self.df.group_by_dynamic(
-        #     index_column=self.time_name,
-        #     every=self.periodicity.dataframe_frequency,
-        #     offset=self.periodicity.dataframe_offset,
-        #     closed="left",
-        #     start_by = "datapoint"
-        # ).agg(pl.len().alias("count"))
-
-        #count_check = (periodicity_counts["count"].eq(1)).all()
-        #if not count_check:
-        #    raise UserWarning(f"Values in time field: \"{self.time_name}\" do not conform to "
-        #                      f"periodicity: {self.periodicity}")
+        # Check how many unique values are in the rounded times. It should equal the length of the original time series
+        # if all time values map to a single periodicity
+        all_unique = rounded_times_with_offset.n_unique() == len(original_times)
+        if not all_unique:
+           raise UserWarning(f"Values in time field: \"{self.time_name}\" do not conform to "
+                             f"periodicity: {self.periodicity}")
 
     def _set_time_zone(self):
         default_time_zone = "UTC"
