@@ -2,21 +2,21 @@ from abc import ABC, abstractmethod
 from typing import Iterator, Optional
 
 import polars as pl
-from period import Period
+from time_series.period import Period
 
 
 class TimeSeries(ABC):
     def __init__(
         self,
-        time_name: Optional[str] = None,
-        resolution: Optional[Period] = None,
-        periodicity: Optional[Period] = None,
-        timezone: Optional[str] = None,
+        time_name: str,
+        resolution: Period,
+        periodicity: Period,
+        time_zone: Optional[str] = None,
     ) -> None:
         self.__time_name = time_name
         self.__resolution = resolution
         self.__periodicity = periodicity
-        self.__timezone = timezone
+        self.__time_zone = time_zone
 
     @property
     def time_name(self) -> str:
@@ -31,21 +31,37 @@ class TimeSeries(ABC):
         return self.__periodicity
 
     @property
-    def timezone(self) -> str:
-        return self.__timezone
+    def time_zone(self) -> str:
+        return self.__time_zone
 
     @staticmethod
     def from_polars(
         df: pl.DataFrame,
-        time_name: Optional[str] = None,
-        resolution: Optional[Period] = None,
-        periodicity: Optional[Period] = None,
-        timezone: Optional[str] = None,
+        time_name: str,
+        resolution: Period,
+        periodicity: Period,
+        time_zone: Optional[str] = None,
     ) -> "TimeSeries":
         # Lazy import to avoid recursive importing
         from time_series_polars import TimeSeriesPolars
 
-        return TimeSeriesPolars(df, time_name, resolution, periodicity, timezone)
+        return TimeSeriesPolars(df, time_name, resolution, periodicity, time_zone)
+
+    @abstractmethod
+    def _validate_resolution(self):
+        pass
+
+    @abstractmethod
+    def _validate_periodicity(self):
+        pass
+
+    @abstractmethod
+    def _set_time_zone(self):
+        pass
+
+    @abstractmethod
+    def _sort_time(self) -> None:
+        pass
 
     @abstractmethod
     def __len__(self) -> int:
