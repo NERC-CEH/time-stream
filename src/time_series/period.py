@@ -1209,7 +1209,7 @@ class Properties:
         else:
             raise AssertionError(f"Illegal step: {step}")
 
-    def dataframe_offset(self) -> str:
+    def pl_offset(self) -> str:
         """Return a string that captures the month and microsecond
         offsets of this period and which is suitable for use with
         Polars DataFrames
@@ -1784,7 +1784,7 @@ class Period(ABC):
         return self._properties.pl_interval()
 
     @property
-    def dataframe_offset(self) -> str:
+    def pl_offset(self) -> str:
         """A string that captures the month and microsecond
         offsets of this period and which is suitable for use with
         Polars DataFrames
@@ -1797,7 +1797,7 @@ class Period(ABC):
         Returns:
             A string suitable for use with Polars DataFrames
         """
-        return self._properties.dataframe_offset()
+        return self._properties.pl_offset()
 
     @property
     def is_epoch_agnostic(self) -> bool:
