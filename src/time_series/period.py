@@ -1267,6 +1267,12 @@ class Properties:
         else:
             raise AssertionError(f"Illegal step: {step}")
 
+    def __str__(self) -> str:
+        elems: list[str] = ["P"]
+        self._append_step_elems(elems)
+        self._append_offset_elems(elems)
+        return "".join(elems)
+
     def __repr__(self) -> str:
         elems: list[str] = ["P"]
         self._append_step_elems(elems)
@@ -1706,7 +1712,6 @@ class Period(ABC):
         assert isinstance(properties.tzinfo, (dt.tzinfo, type(None)))
         assert isinstance(properties.ordinal_shift, int)
         self._properties = properties
-        self._iso8601 = properties.get_iso8601()
         self._timedelta = properties.get_timedelta()
 
     @property
@@ -2195,7 +2200,7 @@ class Period(ABC):
         )
 
     def __str__(self) -> str:
-        return self._iso8601
+        return self._properties.__str__()
 
     def __repr__(self) -> str:
         return self._properties.__repr__()
