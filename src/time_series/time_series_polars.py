@@ -32,16 +32,27 @@ class TimeSeriesPolars(TimeSeries):
     def _validate_resolution(self):
         """ Resolution defines how 'precise' the datetimes are
         """
-        rounded_time = self.df.group_by_dynamic(
-            index_column=self.time_name,
-            every=self.resolution.dataframe_frequency,
-            offset=self.resolution.dataframe_offset,
-            closed="left",
-            start_by="datapoint"
-        ).agg(pl.len())
+        if self.resolution is None:
+            # Default to a resolution that accepts all datetimes
+            self._resolution = Period.of_microseconds(1)
 
-        aligned = self.df[self.time_name].equals(rounded_time[self.time_name])
+        if not self.resolution.is_epoch_agnostic:
+            # E.g. 5 hours, 7 days, 9 months, etc.
+            raise NotImplementedError("Not available for non-epoch agnostic resolutions")
+
+        # Get the datetime series, and remove any offset
+        original_times = self.df[self.time_name]
+        original_times_no_offset = original_times.dt.offset_by("-" + self.resolution.dataframe_offset)
+
+        # Round the (non offset) datetime series to the given resolution interval and add the offset back on
+        rounded_times = original_times_no_offset.dt.round(self.resolution.dataframe_frequency)
+        rounded_times_with_offset = rounded_times.dt.offset_by(self.resolution.dataframe_offset)
+
+        # Compare the original series to the rounded series.  If they don't match, then the
+        # datetimes are not aligned to the resolution.
+        aligned = original_times.equals(rounded_times_with_offset)
         if not aligned:
+            print(original_times, rounded_times_with_offset)
             raise UserWarning(f"Values in time field: \"{self.time_name}\" are not aligned to "
                               f"resolution: {self.resolution}")
 
