@@ -1183,7 +1183,7 @@ class Properties:
         assert self.step == _STEP_MONTHS
         return lambda dt: _fmt_aware_hour(dt, separator)
 
-    def dataframe_frequency(self) -> str:
+    def pl_interval(self) -> str:
         """Return a string that captures the step and multiplier
         of this period and which is suitable for use with
         Polars DataFrames
@@ -1766,7 +1766,7 @@ class Period(ABC):
         return self._timedelta
 
     @property
-    def dataframe_frequency(self) -> str:
+    def pl_interval(self) -> str:
         """A string that captures the step and multiplier
         of this period and which is suitable for use with
         Polars DataFrames
@@ -1781,7 +1781,7 @@ class Period(ABC):
         Returns:
             A string suitable for use with Polars DataFrames
         """
-        return self._properties.dataframe_frequency()
+        return self._properties.pl_interval()
 
     @property
     def dataframe_offset(self) -> str:
