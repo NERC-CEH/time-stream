@@ -1712,7 +1712,6 @@ class Period(ABC):
         assert isinstance(properties.tzinfo, (dt.tzinfo, type(None)))
         assert isinstance(properties.ordinal_shift, int)
         self._properties = properties
-        self._timedelta = properties.get_timedelta()
 
     @property
     def iso_duration(self) -> str:
@@ -1773,7 +1772,7 @@ class Period(ABC):
         Returns:
             A timedelta object, or None
         """
-        return self._timedelta
+        return self._properties.get_timedelta()
 
     @property
     def pl_interval(self) -> str:
