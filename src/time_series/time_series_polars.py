@@ -10,8 +10,8 @@ class TimeSeriesPolars(TimeSeries):
             self,
             df: pl.DataFrame,
             time_name: str,
-            resolution: Period,
-            periodicity: Period,
+            resolution: Optional[Period] = None,
+            periodicity: Optional[Period] = None,
             time_zone: Optional[str] = None,
     ) -> None:
         self._df = df
@@ -59,18 +59,26 @@ class TimeSeriesPolars(TimeSeries):
     def _validate_periodicity(self):
         """ Periodicity defines the allowed frequency of the datetimes
         """
-        periodicity_counts = self.df.group_by_dynamic(
-            index_column=self.time_name,
-            every=self.periodicity.dataframe_frequency,
-            offset=self.periodicity.dataframe_offset,
-            closed="left",
-            start_by = "datapoint"
-        ).agg(pl.len().alias("count"))
+        if self.periodicity is None:
+            # Default to a resolution that accepts all datetimes
+            self._periodicity = Period.of_microseconds(1)
 
-        count_check = (periodicity_counts["count"].eq(1)).all()
-        if not count_check:
-            raise UserWarning(f"Values in time field: \"{self.time_name}\" do not conform to "
-                              f"periodicity: {self.periodicity}")
+        original_times = self.df[self.time_name]
+
+        rounded_times = original_times.dt.truncate(self.periodicity.dataframe_frequency)
+
+        # periodicity_counts = self.df.group_by_dynamic(
+        #     index_column=self.time_name,
+        #     every=self.periodicity.dataframe_frequency,
+        #     offset=self.periodicity.dataframe_offset,
+        #     closed="left",
+        #     start_by = "datapoint"
+        # ).agg(pl.len().alias("count"))
+
+        #count_check = (periodicity_counts["count"].eq(1)).all()
+        #if not count_check:
+        #    raise UserWarning(f"Values in time field: \"{self.time_name}\" do not conform to "
+        #                      f"periodicity: {self.periodicity}")
 
     def _set_time_zone(self):
         default_time_zone = "UTC"

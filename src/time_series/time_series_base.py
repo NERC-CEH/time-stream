@@ -9,8 +9,8 @@ class TimeSeries(ABC):
     def __init__(
         self,
         time_name: str,
-        resolution: Period,
-        periodicity: Period,
+        resolution: Optional[Period] = None,
+        periodicity: Optional[Period] = None,
         time_zone: Optional[str] = None,
     ) -> None:
         self.__time_name = time_name
@@ -38,8 +38,8 @@ class TimeSeries(ABC):
     def from_polars(
         df: pl.DataFrame,
         time_name: str,
-        resolution: Period,
-        periodicity: Period,
+        resolution: Optional[Period] = None,
+        periodicity: Optional[Period] = None,
         time_zone: Optional[str] = None,
     ) -> "TimeSeries":
         # Lazy import to avoid recursive importing
