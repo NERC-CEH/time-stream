@@ -1710,6 +1710,11 @@ class Period(ABC):
         self._timedelta = properties.get_timedelta()
 
     @property
+    def iso_duration(self) -> str:
+        """The standard ISO 8601 duration string of this period"""
+        return self._properties.get_iso8601()
+
+    @property
     def tzinfo(self) -> Optional[dt.tzinfo]:
         """Get the tzinfo property"""
         return self._properties.tzinfo
