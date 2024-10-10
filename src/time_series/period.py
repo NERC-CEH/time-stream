@@ -256,6 +256,17 @@ class DateTimeAdjusters:
         m_advance = month_adjusters.advance
         s_retreat = microsecond_adjusters.retreat
         s_advance = microsecond_adjusters.advance
+        # It's an arbitrary choice as to whether the month shift is done
+        # before or after the microsecond shift, but a retreat should
+        # 'undo' an advance, and vice-versa, so the order needs to be
+        # swapped.  Shifting by a month and shifting by a microsecond
+        # are not commutative operations. The order matters.
+        # i.e. An advance of 1 month followed by 1 day:
+        #     Apr 30 (+1 month) -> May 30 (+1 day) -> May 31
+        # The retreat must be day followed by month to get back to where we started:
+        #     May 31 (-1 day) -> May 30 (-1 month) -> Apr 30
+        # A retreat of 1 month followed by one days yields a different date:
+        #     May 31 (-1 month) -> Apr 30 (-1 day) -> Apr 29
         return DateTimeAdjusters(
             retreat=lambda datetime_obj: m_retreat(s_retreat(datetime_obj)),
             advance=lambda datetime_obj: s_advance(m_advance(datetime_obj)),
