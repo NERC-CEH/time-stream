@@ -44,7 +44,6 @@ Example usage:
 
 """
 
-# pylint: disable=consider-using-f-string,too-many-lines
 import calendar
 import datetime as dt
 import re
@@ -1371,7 +1370,6 @@ class PeriodFields:
     duration string.
     """
 
-    # pylint: disable=too-many-instance-attributes
     string: str
     years: int
     months: int
@@ -1382,7 +1380,6 @@ class PeriodFields:
     microseconds: int
 
     def __post_init__(self) -> None:
-        # pylint: disable=too-many-boolean-expressions
         if (
             (self.years < 0)
             or (self.months < 0)
@@ -1523,8 +1520,6 @@ class Period(ABC):
 
     This class contains the public interface of the period module.
     """
-
-    # pylint: disable=too-many-public-methods
 
     @staticmethod
     def of(period_string: str) -> "Period":
@@ -1750,12 +1745,10 @@ class Period(ABC):
         min_ordinal: int
         try:
             min_ordinal = self.ordinal(dt.datetime.min)
-        # pylint: disable=broad-exception-caught
         except Exception:
             min_ordinal = self.without_offset().ordinal(dt.datetime.min)
         try:
             self.datetime(min_ordinal)
-        # pylint: disable=broad-exception-caught
         except Exception:
             min_ordinal += 1
         #           self.datetime( min_ordinal )
@@ -2182,7 +2175,6 @@ class Period(ABC):
         """
         base_period = self.base_period()
         properties = base_period._properties
-        # pylint: disable=protected-access
         origin_ordinal = base_period.ordinal(origin_date_time)
         floor_date_time = base_period.datetime(origin_ordinal)
         if properties.step in (_STEP_MICROSECONDS, _STEP_SECONDS):
@@ -2639,7 +2631,6 @@ def _get_offset_period(properties: Properties) -> Period:
 
 
 def _get_base_period(properties: Properties) -> Period:
-    # pylint: disable=too-many-return-statements,too-many-locals
     """Return a Period with no month or second
     offset and no ordinal_shift.
 
