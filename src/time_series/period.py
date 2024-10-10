@@ -295,7 +295,7 @@ def _second_string(seconds: int, microseconds: int) -> str:
     """
     if microseconds == 0:
         return str(seconds)
-    return "%d.%s" % (seconds, ("%06d" % (microseconds,)).rstrip("0"))
+    return f"{seconds}.{microseconds:06}".rstrip("0")
 
 
 def _append_second_elems(elems: list[str], seconds: int, microseconds: int) -> list[str]:
