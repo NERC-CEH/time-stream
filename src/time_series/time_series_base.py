@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from typing import Iterator, Optional
 
 import polars as pl
+
 from time_series.period import Period
 
 
@@ -48,15 +49,15 @@ class TimeSeries(ABC):
         return TimeSeriesPolars(df, time_name, resolution, periodicity, time_zone)
 
     @abstractmethod
-    def _validate_resolution(self):
+    def _validate_resolution(self)  -> None:
         pass
 
     @abstractmethod
-    def _validate_periodicity(self):
+    def _validate_periodicity(self) -> None:
         pass
 
     @abstractmethod
-    def _set_time_zone(self):
+    def _set_time_zone(self) -> None:
         pass
 
     @abstractmethod
