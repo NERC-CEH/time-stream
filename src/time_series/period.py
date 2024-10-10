@@ -18,7 +18,7 @@ The datetime() method returns the datetime of the start of the
 interval.
 
 The datetime() method will return the ordinal value "n" for all
-all datetime objects where:
+datetime objects where:
     datetime >= period.datetime( n ) and
     datetime < period.datetime( n+1 )
 
