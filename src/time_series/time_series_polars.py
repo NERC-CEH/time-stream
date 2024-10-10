@@ -6,6 +6,11 @@ from time_series.time_series_base import TimeSeries
 
 
 class TimeSeriesPolars(TimeSeries):
+    """ A class representing a time series data model using a Polars DataFrame.
+
+    This class extends the `TimeSeries` base class and provides functionality for handling time series data
+    using Polars.
+    """
     def __init__(
             self,
             df: pl.DataFrame,
@@ -14,12 +19,22 @@ class TimeSeriesPolars(TimeSeries):
             periodicity: Optional[Period] = None,
             time_zone: Optional[str] = None,
     ) -> None:
-        self._df = df
-        super().__init__(time_name, resolution, periodicity, time_zone)
+        """ Initialize a TimeSeriesPolars instance.
 
+        Args:
+            df: The Polars DataFrame containing the time series data.
+            time_name: The name of the time column in the DataFrame.
+            resolution: The resolution of the time series. Defaults to None.
+            periodicity: The periodicity of the time series. Defaults to None.
+            time_zone: The time zone of the time series. Defaults to None.
+        """
+        super().__init__(time_name, resolution, periodicity, time_zone)
+        self._df = df
         self._setup()
 
     def _setup(self) -> None:
+        """ Perform initial setup for the time series object.
+        """
         self._set_time_zone()
         self._sort_time()
         self._validate_resolution()
@@ -27,62 +42,88 @@ class TimeSeriesPolars(TimeSeries):
 
     @property
     def df(self) -> pl.DataFrame:
+        """  Get the underlying Polars DataFrame.
+        """
         return self._df
 
-    def _validate_resolution(self):
-        """ Resolution defines how 'precise' the datetimes are
+    def _validate_resolution(self) -> None:
+        """ Validate the resolution of the time series.
+
+        Resolution defines how "precise" the datetimes are, i.e. to what precision of time unit should each
+        datetime in the time series match to.
+
+        Some examples:
+        P0.000001S  Allow all datetime values, including microseconds.
+        P1S	        Allow datetimes with a whole number of seconds. Microseconds must be "0".
+        PT1M	    Allow datetimes to be specified to the minute. Seconds and Microseconds must be "0".
+        PT15M	    Allow datetimes to be specified to a multiple of 15 minutes.
+                    Seconds and Microseconds must be "0", and Minutes be one of ("00", "15", "30", "45")
+        P1D	        Allow all dates, but the time must be "00:00:00"
+        P1M	        Allow all years and months, but the day must be "1" and time "00:00:00"
+        P3M	        Quarterly dates; month must be one of ("1", "4", "7", "10"), day must be "1" and time "00:00:00"
+        P1Y+9M9H	Only dates at 09:00 am on the 1st of October are allowed.
+
+        Raises:
+            UserWarning: If the datetimes are not aligned to the resolution.
         """
         if self.resolution is None:
             # Default to a resolution that accepts all datetimes
             self._resolution = Period.of_microseconds(1)
 
-        if not self.resolution.is_epoch_agnostic:
-            # E.g. 5 hours, 7 days, 9 months, etc.
-            raise NotImplementedError("Not available for non-epoch agnostic resolutions")
+        self._epoch_check(self.resolution)
 
-        # Get the datetime series, and remove any offset
-        original_times = self.df[self.time_name]
-        original_times_no_offset = original_times.dt.offset_by("-" + self.resolution.dataframe_offset)
-
-        # Round the (non offset) datetime series to the given resolution interval and add the offset back on
-        rounded_times = original_times_no_offset.dt.truncate(self.resolution.dataframe_frequency)
-        rounded_times_with_offset = rounded_times.dt.offset_by(self.resolution.dataframe_offset)
-
-        # Compare the original series to the rounded series.  If they don't match, then the
-        # datetimes are not aligned to the resolution.
-        aligned = original_times.equals(rounded_times_with_offset)
+        # Compare the original series to the rounded series.  If no match, it is not aligned to the resolution.
+        rounded_times = self._round_time_to_period(self.resolution)
+        aligned = self.df[self.time_name].equals(rounded_times)
         if not aligned:
-            print(original_times, rounded_times_with_offset)
             raise UserWarning(f"Values in time field: \"{self.time_name}\" are not aligned to "
                               f"resolution: {self.resolution}")
 
-    def _validate_periodicity(self):
-        """ Periodicity defines the allowed frequency of the datetimes
+    def _validate_periodicity(self) -> None:
+        """  Validate the periodicity of the time series.
+
+        Periodicity defines the allowed "frequency" of the datetimes, i.e. how many datetimes entries are allowed within
+        a given period of time.
+
+        Some examples:
+        P0.000001S	Effectively there is no "periodicity".
+        P1S	        At most 1 datetime can occur within any given second.
+        PT1M	    At most 1 datetime can occur within any given minute.
+        PT15M	    At most 1 datetime can occur within any 15-minute duration. 
+                    Each 15-minute durations starts at ("00", "15", "30", "45") minutes past the hour.
+        P1D	        At most 1 datetime can occur within any given calendar day
+                    (from midnight of first day up to, but not including, midnight of the next day)
+        P1M	        At most 1 datetime can occur within any given calendar month
+                    (from midnight on the 1st of the month up to, but not including, midnight on the 1st of the
+                    following month).
+        P3M	        At most 1 datetime can occur within any given quarterly period.
+        P1Y+9M9H	At most 1 datetime can occur within any given water year
+                    (from 09:00 am on the 1st of October up to, but including, 09:00 am on the 1st of the
+                    following year).
+
+        Raises:
+            UserWarning: If the datetimes do not conform to the periodicity.
         """
         if self.periodicity is None:
             # Default to a periodicity that accepts all datetimes
             self._periodicity = Period.of_microseconds(1)
 
-        if not self.periodicity.is_epoch_agnostic:
-            # E.g. 5 hours, 7 days, 9 months, etc.
-            raise NotImplementedError("Not available for non-epoch agnostic periodicity")
-
-        # Get the datetime series, and remove any offset
-        original_times = self.df[self.time_name]
-        original_times_no_offset = original_times.dt.offset_by("-" + self.periodicity.dataframe_offset)
-
-        # Round the (non offset) datetime series to the given periodicity interval and add the offset back on
-        rounded_times = original_times_no_offset.dt.truncate(self.periodicity.dataframe_frequency)
-        rounded_times_with_offset = rounded_times.dt.offset_by(self.periodicity.dataframe_offset)
+        self._epoch_check(self.periodicity)
 
         # Check how many unique values are in the rounded times. It should equal the length of the original time series
         # if all time values map to a single periodicity
-        all_unique = rounded_times_with_offset.n_unique() == len(original_times)
+        rounded_times = self._round_time_to_period(self.periodicity)
+        all_unique = rounded_times.n_unique() == len(self.df[self.time_name])
         if not all_unique:
            raise UserWarning(f"Values in time field: \"{self.time_name}\" do not conform to "
                              f"periodicity: {self.periodicity}")
 
-    def _set_time_zone(self):
+    def _set_time_zone(self) -> None:
+        """ Set the time zone for the time series.
+
+        If a time zone is provided in class initialisation, this will overwrite any time zone set on the dataframe.
+        If no time zone provided, defaults to either the dataframe time zone, or if this is not set either, then UTC.
+        """
         default_time_zone = "UTC"
         df_time_zone = self.df.schema[self.time_name].time_zone
 
@@ -93,19 +134,56 @@ class TimeSeriesPolars(TimeSeries):
         else:
             time_zone = default_time_zone
 
-        if df_time_zone is None:
-            self._df = self.df.with_columns(
-                pl.col(self.time_name).dt.replace_time_zone(time_zone)
-            )
+        self._df = self.df.with_columns(
+            pl.col(self.time_name).dt.replace_time_zone(time_zone)
+        )
         self._time_zone = time_zone
 
     def _sort_time(self) -> None:
+        """ Sort the DataFrame by the time column.
+        """
         self._df = self.df.sort(self.time_name)
 
-    def __len__(self):
+    def _round_time_to_period(self, period: Period) -> pl.Series:
+        """ Round the time column to the given period.
+
+        Args:
+           period: The period to which the time column should be rounded.
+
+        Returns:
+           A Polars Series with the rounded time values.
+        """
+        # Remove any offset from the time series
+        time_series_no_offset = self.df[self.time_name].dt.offset_by("-" + period.dataframe_offset)
+
+        # Round the (non offset) time series to the given resolution interval and add the offset back on
+        rounded_times = time_series_no_offset.dt.truncate(period.dataframe_frequency)
+        rounded_times_with_offset = rounded_times.dt.offset_by(period.dataframe_offset)
+
+        return rounded_times_with_offset
+
+    @staticmethod
+    def _epoch_check(period: Period) -> None:
+        """ Check if the period is epoch-agnostic.
+
+        Args:
+            period: The period to check.
+
+        Raises:
+            NotImplementedError: If the period is not epoch-agnostic.
+        """
+        if not period.is_epoch_agnostic:
+            # E.g. 5 hours, 7 days, 9 months, etc.
+            raise NotImplementedError("Not available for non-epoch agnostic periodicity")
+
+    def __len__(self) -> int:
+        """  Get the number of rows in the time series.
+        """
         return self._df.height
 
     def __iter__(self) -> Iterator:
+        """ Return an iterator over the rows of the DataFrame.
+        """
         return self._df.iter_rows()
 
     def __str__(self) -> str:
