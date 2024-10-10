@@ -1047,7 +1047,7 @@ class Properties:
         month and microsecond offsets in a style similar to an
         ISO 8601 duration string
 
-        The list of strings is used to calcluate the repr string
+        The list of strings is used to calculate the repr string
         """
         if (self.month_offset == 0) and (self.microsecond_offset == 0):
             return
@@ -1063,7 +1063,7 @@ class Properties:
         """Add elements to a list of string that describe the
         tzinfo object
 
-        The list of strings is used to calcluate the repr string
+        The list of strings is used to calculate the repr string
         """
         elems.append("[")
         if self.tzinfo is not None:
@@ -1076,7 +1076,7 @@ class Properties:
         """Add elements to a list of string that describe the
         ordinal shift
 
-        The list of strings is used to calcluate the repr string
+        The list of strings is used to calculate the repr string
         """
         if self.ordinal_shift != 0:
             elems.append(str(self.ordinal_shift))
