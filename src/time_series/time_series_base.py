@@ -49,7 +49,7 @@ class TimeSeries(ABC):
         return TimeSeriesPolars(df, time_name, resolution, periodicity, time_zone)
 
     @abstractmethod
-    def _validate_resolution(self)  -> None:
+    def _validate_resolution(self) -> None:
         pass
 
     @abstractmethod
