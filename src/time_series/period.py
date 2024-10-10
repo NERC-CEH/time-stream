@@ -998,14 +998,13 @@ class Properties:
         Returns:
             The ISO 8601 duration string of this Period
         """
-        step = self.step
-        if step == _STEP_MICROSECONDS:
+        if self.step == _STEP_MICROSECONDS:
             return _get_microsecond_period_name(self.multiplier)
-        if step == _STEP_SECONDS:
+        if self.step == _STEP_SECONDS:
             return _get_second_period_name(self.multiplier)
-        if step == _STEP_MONTHS:
+        if self.step == _STEP_MONTHS:
             return _get_month_period_name(self.multiplier)
-        raise AssertionError(f"Illegal step: {step}")
+        raise AssertionError(f"Illegal step: {self.step}")
 
     def get_timedelta(self) -> Optional[dt.timedelta]:
         """Return a timedelta object that matches the duration
@@ -1017,15 +1016,14 @@ class Properties:
         Returns:
             A timedelta object, or None
         """
-        step = self.step
-        if step == _STEP_MICROSECONDS:
+        if self.step == _STEP_MICROSECONDS:
             seconds, microseconds = divmod(self.multiplier, 1_000_000)
             return dt.timedelta(seconds=seconds, microseconds=microseconds)
-        if step == _STEP_SECONDS:
+        if self.step == _STEP_SECONDS:
             return dt.timedelta(seconds=self.multiplier)
-        if step == _STEP_MONTHS:
+        if self.step == _STEP_MONTHS:
             return None
-        raise AssertionError(f"Illegal step: {step}")
+        raise AssertionError(f"Illegal step: {self.step}")
 
     def _append_step_elems(self, elems: list[str]) -> None:
         """Add elements to a list of string that describe the
@@ -1034,17 +1032,15 @@ class Properties:
 
         The list of strings is used to calculate the repr string
         """
-        step = self.step
-        multiplier = self.multiplier
-        if step == _STEP_MICROSECONDS:
-            seconds, microseconds = divmod(multiplier, 1_000_000)
+        if self.step == _STEP_MICROSECONDS:
+            seconds, microseconds = divmod(self.multiplier, 1_000_000)
             _append_second_elems(elems, seconds, microseconds)
-        elif step == _STEP_SECONDS:
-            _append_second_elems(elems, multiplier, 0)
-        elif step == _STEP_MONTHS:
-            _append_month_elems(elems, multiplier)
+        elif self.step == _STEP_SECONDS:
+            _append_second_elems(elems, self.multiplier, 0)
+        elif self.step == _STEP_MONTHS:
+            _append_month_elems(elems, self.multiplier)
         else:
-            raise AssertionError(f"Illegal step: {step}")
+            raise AssertionError(f"Illegal step: {self.step}")
 
     def _append_offset_elems(self, elems: list[str]) -> None:
         """Add elements to a list of string that describe the
@@ -1053,15 +1049,13 @@ class Properties:
 
         The list of strings is used to calcluate the repr string
         """
-        month_offset = self.month_offset
-        microsecond_offset = self.microsecond_offset
-        if (month_offset == 0) and (microsecond_offset == 0):
+        if (self.month_offset == 0) and (self.microsecond_offset == 0):
             return
         elems.append("+")
-        if month_offset > 0:
-            _append_month_elems(elems, month_offset)
-        if microsecond_offset > 0:
-            seconds, microseconds = divmod(microsecond_offset, 1_000_000)
+        if self.month_offset > 0:
+            _append_month_elems(elems, self.month_offset)
+        if self.microsecond_offset > 0:
+            seconds, microseconds = divmod(self.microsecond_offset, 1_000_000)
             _append_second_elems(elems, seconds, microseconds)
         return
 
@@ -1208,16 +1202,14 @@ class Properties:
         Returns:
             A string suitable for use with Polars DataFrames
         """
-        step = self.step
-        multiplier = self.multiplier
-        if step == _STEP_MICROSECONDS:
-            return f"{multiplier}us"
-        elif step == _STEP_SECONDS:
-            return f"{multiplier}s"
-        elif step == _STEP_MONTHS:
-            return f"{multiplier}mo"
+        if self.step == _STEP_MICROSECONDS:
+            return f"{self.multiplier}us"
+        elif self.step == _STEP_SECONDS:
+            return f"{self.multiplier}s"
+        elif self.step == _STEP_MONTHS:
+            return f"{self.multiplier}mo"
         else:
-            raise AssertionError(f"Illegal step: {step}")
+            raise AssertionError(f"Illegal step: {self.step}")
 
     def pl_offset(self) -> str:
         """Return a string that captures the month and microsecond
@@ -1232,9 +1224,7 @@ class Properties:
         Returns:
             A string suitable for use with Polars DataFrames
         """
-        month_offset = self.month_offset
-        microsecond_offset = self.microsecond_offset
-        return f"{month_offset}mo{microsecond_offset}us"
+        return f"{self.month_offset}mo{self.microsecond_offset}us"
 
     def is_epoch_agnostic(self) -> bool:
         """Return True if the way that this period splits the
@@ -1257,25 +1247,23 @@ class Properties:
             True if this period plits the timeline into the same
             intervals regardless of the epoch, False otherwise.
         """
-        step = self.step
-        multiplier = self.multiplier
-        if step == _STEP_MICROSECONDS:
-            if multiplier > 1_000_000:
+        if self.step == _STEP_MICROSECONDS:
+            if self.multiplier > 1_000_000:
                 return False
-            num_per_second: int = 1_000_000 // multiplier
-            return (multiplier * num_per_second) == 1_000_000
-        elif step == _STEP_SECONDS:
-            if multiplier > 86_400:
+            num_per_second: int = 1_000_000 // self.multiplier
+            return (self.multiplier * num_per_second) == 1_000_000
+        elif self.step == _STEP_SECONDS:
+            if self.multiplier > 86_400:
                 return False
-            num_per_day: int = 86_400 // multiplier
-            return (multiplier * num_per_day) == 86_400
-        elif step == _STEP_MONTHS:
-            if multiplier > 12:
+            num_per_day: int = 86_400 // self.multiplier
+            return (self.multiplier * num_per_day) == 86_400
+        elif self.step == _STEP_MONTHS:
+            if self.multiplier > 12:
                 return False
-            num_per_year: int = 12 // multiplier
-            return (multiplier * num_per_year) == 12
+            num_per_year: int = 12 // self.multiplier
+            return (self.multiplier * num_per_year) == 12
         else:
-            raise AssertionError(f"Illegal step: {step}")
+            raise AssertionError(f"Illegal step: {self.step}")
 
     def __str__(self) -> str:
         elems: list[str] = ["P"]
@@ -1324,14 +1312,11 @@ class MonthsSeconds:
             cannot be created.  This happens, for example,
             if boths months and seconds are >0.
         """
-        months = self.months
-        seconds = self.seconds
-        microseconds = self.microseconds
-        if (months > 0) and (seconds == 0) and (microseconds == 0):
-            return _STEP_MONTHS, months
-        if (months == 0) and (seconds > 0) and (microseconds == 0):
-            return _STEP_SECONDS, seconds
-        if (months == 0) and (microseconds > 0):
+        if (self.months > 0) and (self.seconds == 0) and (self.microseconds == 0):
+            return _STEP_MONTHS, self.months
+        if (self.months == 0) and (self.seconds > 0) and (self.microseconds == 0):
+            return _STEP_SECONDS, self.seconds
+        if (self.months == 0) and (self.microseconds > 0):
             return _STEP_MICROSECONDS, self.total_microseconds()
         raise ValueError(f"Illegal period: {self.string}")
 
