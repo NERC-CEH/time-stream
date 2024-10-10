@@ -1093,9 +1093,11 @@ class Properties:
             A function that takes a single datetime argument and
             returns a string
         """
+        # Check if microseconds need to be output
         o_total_milliseconds, o_microseconds_nnn = divmod(self.microsecond_offset, 1_000)
         if o_microseconds_nnn != 0:
             return lambda dt: _fmt_naive_microsecond(dt, separator)
+        # Check if milliseconds need to be output
         o_total_seconds, o_milliseconds_nnn = divmod(o_total_milliseconds, 1_000)
         if self.step == _STEP_MICROSECONDS:
             s_total_milliseconds, s_microseconds_nnn = divmod(self.multiplier, 1_000)
@@ -1108,6 +1110,7 @@ class Properties:
         if o_milliseconds_nnn != 0:
             return lambda dt: _fmt_naive_millisecond(dt, separator)
 
+        # Check if seconds need to be output
         o_total_minutes, o_seconds_nn = divmod(o_total_seconds, 60)
         if o_seconds_nn != 0:
             return lambda dt: _fmt_naive_second(dt, separator)
@@ -1124,6 +1127,7 @@ class Properties:
             if (s_hours_nn != 0) or (o_hours_nn != 0):
                 return lambda dt: _fmt_naive_hour(dt, separator)
             return _fmt_naive_day
+        # Check if minutes/hours/days need to be output
         if o_minutes_nn != 0:
             return lambda dt: _fmt_naive_minute(dt, separator)
         if o_hours_nn != 0:
@@ -1134,6 +1138,7 @@ class Properties:
         assert self.step == _STEP_MONTHS
         o_months_nn = self.month_offset % 12
         s_months_nn = self.multiplier % 12
+        # Check if months need to be output
         if (s_months_nn != 0) or (o_months_nn != 0):
             return _fmt_naive_month
         return _fmt_naive_year
@@ -1150,10 +1155,12 @@ class Properties:
             A function that takes a single datetime argument and
             returns a string
         """
+        # Check if microseconds need to be output
         o_total_milliseconds, o_microseconds_nnn = divmod(self.microsecond_offset, 1_000)
         if o_microseconds_nnn != 0:
             return lambda dt: _fmt_aware_microsecond(dt, separator)
 
+        # Check if milliseconds need to be output
         o_total_seconds, o_milliseconds_nnn = divmod(o_total_milliseconds, 1_000)
         if self.step == _STEP_MICROSECONDS:
             s_total_milliseconds, s_microseconds_nnn = divmod(self.multiplier, 1_000)
@@ -1166,6 +1173,7 @@ class Properties:
         if o_milliseconds_nnn != 0:
             return lambda dt: _fmt_aware_millisecond(dt, separator)
 
+        # Check if seconds/minutes need to be output
         o_total_minutes, o_seconds_nn = divmod(o_total_seconds, 60)
         if o_seconds_nn != 0:
             return lambda dt: _fmt_aware_second(dt, separator)
