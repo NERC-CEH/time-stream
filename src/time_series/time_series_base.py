@@ -44,7 +44,7 @@ class TimeSeries(ABC):
         time_zone: Optional[str] = None,
     ) -> "TimeSeries":
         # Lazy import to avoid recursive importing
-        from time_series_polars import TimeSeriesPolars
+        from time_series.time_series_polars import TimeSeriesPolars
 
         return TimeSeriesPolars(df, time_name, resolution, periodicity, time_zone)
 
@@ -64,6 +64,11 @@ class TimeSeries(ABC):
     def _sort_time(self) -> None:
         pass
 
+    def aggregate(
+        self, aggregation_function: "AggregationFunction", aggregation_period: Period, column_name: str
+    ) -> "TimeSeries":
+        return aggregation_function.apply(self, aggregation_period, column_name)
+
     @abstractmethod
     def __len__(self) -> int:
         pass
@@ -75,3 +80,40 @@ class TimeSeries(ABC):
     @abstractmethod
     def __str__(self) -> str:
         pass
+
+
+class AggregationFunction(ABC):
+    @staticmethod
+    def mean() -> "AggregationFunction":
+        # Lazy import to avoid recursive importing
+        import time_series.aggregation
+
+        return time_series.aggregation.Mean()
+
+    @staticmethod
+    def min() -> "AggregationFunction":
+        # Lazy import to avoid recursive importing
+        import time_series.aggregation
+
+        return time_series.aggregation.Min()
+
+    @staticmethod
+    def max() -> "AggregationFunction":
+        # Lazy import to avoid recursive importing
+        import time_series.aggregation
+
+        return time_series.aggregation.Max()
+
+    def __init__(self, name: str) -> None:
+        assert isinstance(name, str)
+        self._name = name
+
+    @property
+    def name(self) -> str:
+        """Return name of aggregation function"""
+        return self._name
+
+    @abstractmethod
+    def apply(self, ts: TimeSeries, aggregation_period: Period, column_name: str) -> TimeSeries:
+        """Apply this function to a time-series over a period"""
+        raise NotImplementedError()
