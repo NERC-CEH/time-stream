@@ -210,8 +210,6 @@ class Min(PolarsAggregationFunction):
 
     @override
     def pl_agg(self, ts: TimeSeriesPolars, aggregation_period: Period, column_name: str) -> TimeSeries:
-        if not isinstance(ts, TimeSeriesPolars):
-            raise NotImplementedError()
         aggregator: PolarsAggregator = PolarsAggregator(ts, aggregation_period)
         df: pl.DataFrame = aggregator.aggregate(
             [
@@ -223,7 +221,7 @@ class Min(PolarsAggregationFunction):
         return TimeSeries.from_polars(
             df=df,
             time_name=ts.time_name,
-            resolution=aggregation_period,
+            resolution=ts.resolution,
             periodicity=aggregation_period,
             time_zone=ts.time_zone,
         )
@@ -246,7 +244,7 @@ class Max(PolarsAggregationFunction):
         return TimeSeries.from_polars(
             df=df,
             time_name=ts.time_name,
-            resolution=aggregation_period,
+            resolution=ts.resolution,
             periodicity=aggregation_period,
             time_zone=ts.time_zone,
         )
