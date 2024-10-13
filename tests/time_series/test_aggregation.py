@@ -1,4 +1,7 @@
 import unittest
+from collections.abc import (
+    Callable,
+)
 from dataclasses import (
     dataclass ,
     )
@@ -35,14 +38,13 @@ def _create_ts( datetime_list: list[datetime],
         periodicity = periodicity ,
         time_zone = time_zone )
 
+MAX_LENGTH: int = 10_000
+
 @dataclass( frozen=True )
 class TsData:
     resolution: Period
     datetime_list: list[datetime]
     value_list: list[float]
-
-    def create_df( self ) -> pl.DataFrame:
-        _create_df( self.datetime_list , self.value_list )
 
     def create_ts( self ) -> TimeSeries:
         return _create_ts( datetime_list = self.datetime_list ,
@@ -67,7 +69,7 @@ class TsData:
         resolution: Period = period.with_origin( datetime_from )
 
         ordinal_from = resolution.ordinal( datetime_from )
-        ordinal_to = resolution.ordinal( datetime_to )
+        ordinal_to = min( resolution.ordinal( datetime_to ) , ordinal_from + MAX_LENGTH )
 
         def _gen_datetime_series():
             for ordinal in range(ordinal_from,ordinal_to):
@@ -90,29 +92,44 @@ P1M = Period.of_months( 1 )
 W_P1M = P1M.with_hour_offset( 9 )
 P1Y = Period.of_months( 1 )
 W_P1Y = P1Y.with_month_offset( 9 ) .with_hour_offset( 9 )
+PT1S = Period.of_seconds( 1 )
+PT1M = Period.of_minutes( 1 )
+PT1H = Period.of_hours( 1 )
 CASE1_LIST: list[Case1] = [
     Case1( data_period = PT15M , aggregation_period = PT1H ),
     Case1( data_period = PT15M , aggregation_period = P1D ),
     Case1( data_period = PT15M , aggregation_period = W_P1D ),
     Case1( data_period = PT15M , aggregation_period = W_P1M ),
     Case1( data_period = PT15M , aggregation_period = W_P1Y ),
-    Case1( data_period = PT1H , aggregation_period = P1D ),
     Case1( data_period = PT1H , aggregation_period = W_P1D ),
     Case1( data_period = PT1H , aggregation_period = W_P1M ),
     Case1( data_period = PT1H , aggregation_period = W_P1Y ),
-    Case1( data_period = P1D , aggregation_period = P1M ),
-    Case1( data_period = P1D , aggregation_period = P1Y ),
     Case1( data_period = W_P1D , aggregation_period = W_P1M ),
     Case1( data_period = W_P1D , aggregation_period = W_P1Y ),
     Case1( data_period = W_P1M , aggregation_period = W_P1Y ),
+    Case1( data_period = PT1S , aggregation_period = PT1M ),
+    Case1( data_period = PT1S , aggregation_period = PT1H ),
+    Case1( data_period = PT1S , aggregation_period = P1D ),
+    Case1( data_period = PT1S , aggregation_period = P1M ),
+    Case1( data_period = PT1S , aggregation_period = P1Y ),
+    Case1( data_period = PT1M , aggregation_period = PT1H ),
+    Case1( data_period = PT1M , aggregation_period = P1D ),
+    Case1( data_period = PT1M , aggregation_period = P1M ),
+    Case1( data_period = PT1M , aggregation_period = P1Y ),
+    Case1( data_period = PT1H , aggregation_period = P1D ),
+    Case1( data_period = PT1H , aggregation_period = P1M ),
+    Case1( data_period = PT1H , aggregation_period = P1Y ),
+    Case1( data_period = P1D , aggregation_period = P1M ),
+    Case1( data_period = P1D , aggregation_period = P1Y ),
+    Case1( data_period = P1M , aggregation_period = P1Y ),
     ]
 
-PARAM_CASE1: list[tuple[str,Case1]] = [
-    ( f"{tc1.data_period.iso_duration}_{tc1.aggregation_period.iso_duration}" , tc1 ) for tc1 in CASE1_LIST
+PARAMS_CASE1: list[tuple[str,Case1]] = [
+    ( f"{case1.data_period.iso_duration}_{case1.aggregation_period.iso_duration}" , case1 ) for case1 in CASE1_LIST
     ]
 
-DATETIME_FROM = datetime( 1990 , 1 , 1 )
-DATETIME_TO = datetime( 2020 , 1 , 1 )
+DATETIME_FROM: datetime = datetime( 1990 , 1 , 1 )
+DATETIME_TO: datetime = datetime( 2020 , 1 , 1 )
 
 def _create_ts_data( resolution: Period ) -> TsData:
     return TsData.create( resolution , DATETIME_FROM , DATETIME_TO )
@@ -215,37 +232,66 @@ def _get_count_datetime_list( test_dict: dict[int,list[tuple[datetime,float]]] ,
         in test_dict.keys() ]
 
 class TestFunctions(unittest.TestCase):
-    @parameterized.expand( PARAM_CASE1 )
+
+    def _test_basic(
+            self, 
+            case1: Case1 , 
+            name: str , 
+            aggregation_function: AggregationFunction ,
+            value_fn: Callable[[dict[int,list[tuple[datetime,float]]]],list[float]]
+            ) -> None:
+        ts_data = _create_ts_data( case1.data_period )
+        ts: TimeSeries = ts_data.create_ts()
+        result = ts.aggregate( aggregation_function , case1.aggregation_period , VALUE )
+        test_dict: dict[int,list[tuple[datetime,float]]] = ts_data.create_test_dict( case1.aggregation_period )
+        self.assertListEqual( _get_pl_datetime_list( result.df , TIME ) , _get_datetime_list( test_dict , case1.aggregation_period ) )
+        self.assertListEqual( _get_pl_float_list( result.df , f"{name}_{VALUE}" ) , value_fn( test_dict ) )
+        self.assertListEqual( _get_pl_int_list( result.df , f"count_{VALUE}" ) , _get_count_list( test_dict ) )
+        self.assertListEqual( _get_pl_int_list( result.df , f"count_{TIME}" ) , _get_count_datetime_list( test_dict , case1.aggregation_period , case1.data_period ) )
+
+    def _test_with_datetime(
+            self, 
+            case1: Case1 , 
+            name: str , 
+            aggregation_function: AggregationFunction ,
+            datetime_fn: Callable[[dict[int,list[tuple[datetime,float]]]],list[datetime]] ,
+            value_fn: Callable[[dict[int,list[tuple[datetime,float]]]],list[float]]
+            ) -> None:
+        ts_data = _create_ts_data( case1.data_period )
+        ts: TimeSeries = ts_data.create_ts()
+        result = ts.aggregate( aggregation_function , case1.aggregation_period , VALUE )
+        test_dict: dict[int,list[tuple[datetime,float]]] = ts_data.create_test_dict( case1.aggregation_period )
+        self.assertListEqual( _get_pl_datetime_list( result.df , TIME ) , _get_datetime_list( test_dict , case1.aggregation_period ) )
+        self.assertListEqual( _get_pl_datetime_list( result.df , f"{TIME}_of_{name}" ) , datetime_fn( test_dict ) )
+        self.assertListEqual( _get_pl_float_list( result.df , f"{name}_{VALUE}" ) , value_fn( test_dict ) )
+        self.assertListEqual( _get_pl_int_list( result.df , f"count_{VALUE}" ) , _get_count_list( test_dict ) )
+        self.assertListEqual( _get_pl_int_list( result.df , f"count_{TIME}" ) , _get_count_datetime_list( test_dict , case1.aggregation_period , case1.data_period ) )
+
+    @parameterized.expand( PARAMS_CASE1 )
     def test_mean(self, _, case1 ):
-        ts_data = _create_ts_data( case1.data_period )
-        ts: TimeSeries = ts_data.create_ts()
-        result = ts.aggregate( AggregationFunction.mean() , case1.aggregation_period , VALUE )
-        test_dict: dict[int,list[tuple[datetime,float]]] = ts_data.create_test_dict( case1.aggregation_period )
-        self.assertListEqual( _get_pl_datetime_list( result.df , TIME ) , _get_datetime_list( test_dict , case1.aggregation_period ) )
-        self.assertListEqual( _get_pl_float_list( result.df , f"mean_{VALUE}" ) , _get_mean_list( test_dict ) )
-        self.assertListEqual( _get_pl_int_list( result.df , f"count_{VALUE}" ) , _get_count_list( test_dict ) )
-        self.assertListEqual( _get_pl_int_list( result.df , f"count_{TIME}" ) , _get_count_datetime_list( test_dict , case1.aggregation_period , case1.data_period ) )
+        self._test_basic(
+            case1 = case1 ,
+            name = "mean" ,
+            aggregation_function = AggregationFunction.mean() ,
+            value_fn = _get_mean_list
+            )
 
-    @parameterized.expand( PARAM_CASE1 )
+    @parameterized.expand( PARAMS_CASE1 )
     def test_min(self, _, case1 ):
-        ts_data = _create_ts_data( case1.data_period )
-        ts: TimeSeries = ts_data.create_ts()
-        result = ts.aggregate( AggregationFunction.min() , case1.aggregation_period , VALUE )
-        test_dict: dict[int,list[tuple[datetime,float]]] = ts_data.create_test_dict( case1.aggregation_period )
-        self.assertListEqual( _get_pl_datetime_list( result.df , TIME ) , _get_datetime_list( test_dict , case1.aggregation_period ) )
-        self.assertListEqual( _get_pl_datetime_list( result.df , f"{TIME}_of_min" ) , _get_datetime_of_min_list( test_dict ) )
-        self.assertListEqual( _get_pl_float_list( result.df , f"min_{VALUE}" ) , _get_min_list( test_dict ) )
-        self.assertListEqual( _get_pl_int_list( result.df , f"count_{VALUE}" ) , _get_count_list( test_dict ) )
-        self.assertListEqual( _get_pl_int_list( result.df , f"count_{TIME}" ) , _get_count_datetime_list( test_dict , case1.aggregation_period , case1.data_period ) )
+        self._test_with_datetime(
+            case1 = case1 ,
+            name = "min" ,
+            aggregation_function = AggregationFunction.min() ,
+            datetime_fn = _get_datetime_of_min_list ,
+            value_fn = _get_min_list
+            )
 
-    @parameterized.expand( PARAM_CASE1 )
+    @parameterized.expand( PARAMS_CASE1 )
     def test_max(self, _, case1 ):
-        ts_data = _create_ts_data( case1.data_period )
-        ts: TimeSeries = ts_data.create_ts()
-        result = ts.aggregate( AggregationFunction.max() , case1.aggregation_period , VALUE )
-        test_dict: dict[int,list[tuple[datetime,float]]] = ts_data.create_test_dict( case1.aggregation_period )
-        self.assertListEqual( _get_pl_datetime_list( result.df , TIME ) , _get_datetime_list( test_dict , case1.aggregation_period ) )
-        self.assertListEqual( _get_pl_datetime_list( result.df , f"{TIME}_of_max" ) , _get_datetime_of_max_list( test_dict ) )
-        self.assertListEqual( _get_pl_float_list( result.df , f"max_{VALUE}" ) , _get_max_list( test_dict ) )
-        self.assertListEqual( _get_pl_int_list( result.df , f"count_{VALUE}" ) , _get_count_list( test_dict ) )
-        self.assertListEqual( _get_pl_int_list( result.df , f"count_{TIME}" ) , _get_count_datetime_list( test_dict , case1.aggregation_period , case1.data_period ) )
+        self._test_with_datetime(
+            case1 = case1 ,
+            name = "max" ,
+            aggregation_function = AggregationFunction.max() ,
+            datetime_fn = _get_datetime_of_max_list ,
+            value_fn = _get_max_list
+            )

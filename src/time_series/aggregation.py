@@ -34,15 +34,15 @@ def _gb_min(group_by: pl.dataframe.group_by.GroupBy) -> pl.DataFrame:
 
 
 # ----------------------------------------------------------------------
-class AggregationInfo:
+class PolarsAggregator:
     def __init__(self, ts: TimeSeries, aggregation_period: Period) -> None:
         self.ts = ts
         self.aggregation_period = aggregation_period
         self.datetime_column_name: str = ts.time_name
-        self.resolution_interval: str = ts.resolution.pl_interval
-        self.resolution_offset: str = ts.resolution.pl_offset
+        #       self.resolution_interval: str = ts.resolution.pl_interval
+        #       self.resolution_offset: str = ts.resolution.pl_offset
         self.periodicity_interval: str = ts.periodicity.pl_interval
-        self.periodicity_offset: str = ts.periodicity.pl_offset
+        #       self.periodicity_offset: str = ts.periodicity.pl_offset
         self.aggregation_interval: str = aggregation_period.pl_interval
         self.aggregation_offset: str = aggregation_period.pl_offset
 
@@ -74,16 +74,16 @@ class AggregationInfo:
 
 
 class DataFrameAggregator(ABC):
-    def __init__(self, aggregation_info: AggregationInfo, name: str) -> None:
-        self.info = aggregation_info
+    def __init__(self, aggregator: PolarsAggregator, name: str) -> None:
+        self.aggregator = aggregator
         self.name = name
 
-    #       print( f"info: {self.info}" )
+    #       print( f"aggregator: {self.aggregator}" )
     #       print( f"name: {self.name}" )
 
     @property
     def datetime_column_name(self) -> str:
-        return self.info.datetime_column_name
+        return self.aggregator.datetime_column_name
 
     def expressions(self) -> list[pl.Expr]:
         """Return list of expressions"""
@@ -99,23 +99,25 @@ class DataFrameAggregator(ABC):
 
 
 class DateTimeCount(DataFrameAggregator):
-    def __init__(self, aggregation_info: AggregationInfo) -> None:
-        super().__init__(aggregation_info, "datetime_count")
+    def __init__(self, aggregator: PolarsAggregator) -> None:
+        super().__init__(aggregator, "datetime_count")
 
     def with_columns(self) -> list[pl.Expr]:
-        datetime_column = self.info.datetime_column_name
+        datetime_column = self.aggregator.datetime_column_name
         start_expr: pl.Expr = pl.col(datetime_column)
-        end_expr: pl.Expr = pl.col(datetime_column).dt.offset_by(self.info.aggregation_interval)
+        end_expr: pl.Expr = pl.col(datetime_column).dt.offset_by(self.aggregator.aggregation_interval)
         return [
-            pl.datetime_ranges(start=start_expr, end=end_expr, interval=self.info.periodicity_interval, closed="right")
+            pl.datetime_ranges(
+                start=start_expr, end=end_expr, interval=self.aggregator.periodicity_interval, closed="right"
+            )
             .list.len()
             .alias(f"count_{datetime_column}")
         ]
 
 
 class ValueCount(DataFrameAggregator):
-    def __init__(self, aggregation_info: AggregationInfo, value_column: str) -> None:
-        super().__init__(aggregation_info, "value_count")
+    def __init__(self, aggregator: PolarsAggregator, value_column: str) -> None:
+        super().__init__(aggregator, "value_count")
         self._value_column = value_column
 
     def expressions(self) -> list[pl.Expr]:
@@ -124,10 +126,8 @@ class ValueCount(DataFrameAggregator):
 
 
 class GroupByWithDateTime(DataFrameAggregator):
-    def __init__(
-        self, aggregation_info: AggregationInfo, name: str, gb2df: GroupByToDataFrame, value_column: str
-    ) -> None:
-        super().__init__(aggregation_info, name)
+    def __init__(self, aggregator: PolarsAggregator, name: str, gb2df: GroupByToDataFrame, value_column: str) -> None:
+        super().__init__(aggregator, name)
         self._gb2df = gb2df
         self._value_column = value_column
         self._struct_name: str = f"{name}_struct"
@@ -135,7 +135,7 @@ class GroupByWithDateTime(DataFrameAggregator):
     def expressions(self) -> list[pl.Expr]:
         name: str = self.name
         value_column: str = self._value_column
-        struct_columns: list[str] = [self.info.datetime_column_name, value_column]
+        struct_columns: list[str] = [self.aggregator.datetime_column_name, value_column]
         return [
             self._gb2df(pl.struct(struct_columns).sort_by(value_column))
             .alias(self._struct_name)
@@ -147,10 +147,8 @@ class GroupByWithDateTime(DataFrameAggregator):
 
 
 class GroupByBasic(DataFrameAggregator):
-    def __init__(
-        self, aggregation_info: AggregationInfo, name: str, gb2df: GroupByToDataFrame, value_column: str
-    ) -> None:
-        super().__init__(aggregation_info, name)
+    def __init__(self, aggregator: PolarsAggregator, name: str, gb2df: GroupByToDataFrame, value_column: str) -> None:
+        super().__init__(aggregator, name)
         self._gb2df = gb2df
         self._value_column = value_column
 
@@ -189,9 +187,13 @@ class Mean(PolarsAggregationFunction):
 
     @override
     def pl_agg(self, ts: TimeSeriesPolars, aggregation_period: Period, column_name: str) -> TimeSeries:
-        info: AggregationInfo = AggregationInfo(ts, aggregation_period)
-        df: pl.DataFrame = info.aggregate(
-            [GroupByBasic(info, "mean", _gb_mean, column_name), ValueCount(info, column_name), DateTimeCount(info)]
+        aggregator: PolarsAggregator = PolarsAggregator(ts, aggregation_period)
+        df: pl.DataFrame = aggregator.aggregate(
+            [
+                GroupByBasic(aggregator, "mean", _gb_mean, column_name),
+                ValueCount(aggregator, column_name),
+                DateTimeCount(aggregator),
+            ]
         )
         return TimeSeries.from_polars(
             df=df,
@@ -210,12 +212,12 @@ class Min(PolarsAggregationFunction):
     def pl_agg(self, ts: TimeSeriesPolars, aggregation_period: Period, column_name: str) -> TimeSeries:
         if not isinstance(ts, TimeSeriesPolars):
             raise NotImplementedError()
-        info: AggregationInfo = AggregationInfo(ts, aggregation_period)
-        df: pl.DataFrame = info.aggregate(
+        aggregator: PolarsAggregator = PolarsAggregator(ts, aggregation_period)
+        df: pl.DataFrame = aggregator.aggregate(
             [
-                GroupByWithDateTime(info, "min", _gb_first, column_name),
-                ValueCount(info, column_name),
-                DateTimeCount(info),
+                GroupByWithDateTime(aggregator, "min", _gb_first, column_name),
+                ValueCount(aggregator, column_name),
+                DateTimeCount(aggregator),
             ]
         )
         return TimeSeries.from_polars(
@@ -233,12 +235,12 @@ class Max(PolarsAggregationFunction):
 
     @override
     def pl_agg(self, ts: TimeSeriesPolars, aggregation_period: Period, column_name: str) -> TimeSeries:
-        info: AggregationInfo = AggregationInfo(ts, aggregation_period)
-        df: pl.DataFrame = info.aggregate(
+        aggregator: PolarsAggregator = PolarsAggregator(ts, aggregation_period)
+        df: pl.DataFrame = aggregator.aggregate(
             [
-                GroupByWithDateTime(info, "max", _gb_last, column_name),
-                ValueCount(info, column_name),
-                DateTimeCount(info),
+                GroupByWithDateTime(aggregator, "max", _gb_last, column_name),
+                ValueCount(aggregator, column_name),
+                DateTimeCount(aggregator),
             ]
         )
         return TimeSeries.from_polars(
