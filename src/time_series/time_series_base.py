@@ -67,6 +67,27 @@ class TimeSeries(ABC):
     def aggregate(
         self, aggregation_function: "AggregationFunction", aggregation_period: Period, column_name: str
     ) -> "TimeSeries":
+        """Apply an aggregation function to a column in this
+        TimeSeries and return a new derived TimeSeries containing
+        the aggregated data.
+
+        The AggregationFunction class provides static methods that
+        return aggregation function objects that can be used with
+        this method.
+
+        Note: This is the first attempt at a mechanism for aggregating
+        time-series data.  The signature of this method is likely to
+        evolve considerably.
+
+        Args:
+            aggregation_function: The aggregation function to apply
+            aggregation_period: The period over which to aggregate
+                                the data
+            column_name: The column containing the data to be aggregated
+
+        Returns:
+            A TimeSeries containing the aggregated data.
+        """
         return aggregation_function.apply(self, aggregation_period, column_name)
 
     @abstractmethod
@@ -83,8 +104,25 @@ class TimeSeries(ABC):
 
 
 class AggregationFunction(ABC):
+    """An aggregation function that can be applied to a field
+    in a TimeSeries.
+
+    A new aggregated TimeSeries can be created from an existing
+    TimeSeries by passing a subclass of AggregationFunction
+    into the TimeSeries.aggregate method.
+
+    Attributes:
+        name: The name of the aggregation function
+    """
+
     @staticmethod
     def mean() -> "AggregationFunction":
+        """Return an AggregationFunction that calculates
+        an arithmetic mean.
+
+        Returns:
+            An AggregationFunction
+        """
         # Lazy import to avoid recursive importing
         import time_series.aggregation
 
@@ -92,6 +130,13 @@ class AggregationFunction(ABC):
 
     @staticmethod
     def min() -> "AggregationFunction":
+        """Return an AggregationFunction that returns the
+        minimum value within each aggregation period, along
+        with the datetime of the minimum
+
+        Returns:
+            An AggregationFunction
+        """
         # Lazy import to avoid recursive importing
         import time_series.aggregation
 
@@ -99,6 +144,13 @@ class AggregationFunction(ABC):
 
     @staticmethod
     def max() -> "AggregationFunction":
+        """Return an AggregationFunction that returns the
+        maximum value within each aggregation period, along
+        with the datetime of the maximum
+
+        Returns:
+            An AggregationFunction
+        """
         # Lazy import to avoid recursive importing
         import time_series.aggregation
 
@@ -110,10 +162,24 @@ class AggregationFunction(ABC):
 
     @property
     def name(self) -> str:
-        """Return name of aggregation function"""
+        """Return the name of this aggregation function"""
         return self._name
 
     @abstractmethod
     def apply(self, ts: TimeSeries, aggregation_period: Period, column_name: str) -> TimeSeries:
-        """Apply this function to a time-series over a period"""
+        """Apply this aggregation function to the supplied
+        TimeSeries column and return a new TimeSeries containing
+        the aggregated data
+
+        Note: This is the first attempt at a mechanism for aggregating
+        time-series data.  The signature of this method is likely to
+        evolve considerably.
+
+        Args:
+            ts: The TimeSeries containing the data to be aggregated
+            column_name: The column containing the data to be aggregated
+
+        Returns:
+            A TimeSeries containing the aggregated data
+        """
         raise NotImplementedError()

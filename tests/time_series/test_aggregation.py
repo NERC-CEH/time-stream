@@ -1,3 +1,8 @@
+"""
+Unit tests for the aggregation module
+"""
+
+import random
 import unittest
 from collections.abc import (
     Callable,
@@ -5,24 +10,29 @@ from collections.abc import (
 from dataclasses import (
     dataclass,
 )
-
-import random
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any, Iterable, Optional
 
 import polars as pl
 from parameterized import parameterized
 
-from time_series.time_series_base import TimeSeries, AggregationFunction
-from time_series.time_series_polars import TimeSeriesPolars
 from time_series.period import Period
-import time_series.aggregation as aggregation
+from time_series.time_series_base import AggregationFunction, TimeSeries
 
 TIME: str = "datetime"
 VALUE: str = "value"
 
 
 def _create_df(datetime_list: list[datetime], value_list: list[float]) -> pl.DataFrame:
+    """Create a Polars DataFrame
+
+    Args:
+        datetime_list: A list of datetime objects
+        value_list: A list of floats
+
+    Returns:
+        A Polars DataFrame with two columns, TIME and VALUE
+    """
     return pl.DataFrame({TIME: datetime_list, VALUE: value_list})
 
 
@@ -33,6 +43,20 @@ def _create_ts(
     periodicity: Period,
     time_zone: Optional[str],
 ) -> TimeSeries:
+    """Create a TimeSeries
+
+    Args:
+        datetime_list: A list of datetime objects
+        value_list: A list of floats
+        resolution: The resolution of the time-series
+        periodicity: The periodicity of the time-series
+        time_zone: The time zone of the time-series
+
+    Returns:
+        A TimeSeries object
+    """
+    """Create a TimeSeries
+    """
     return TimeSeries.from_polars(
         df=_create_df(datetime_list, value_list),
         time_name=TIME,
@@ -42,17 +66,31 @@ def _create_ts(
     )
 
 
+# Maximum length of a synthetic TimeSeries
 MAX_LENGTH: int = 100_000
 
 
 @dataclass(frozen=True)
 class TsData:
+    """Some basic time-series data.
+
+    The datetime_list and value_list properties contain
+    the actual data.
+
+    Attributes:
+        resolution: The resolution of the time-series
+        periodicity: The periodicity of the time-series
+        datetime_list: A list of datetime objects
+        value_list: A list of floats
+    """
+
     resolution: Period
     periodicity: Period
     datetime_list: list[datetime]
     value_list: list[float]
 
     def create_ts(self) -> TimeSeries:
+        """Create a TimeSeries from this data"""
         return _create_ts(
             datetime_list=self.datetime_list,
             value_list=self.value_list,
@@ -61,7 +99,23 @@ class TsData:
             time_zone=None,
         )
 
-    def create_test_dict(self, aggregation_period: Period) -> dict[int, list[tuple[datetime, float]]]:
+    def create_aggr_dict(self, aggregation_period: Period) -> dict[int, list[tuple[datetime, float]]]:
+        """Create a dict containing some aggregated data
+
+        The key of the dict is the ordinal of the aggregation
+        period.
+
+        The value of the dict is a list of tuples. Each tuple
+        contains the [datetime, float] values of an element
+        of time-series data
+
+        Args:
+            aggregation_period: The aggregation period
+
+        Returns:
+            A dict containing aggregated data that can be used
+            to check the results of the Polars aggregation
+        """
         result: dict[int, list[tuple[datetime, float]]] = {}
         for dt, val in zip(self.datetime_list, self.value_list):
             aggregation_ordinal = aggregation_period.ordinal(dt)
@@ -76,25 +130,40 @@ class TsData:
     def create(
         resolution: Period, periodicity: Period, in_datetime_from: datetime, in_datetime_to: datetime
     ) -> "TsData":
+        """Create a TsData object containing synthetic time-series
+        date of the supplied resolution and periodicity and within
+        the supplied datetime range
+
+        Args:
+            resolution: The resolution of the time-series data
+            periodicity: The periodicity of the time-series data
+            in_datetime_from: The start datetime of the time-series
+            in_datetime_to: The end datetime of the time-series
+
+        Returns:
+            A TsData object containing synthetic time-series data
+        """
         ordinal_from: int = periodicity.ordinal(in_datetime_from)
         ordinal_to: int = periodicity.ordinal(in_datetime_to)
-        datetime_from: datetime = periodicity.datetime(ordinal_from)
-        datetime_to: datetime = periodicity.datetime(ordinal_to)
 
         periodicity_ordinal_start = ordinal_from
         periodicity_ordinal_end = min(ordinal_to, periodicity_ordinal_start + MAX_LENGTH)
 
         datetime_iter: Iterable[datetime]
         if resolution == periodicity:
-
-            def _gen_datetime_series_flat():
+            # if resolution == periodicity just create a sequence of
+            # datetimes between start and end
+            def _gen_datetime_series_flat() -> Iterable[datetime]:
                 for ordinal in range(periodicity_ordinal_start, periodicity_ordinal_end):
                     yield resolution.datetime(ordinal)
 
             datetime_iter = _gen_datetime_series_flat()
         else:
-
-            def _gen_datetime_series_gappy():
+            # if resolution != periodicity then create one datetime
+            # for each period defined by the periodicity
+            # The datetime will occur at a random position within
+            # the periodicity period
+            def _gen_datetime_series_gappy() -> Iterable[datetime]:
                 for ordinal in range(periodicity_ordinal_start, periodicity_ordinal_end):
                     p_start = periodicity.datetime(ordinal)
                     p_end = periodicity.datetime(ordinal + 1)
@@ -112,9 +181,13 @@ class TsData:
             datetime_iter = _gen_datetime_series_gappy()
 
         datetime_list: list[datetime] = [dt for dt in datetime_iter]
+        # Generate a list of distinct float values sequentially
+        # between 0 and n for each element of the time-series.
         value_list: list[float] = [
             float(o - periodicity_ordinal_start) for o in range(periodicity_ordinal_start, periodicity_ordinal_end)
         ]
+        # Shuffle the resulting list to give the aggregation
+        # functions something a bit less ordered to deal with.
         random.shuffle(value_list)
         return TsData(
             resolution=resolution, periodicity=periodicity, datetime_list=datetime_list, value_list=value_list
@@ -123,11 +196,27 @@ class TsData:
 
 @dataclass(frozen=True)
 class Case1:
+    """Some test case data
+
+    For each aggregation function being tested a time-series
+    of the given resolution and periodicity is created, which
+    is then aggregated over the given aggregation period.
+
+    The results from Polars are compared against the results
+    of performing the aggregation just using Python
+
+    Attributes:
+        resolution: The resolution of the time-series
+        periodicity: The periodicity of the time-series
+        aggregation_period: The aggregation period
+    """
+
     resolution: Period
     periodicity: Period
     aggregation_period: Period
 
 
+# All the Periods used in the tests
 PT15M = Period.of_minutes(15)
 PT1H = Period.of_hours(1)
 P1D = Period.of_days(1)
@@ -139,6 +228,14 @@ W_P1Y = P1Y.with_month_offset(9).with_hour_offset(9)
 PT1S = Period.of_seconds(1)
 PT1M = Period.of_minutes(1)
 PT1H = Period.of_hours(1)
+PT0_1S = Period.of_microseconds(100_000)
+PT0_01S = Period.of_microseconds(10_000)
+PT0_001S = Period.of_microseconds(1_000)
+PT0_0001S = Period.of_microseconds(100)
+PT0_00001S = Period.of_microseconds(10)
+PT0_000001S = Period.of_microseconds(1)
+
+# A list of test cases
 CASE1_LIST: list[Case1] = [
     Case1(resolution=PT15M, periodicity=PT15M, aggregation_period=PT1H),
     Case1(resolution=PT15M, periodicity=PT15M, aggregation_period=P1D),
@@ -173,109 +270,160 @@ CASE1_LIST: list[Case1] = [
     Case1(resolution=PT15M, periodicity=W_P1D, aggregation_period=W_P1M),
     Case1(resolution=PT15M, periodicity=W_P1M, aggregation_period=W_P1Y),
     Case1(resolution=W_P1D, periodicity=W_P1M, aggregation_period=W_P1Y),
+    Case1(resolution=PT0_1S, periodicity=PT0_1S, aggregation_period=PT1S),
+    Case1(resolution=PT0_01S, periodicity=PT0_01S, aggregation_period=PT0_1S),
+    Case1(resolution=PT0_001S, periodicity=PT0_001S, aggregation_period=PT0_01S),
+    Case1(resolution=PT0_0001S, periodicity=PT0_0001S, aggregation_period=PT0_001S),
+    Case1(resolution=PT0_00001S, periodicity=PT0_00001S, aggregation_period=PT0_0001S),
+    Case1(resolution=PT0_000001S, periodicity=PT0_000001S, aggregation_period=PT0_00001S),
+    # The following test case will fail with an out-of-memory error
+    # XX Case1(resolution=PT0_000001S, periodicity=PT0_000001S, aggregation_period=P1D),
 ]
 
+# A list that can be supplied to the @parameterized.expand
+# annotation to test all the test cases
 PARAMS_CASE1: list[tuple[str, Case1]] = [
     (f"{case1.resolution.iso_duration}_{case1.aggregation_period.iso_duration}", case1) for case1 in CASE1_LIST
 ]
 
+# The dates within which to create test time-series data
 DATETIME_FROM: datetime = datetime(1990, 1, 1)
 DATETIME_TO: datetime = datetime(2020, 1, 1)
 
 
 def _create_ts_data(resolution: Period, periodicity: Period) -> TsData:
+    """Create some test time-series data"""
     return TsData.create(resolution, periodicity, DATETIME_FROM, DATETIME_TO)
 
 
 def _get_pl_datetime_list(df: pl.DataFrame, column_name: str) -> list[datetime]:
+    """Get a list of datetimes from a Series in a DataFrame"""
     return [dt.replace(tzinfo=None) for dt in df[column_name]]
 
 
 def _get_pl_float_list(df: pl.DataFrame, column_name: str) -> list[float]:
+    """Get a list of floats from a Series in a DataFrame"""
     return [float(f) for f in df[column_name]]
 
 
 def _get_pl_int_list(df: pl.DataFrame, column_name: str) -> list[int]:
+    """Get a list of ints from a Series in a DataFrame"""
     return [int(i) for i in df[column_name]]
 
 
 def _get_datetime_list(
-    test_dict: dict[int, list[tuple[datetime, float]]], aggregation_period: Period
+    aggr_dict: dict[int, list[tuple[datetime, float]]], aggregation_period: Period
 ) -> list[datetime]:
-    return [aggregation_period.datetime(key) for key in test_dict.keys()]
+    """Get a list of datetimes of the start of each aggregation
+    period from a dict of aggregated data
+    """
+    return [aggregation_period.datetime(key) for key in aggr_dict.keys()]
 
 
-def _get_datetime_of_min_list(test_dict: dict[int, list[tuple[datetime, float]]]) -> list[datetime]:
-    def _sort_by_min_value(tup: tuple[datetime, float]) -> Any:
+def _get_datetime_of_min_list(aggr_dict: dict[int, list[tuple[datetime, float]]]) -> list[datetime]:
+    """Get a list of datetimes of the minimum value for each
+    period from a dict of aggregated data
+    """
+
+    def _sort_by_min_value(tup: tuple[datetime, float]) -> float:
         return tup[1]
 
-    def _get_min_datetime(values: list[tuple[datetime, float]]):
+    def _get_min_datetime(values: list[tuple[datetime, float]]) -> datetime:
         sorted_list: list[tuple[datetime, float]] = sorted(values, key=_sort_by_min_value)
         return sorted_list[0][0].replace(tzinfo=None)
 
-    return [_get_min_datetime(value) for value in test_dict.values()]
+    return [_get_min_datetime(value) for value in aggr_dict.values()]
 
 
-def _get_datetime_of_max_list(test_dict: dict[int, list[tuple[datetime, float]]]) -> list[datetime]:
-    def _sort_by_max_value(tup: tuple[datetime, float]) -> Any:
+def _get_datetime_of_max_list(aggr_dict: dict[int, list[tuple[datetime, float]]]) -> list[datetime]:
+    """Get a list of datetimes of the maximum value for each
+    period from a dict of aggregated data
+    """
+
+    def _sort_by_max_value(tup: tuple[datetime, float]) -> float:
         return 0.0 - tup[1]
 
-    def _get_max_datetime(values: list[tuple[datetime, float]]):
+    def _get_max_datetime(values: list[tuple[datetime, float]]) -> datetime:
         sorted_list: list[tuple[datetime, float]] = sorted(values, key=_sort_by_max_value)
         return sorted_list[0][0].replace(tzinfo=None)
 
-    return [_get_max_datetime(value) for value in test_dict.values()]
+    return [_get_max_datetime(value) for value in aggr_dict.values()]
 
 
-def _get_mean_list(test_dict: dict[int, list[tuple[datetime, float]]]) -> list[float]:
-    def _calc_mean(values: list[tuple[datetime, float]]):
+def _get_mean_list(aggr_dict: dict[int, list[tuple[datetime, float]]]) -> list[float]:
+    """Get a list of floats of the means value for each
+    period from a dict of aggregated data
+    """
+
+    def _calc_mean(values: list[tuple[datetime, float]]) -> float:
         return sum(t[1] for t in values) / len(values)
 
-    return [_calc_mean(value) for value in test_dict.values()]
+    return [_calc_mean(value) for value in aggr_dict.values()]
 
 
-def _get_min_list(test_dict: dict[int, list[tuple[datetime, float]]]) -> list[float]:
-    def _calc_min(values: list[tuple[datetime, float]]):
+def _get_min_list(aggr_dict: dict[int, list[tuple[datetime, float]]]) -> list[float]:
+    """Get a list of floats of the min value for each
+    period from a dict of aggregated data
+    """
+
+    def _calc_min(values: list[tuple[datetime, float]]) -> float:
         return min(t[1] for t in values)
 
-    return [_calc_min(value) for value in test_dict.values()]
+    return [_calc_min(value) for value in aggr_dict.values()]
 
 
-def _get_max_list(test_dict: dict[int, list[tuple[datetime, float]]]) -> list[float]:
-    def _calc_max(values: list[tuple[datetime, float]]):
+def _get_max_list(aggr_dict: dict[int, list[tuple[datetime, float]]]) -> list[float]:
+    """Get a list of floats of the max value for each
+    period from a dict of aggregated data
+    """
+
+    def _calc_max(values: list[tuple[datetime, float]]) -> float:
         return max(t[1] for t in values)
 
-    return [_calc_max(value) for value in test_dict.values()]
+    return [_calc_max(value) for value in aggr_dict.values()]
 
 
-def _get_count_list(test_dict: dict[int, list[tuple[datetime, float]]]) -> list[int]:
-    def _calc_count(values: list[tuple[datetime, float]]):
+def _get_count_list(aggr_dict: dict[int, list[tuple[datetime, float]]]) -> list[int]:
+    """Get a list of ints containing a count of the number of
+    items in each period from a dict of aggregated data
+    """
+
+    def _calc_count(values: list[tuple[datetime, float]]) -> int:
         return len(values)
 
-    return [_calc_count(value) for value in test_dict.values()]
+    return [_calc_count(value) for value in aggr_dict.values()]
 
 
 def _get_count_datetime_list(
-    test_dict: dict[int, list[tuple[datetime, float]]], aggregation_period: Period, resolution: Period
+    aggr_dict: dict[int, list[tuple[datetime, float]]], aggregation_period: Period, periodicity: Period
 ) -> list[int]:
-    def _calc_count(aggregation_ordinal: int):
+    """Get a list of ints containing a count of the maximum number of
+    items that could appear in each period from a dict of aggregated
+    data
+    """
+
+    def _calc_count(aggregation_ordinal: int) -> int:
         agg_start = aggregation_period.datetime(aggregation_ordinal)
         agg_end = aggregation_period.datetime(aggregation_ordinal + 1)
-        res_start_o = resolution.ordinal(agg_start)
-        res_end_o = resolution.ordinal(agg_end)
-        res_start = resolution.datetime(res_start_o)
-        res_end = resolution.datetime(res_end_o)
-        res_span = res_end_o - res_start_o
-        if res_start < agg_start:
-            res_span -= 1
-        if res_end < agg_end:
-            res_span += 1
-        return res_span
+        prd_ordinal_start = periodicity.ordinal(agg_start)
+        prd_ordinal_end = periodicity.ordinal(agg_end)
+        prd_start = periodicity.datetime(prd_ordinal_start)
+        prd_end = periodicity.datetime(prd_ordinal_end)
+        if prd_start < agg_start:
+            prd_ordinal_start += 1
+        if prd_end < agg_end:
+            prd_ordinal_end += 1
+        prd_span = prd_ordinal_end - prd_ordinal_start
+        return prd_span
 
-    return [_calc_count(key) for key in test_dict.keys()]
+    return [_calc_count(key) for key in aggr_dict.keys()]
 
 
 class TestFunctions(unittest.TestCase):
+    """Test the min, mean, and max functions over a range of
+    input time-series and aggregation periods
+    """
+
     def _test_basic(
         self,
         case1: Case1,
@@ -283,25 +431,32 @@ class TestFunctions(unittest.TestCase):
         aggregation_function: AggregationFunction,
         value_fn: Callable[[dict[int, list[tuple[datetime, float]]]], list[float]],
     ) -> None:
+        """Test a 'basic' aggregation function, which just produces a
+        float for each aggregation period
+        """
         ts_data = _create_ts_data(case1.resolution, case1.periodicity)
         ts: TimeSeries = ts_data.create_ts()
         #       print(f"input: {ts.resolution} {ts.periodicity}" )
         #       print(ts.df)
         result = ts.aggregate(aggregation_function, case1.aggregation_period, VALUE)
-        test_dict: dict[int, list[tuple[datetime, float]]] = ts_data.create_test_dict(case1.aggregation_period)
+        aggr_dict: dict[int, list[tuple[datetime, float]]] = ts_data.create_aggr_dict(case1.aggregation_period)
+        # Compare datetime columns
         self.assertListEqual(
-            _get_pl_datetime_list(result.df, TIME), _get_datetime_list(test_dict, case1.aggregation_period)
+            _get_pl_datetime_list(result.df, TIME), _get_datetime_list(aggr_dict, case1.aggregation_period)
         )
-        self.assertListEqual(_get_pl_float_list(result.df, f"{name}_{VALUE}"), value_fn(test_dict))
-        self.assertListEqual(_get_pl_int_list(result.df, f"count_{VALUE}"), _get_count_list(test_dict))
+        # Compare value columns
+        # An equality check on floats could fail, but this
+        # works, for the mean function at least.
+        # Might need a version that takes float underflow/overflow
+        # into account.
+        self.assertListEqual(_get_pl_float_list(result.df, f"{name}_{VALUE}"), value_fn(aggr_dict))
+        # Compare value count columns
+        self.assertListEqual(_get_pl_int_list(result.df, f"count_{VALUE}"), _get_count_list(aggr_dict))
+        # Compare datetime count columns
         self.assertListEqual(
             _get_pl_int_list(result.df, f"count_{TIME}"),
-            _get_count_datetime_list(test_dict, case1.aggregation_period, case1.periodicity),
+            _get_count_datetime_list(aggr_dict, case1.aggregation_period, case1.periodicity),
         )
-
-    #       print(f"result: {name}: {result.resolution} {result.periodicity}" )
-    #       print(result.df)
-    #       self.assertTrue(False)
 
     def _test_with_datetime(
         self,
@@ -311,35 +466,41 @@ class TestFunctions(unittest.TestCase):
         datetime_fn: Callable[[dict[int, list[tuple[datetime, float]]]], list[datetime]],
         value_fn: Callable[[dict[int, list[tuple[datetime, float]]]], list[float]],
     ) -> None:
+        """Test a 'datetime' aggregation function, which produces a
+        float and a datetime for each aggregation period
+        """
         ts_data = _create_ts_data(case1.resolution, case1.periodicity)
         ts: TimeSeries = ts_data.create_ts()
-        #       print(f"input: {ts.resolution} {ts.periodicity}" )
-        #       print(ts.df)
         result = ts.aggregate(aggregation_function, case1.aggregation_period, VALUE)
-        test_dict: dict[int, list[tuple[datetime, float]]] = ts_data.create_test_dict(case1.aggregation_period)
+        aggr_dict: dict[int, list[tuple[datetime, float]]] = ts_data.create_aggr_dict(case1.aggregation_period)
+        # Compare datetime columns
         self.assertListEqual(
-            _get_pl_datetime_list(result.df, TIME), _get_datetime_list(test_dict, case1.aggregation_period)
+            _get_pl_datetime_list(result.df, TIME), _get_datetime_list(aggr_dict, case1.aggregation_period)
         )
-        self.assertListEqual(_get_pl_datetime_list(result.df, f"{TIME}_of_{name}"), datetime_fn(test_dict))
-        self.assertListEqual(_get_pl_float_list(result.df, f"{name}_{VALUE}"), value_fn(test_dict))
-        self.assertListEqual(_get_pl_int_list(result.df, f"count_{VALUE}"), _get_count_list(test_dict))
+        # Compare datetime of min/max columns
+        self.assertListEqual(_get_pl_datetime_list(result.df, f"{TIME}_of_{name}"), datetime_fn(aggr_dict))
+        # Compare value columns
+        # For min/max comparing the float values should work ok, as
+        # data is just being copied, there is no calculation involved.
+        # Might need a version that takes float underflow/overflow
+        # into account.
+        self.assertListEqual(_get_pl_float_list(result.df, f"{name}_{VALUE}"), value_fn(aggr_dict))
+        # Compare value count columns
+        self.assertListEqual(_get_pl_int_list(result.df, f"count_{VALUE}"), _get_count_list(aggr_dict))
+        # Compare datetime count columns
         self.assertListEqual(
             _get_pl_int_list(result.df, f"count_{TIME}"),
-            _get_count_datetime_list(test_dict, case1.aggregation_period, case1.periodicity),
+            _get_count_datetime_list(aggr_dict, case1.aggregation_period, case1.periodicity),
         )
 
-    #       print(f"result: {name}: {result.resolution} {result.periodicity}" )
-    #       print(result.df)
-    #       self.assertTrue(False)
-
     @parameterized.expand(PARAMS_CASE1)
-    def test_mean(self, _, case1):
+    def test_mean(self, _: Any, case1: Case1) -> None:
         self._test_basic(
             case1=case1, name="mean", aggregation_function=AggregationFunction.mean(), value_fn=_get_mean_list
         )
 
     @parameterized.expand(PARAMS_CASE1)
-    def test_min(self, _, case1):
+    def test_min(self, _: Any, case1: Case1) -> None:
         self._test_with_datetime(
             case1=case1,
             name="min",
@@ -349,7 +510,7 @@ class TestFunctions(unittest.TestCase):
         )
 
     @parameterized.expand(PARAMS_CASE1)
-    def test_max(self, _, case1):
+    def test_max(self, _: Any, case1: Case1) -> None:
         self._test_with_datetime(
             case1=case1,
             name="max",
