@@ -134,7 +134,7 @@ class DataFrameAggregator(ABC):
 
         These expressions are passed to the Polars .agg() method.
 
-        Subclasses override this method to provide to provide
+        Subclasses override this method to provide
         a non-empty return list.
 
         Returns:
@@ -149,7 +149,7 @@ class DataFrameAggregator(ABC):
         These struct names are passed to the Polars DataFrame.unnest()
         method.
 
-        Subclasses override this method to provide to provide
+        Subclasses override this method to provide
         a non-empty return list.
 
         Returns:
@@ -164,7 +164,7 @@ class DataFrameAggregator(ABC):
         These expressions are passed to the Polars
         DataFrame.with_columns() method.
 
-        Subclasses override this method to provide to provide
+        Subclasses override this method to provide
         a non-empty return list.
 
         Returns:
