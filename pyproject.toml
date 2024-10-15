@@ -14,7 +14,7 @@ dependencies = [
     "pyarrow>=17.0.0",
     "pydantic>=2.8.2",
     "isodate",
-    "duckdb",
+    "duckdb>=1.1.2",
     "pandas",
     "tenacity",
     "prometheus-client"
