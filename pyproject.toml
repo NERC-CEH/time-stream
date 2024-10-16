@@ -17,7 +17,8 @@ dependencies = [
     "duckdb>=1.1.2",
     "pandas",
     "tenacity",
-    "prometheus-client"
+    "prometheus-client",
+    "setuptools"
 ]
 name = "dritimeseriesprocessor"
 dynamic = ["version"]
