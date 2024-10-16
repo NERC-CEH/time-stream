@@ -14,26 +14,26 @@ class TimeSeries(ABC):
         periodicity: Optional[Period] = None,
         time_zone: Optional[str] = None,
     ) -> None:
-        self.__time_name = time_name
-        self.__resolution = resolution
-        self.__periodicity = periodicity
-        self.__time_zone = time_zone
+        self._time_name = time_name
+        self._resolution = resolution
+        self._periodicity = periodicity
+        self._time_zone = time_zone
 
     @property
     def time_name(self) -> str:
-        return self.__time_name
+        return self._time_name
 
     @property
     def resolution(self) -> Period:
-        return self.__resolution
+        return self._resolution
 
     @property
     def periodicity(self) -> Period:
-        return self.__periodicity
+        return self._periodicity
 
     @property
     def time_zone(self) -> str:
-        return self.__time_zone
+        return self._time_zone
 
     @staticmethod
     def from_polars(
