@@ -157,7 +157,6 @@ class AggregationFunction(ABC):
         return time_series.aggregation.Max()
 
     def __init__(self, name: str) -> None:
-        assert isinstance(name, str)
         self._name = name
 
     @property
