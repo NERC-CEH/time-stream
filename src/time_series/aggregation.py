@@ -171,7 +171,7 @@ class ExpectedCount(AggregationStage):
                 start=start_expr, end=end_expr, interval=self.aggregator.ts.periodicity.pl_interval, closed="right"
             )
             .list.len()
-            .alias(f"count_{time_name}")
+            .alias(f"expected_count_{time_name}")
         ]
 
 

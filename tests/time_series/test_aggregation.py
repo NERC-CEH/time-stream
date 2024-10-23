@@ -394,7 +394,7 @@ def _get_count_list(aggr_dict: dict[int, list[tuple[datetime, float]]]) -> list[
     return [_calc_count(value) for value in aggr_dict.values()]
 
 
-def _get_count_datetime_list(
+def _get_expected_count_list(
     aggr_dict: dict[int, list[tuple[datetime, float]]], aggregation_period: Period, periodicity: Period
 ) -> list[int]:
     """Get a list of ints containing a count of the maximum number of
@@ -454,8 +454,8 @@ class TestFunctions(unittest.TestCase):
         self.assertListEqual(_get_pl_int_list(result.df, f"count_{VALUE}"), _get_count_list(aggr_dict))
         # Compare datetime count columns
         self.assertListEqual(
-            _get_pl_int_list(result.df, f"count_{TIME}"),
-            _get_count_datetime_list(aggr_dict, case1.aggregation_period, case1.periodicity),
+            _get_pl_int_list(result.df, f"expected_count_{TIME}"),
+            _get_expected_count_list(aggr_dict, case1.aggregation_period, case1.periodicity),
         )
 
     def _test_with_datetime(
@@ -489,8 +489,8 @@ class TestFunctions(unittest.TestCase):
         self.assertListEqual(_get_pl_int_list(result.df, f"count_{VALUE}"), _get_count_list(aggr_dict))
         # Compare datetime count columns
         self.assertListEqual(
-            _get_pl_int_list(result.df, f"count_{TIME}"),
-            _get_count_datetime_list(aggr_dict, case1.aggregation_period, case1.periodicity),
+            _get_pl_int_list(result.df, f"expected_count_{TIME}"),
+            _get_expected_count_list(aggr_dict, case1.aggregation_period, case1.periodicity),
         )
 
     @parameterized.expand(PARAMS_CASE1)
