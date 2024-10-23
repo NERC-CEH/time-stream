@@ -65,7 +65,7 @@ class TimeSeries(ABC):
         pass
 
     def aggregate(
-        self, aggregation_function: "AggregationFunction", aggregation_period: Period, column_name: str
+        self, aggregation_period: Period, aggregation_function: "AggregationFunction", column_name: str
     ) -> "TimeSeries":
         """Apply an aggregation function to a column in this
         TimeSeries and return a new derived TimeSeries containing
@@ -80,9 +80,9 @@ class TimeSeries(ABC):
         evolve considerably.
 
         Args:
-            aggregation_function: The aggregation function to apply
             aggregation_period: The period over which to aggregate
                                 the data
+            aggregation_function: The aggregation function to apply
             column_name: The column containing the data to be aggregated
 
         Returns:

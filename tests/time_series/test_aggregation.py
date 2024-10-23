@@ -438,7 +438,7 @@ class TestFunctions(unittest.TestCase):
         ts: TimeSeries = ts_data.create_ts()
         #       print(f"input: {ts.resolution} {ts.periodicity}" )
         #       print(ts.df)
-        result = ts.aggregate(aggregation_function, case1.aggregation_period, VALUE)
+        result = ts.aggregate(case1.aggregation_period, aggregation_function, VALUE)
         aggr_dict: dict[int, list[tuple[datetime, float]]] = ts_data.create_aggr_dict(case1.aggregation_period)
         # Compare datetime columns
         self.assertListEqual(
@@ -471,7 +471,7 @@ class TestFunctions(unittest.TestCase):
         """
         ts_data = _create_ts_data(case1.resolution, case1.periodicity)
         ts: TimeSeries = ts_data.create_ts()
-        result = ts.aggregate(aggregation_function, case1.aggregation_period, VALUE)
+        result = ts.aggregate(case1.aggregation_period, aggregation_function, VALUE)
         aggr_dict: dict[int, list[tuple[datetime, float]]] = ts_data.create_aggr_dict(case1.aggregation_period)
         # Compare datetime columns
         self.assertListEqual(
