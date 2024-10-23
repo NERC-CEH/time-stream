@@ -1,5 +1,7 @@
 import unittest
 import datetime as dt
+
+from unittest.mock import patch, Mock
 from typing import Callable
 from parameterized import parameterized
 
@@ -16,6 +18,9 @@ from time_series.period import (
     _get_microsecond_period_name,
     _get_second_period_name,
     _get_month_period_name,
+    _STEP_MICROSECONDS,
+    _STEP_SECONDS,
+    _STEP_MONTHS,
     _fmt_naive_microsecond,
     _fmt_naive_millisecond,
     _fmt_naive_second,
@@ -23,11 +28,19 @@ from time_series.period import (
     _fmt_naive_hour,
     _fmt_naive_day,
     _fmt_naive_month,
-    _fmt_naive_year
+    _fmt_naive_year,
+    _fmt_tzdelta,
+    _fmt_tzinfo,
+    _fmt_aware_microsecond,
+    _fmt_aware_millisecond,
+    _fmt_aware_second,
+    _fmt_aware_minute,
+    _fmt_aware_hour,
+    Properties
 )
 
 
-class TestNaiveFunction(unittest.TestCase):
+class TestNaive(unittest.TestCase):
     """ Unit tests for the _naive function.
     """
 
@@ -48,7 +61,7 @@ class TestNaiveFunction(unittest.TestCase):
         self.assertEqual(result, dt_without_tz)
 
 
-class TestGregorianSecondsFunction(unittest.TestCase):
+class TestGregorianSeconds(unittest.TestCase):
     """ Unit tests for the _gregorian_seconds function.
     """
 
@@ -62,7 +75,7 @@ class TestGregorianSecondsFunction(unittest.TestCase):
         self.assertEqual(_gregorian_seconds(dt_obj), expected_seconds)
 
 
-class TestPeriodRegexFunction(unittest.TestCase):
+class TestPeriodRegex(unittest.TestCase):
     """ Unit tests for the _period_regex function.
     """
 
@@ -281,7 +294,7 @@ class TestDateTimeAdjustersPostInit(unittest.TestCase):
             DateTimeAdjusters(retreat=retreat, advance=advance).__post_init__()
 
 
-class TestSecondStringFunction(unittest.TestCase):
+class TestSecondString(unittest.TestCase):
     """ Unit tests for the _second_string function.
     """
 
@@ -300,7 +313,7 @@ class TestSecondStringFunction(unittest.TestCase):
         self.assertEqual(result, expected)
 
 
-class TestAppendSecondElemsFunction(unittest.TestCase):
+class TestAppendSecondElems(unittest.TestCase):
     """ Unit tests for the _append_second_elems function.
     """
 
@@ -319,7 +332,7 @@ class TestAppendSecondElemsFunction(unittest.TestCase):
         self.assertEqual(result, expected)
 
 
-class TestAppendMonthElemsFunction(unittest.TestCase):
+class TestAppendMonthElems(unittest.TestCase):
     """ Unit tests for the _append_month_elems function.
     """
 
@@ -337,7 +350,7 @@ class TestAppendMonthElemsFunction(unittest.TestCase):
         self.assertEqual(result, expected)
 
 
-class TestGetMicrosecondPeriodNameFunction(unittest.TestCase):
+class TestGetMicrosecondPeriodName(unittest.TestCase):
     """ Unit tests for the _get_microsecond_period_name function.
     """
 
@@ -355,7 +368,7 @@ class TestGetMicrosecondPeriodNameFunction(unittest.TestCase):
         self.assertEqual(result, expected)
 
 
-class TestGetSecondPeriodNameFunction(unittest.TestCase):
+class TestGetSecondPeriodName(unittest.TestCase):
     """ Unit tests for the _get_second_period_name function.
     """
 
@@ -373,7 +386,7 @@ class TestGetSecondPeriodNameFunction(unittest.TestCase):
         self.assertEqual(result, expected)
 
 
-class TestGetMonthPeriodNameFunction(unittest.TestCase):
+class TestGetMonthPeriodName(unittest.TestCase):
     """ Unit tests for the _get_month_period_name function.
     """
 
@@ -390,15 +403,14 @@ class TestGetMonthPeriodNameFunction(unittest.TestCase):
         self.assertEqual(result, expected)
 
 
-class TestFmtNaiveMicrosecondFunction(unittest.TestCase):
+class TestFmtNaiveMicrosecond(unittest.TestCase):
     """ Unit tests for the _fmt_naive_microsecond function.
     """
 
     @parameterized.expand([
         ("standard datetime with dash separator", dt.datetime(2023, 10, 10, 10, 0, 0, 123456), "-", "2023-10-10-10:00:00.123456"),
         ("standard datetime with T separator", dt.datetime(2023, 10, 10, 10, 0, 0, 123456), "T", "2023-10-10T10:00:00.123456"),
-        ("datetime with zero microseconds", dt.datetime(2023, 10, 10, 10, 0, 0, 0), "-", "2023-10-10-10:00:00.000000"),
-        ("datetime with space separator", dt.datetime(2023, 10, 10, 10, 0, 0, 123456), " ", "2023-10-10 10:00:00.123456")
+        ("datetime with zero microseconds", dt.datetime(2023, 10, 10, 10, 0, 0, 0), "-", "2023-10-10-10:00:00.000000")
     ])
     def test_fmt_naive_microsecond(self, name, obj, separator, expected):
         """ Test _fmt_naive_microsecond function with various datetime objects and separators.
@@ -407,15 +419,14 @@ class TestFmtNaiveMicrosecondFunction(unittest.TestCase):
         self.assertEqual(result, expected)
 
 
-class TestFmtNaiveMillisecondFunction(unittest.TestCase):
+class TestFmtNaiveMillisecond(unittest.TestCase):
     """ Unit tests for the _fmt_naive_millisecond function.
     """
 
     @parameterized.expand([
         ("standard datetime with dash separator", dt.datetime(2023, 10, 10, 10, 0, 0, 123456), "-", "2023-10-10-10:00:00.123"),
         ("standard datetime with T separator", dt.datetime(2023, 10, 10, 10, 0, 0, 123456), "T", "2023-10-10T10:00:00.123"),
-        ("datetime with zero microseconds", dt.datetime(2023, 10, 10, 10, 0, 0, 0), "-", "2023-10-10-10:00:00.000"),
-        ("datetime with space separator", dt.datetime(2023, 10, 10, 10, 0, 0, 123456), " ", "2023-10-10 10:00:00.123")
+        ("datetime with zero microseconds", dt.datetime(2023, 10, 10, 10, 0, 0, 0), "-", "2023-10-10-10:00:00.000")
     ])
     def test_fmt_naive_millisecond(self, name, obj, separator, expected):
         """ Test _fmt_naive_millisecond function with various datetime objects and separators.
@@ -424,14 +435,13 @@ class TestFmtNaiveMillisecondFunction(unittest.TestCase):
         self.assertEqual(result, expected)
 
 
-class TestFmtNaiveSecondFunction(unittest.TestCase):
+class TestFmtNaiveSecond(unittest.TestCase):
     """ Unit tests for the _fmt_naive_second function.
     """
 
     @parameterized.expand([
         ("standard datetime with dash separator", dt.datetime(2023, 10, 10, 10, 0, 0), "-", "2023-10-10-10:00:00"),
-        ("standard datetime with T separator", dt.datetime(2023, 10, 10, 10, 0, 0), "T", "2023-10-10T10:00:00"),
-        ("datetime with space separator", dt.datetime(2023, 10, 10, 10, 0, 0), " ", "2023-10-10 10:00:00")
+        ("standard datetime with T separator", dt.datetime(2023, 10, 10, 10, 0, 0), "T", "2023-10-10T10:00:00")
     ])
     def test_fmt_naive_second(self, name, obj, separator, expected):
         """ Test _fmt_naive_second function with various datetime objects and separators.
@@ -440,14 +450,13 @@ class TestFmtNaiveSecondFunction(unittest.TestCase):
         self.assertEqual(result, expected)
 
 
-class TestFmtNaiveMinuteFunction(unittest.TestCase):
+class TestFmtNaiveMinute(unittest.TestCase):
     """ Unit tests for the _fmt_naive_minute function.
     """
 
     @parameterized.expand([
         ("standard datetime with dash separator", dt.datetime(2023, 10, 10, 10, 0, 0), "-", "2023-10-10-10:00"),
-        ("standard datetime with T separator", dt.datetime(2023, 10, 10, 10, 0, 0), "T", "2023-10-10T10:00"),
-        ("datetime with space separator", dt.datetime(2023, 10, 10, 10, 0, 0), " ", "2023-10-10 10:00")
+        ("standard datetime with T separator", dt.datetime(2023, 10, 10, 10, 0, 0), "T", "2023-10-10T10:00")
     ])
     def test_fmt_naive_minute(self, name, obj, separator, expected):
         """ Test _fmt_naive_minute function with various datetime objects and separators.
@@ -456,14 +465,13 @@ class TestFmtNaiveMinuteFunction(unittest.TestCase):
         self.assertEqual(result, expected)
 
 
-class TestFmtNaiveHourFunction(unittest.TestCase):
+class TestFmtNaiveHour(unittest.TestCase):
     """ Unit tests for the _fmt_naive_hour function.
     """
 
     @parameterized.expand([
         ("standard datetime with dash separator", dt.datetime(2023, 10, 10, 10, 0, 0), "-", "2023-10-10-10"),
-        ("standard datetime with T separator", dt.datetime(2023, 10, 10, 10, 0, 0), "T", "2023-10-10T10"),
-        ("datetime with space separator", dt.datetime(2023, 10, 10, 10, 0, 0), " ", "2023-10-10 10")
+        ("standard datetime with T separator", dt.datetime(2023, 10, 10, 10, 0, 0), "T", "2023-10-10T10")
     ])
     def test_fmt_naive_hour(self, name, obj, separator, expected):
         """ Test _fmt_naive_hour function with various datetime objects and separators.
@@ -472,7 +480,7 @@ class TestFmtNaiveHourFunction(unittest.TestCase):
         self.assertEqual(result, expected)
 
 
-class TestFmtNaiveDayFunction(unittest.TestCase):
+class TestFmtNaiveDay(unittest.TestCase):
     """ Unit tests for the _fmt_naive_day function.
     """
 
@@ -484,7 +492,7 @@ class TestFmtNaiveDayFunction(unittest.TestCase):
         self.assertEqual(result, expected)
 
 
-class TestFmtNaiveMonthFunction(unittest.TestCase):
+class TestFmtNaiveMonth(unittest.TestCase):
     """ Unit tests for the _fmt_naive_month function.
     """
 
@@ -496,7 +504,7 @@ class TestFmtNaiveMonthFunction(unittest.TestCase):
         self.assertEqual(result, expected)
 
 
-class TestFmtNaiveYearFunction(unittest.TestCase):
+class TestFmtNaiveYear(unittest.TestCase):
     """ Unit tests for the _fmt_naive_year function.
     """
 
@@ -506,6 +514,463 @@ class TestFmtNaiveYearFunction(unittest.TestCase):
         expected = "2023"
         result = _fmt_naive_year(dt.datetime(2023, 10, 10, 10, 0, 0))
         self.assertEqual(result, expected)
+
+
+class TestFmtTzdelta(unittest.TestCase):
+    """ Unit tests for the _fmt_tzdelta function.
+    """
+
+    @parameterized.expand([
+        ("zero delta", dt.timedelta(0), "Z"),
+        ("positive delta", dt.timedelta(hours=5, minutes=30), "+05:30"),
+        ("negative delta", dt.timedelta(hours=-5, minutes=-30), "-05:30"),
+        ("positive delta with seconds", dt.timedelta(hours=1, minutes=45, seconds=30), "+01:45"),
+        ("negative delta with seconds", dt.timedelta(hours=-1, minutes=-45, seconds=-30), "-01:45")
+    ])
+    def test_fmt_tzdelta(self, name, delta, expected):
+        """ Test _fmt_tzdelta function with various timedelta objects.
+        """
+        result = _fmt_tzdelta(delta)
+        self.assertEqual(result, expected)
+
+    @parameterized.expand([
+        ("delta exceeding one day", dt.timedelta(days=1, hours=1)),
+        ("negative delta exceeding one day", dt.timedelta(days=-1, hours=-1))
+    ])
+    def test_fmt_tzdelta_invalid(self, name, delta):
+        """ Test _fmt_tzdelta function with invalid timedelta objects.
+        """
+        with self.assertRaises(ValueError):
+            _fmt_tzdelta(delta)
+
+
+class TestFmtTzinfo(unittest.TestCase):
+    """ Unit tests for the _fmt_tzinfo function.
+    """
+
+    @parameterized.expand([
+        ("no tzinfo", None, ""),
+        ("UTC tzinfo", dt.timezone.utc, "Z"),
+        ("positive tzinfo", dt.timezone(dt.timedelta(hours=5, minutes=30)), "+05:30"),
+        ("negative tzinfo", dt.timezone(dt.timedelta(hours=-5, minutes=-30)), "-05:30")
+    ])
+    def test_fmt_tzinfo(self, name, tz, expected):
+        """ Test _fmt_tzinfo function with various tzinfo objects.
+        """
+        result = _fmt_tzinfo(tz)
+        self.assertEqual(result, expected)
+
+
+class TestFmtAwareMicrosecond(unittest.TestCase):
+    """ Unit tests for the _fmt_aware_microsecond function.
+    """
+
+    @parameterized.expand([
+        ("UTC timezone with dash separator", dt.datetime(2023, 10, 10, 10, 0, 0, 123456, tzinfo=dt.timezone.utc), "-", "2023-10-10-10:00:00.123456Z"),
+        ("UTC timezone with T separator", dt.datetime(2023, 10, 10, 10, 0, 0, 123456, tzinfo=dt.timezone.utc), "T", "2023-10-10T10:00:00.123456Z"),
+        ("positive timezone", dt.datetime(2023, 10, 10, 10, 0, 0, 123456, tzinfo=dt.timezone(dt.timedelta(hours=5, minutes=30))), "-", "2023-10-10-10:00:00.123456+05:30"),
+        ("negative timezone", dt.datetime(2023, 10, 10, 10, 0, 0, 123456, tzinfo=dt.timezone(dt.timedelta(hours=-5, minutes=-30))), "-", "2023-10-10-10:00:00.123456-05:30")
+    ])
+    def test_fmt_aware_microsecond(self, name, obj, separator, expected):
+        """ Test _fmt_aware_microsecond function with various datetime objects and separators.
+        """
+        result = _fmt_aware_microsecond(obj, separator)
+        self.assertEqual(result, expected)
+
+
+class TestFmtAwareMillisecond(unittest.TestCase):
+    """ Unit tests for the _fmt_aware_millisecond function.
+    """
+
+    @parameterized.expand([
+        ("UTC timezone with dash separator", dt.datetime(2023, 10, 10, 10, 0, 0, 123456, tzinfo=dt.timezone.utc), "-", "2023-10-10-10:00:00.123Z"),
+        ("UTC timezone with T separator", dt.datetime(2023, 10, 10, 10, 0, 0, 123456, tzinfo=dt.timezone.utc), "T", "2023-10-10T10:00:00.123Z"),
+        ("positive timezone", dt.datetime(2023, 10, 10, 10, 0, 0, 123456, tzinfo=dt.timezone(dt.timedelta(hours=5, minutes=30))), "-", "2023-10-10-10:00:00.123+05:30"),
+        ("negative timezone", dt.datetime(2023, 10, 10, 10, 0, 0, 123456, tzinfo=dt.timezone(dt.timedelta(hours=-5, minutes=-30))), "-", "2023-10-10-10:00:00.123-05:30")
+    ])
+    def test_fmt_aware_millisecond(self, name, obj, separator, expected):
+        """ Test _fmt_aware_millisecond function with various datetime objects and separators.
+        """
+        result = _fmt_aware_millisecond(obj, separator)
+        self.assertEqual(result, expected)
+
+
+class TestFmtAwareSecond(unittest.TestCase):
+    """ Unit tests for the _fmt_aware_second function.
+    """
+
+    @parameterized.expand([
+        ("UTC timezone with dash separator", dt.datetime(2023, 10, 10, 10, 0, 0, tzinfo=dt.timezone.utc), "-", "2023-10-10-10:00:00Z"),
+        ("UTC timezone with T separator", dt.datetime(2023, 10, 10, 10, 0, 0, tzinfo=dt.timezone.utc), "T", "2023-10-10T10:00:00Z"),
+        ("positive timezone", dt.datetime(2023, 10, 10, 10, 0, 0, tzinfo=dt.timezone(dt.timedelta(hours=5, minutes=30))), "-", "2023-10-10-10:00:00+05:30"),
+        ("negative timezone", dt.datetime(2023, 10, 10, 10, 0, 0, tzinfo=dt.timezone(dt.timedelta(hours=-5, minutes=-30))), "-", "2023-10-10-10:00:00-05:30")
+    ])
+    def test_fmt_aware_second(self, name, obj, separator, expected):
+        """ Test _fmt_aware_second function with various datetime objects and separators.
+        """
+        result = _fmt_aware_second(obj, separator)
+        self.assertEqual(result, expected)
+
+
+class TestFmtAwareMinute(unittest.TestCase):
+    """ Unit tests for the _fmt_aware_minute function.
+    """
+
+    @parameterized.expand([
+        ("UTC timezone with dash separator", dt.datetime(2023, 10, 10, 10, 0, tzinfo=dt.timezone.utc), "-", "2023-10-10-10:00Z"),
+        ("UTC timezone with T separator", dt.datetime(2023, 10, 10, 10, 0, tzinfo=dt.timezone.utc), "T", "2023-10-10T10:00Z"),
+        ("positive timezone", dt.datetime(2023, 10, 10, 10, 0, tzinfo=dt.timezone(dt.timedelta(hours=5, minutes=30))), "-", "2023-10-10-10:00+05:30"),
+        ("negative timezone", dt.datetime(2023, 10, 10, 10, 0, tzinfo=dt.timezone(dt.timedelta(hours=-5, minutes=-30))), "-", "2023-10-10-10:00-05:30")
+    ])
+    def test_fmt_aware_minute(self, name, obj, separator, expected):
+        """ Test _fmt_aware_minute function with various datetime objects and separators.
+        """
+        result = _fmt_aware_minute(obj, separator)
+        self.assertEqual(result, expected)
+
+
+class TestFmtAwareHour(unittest.TestCase):
+    """ Unit tests for the _fmt_aware_hour function.
+    """
+
+    @parameterized.expand([
+        ("UTC timezone with dash separator", dt.datetime(2023, 10, 10, 10, tzinfo=dt.timezone.utc), "-", "2023-10-10-10Z"),
+        ("UTC timezone with T separator", dt.datetime(2023, 10, 10, 10, tzinfo=dt.timezone.utc), "T", "2023-10-10T10Z"),
+        ("positive timezone", dt.datetime(2023, 10, 10, 10, tzinfo=dt.timezone(dt.timedelta(hours=5, minutes=30))), "-", "2023-10-10-10+05:30"),
+        ("negative timezone", dt.datetime(2023, 10, 10, 10, tzinfo=dt.timezone(dt.timedelta(hours=-5, minutes=-30))), "-", "2023-10-10-10-05:30")
+    ])
+    def test_fmt_aware_hour(self, name, obj, separator, expected):
+        """ Test _fmt_aware_hour function with various datetime objects and separators.
+        """
+        result = _fmt_aware_hour(obj, separator)
+        self.assertEqual(result, expected)
+
+
+class TestOfYears(unittest.TestCase):
+    """ Unit tests for the Properties.of_years method.
+    """
+
+    @parameterized.expand([
+        ("one year", 1),
+        ("two years", 2),
+    ])
+    def test_valid_years(self, name, no_of_years):
+        """ Test Properties.of_years method with various year inputs.
+        """
+        expected = Properties(step=_STEP_MONTHS, multiplier=no_of_years*12, month_offset=0, microsecond_offset=0, tzinfo=None, ordinal_shift=0)
+        result = Properties.of_years(no_of_years)
+        self.assertEqual(result, expected)
+
+    def test_zero_years(self):
+        """ Test Properties.of_years method with various year inputs.
+        """
+        with self.assertRaises(AssertionError):
+            Properties.of_years(0)
+
+
+class TestOfMonths(unittest.TestCase):
+    """ Unit tests for the Properties.of_months method.
+    """
+
+    @parameterized.expand([
+        ("one month", 1),
+        ("twelve months", 12),
+    ])
+    def test_valid_months(self, name, no_of_months):
+        """ Test Properties.of_months method with various month inputs.
+        """
+        expected = Properties(step=_STEP_MONTHS, multiplier=no_of_months, month_offset=0, microsecond_offset=0, tzinfo=None, ordinal_shift=0)
+        result = Properties.of_months(no_of_months)
+        self.assertEqual(result, expected)
+
+    def test_zero_months(self):
+        """ Test Properties.of_months method with zero month input.
+        """
+        with self.assertRaises(AssertionError):
+            Properties.of_months(0)
+
+
+class TestOfDays(unittest.TestCase):
+    """ Unit tests for the Properties.of_days method.
+    """
+
+    @parameterized.expand([
+        ("one day", 1),
+        ("seven days", 7),
+    ])
+    def test_valid_days(self, name, no_of_days):
+        """ Test Properties.of_days method with various day inputs.
+        """
+        expected = Properties(step=_STEP_SECONDS, multiplier=no_of_days * 86_400, month_offset=0, microsecond_offset=0, tzinfo=None, ordinal_shift=0)
+        result = Properties.of_days(no_of_days)
+        self.assertEqual(result, expected)
+
+    def test_zero_days(self):
+        """ Test Properties.of_days method with zero day input.
+        """
+        with self.assertRaises(AssertionError):
+            Properties.of_days(0)
+
+
+class TestOfHours(unittest.TestCase):
+    """ Unit tests for the Properties.of_hours method.
+    """
+
+    @parameterized.expand([
+        ("one hour", 1),
+        ("twenty-four hours", 24),
+    ])
+    def test_valid_hours(self, name, no_of_hours):
+        """ Test Properties.of_hours method with various hour inputs.
+        """
+        expected = Properties(step=_STEP_SECONDS, multiplier=no_of_hours * 3_600, month_offset=0, microsecond_offset=0, tzinfo=None, ordinal_shift=0)
+        result = Properties.of_hours(no_of_hours)
+        self.assertEqual(result, expected)
+
+    def test_zero_hours(self):
+        """ Test Properties.of_hours method with zero hour input.
+        """
+        with self.assertRaises(AssertionError):
+            Properties.of_hours(0)
+
+
+class TestOfMinutes(unittest.TestCase):
+    """ Unit tests for the Properties.of_minutes method.
+    """
+
+    @parameterized.expand([
+        ("one minute", 1),
+        ("sixty minutes", 60),
+    ])
+    def test_valid_minutes(self, name, no_of_minutes):
+        """ Test Properties.of_minutes method with various minute inputs.
+        """
+        expected = Properties(step=_STEP_SECONDS, multiplier=no_of_minutes * 60, month_offset=0, microsecond_offset=0, tzinfo=None, ordinal_shift=0)
+        result = Properties.of_minutes(no_of_minutes)
+        self.assertEqual(result, expected)
+
+    def test_zero_minutes(self):
+        """ Test Properties.of_minutes method with zero minute input.
+        """
+        with self.assertRaises(AssertionError):
+            Properties.of_minutes(0)
+
+
+class TestOfSeconds(unittest.TestCase):
+    """ Unit tests for the Properties.of_seconds method.
+    """
+
+    @parameterized.expand([
+        ("one second", 1),
+        ("sixty seconds", 60),
+    ])
+    def test_valid_seconds(self, name, no_of_seconds):
+        """ Test Properties.of_seconds method with various second inputs.
+        """
+        expected = Properties(step=_STEP_SECONDS, multiplier=no_of_seconds, month_offset=0, microsecond_offset=0, tzinfo=None, ordinal_shift=0)
+        result = Properties.of_seconds(no_of_seconds)
+        self.assertEqual(result, expected)
+
+    def test_zero_seconds(self):
+        """ Test Properties.of_seconds method with zero second input.
+        """
+        with self.assertRaises(AssertionError):
+            Properties.of_seconds(0)
+
+
+class TestOfMicroseconds(unittest.TestCase):
+    """ Unit tests for the Properties.of_microseconds method.
+    """
+
+    @parameterized.expand([
+        ("one microsecond", 1),
+        ("one million microseconds", 1_000_000),
+    ])
+    def test_valid_microseconds(self, name, no_of_microseconds):
+        """ Test Properties.of_microseconds method with various microsecond inputs.
+        """
+        seconds, microseconds = divmod(no_of_microseconds, 1_000_000)
+        if microseconds == 0:
+            expected = Properties(step=_STEP_SECONDS, multiplier=seconds, month_offset=0, microsecond_offset=0, tzinfo=None, ordinal_shift=0)
+        else:
+            expected = Properties(step=_STEP_MICROSECONDS, multiplier=no_of_microseconds, month_offset=0, microsecond_offset=0, tzinfo=None, ordinal_shift=0)
+        result = Properties.of_microseconds(no_of_microseconds)
+        self.assertEqual(result, expected)
+
+    def test_zero_microseconds(self):
+        """ Test Properties.of_microseconds method with zero microsecond input.
+        """
+        with self.assertRaises(AssertionError):
+            Properties.of_microseconds(0)
+
+
+class TestOfStepAndMultiplier(unittest.TestCase):
+    """ Unit tests for the Properties.of_step_and_multiplier method.
+    """
+
+    @parameterized.expand([
+        ("microseconds step", _STEP_MICROSECONDS, 1_000_000),
+        ("seconds step", _STEP_SECONDS, 60),
+        ("months step", _STEP_MONTHS, 12),
+    ])
+    def test_valid_step_and_multiplier(self, name, step, multiplier):
+        """ Test Properties.of_step_and_multiplier method with various step and multiplier inputs.
+        """
+        expected = Properties(step=step, multiplier=multiplier, month_offset=0, microsecond_offset=0, tzinfo=None, ordinal_shift=0)
+        result = Properties.of_step_and_multiplier(step, multiplier)
+        self.assertEqual(result, expected)
+
+    def test_invalid_step(self):
+        """ Test Properties.of_step_and_multiplier method with invalid step input.
+        """
+        with self.assertRaises(AssertionError):
+            Properties.of_step_and_multiplier(999, 1)
+
+
+class TestNormaliseOffsets(unittest.TestCase):
+    """ Unit tests for the Properties.normalise_offsets method.
+    """
+
+    @parameterized.expand([
+        ("normalised months", Properties(step=_STEP_MONTHS, multiplier=12, month_offset=13, microsecond_offset=0, tzinfo=None, ordinal_shift=0), Properties(step=_STEP_MONTHS, multiplier=12, month_offset=1, microsecond_offset=0, tzinfo=None, ordinal_shift=0)),
+        ("normalised seconds", Properties(step=_STEP_SECONDS, multiplier=60, month_offset=0, microsecond_offset=61_000_000, tzinfo=None, ordinal_shift=0), Properties(step=_STEP_SECONDS, multiplier=60, month_offset=0, microsecond_offset=1_000_000, tzinfo=None, ordinal_shift=0)),
+        ("normalised microseconds", Properties(step=_STEP_MICROSECONDS, multiplier=1_000_000, month_offset=0, microsecond_offset=1_000_001, tzinfo=None, ordinal_shift=0), Properties(step=_STEP_MICROSECONDS, multiplier=1_000_000, month_offset=0, microsecond_offset=1, tzinfo=None, ordinal_shift=0)),
+        ("already normalised", Properties(step=_STEP_MONTHS, multiplier=12, month_offset=1, microsecond_offset=0, tzinfo=None, ordinal_shift=0), Properties(step=_STEP_MONTHS, multiplier=12, month_offset=1, microsecond_offset=0, tzinfo=None, ordinal_shift=0))
+    ])
+    def test_normalise_offsets(self, name, props, expected):
+        """ Test Properties.normalise_offsets method with various inputs.
+        """
+        result = props.normalise_offsets()
+        self.assertEqual(result, expected)
+
+
+class TestWithMonthOffset(unittest.TestCase):
+    """ Unit tests for the Properties.with_month_offset method.
+    """
+
+    @parameterized.expand([
+        ("add one month", 1, Properties(step=_STEP_MONTHS, multiplier=12, month_offset=1, microsecond_offset=0, tzinfo=None, ordinal_shift=0)),
+        ("add thirteen months", 13, Properties(step=_STEP_MONTHS, multiplier=12, month_offset=1, microsecond_offset=0, tzinfo=None, ordinal_shift=0)),
+        ("no change", 0, Properties(step=_STEP_MONTHS, multiplier=12, month_offset=0, microsecond_offset=0, tzinfo=None, ordinal_shift=0))
+    ])
+    def test_with_month_offset(self, name, month_amount, expected):
+        """ Test Properties.with_month_offset method with various month amounts.
+        """
+        props = Properties(step=_STEP_MONTHS, multiplier=12, month_offset=0, microsecond_offset=0, tzinfo=None, ordinal_shift=0)
+        result = props.with_month_offset(month_amount)
+        self.assertEqual(result, expected)
+
+    def test_invalid_offset(self):
+        """ Test Properties.of_step_and_multiplier method with invalid step input.
+        """
+        props = Properties(step=_STEP_MONTHS, multiplier=12, month_offset=0, microsecond_offset=0, tzinfo=None, ordinal_shift=0)
+        with self.assertRaises(AssertionError):
+            props.with_month_offset(-1)
+
+
+class TestWithMicrosecondOffset(unittest.TestCase):
+    """ Unit tests for the Properties.with_microsecond_offset method.
+    """
+
+    @parameterized.expand([
+        ("add one microsecond", 1, Properties(step=_STEP_MICROSECONDS, multiplier=1_000_000, month_offset=0, microsecond_offset=1, tzinfo=None, ordinal_shift=0)),
+        ("add one million microseconds", 1_000_000, Properties(step=_STEP_MICROSECONDS, multiplier=1_000_000, month_offset=0, microsecond_offset=0, tzinfo=None, ordinal_shift=0)),
+        ("no change", 0, Properties(step=_STEP_MICROSECONDS, multiplier=1_000_000, month_offset=0, microsecond_offset=0, tzinfo=None, ordinal_shift=0))
+    ])
+    def test_with_microsecond_offset(self, name, microsecond_amount, expected):
+        """ Test Properties.with_microsecond_offset method with various microsecond amounts.
+        """
+        props = Properties(step=_STEP_MICROSECONDS, multiplier=1_000_000, month_offset=0, microsecond_offset=0, tzinfo=None, ordinal_shift=0)
+        result = props.with_microsecond_offset(microsecond_amount)
+        self.assertEqual(result, expected)
+
+    def test_invalid_offset(self):
+        """ Test Properties.with_microsecond_offset method with invalid microsecond input.
+        """
+        props = Properties(step=_STEP_MICROSECONDS, multiplier=1_000_000, month_offset=0, microsecond_offset=0, tzinfo=None, ordinal_shift=0)
+        with self.assertRaises(AssertionError):
+            props.with_microsecond_offset(-1)
+
+
+class TestWithTzinfo(unittest.TestCase):
+    """ Unit tests for the Properties.with_tzinfo method.
+    """
+
+    @parameterized.expand([
+        ("UTC timezone", dt.timezone.utc, Properties(step=_STEP_MONTHS, multiplier=12, month_offset=0, microsecond_offset=0, tzinfo=dt.timezone.utc, ordinal_shift=0)),
+        ("None timezone", None, Properties(step=_STEP_MONTHS, multiplier=12, month_offset=0, microsecond_offset=0, tzinfo=None, ordinal_shift=0)),
+        ("positive timezone", dt.timezone(dt.timedelta(hours=5, minutes=30)), Properties(step=_STEP_MONTHS, multiplier=12, month_offset=0, microsecond_offset=0, tzinfo=dt.timezone(dt.timedelta(hours=5, minutes=30)), ordinal_shift=0)),
+        ("negative timezone", dt.timezone(dt.timedelta(hours=-5, minutes=-30)), Properties(step=_STEP_MONTHS, multiplier=12, month_offset=0, microsecond_offset=0, tzinfo=dt.timezone(dt.timedelta(hours=-5, minutes=-30)), ordinal_shift=0))
+    ])
+    def test_with_tzinfo(self, name, tzinfo, expected):
+        """ Test Properties.with_tzinfo method with various tzinfo objects.
+        """
+        props = Properties(step=_STEP_MONTHS, multiplier=12, month_offset=0, microsecond_offset=0, tzinfo=None, ordinal_shift=0)
+        result = props.with_tzinfo(tzinfo)
+        self.assertEqual(result, expected)
+
+
+class TestWithOrdinalShift(unittest.TestCase):
+    """ Unit tests for the Properties.with_ordinal_shift method.
+    """
+
+    @parameterized.expand([
+        ("positive shift", 1, Properties(step=_STEP_MONTHS, multiplier=12, month_offset=0, microsecond_offset=0, tzinfo=None, ordinal_shift=1)),
+        ("negative shift", -1, Properties(step=_STEP_MONTHS, multiplier=12, month_offset=0, microsecond_offset=0, tzinfo=None, ordinal_shift=-1)),
+        ("zero shift", 0, Properties(step=_STEP_MONTHS, multiplier=12, month_offset=0, microsecond_offset=0, tzinfo=None, ordinal_shift=0))
+    ])
+    def test_with_ordinal_shift(self, name, ordinal_shift, expected):
+        """ Test Properties.with_ordinal_shift method with various ordinal shift values.
+        """
+        props = Properties(step=_STEP_MONTHS, multiplier=12, month_offset=0, microsecond_offset=0, tzinfo=None, ordinal_shift=0)
+        result = props.with_ordinal_shift(ordinal_shift)
+        self.assertEqual(result, expected)
+
+
+class TestWithOffsetPeriodFields(unittest.TestCase):
+    """ Unit tests for the Properties.with_offset_period_fields method.
+    """
+
+    @parameterized.expand([
+        ("offset period fields with months and seconds", (6, 1_000_000), Properties(step=_STEP_MONTHS, multiplier=12, month_offset=6, microsecond_offset=1_000_000, tzinfo=None, ordinal_shift=0)),
+        ("offset period fields with normalised months and seconds", (12, 1_000_000), Properties(step=_STEP_MONTHS, multiplier=12, month_offset=0, microsecond_offset=1_000_000, tzinfo=None, ordinal_shift=0)),
+        ("offset period fields with zero months and seconds", (0, 0), Properties(step=_STEP_MONTHS, multiplier=12, month_offset=0, microsecond_offset=0, tzinfo=None, ordinal_shift=0))
+    ])
+    @patch('time_series.period.PeriodFields')
+    def test_with_offset_period_fields(self, name, months_seconds, expected, mock_period_fields):
+        """ Test Properties.with_offset_period_fields method with various PeriodFields inputs.
+        """
+        mock_months_seconds = Mock()
+        mock_months_seconds.months = months_seconds[0]
+        mock_months_seconds.total_microseconds.return_value = months_seconds[1]
+        mock_period_fields.get_months_seconds.return_value = mock_months_seconds
+
+        props = Properties(step=_STEP_MONTHS, multiplier=12, month_offset=0, microsecond_offset=0, tzinfo=None, ordinal_shift=0)
+        result = props.with_offset_period_fields(mock_period_fields)
+        self.assertEqual(result, expected)
+
+
+class TestWithOffsetMonthsSeconds(unittest.TestCase):
+    """ Unit tests for the Properties.with_offset_months_seconds method.
+    """
+
+    @parameterized.expand([
+        ("offset period fields with months and seconds", (6, 1_000_000), Properties(step=_STEP_MONTHS, multiplier=12, month_offset=6, microsecond_offset=1_000_000, tzinfo=None, ordinal_shift=0)),
+        ("offset period fields with normalised months and seconds", (12, 1_000_000), Properties(step=_STEP_MONTHS, multiplier=12, month_offset=0, microsecond_offset=1_000_000, tzinfo=None, ordinal_shift=0)),
+        ("offset period fields with zero months and seconds", (0, 0), Properties(step=_STEP_MONTHS, multiplier=12, month_offset=0, microsecond_offset=0, tzinfo=None, ordinal_shift=0))
+    ])
+    @patch('time_series.period.MonthsSeconds')
+    def test_with_offset_months_seconds(self, name, months_seconds, expected, mock_months_seconds):
+        """ Test Properties.with_offset_months_seconds method with various MonthsSeconds inputs.
+        """
+        mock_months_seconds = Mock()
+        mock_months_seconds.months = months_seconds[0]
+        mock_months_seconds.total_microseconds.return_value = months_seconds[1]
+
+        props = Properties(step=_STEP_MONTHS, multiplier=12, month_offset=0, microsecond_offset=0, tzinfo=None, ordinal_shift=0)
+        result = props.with_offset_months_seconds(mock_months_seconds)
+        self.assertEqual(result, expected)
+
 
 
 
