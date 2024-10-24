@@ -17,8 +17,7 @@ from time_series.period import Period
 from time_series.time_series_base import AggregationFunction, TimeSeries
 from time_series.time_series_polars import TimeSeriesPolars
 
-# A function that tkes a Polars GroupBy as an argument and
-# returns a DataFrame
+# A function that takes a Polars GroupBy as an argument and returns a DataFrame
 GroupByToDataFrame = Callable[[pl.dataframe.group_by.GroupBy], pl.DataFrame]
 
 
@@ -37,7 +36,6 @@ def _group_by_mean(group_by: pl.dataframe.group_by.GroupBy) -> pl.DataFrame:
     return group_by.mean()
 
 
-# ----------------------------------------------------------------------
 class PolarsAggregator:
     """A class used to assist with aggregating data
 
@@ -72,7 +70,7 @@ class PolarsAggregator:
         """
         aggregation_expression_list: list[pl.Expr] = []
         unnest_list: list[str] = []
-        with_column_list: list[str] = []
+        with_column_list: list[pl.Expr] = []
         for aggregation_stage in stage_list:
             aggregation_expression_list.extend(aggregation_stage.aggregation_expressions())
             unnest_list.extend(aggregation_stage.unnest())
@@ -149,7 +147,7 @@ class AggregationStage(ABC):
 class ExpectedCount(AggregationStage):
     """An AggregationStage
 
-    Creates a "count_{time_name}" column containing a count of the expected number of elements in each period.
+    Creates a "expected_count_{time_name}" column containing a count of the expected number of elements in each period.
     """
 
     def __init__(self, aggregator: PolarsAggregator) -> None:
@@ -244,7 +242,6 @@ class GroupByBasic(AggregationStage):
         return [self._gb2df(pl.col(self._value_column)).alias(f"{self.name}_{self._value_column}")]
 
 
-# ----------------------------------------------------------------------
 class Mean(AggregationFunction):
     """A mean AggregationFunction
 

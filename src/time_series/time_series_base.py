@@ -176,6 +176,7 @@ class AggregationFunction(ABC):
 
         Args:
             ts: The TimeSeries containing the data to be aggregated
+            aggregation_period: The time period over which to aggregate
             column_name: The column containing the data to be aggregated
 
         Returns:
