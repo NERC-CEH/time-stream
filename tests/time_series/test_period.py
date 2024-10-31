@@ -21,8 +21,8 @@ from typing import (
 from parameterized import parameterized
 import re
 
-import period as p
-from period import Period
+import time_series.period as p
+from time_series.period import Period
 
 
 TZ_UTC = datetime.timezone(datetime.timedelta(hours=0))
