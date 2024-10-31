@@ -1280,8 +1280,8 @@ class Properties:
         if self.step == _STEP_MICROSECONDS:
             if self.multiplier > 1_000_000:
                 return False
-            num_per_second: int = 1_000_000 // self.multiplier
-            return (self.multiplier * num_per_second) == 1_000_000
+            num_per_day: int = 86_400_000_000 // self.multiplier
+            return (self.multiplier * num_per_day) == 86_400_000_000
         elif self.step == _STEP_SECONDS:
             if self.multiplier > 86_400:
                 return False
