@@ -2024,7 +2024,9 @@ class Period(ABC):
                 microsecond_offset=properties.microsecond_offset,
                 tzinfo=properties.tzinfo,
                 ordinal_shift=0,
-            ).normalise_offsets()
+            )
+            .normalise_step_and_multiplier()
+            .normalise_offsets()
         )
 
     def with_year_offset(self, year_amount: int) -> "Period":
