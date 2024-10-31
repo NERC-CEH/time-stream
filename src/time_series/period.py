@@ -821,6 +821,28 @@ class Properties:
         if (self.step != _STEP_MONTHS) and (self.month_offset != 0):
             raise AssertionError("Illegal month offset for non-month step")
 
+    def normalise_step_and_multiplier(self) -> "Properties":
+        """Return an equivalent Properties object where
+        step and multiplier are potentially adjusted
+
+        If step is microseconds see if it can be converted to seconds.
+
+        Returns:
+            A Properties object
+        """
+        if self.step == _STEP_MICROSECONDS:
+            seconds, microseconds = divmod(self.multiplier, 1_000_000)
+            if microseconds == 0:
+                return Properties(
+                    step=_STEP_SECONDS,
+                    multiplier=seconds,
+                    month_offset=self.month_offset,
+                    microsecond_offset=self.microsecond_offset,
+                    tzinfo=self.tzinfo,
+                    ordinal_shift=self.ordinal_shift,
+                )
+        return self
+
     def normalise_offsets(self) -> "Properties":
         """Return an equivalent Properties object where
         month_offset and microsecond_offset are within the
