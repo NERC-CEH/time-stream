@@ -179,7 +179,7 @@ class TestOfMonthOffset(unittest.TestCase):
         self.assertIsNone(adjusters)
 
 
-class TestOfMircorsecondOffset(unittest.TestCase):
+class TestOfMicrosecondOffset(unittest.TestCase):
     """Unit tests for of_microsecond_offset in the the DateTimeAdjusters class."""
 
     def test_of_microsecond_offset(self):
