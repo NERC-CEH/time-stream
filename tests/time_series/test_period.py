@@ -1027,6 +1027,95 @@ class TestOfStepAndMultiplier(unittest.TestCase):
             p.Properties.of_step_and_multiplier(999, 1)
 
 
+class TestNormaliseStepAndMultiplier(unittest.TestCase):
+    """Unit tests for the Properties.normalise_step_and_multiplier method."""
+
+    @parameterized.expand(
+        [
+            (
+                "normalised months",
+                p.Properties(
+                    step=p._STEP_MONTHS,
+                    multiplier=1,
+                    month_offset=0,
+                    microsecond_offset=0,
+                    tzinfo=None,
+                    ordinal_shift=0,
+                ),
+                p.Properties(
+                    step=p._STEP_MONTHS,
+                    multiplier=1,
+                    month_offset=0,
+                    microsecond_offset=0,
+                    tzinfo=None,
+                    ordinal_shift=0,
+                ),
+            ),
+            (
+                "normalised seconds",
+                p.Properties(
+                    step=p._STEP_SECONDS,
+                    multiplier=1,
+                    month_offset=0,
+                    microsecond_offset=0,
+                    tzinfo=None,
+                    ordinal_shift=0,
+                ),
+                p.Properties(
+                    step=p._STEP_SECONDS,
+                    multiplier=1,
+                    month_offset=0,
+                    microsecond_offset=0,
+                    tzinfo=None,
+                    ordinal_shift=0,
+                ),
+            ),
+            (
+                "normalised microseconds",
+                p.Properties(
+                    step=p._STEP_MICROSECONDS,
+                    multiplier=1,
+                    month_offset=0,
+                    microsecond_offset=0,
+                    tzinfo=None,
+                    ordinal_shift=0,
+                ),
+                p.Properties(
+                    step=p._STEP_MICROSECONDS,
+                    multiplier=1,
+                    month_offset=0,
+                    microsecond_offset=0,
+                    tzinfo=None,
+                    ordinal_shift=0,
+                ),
+            ),
+            (
+                "normalise microseconds to seconds",
+                p.Properties(
+                    step=p._STEP_MICROSECONDS,
+                    multiplier=1_000_000,
+                    month_offset=0,
+                    microsecond_offset=0,
+                    tzinfo=None,
+                    ordinal_shift=0,
+                ),
+                p.Properties(
+                    step=p._STEP_SECONDS,
+                    multiplier=1,
+                    month_offset=0,
+                    microsecond_offset=0,
+                    tzinfo=None,
+                    ordinal_shift=0,
+                ),
+            ),
+        ]
+    )
+    def test_normalise_step_and_multiplier(self, name, props, expected):
+        """Test Properties.normalise_step_and_multiplier method with various inputs."""
+        result = props.normalise_step_and_multiplier()
+        self.assertEqual(result, expected)
+
+
 class TestNormaliseOffsets(unittest.TestCase):
     """Unit tests for the Properties.normalise_offsets method."""
 
