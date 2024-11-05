@@ -1,5 +1,5 @@
 import unittest
-import datetime as dt
+import datetime
 import re
 
 from unittest.mock import patch, Mock
@@ -14,14 +14,14 @@ class TestNaive(unittest.TestCase):
 
     def test_naive_with_tzinfo(self):
         """Test _naive function with a datetime object that has tzinfo."""
-        dt_with_tz = dt.datetime(2023, 10, 10, 10, 0, tzinfo=dt.timezone.utc)
+        dt_with_tz = datetime.datetime(2023, 10, 10, 10, 0, tzinfo=datetime.timezone.utc)
         result = p._naive(dt_with_tz)
         self.assertIsNone(result.tzinfo)
-        self.assertEqual(result, dt.datetime(2023, 10, 10, 10, 0))
+        self.assertEqual(result, datetime.datetime(2023, 10, 10, 10, 0))
 
     def test_naive_without_tzinfo(self):
         """Test _naive function with a datetime object that has no tzinfo."""
-        dt_without_tz = dt.datetime(2023, 10, 10, 10, 0)
+        dt_without_tz = datetime.datetime(2023, 10, 10, 10, 0)
         result = p._naive(dt_without_tz)
         self.assertIsNone(result.tzinfo)
         self.assertEqual(result, dt_without_tz)
@@ -32,8 +32,8 @@ class TestGregorianSeconds(unittest.TestCase):
 
     @parameterized.expand(
         [
-            ("Zero", dt.datetime(1, 1, 1, 0, 0, 0), 86_400 + 0),
-            ("2 hours", dt.datetime(1, 1, 1, 2, 2, 2), 86_400 + (3600 * 2) + (60 * 2) + 2),
+            ("Zero", datetime.datetime(1, 1, 1, 0, 0, 0), 86_400 + 0),
+            ("2 hours", datetime.datetime(1, 1, 1, 2, 2, 2), 86_400 + (3600 * 2) + (60 * 2) + 2),
         ]
     )
     def test_gregorian_seconds(self, name, dt_obj, expected_seconds):
@@ -68,37 +68,37 @@ class TestYearShift(unittest.TestCase):
 
     def test_no_shift(self):
         """Test that the date remains the same when shift_amount is 0."""
-        date_time = dt.datetime(2023, 10, 8)
+        date_time = datetime.datetime(2023, 10, 8)
         self.assertEqual(p.year_shift(date_time, 0), date_time)
 
     def test_positive_shift(self):
         """Test shifting the date forward by a positive number of years."""
-        date_time = dt.datetime(2023, 10, 8)
-        expected = dt.datetime(2025, 10, 8)
+        date_time = datetime.datetime(2023, 10, 8)
+        expected = datetime.datetime(2025, 10, 8)
         self.assertEqual(p.year_shift(date_time, 2), expected)
 
     def test_negative_shift(self):
         """Test shifting the date backward by a negative number of years."""
-        date_time = dt.datetime(2023, 10, 8)
-        expected = dt.datetime(2021, 10, 8)
+        date_time = datetime.datetime(2023, 10, 8)
+        expected = datetime.datetime(2021, 10, 8)
         self.assertEqual(p.year_shift(date_time, -2), expected)
 
     def test_leap_year(self):
         """Test shifting a leap day to another leap year."""
-        date_time = dt.datetime(2020, 2, 29)
-        expected = dt.datetime(2024, 2, 29)
+        date_time = datetime.datetime(2020, 2, 29)
+        expected = datetime.datetime(2024, 2, 29)
         self.assertEqual(p.year_shift(date_time, 4), expected)
 
     def test_non_leap_year(self):
         """Test shifting a leap day to a non-leap year."""
-        date_time = dt.datetime(2020, 2, 29)
-        expected = dt.datetime(2021, 2, 28)
+        date_time = datetime.datetime(2020, 2, 29)
+        expected = datetime.datetime(2021, 2, 28)
         self.assertEqual(p.year_shift(date_time, 1), expected)
 
     def test_end_of_month(self):
         """Test shifting a date at the end of the month."""
-        date_time = dt.datetime(2023, 1, 31)
-        expected = dt.datetime(2024, 1, 31)
+        date_time = datetime.datetime(2023, 1, 31)
+        expected = datetime.datetime(2024, 1, 31)
         self.assertEqual(p.year_shift(date_time, 1), expected)
 
 
@@ -107,37 +107,37 @@ class TestMonthShift(unittest.TestCase):
 
     def test_no_shift(self):
         """Test that the date remains the same when shift_amount is 0."""
-        date_time = dt.datetime(2023, 10, 8)
+        date_time = datetime.datetime(2023, 10, 8)
         self.assertEqual(p.month_shift(date_time, 0), date_time)
 
     def test_positive_shift(self):
         """Test shifting the date forward by a positive number of months."""
-        date_time = dt.datetime(2023, 10, 8)
-        expected = dt.datetime(2024, 4, 8)
+        date_time = datetime.datetime(2023, 10, 8)
+        expected = datetime.datetime(2024, 4, 8)
         self.assertEqual(p.month_shift(date_time, 6), expected)
 
     def test_negative_shift(self):
         """Test shifting the date backward by a negative number of months."""
-        date_time = dt.datetime(2023, 10, 8)
-        expected = dt.datetime(2023, 4, 8)
+        date_time = datetime.datetime(2023, 10, 8)
+        expected = datetime.datetime(2023, 4, 8)
         self.assertEqual(p.month_shift(date_time, -6), expected)
 
     def test_end_of_month(self):
         """Test shifting a date at the end of the month."""
-        date_time = dt.datetime(2023, 1, 31)
-        expected = dt.datetime(2023, 2, 28)  # February in a non-leap year
+        date_time = datetime.datetime(2023, 1, 31)
+        expected = datetime.datetime(2023, 2, 28)  # February in a non-leap year
         self.assertEqual(p.month_shift(date_time, 1), expected)
 
     def test_leap_year(self):
         """Test shifting a date in a leap year."""
-        date_time = dt.datetime(2020, 2, 29)
-        expected = dt.datetime(2020, 3, 29)
+        date_time = datetime.datetime(2020, 2, 29)
+        expected = datetime.datetime(2020, 3, 29)
         self.assertEqual(p.month_shift(date_time, 1), expected)
 
     def test_non_leap_year(self):
         """Test shifting a date from a leap year to a non-leap year."""
-        date_time = dt.datetime(2020, 2, 29)
-        expected = dt.datetime(2021, 2, 28)
+        date_time = datetime.datetime(2020, 2, 29)
+        expected = datetime.datetime(2021, 2, 28)
         self.assertEqual(p.month_shift(date_time, 12), expected)
 
 
@@ -170,9 +170,9 @@ class TestOfMircorsecondOffset(unittest.TestCase):
         self.assertIsInstance(adjusters.retreat, Callable)
 
         # As lambda functions are returned for the adjuster functions, test their behaviour
-        dt_obj = dt.datetime(2023, 10, 10, 10, 0, 0)
-        expected_advance = dt_obj + dt.timedelta(microseconds=microseconds)
-        expected_retreat = dt_obj - dt.timedelta(microseconds=microseconds)
+        dt_obj = datetime.datetime(2023, 10, 10, 10, 0, 0)
+        expected_advance = dt_obj + datetime.timedelta(microseconds=microseconds)
+        expected_retreat = dt_obj - datetime.timedelta(microseconds=microseconds)
 
         self.assertEqual(adjusters.advance(dt_obj), expected_advance)
         self.assertEqual(adjusters.retreat(dt_obj), expected_retreat)
@@ -192,35 +192,35 @@ class TestOfOffsets(unittest.TestCase):
                 "15 months, 1000000 microseconds",
                 15,
                 1_000_000,
-                dt.datetime(2024, 4, 1, 0, 0, 1),
-                dt.datetime(2021, 9, 30, 23, 59, 59),
+                datetime.datetime(2024, 4, 1, 0, 0, 1),
+                datetime.datetime(2021, 9, 30, 23, 59, 59),
             ),
             (
                 "12 months, 500000 microseconds",
                 12,
                 500_000,
-                dt.datetime(2024, 1, 1, 0, 0, 0, 500_000),
-                dt.datetime(2021, 12, 31, 23, 59, 59, 500000),
+                datetime.datetime(2024, 1, 1, 0, 0, 0, 500_000),
+                datetime.datetime(2021, 12, 31, 23, 59, 59, 500000),
             ),
             (
                 "6 months, 1000 microseconds",
                 6,
                 1_000,
-                dt.datetime(2023, 7, 1, 0, 0, 0, 1000),
-                dt.datetime(2022, 6, 30, 23, 59, 59, 999000),
+                datetime.datetime(2023, 7, 1, 0, 0, 0, 1000),
+                datetime.datetime(2022, 6, 30, 23, 59, 59, 999000),
             ),
             (
                 "0 months, 1000 microseconds",
                 0,
                 1_000,
-                dt.datetime(2023, 1, 1, 0, 0, 0, 1000),
-                dt.datetime(2022, 12, 31, 23, 59, 59, 999000),
+                datetime.datetime(2023, 1, 1, 0, 0, 0, 1000),
+                datetime.datetime(2022, 12, 31, 23, 59, 59, 999000),
             ),
             (
                 "6 months, 0 microseconds",
                 6,
                 0,
-                dt.datetime(
+                datetime.datetime(
                     2023,
                     7,
                     1,
@@ -228,7 +228,7 @@ class TestOfOffsets(unittest.TestCase):
                     0,
                     0,
                 ),
-                dt.datetime(2022, 7, 1, 0, 0, 0),
+                datetime.datetime(2022, 7, 1, 0, 0, 0),
             ),
         ]
     )
@@ -239,7 +239,7 @@ class TestOfOffsets(unittest.TestCase):
         self.assertIsInstance(adjusters.advance, Callable)
         self.assertIsInstance(adjusters.retreat, Callable)
 
-        dt_obj = dt.datetime(2023, 1, 1, 0, 0, 0)
+        dt_obj = datetime.datetime(2023, 1, 1, 0, 0, 0)
         self.assertEqual(adjusters.advance(dt_obj), expected_adv)
         self.assertEqual(adjusters.retreat(dt_obj), expected_ret)
 
@@ -381,19 +381,19 @@ class TestFmtNaiveMicrosecond(unittest.TestCase):
         [
             (
                 "standard datetime with dash separator",
-                dt.datetime(2023, 10, 10, 10, 0, 0, 123456),
+                datetime.datetime(2023, 10, 10, 10, 0, 0, 123456),
                 "-",
                 "2023-10-10-10:00:00.123456",
             ),
             (
                 "standard datetime with T separator",
-                dt.datetime(2023, 10, 10, 10, 0, 0, 123456),
+                datetime.datetime(2023, 10, 10, 10, 0, 0, 123456),
                 "T",
                 "2023-10-10T10:00:00.123456",
             ),
             (
                 "datetime with zero microseconds",
-                dt.datetime(2023, 10, 10, 10, 0, 0, 0),
+                datetime.datetime(2023, 10, 10, 10, 0, 0, 0),
                 "-",
                 "2023-10-10-10:00:00.000000",
             ),
@@ -412,17 +412,22 @@ class TestFmtNaiveMillisecond(unittest.TestCase):
         [
             (
                 "standard datetime with dash separator",
-                dt.datetime(2023, 10, 10, 10, 0, 0, 123456),
+                datetime.datetime(2023, 10, 10, 10, 0, 0, 123456),
                 "-",
                 "2023-10-10-10:00:00.123",
             ),
             (
                 "standard datetime with T separator",
-                dt.datetime(2023, 10, 10, 10, 0, 0, 123456),
+                datetime.datetime(2023, 10, 10, 10, 0, 0, 123456),
                 "T",
                 "2023-10-10T10:00:00.123",
             ),
-            ("datetime with zero microseconds", dt.datetime(2023, 10, 10, 10, 0, 0, 0), "-", "2023-10-10-10:00:00.000"),
+            (
+                "datetime with zero microseconds",
+                datetime.datetime(2023, 10, 10, 10, 0, 0, 0),
+                "-",
+                "2023-10-10-10:00:00.000",
+            ),
         ]
     )
     def test_fmt_naive_millisecond(self, name, obj, separator, expected):
@@ -436,8 +441,18 @@ class TestFmtNaiveSecond(unittest.TestCase):
 
     @parameterized.expand(
         [
-            ("standard datetime with dash separator", dt.datetime(2023, 10, 10, 10, 0, 0), "-", "2023-10-10-10:00:00"),
-            ("standard datetime with T separator", dt.datetime(2023, 10, 10, 10, 0, 0), "T", "2023-10-10T10:00:00"),
+            (
+                "standard datetime with dash separator",
+                datetime.datetime(2023, 10, 10, 10, 0, 0),
+                "-",
+                "2023-10-10-10:00:00",
+            ),
+            (
+                "standard datetime with T separator",
+                datetime.datetime(2023, 10, 10, 10, 0, 0),
+                "T",
+                "2023-10-10T10:00:00",
+            ),
         ]
     )
     def test_fmt_naive_second(self, name, obj, separator, expected):
@@ -451,8 +466,13 @@ class TestFmtNaiveMinute(unittest.TestCase):
 
     @parameterized.expand(
         [
-            ("standard datetime with dash separator", dt.datetime(2023, 10, 10, 10, 0, 0), "-", "2023-10-10-10:00"),
-            ("standard datetime with T separator", dt.datetime(2023, 10, 10, 10, 0, 0), "T", "2023-10-10T10:00"),
+            (
+                "standard datetime with dash separator",
+                datetime.datetime(2023, 10, 10, 10, 0, 0),
+                "-",
+                "2023-10-10-10:00",
+            ),
+            ("standard datetime with T separator", datetime.datetime(2023, 10, 10, 10, 0, 0), "T", "2023-10-10T10:00"),
         ]
     )
     def test_fmt_naive_minute(self, name, obj, separator, expected):
@@ -466,8 +486,8 @@ class TestFmtNaiveHour(unittest.TestCase):
 
     @parameterized.expand(
         [
-            ("standard datetime with dash separator", dt.datetime(2023, 10, 10, 10, 0, 0), "-", "2023-10-10-10"),
-            ("standard datetime with T separator", dt.datetime(2023, 10, 10, 10, 0, 0), "T", "2023-10-10T10"),
+            ("standard datetime with dash separator", datetime.datetime(2023, 10, 10, 10, 0, 0), "-", "2023-10-10-10"),
+            ("standard datetime with T separator", datetime.datetime(2023, 10, 10, 10, 0, 0), "T", "2023-10-10T10"),
         ]
     )
     def test_fmt_naive_hour(self, name, obj, separator, expected):
@@ -482,7 +502,7 @@ class TestFmtNaiveDay(unittest.TestCase):
     def test_fmt_naive_day(self):
         """Test _fmt_naive_day function with various datetime objects."""
         expected = "2023-10-10"
-        result = p._fmt_naive_day(dt.datetime(2023, 10, 10, 10, 0, 0))
+        result = p._fmt_naive_day(datetime.datetime(2023, 10, 10, 10, 0, 0))
         self.assertEqual(result, expected)
 
 
@@ -492,7 +512,7 @@ class TestFmtNaiveMonth(unittest.TestCase):
     def test_fmt_naive_month(self):
         """Test _fmt_naive_month function with various datetime objects."""
         expected = "2023-10"
-        result = p._fmt_naive_month(dt.datetime(2023, 10, 10, 10, 0, 0))
+        result = p._fmt_naive_month(datetime.datetime(2023, 10, 10, 10, 0, 0))
         self.assertEqual(result, expected)
 
 
@@ -502,7 +522,7 @@ class TestFmtNaiveYear(unittest.TestCase):
     def test_fmt_naive_year(self):
         """Test _fmt_naive_year function with various datetime objects."""
         expected = "2023"
-        result = p._fmt_naive_year(dt.datetime(2023, 10, 10, 10, 0, 0))
+        result = p._fmt_naive_year(datetime.datetime(2023, 10, 10, 10, 0, 0))
         self.assertEqual(result, expected)
 
 
@@ -511,11 +531,11 @@ class TestFmtTzdelta(unittest.TestCase):
 
     @parameterized.expand(
         [
-            ("zero delta", dt.timedelta(0), "Z"),
-            ("positive delta", dt.timedelta(hours=5, minutes=30), "+05:30"),
-            ("negative delta", dt.timedelta(hours=-5, minutes=-30), "-05:30"),
-            ("positive delta with seconds", dt.timedelta(hours=1, minutes=45, seconds=30), "+01:45"),
-            ("negative delta with seconds", dt.timedelta(hours=-1, minutes=-45, seconds=-30), "-01:45"),
+            ("zero delta", datetime.timedelta(0), "Z"),
+            ("positive delta", datetime.timedelta(hours=5, minutes=30), "+05:30"),
+            ("negative delta", datetime.timedelta(hours=-5, minutes=-30), "-05:30"),
+            ("positive delta with seconds", datetime.timedelta(hours=1, minutes=45, seconds=30), "+01:45"),
+            ("negative delta with seconds", datetime.timedelta(hours=-1, minutes=-45, seconds=-30), "-01:45"),
         ]
     )
     def test_fmt_tzdelta(self, name, delta, expected):
@@ -525,8 +545,8 @@ class TestFmtTzdelta(unittest.TestCase):
 
     @parameterized.expand(
         [
-            ("delta exceeding one day", dt.timedelta(days=1, hours=1)),
-            ("negative delta exceeding one day", dt.timedelta(days=-1, hours=-1)),
+            ("delta exceeding one day", datetime.timedelta(days=1, hours=1)),
+            ("negative delta exceeding one day", datetime.timedelta(days=-1, hours=-1)),
         ]
     )
     def test_fmt_tzdelta_invalid(self, name, delta):
@@ -541,9 +561,9 @@ class TestFmtTzinfo(unittest.TestCase):
     @parameterized.expand(
         [
             ("no tzinfo", None, ""),
-            ("UTC tzinfo", dt.timezone.utc, "Z"),
-            ("positive tzinfo", dt.timezone(dt.timedelta(hours=5, minutes=30)), "+05:30"),
-            ("negative tzinfo", dt.timezone(dt.timedelta(hours=-5, minutes=-30)), "-05:30"),
+            ("UTC tzinfo", datetime.timezone.utc, "Z"),
+            ("positive tzinfo", datetime.timezone(datetime.timedelta(hours=5, minutes=30)), "+05:30"),
+            ("negative tzinfo", datetime.timezone(datetime.timedelta(hours=-5, minutes=-30)), "-05:30"),
         ]
     )
     def test_fmt_tzinfo(self, name, tz, expected):
@@ -559,25 +579,29 @@ class TestFmtAwareMicrosecond(unittest.TestCase):
         [
             (
                 "UTC timezone with dash separator",
-                dt.datetime(2023, 10, 10, 10, 0, 0, 123456, tzinfo=dt.timezone.utc),
+                datetime.datetime(2023, 10, 10, 10, 0, 0, 123456, tzinfo=datetime.timezone.utc),
                 "-",
                 "2023-10-10-10:00:00.123456Z",
             ),
             (
                 "UTC timezone with T separator",
-                dt.datetime(2023, 10, 10, 10, 0, 0, 123456, tzinfo=dt.timezone.utc),
+                datetime.datetime(2023, 10, 10, 10, 0, 0, 123456, tzinfo=datetime.timezone.utc),
                 "T",
                 "2023-10-10T10:00:00.123456Z",
             ),
             (
                 "positive timezone",
-                dt.datetime(2023, 10, 10, 10, 0, 0, 123456, tzinfo=dt.timezone(dt.timedelta(hours=5, minutes=30))),
+                datetime.datetime(
+                    2023, 10, 10, 10, 0, 0, 123456, tzinfo=datetime.timezone(datetime.timedelta(hours=5, minutes=30))
+                ),
                 "-",
                 "2023-10-10-10:00:00.123456+05:30",
             ),
             (
                 "negative timezone",
-                dt.datetime(2023, 10, 10, 10, 0, 0, 123456, tzinfo=dt.timezone(dt.timedelta(hours=-5, minutes=-30))),
+                datetime.datetime(
+                    2023, 10, 10, 10, 0, 0, 123456, tzinfo=datetime.timezone(datetime.timedelta(hours=-5, minutes=-30))
+                ),
                 "-",
                 "2023-10-10-10:00:00.123456-05:30",
             ),
@@ -596,25 +620,29 @@ class TestFmtAwareMillisecond(unittest.TestCase):
         [
             (
                 "UTC timezone with dash separator",
-                dt.datetime(2023, 10, 10, 10, 0, 0, 123456, tzinfo=dt.timezone.utc),
+                datetime.datetime(2023, 10, 10, 10, 0, 0, 123456, tzinfo=datetime.timezone.utc),
                 "-",
                 "2023-10-10-10:00:00.123Z",
             ),
             (
                 "UTC timezone with T separator",
-                dt.datetime(2023, 10, 10, 10, 0, 0, 123456, tzinfo=dt.timezone.utc),
+                datetime.datetime(2023, 10, 10, 10, 0, 0, 123456, tzinfo=datetime.timezone.utc),
                 "T",
                 "2023-10-10T10:00:00.123Z",
             ),
             (
                 "positive timezone",
-                dt.datetime(2023, 10, 10, 10, 0, 0, 123456, tzinfo=dt.timezone(dt.timedelta(hours=5, minutes=30))),
+                datetime.datetime(
+                    2023, 10, 10, 10, 0, 0, 123456, tzinfo=datetime.timezone(datetime.timedelta(hours=5, minutes=30))
+                ),
                 "-",
                 "2023-10-10-10:00:00.123+05:30",
             ),
             (
                 "negative timezone",
-                dt.datetime(2023, 10, 10, 10, 0, 0, 123456, tzinfo=dt.timezone(dt.timedelta(hours=-5, minutes=-30))),
+                datetime.datetime(
+                    2023, 10, 10, 10, 0, 0, 123456, tzinfo=datetime.timezone(datetime.timedelta(hours=-5, minutes=-30))
+                ),
                 "-",
                 "2023-10-10-10:00:00.123-05:30",
             ),
@@ -633,25 +661,29 @@ class TestFmtAwareSecond(unittest.TestCase):
         [
             (
                 "UTC timezone with dash separator",
-                dt.datetime(2023, 10, 10, 10, 0, 0, tzinfo=dt.timezone.utc),
+                datetime.datetime(2023, 10, 10, 10, 0, 0, tzinfo=datetime.timezone.utc),
                 "-",
                 "2023-10-10-10:00:00Z",
             ),
             (
                 "UTC timezone with T separator",
-                dt.datetime(2023, 10, 10, 10, 0, 0, tzinfo=dt.timezone.utc),
+                datetime.datetime(2023, 10, 10, 10, 0, 0, tzinfo=datetime.timezone.utc),
                 "T",
                 "2023-10-10T10:00:00Z",
             ),
             (
                 "positive timezone",
-                dt.datetime(2023, 10, 10, 10, 0, 0, tzinfo=dt.timezone(dt.timedelta(hours=5, minutes=30))),
+                datetime.datetime(
+                    2023, 10, 10, 10, 0, 0, tzinfo=datetime.timezone(datetime.timedelta(hours=5, minutes=30))
+                ),
                 "-",
                 "2023-10-10-10:00:00+05:30",
             ),
             (
                 "negative timezone",
-                dt.datetime(2023, 10, 10, 10, 0, 0, tzinfo=dt.timezone(dt.timedelta(hours=-5, minutes=-30))),
+                datetime.datetime(
+                    2023, 10, 10, 10, 0, 0, tzinfo=datetime.timezone(datetime.timedelta(hours=-5, minutes=-30))
+                ),
                 "-",
                 "2023-10-10-10:00:00-05:30",
             ),
@@ -670,25 +702,29 @@ class TestFmtAwareMinute(unittest.TestCase):
         [
             (
                 "UTC timezone with dash separator",
-                dt.datetime(2023, 10, 10, 10, 0, tzinfo=dt.timezone.utc),
+                datetime.datetime(2023, 10, 10, 10, 0, tzinfo=datetime.timezone.utc),
                 "-",
                 "2023-10-10-10:00Z",
             ),
             (
                 "UTC timezone with T separator",
-                dt.datetime(2023, 10, 10, 10, 0, tzinfo=dt.timezone.utc),
+                datetime.datetime(2023, 10, 10, 10, 0, tzinfo=datetime.timezone.utc),
                 "T",
                 "2023-10-10T10:00Z",
             ),
             (
                 "positive timezone",
-                dt.datetime(2023, 10, 10, 10, 0, tzinfo=dt.timezone(dt.timedelta(hours=5, minutes=30))),
+                datetime.datetime(
+                    2023, 10, 10, 10, 0, tzinfo=datetime.timezone(datetime.timedelta(hours=5, minutes=30))
+                ),
                 "-",
                 "2023-10-10-10:00+05:30",
             ),
             (
                 "negative timezone",
-                dt.datetime(2023, 10, 10, 10, 0, tzinfo=dt.timezone(dt.timedelta(hours=-5, minutes=-30))),
+                datetime.datetime(
+                    2023, 10, 10, 10, 0, tzinfo=datetime.timezone(datetime.timedelta(hours=-5, minutes=-30))
+                ),
                 "-",
                 "2023-10-10-10:00-05:30",
             ),
@@ -707,25 +743,27 @@ class TestFmtAwareHour(unittest.TestCase):
         [
             (
                 "UTC timezone with dash separator",
-                dt.datetime(2023, 10, 10, 10, tzinfo=dt.timezone.utc),
+                datetime.datetime(2023, 10, 10, 10, tzinfo=datetime.timezone.utc),
                 "-",
                 "2023-10-10-10Z",
             ),
             (
                 "UTC timezone with T separator",
-                dt.datetime(2023, 10, 10, 10, tzinfo=dt.timezone.utc),
+                datetime.datetime(2023, 10, 10, 10, tzinfo=datetime.timezone.utc),
                 "T",
                 "2023-10-10T10Z",
             ),
             (
                 "positive timezone",
-                dt.datetime(2023, 10, 10, 10, tzinfo=dt.timezone(dt.timedelta(hours=5, minutes=30))),
+                datetime.datetime(2023, 10, 10, 10, tzinfo=datetime.timezone(datetime.timedelta(hours=5, minutes=30))),
                 "-",
                 "2023-10-10-10+05:30",
             ),
             (
                 "negative timezone",
-                dt.datetime(2023, 10, 10, 10, tzinfo=dt.timezone(dt.timedelta(hours=-5, minutes=-30))),
+                datetime.datetime(
+                    2023, 10, 10, 10, tzinfo=datetime.timezone(datetime.timedelta(hours=-5, minutes=-30))
+                ),
                 "-",
                 "2023-10-10-10-05:30",
             ),
@@ -1194,13 +1232,13 @@ class TestWithTzinfo(unittest.TestCase):
         [
             (
                 "UTC timezone",
-                dt.timezone.utc,
+                datetime.timezone.utc,
                 p.Properties(
                     step=p._STEP_MONTHS,
                     multiplier=12,
                     month_offset=0,
                     microsecond_offset=0,
-                    tzinfo=dt.timezone.utc,
+                    tzinfo=datetime.timezone.utc,
                     ordinal_shift=0,
                 ),
             ),
@@ -1218,25 +1256,25 @@ class TestWithTzinfo(unittest.TestCase):
             ),
             (
                 "positive timezone",
-                dt.timezone(dt.timedelta(hours=5, minutes=30)),
+                datetime.timezone(datetime.timedelta(hours=5, minutes=30)),
                 p.Properties(
                     step=p._STEP_MONTHS,
                     multiplier=12,
                     month_offset=0,
                     microsecond_offset=0,
-                    tzinfo=dt.timezone(dt.timedelta(hours=5, minutes=30)),
+                    tzinfo=datetime.timezone(datetime.timedelta(hours=5, minutes=30)),
                     ordinal_shift=0,
                 ),
             ),
             (
                 "negative timezone",
-                dt.timezone(dt.timedelta(hours=-5, minutes=-30)),
+                datetime.timezone(datetime.timedelta(hours=-5, minutes=-30)),
                 p.Properties(
                     step=p._STEP_MONTHS,
                     multiplier=12,
                     month_offset=0,
                     microsecond_offset=0,
-                    tzinfo=dt.timezone(dt.timedelta(hours=-5, minutes=-30)),
+                    tzinfo=datetime.timezone(datetime.timedelta(hours=-5, minutes=-30)),
                     ordinal_shift=0,
                 ),
             ),
@@ -1459,7 +1497,7 @@ class TestGetTimedelta(unittest.TestCase):
             tzinfo=None,
             ordinal_shift=0,
         )
-        expected = dt.timedelta(seconds=1, microseconds=500_000)
+        expected = datetime.timedelta(seconds=1, microseconds=500_000)
         self.assertEqual(properties.get_timedelta(), expected)
 
     def test_get_timedelta_seconds(self):
@@ -1467,7 +1505,7 @@ class TestGetTimedelta(unittest.TestCase):
         properties = p.Properties(
             step=p._STEP_SECONDS, multiplier=3600, month_offset=0, microsecond_offset=0, tzinfo=None, ordinal_shift=0
         )
-        expected = dt.timedelta(seconds=3600)
+        expected = datetime.timedelta(seconds=3600)
         self.assertEqual(properties.get_timedelta(), expected)
 
     def test_get_timedelta_months(self):
@@ -1576,8 +1614,8 @@ class TestAppendTzElems(unittest.TestCase):
     @parameterized.expand(
         [
             ("no_tzinfo", None, ["[", "]"]),
-            ("with_tzinfo", dt.timezone(dt.timedelta(hours=5, minutes=30)), ["[", "+05:30", "]"]),
-            ("with_utc", dt.timezone.utc, ["[", "Z", "]"]),
+            ("with_tzinfo", datetime.timezone(datetime.timedelta(hours=5, minutes=30)), ["[", "+05:30", "]"]),
+            ("with_utc", datetime.timezone.utc, ["[", "Z", "]"]),
         ]
     )
     def test_append_tz_elems(self, name, tzinfo, expected):
@@ -1630,7 +1668,8 @@ class TestGetNaiveFormatter(unittest.TestCase):
         )
         formatter = properties.get_naive_formatter("T")
         self.assertEqual(
-            formatter(dt.datetime(2023, 10, 10, 10, 0)), p._fmt_naive_microsecond(dt.datetime(2023, 10, 10, 10, 0), "T")
+            formatter(datetime.datetime(2023, 10, 10, 10, 0)),
+            p._fmt_naive_microsecond(datetime.datetime(2023, 10, 10, 10, 0), "T"),
         )
 
     def test_get_naive_formatter_milliseconds(self):
@@ -1645,7 +1684,8 @@ class TestGetNaiveFormatter(unittest.TestCase):
         )
         formatter = properties.get_naive_formatter("T")
         self.assertEqual(
-            formatter(dt.datetime(2023, 10, 10, 10, 0)), p._fmt_naive_millisecond(dt.datetime(2023, 10, 10, 10, 0), "T")
+            formatter(datetime.datetime(2023, 10, 10, 10, 0)),
+            p._fmt_naive_millisecond(datetime.datetime(2023, 10, 10, 10, 0), "T"),
         )
 
     def test_get_naive_formatter_seconds(self):
@@ -1660,7 +1700,8 @@ class TestGetNaiveFormatter(unittest.TestCase):
         )
         formatter = properties.get_naive_formatter("T")
         self.assertEqual(
-            formatter(dt.datetime(2023, 10, 10, 10, 0)), p._fmt_naive_second(dt.datetime(2023, 10, 10, 10, 0), "T")
+            formatter(datetime.datetime(2023, 10, 10, 10, 0)),
+            p._fmt_naive_second(datetime.datetime(2023, 10, 10, 10, 0), "T"),
         )
 
     def test_get_naive_formatter_minutes(self):
@@ -1675,7 +1716,8 @@ class TestGetNaiveFormatter(unittest.TestCase):
         )
         formatter = properties.get_naive_formatter("T")
         self.assertEqual(
-            formatter(dt.datetime(2023, 10, 10, 10, 0)), p._fmt_naive_minute(dt.datetime(2023, 10, 10, 10, 0), "T")
+            formatter(datetime.datetime(2023, 10, 10, 10, 0)),
+            p._fmt_naive_minute(datetime.datetime(2023, 10, 10, 10, 0), "T"),
         )
 
     def test_get_naive_formatter_hours(self):
@@ -1690,7 +1732,8 @@ class TestGetNaiveFormatter(unittest.TestCase):
         )
         formatter = properties.get_naive_formatter("T")
         self.assertEqual(
-            formatter(dt.datetime(2023, 10, 10, 10, 0)), p._fmt_naive_hour(dt.datetime(2023, 10, 10, 10, 0), "T")
+            formatter(datetime.datetime(2023, 10, 10, 10, 0)),
+            p._fmt_naive_hour(datetime.datetime(2023, 10, 10, 10, 0), "T"),
         )
 
     def test_get_naive_formatter_days(self):
@@ -1705,7 +1748,7 @@ class TestGetNaiveFormatter(unittest.TestCase):
         )
         formatter = properties.get_naive_formatter("T")
         self.assertEqual(
-            formatter(dt.datetime(2023, 10, 10, 10, 0)), p._fmt_naive_day(dt.datetime(2023, 10, 10, 10, 0))
+            formatter(datetime.datetime(2023, 10, 10, 10, 0)), p._fmt_naive_day(datetime.datetime(2023, 10, 10, 10, 0))
         )
 
     def test_get_naive_formatter_months(self):
@@ -1715,7 +1758,8 @@ class TestGetNaiveFormatter(unittest.TestCase):
         )
         formatter = properties.get_naive_formatter("T")
         self.assertEqual(
-            formatter(dt.datetime(2023, 10, 10, 10, 0)), p._fmt_naive_month(dt.datetime(2023, 10, 10, 10, 0))
+            formatter(datetime.datetime(2023, 10, 10, 10, 0)),
+            p._fmt_naive_month(datetime.datetime(2023, 10, 10, 10, 0)),
         )
 
     def test_get_naive_formatter_years(self):
@@ -1725,7 +1769,7 @@ class TestGetNaiveFormatter(unittest.TestCase):
         )
         formatter = properties.get_naive_formatter("T")
         self.assertEqual(
-            formatter(dt.datetime(2023, 10, 10, 10, 0)), p._fmt_naive_year(dt.datetime(2023, 10, 10, 10, 0))
+            formatter(datetime.datetime(2023, 10, 10, 10, 0)), p._fmt_naive_year(datetime.datetime(2023, 10, 10, 10, 0))
         )
 
 
@@ -1753,8 +1797,8 @@ class TestGetAwareFormatter(unittest.TestCase):
         )
         formatter = properties.get_aware_formatter(separator)
         self.assertEqual(
-            formatter(dt.datetime(2023, 10, 10, 10, 0, tzinfo=dt.timezone.utc)),
-            expected_formatter(dt.datetime(2023, 10, 10, 10, 0, tzinfo=dt.timezone.utc), separator),
+            formatter(datetime.datetime(2023, 10, 10, 10, 0, tzinfo=datetime.timezone.utc)),
+            expected_formatter(datetime.datetime(2023, 10, 10, 10, 0, tzinfo=datetime.timezone.utc), separator),
         )
 
 
@@ -1858,7 +1902,7 @@ class TestPropertiesReprMethod(unittest.TestCase):
             ("microseconds_with_offset", p._STEP_MICROSECONDS, 1_500_000, 1, None, 0, "PT1.5S+T0.000001S[]"),
             ("seconds_with_offset", p._STEP_SECONDS, 3600, 1, None, 0, "PT1H+T0.000001S[]"),
             ("months_with_offset", p._STEP_MONTHS, 1, 1, None, 0, "P1M+T0.000001S[]"),
-            ("with_tzinfo", p._STEP_SECONDS, 3600, 0, dt.timezone.utc, 0, "PT1H[Z]"),
+            ("with_tzinfo", p._STEP_SECONDS, 3600, 0, datetime.timezone.utc, 0, "PT1H[Z]"),
             ("with_ordinal_shift", p._STEP_SECONDS, 3600, 0, None, 5, "PT1H[]5"),
         ]
     )
@@ -2123,10 +2167,10 @@ class TestTotalMicroseconds(unittest.TestCase):
 
     @parameterized.expand(
         [
-            ("one_second", dt.timedelta(seconds=1), 1_000_000),
-            ("one_day", dt.timedelta(days=1), 86_400_000_000),
-            ("one_day_one_second", dt.timedelta(days=1, seconds=1), 86_401_000_000),
-            ("one_day_one_microsecond", dt.timedelta(days=1, microseconds=1), 86_400_000_001),
+            ("one_second", datetime.timedelta(seconds=1), 1_000_000),
+            ("one_day", datetime.timedelta(days=1), 86_400_000_000),
+            ("one_day_one_second", datetime.timedelta(days=1, seconds=1), 86_401_000_000),
+            ("one_day_one_microsecond", datetime.timedelta(days=1, microseconds=1), 86_400_000_001),
         ]
     )
     def test_total_microseconds(self, name, delta, expected):
