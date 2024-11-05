@@ -73,8 +73,8 @@ class TestGregorianSeconds(unittest.TestCase):
     """
 
     @parameterized.expand([
-        ("Zero", dt.datetime(1, 1, 1, 0, 0, 0), 0), 
-        ("2 hours", dt.datetime(1, 1, 1, 2, 2, 2), (3600 * 2) + (60 * 2) + 2), 
+        ("Zero", dt.datetime(1, 1, 1, 0, 0, 0), 86_400 + 0), 
+        ("2 hours", dt.datetime(1, 1, 1, 2, 2, 2), 86_400 + (3600 * 2) + (60 * 2) + 2), 
     ])
     def test_gregorian_seconds(self, name, dt_obj, expected_seconds):
         """ Test _gregorian_seconds function with various datetime inputs.
@@ -1465,7 +1465,9 @@ class TestPeriodFieldsGetBaseProperties(unittest.TestCase):
     """
 
     @parameterized.expand([
-        ("valid_period", "P1Y1M1DT1H1M1S", 1, 1, 1, 1, 1, 1, 1, Properties(_STEP_SECONDS, 90061, 0, 1, None, 0)),
+        ("valid_period_months", "P1Y1M", 1, 1, 0, 0, 0, 0, 0, Properties(_STEP_MONTHS, 13, 0, 0, None, 0)),
+        ("valid_period_seconds", "P1DT1H1M1S", 0, 0, 1, 1, 1, 1, 0, Properties(_STEP_SECONDS, 86_400+60*60+60+1, 0, 0, None, 0)),
+        ("valid_period_microseconds", "P1.234567S", 0, 0, 0, 0, 0, 1, 234_567, Properties(_STEP_MICROSECONDS, 1_234_567, 0, 0, None, 0)),
     ])
     def test_get_base_properties(self, name, string, years, months, days, hours, minutes, seconds, microseconds, expected):
         """ Test get_base_properties method with valid periods.
