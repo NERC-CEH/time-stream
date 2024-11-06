@@ -1,4 +1,4 @@
-from typing import Iterator, Optional
+from typing import Iterable, Iterator, Optional, Union
 
 import polars as pl
 
@@ -20,6 +20,8 @@ class TimeSeriesPolars(TimeSeries):
         resolution: Optional[Period] = None,
         periodicity: Optional[Period] = None,
         time_zone: Optional[str] = None,
+        data_col_names: Optional[list] = [],
+        supp_col_names: Optional[list] = [],
     ) -> None:
         """Initialize a TimeSeriesPolars instance.
 
@@ -30,7 +32,7 @@ class TimeSeriesPolars(TimeSeries):
             periodicity: The periodicity of the time series. Defaults to None.
             time_zone: The time zone of the time series. Defaults to None.
         """
-        super().__init__(time_name, resolution, periodicity, time_zone)
+        super().__init__(time_name, resolution, periodicity, time_zone, data_col_names, supp_col_names)
         self._df = df
         self._setup()
 
@@ -40,11 +42,23 @@ class TimeSeriesPolars(TimeSeries):
         self._sort_time()
         self._validate_resolution()
         self._validate_periodicity()
+        self._set_column_types()
 
     @property
     def df(self) -> pl.DataFrame:
         """Get the underlying Polars DataFrame."""
         return self._df
+
+    def add_supp_column(self, col_name: str, data: Union[int, float, str, Iterable]) -> None:
+        """Add a supplementary column to df"""
+        if isinstance(data, (float, int, str)):
+            data = pl.lit(data)
+        else:
+            data = pl.Series(data)
+
+        self._df = self._df.with_columns(data.alias(col_name))
+
+        self.supp_col_names.append(col_name)
 
     def _validate_resolution(self) -> None:
         """Validate the resolution of the time series.
@@ -142,6 +156,33 @@ class TimeSeriesPolars(TimeSeries):
     def _sort_time(self) -> None:
         """Sort the DataFrame by the time column."""
         self._df = self.df.sort(self.time_name)
+
+    def _set_column_types(self) -> None:
+        """Check and define which columns are data columns and which are
+        supplemenary columns.
+        If not specifed, assume all but the time column are data columns
+        """
+        data_col_names = []
+        supp_col_names = []
+
+        for col in self._df.columns:
+            if col == self.time_name:
+                continue
+
+            if col in self._given_data_col_names:
+                if col in self._given_supp_col_names:
+                    raise ValueError(f"Cannot specify column {col} as both data " f"column and supplementary column")
+                data_col_names.append(col)
+
+            elif col in self._given_supp_col_names:
+                supp_col_names.append(col)
+
+            else:
+                # Column not specified as data or supplementary, so assume data
+                data_col_names.append(col)
+
+        self.data_col_names = data_col_names
+        self.supp_col_names = supp_col_names
 
     def _round_time_to_period(self, period: Period) -> pl.Series:
         """Round the time column to the given period.
