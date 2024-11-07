@@ -13,15 +13,13 @@ class TimeSeries(ABC):
         resolution: Optional[Period] = None,
         periodicity: Optional[Period] = None,
         time_zone: Optional[str] = None,
-        data_col_names: Optional[list] = [],
         supp_col_names: Optional[list] = [],
     ) -> None:
         self._time_name = time_name
         self._resolution = resolution
         self._periodicity = periodicity
         self._time_zone = time_zone
-        self._given_data_col_names = data_col_names
-        self._given_supp_col_names = supp_col_names
+        self._supp_col_names = supp_col_names
 
     @property
     def time_name(self) -> str:
@@ -39,6 +37,10 @@ class TimeSeries(ABC):
     def time_zone(self) -> str:
         return self._time_zone
 
+    @property
+    def supp_col_names(self) -> list:
+        return self._supp_col_names
+
     @staticmethod
     def from_polars(
         df: pl.DataFrame,
@@ -46,13 +48,12 @@ class TimeSeries(ABC):
         resolution: Optional[Period] = None,
         periodicity: Optional[Period] = None,
         time_zone: Optional[str] = None,
-        data_col_names: Optional[list] = [],
         supp_col_names: Optional[list] = [],
     ) -> "TimeSeries":
         # Lazy import to avoid recursive importing
         from time_series.time_series_polars import TimeSeriesPolars
 
-        return TimeSeriesPolars(df, time_name, resolution, periodicity, time_zone, data_col_names, supp_col_names)
+        return TimeSeriesPolars(df, time_name, resolution, periodicity, time_zone, supp_col_names)
 
     @abstractmethod
     def _validate_resolution(self) -> None:

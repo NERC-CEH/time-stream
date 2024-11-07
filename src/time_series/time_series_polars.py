@@ -20,7 +20,6 @@ class TimeSeriesPolars(TimeSeries):
         resolution: Optional[Period] = None,
         periodicity: Optional[Period] = None,
         time_zone: Optional[str] = None,
-        data_col_names: Optional[list] = [],
         supp_col_names: Optional[list] = [],
     ) -> None:
         """Initialize a TimeSeriesPolars instance.
@@ -32,7 +31,7 @@ class TimeSeriesPolars(TimeSeries):
             periodicity: The periodicity of the time series. Defaults to None.
             time_zone: The time zone of the time series. Defaults to None.
         """
-        super().__init__(time_name, resolution, periodicity, time_zone, data_col_names, supp_col_names)
+        super().__init__(time_name, resolution, periodicity, time_zone, supp_col_names)
         self._df = df
         self._setup()
 
@@ -163,26 +162,15 @@ class TimeSeriesPolars(TimeSeries):
         If not specifed, assume all but the time column are data columns
         """
         data_col_names = []
-        supp_col_names = []
 
         for col in self._df.columns:
             if col == self.time_name:
                 continue
 
-            if col in self._given_data_col_names:
-                if col in self._given_supp_col_names:
-                    raise ValueError(f"Cannot specify column {col} as both data " f"column and supplementary column")
-                data_col_names.append(col)
-
-            elif col in self._given_supp_col_names:
-                supp_col_names.append(col)
-
-            else:
-                # Column not specified as data or supplementary, so assume data
+            if col not in self._supp_col_names:
                 data_col_names.append(col)
 
         self.data_col_names = data_col_names
-        self.supp_col_names = supp_col_names
 
     def _round_time_to_period(self, period: Period) -> pl.Series:
         """Round the time column to the given period.
