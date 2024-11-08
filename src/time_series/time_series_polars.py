@@ -170,25 +170,20 @@ class TimeSeriesPolars(TimeSeries):
         supplemenary columns.
         If not specifed, assume all but the time column are data columns
         """
-        data_col_names = []
-        supp_col_names = []
+        # Check given supplementary columns are in df
+        for supp_col in self._supp_col_names:
+            if supp_col not in self._df.columns:
+                raise ValueError(f"Cannot assign supplementary columns not found in dataframe: {supp_col}")
 
+        # Determine data columns. All which are not specified as supplementary
+        data_col_names = []
         for col in self._df.columns:
             if col == self.time_name:
                 continue
-
             if col not in self._supp_col_names:
                 data_col_names.append(col)
-            else:
-                supp_col_names.append(col)
-
-        if len(supp_col_names) != len(self._supp_col_names):
-            # Supplementary columns specified that are not in the dataframe
-            col_diff = set(self._supp_col_names).difference(set(supp_col_names))
-            raise ValueError(f"Cannot assign supplementary columns not found in dataframe: {", ".join(col_diff)}")
 
         self._data_col_names = data_col_names
-        self._supp_col_names = supp_col_names
 
     def _round_time_to_period(self, period: Period) -> pl.Series:
         """Round the time column to the given period.
