@@ -179,7 +179,7 @@ If you need the output file to be different to the target:
 
 builder.reset()
 builder.target = Path("mydata-3.parquet")
-builder.output = Path("mydata-3-test.parquet"))
+builder.output = Path("mydata-3-test.parquet")
 
 # This sets the target to "mydata-3.parquet" and the output
 # to "mydata-3-test.parquet
