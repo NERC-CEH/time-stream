@@ -167,15 +167,16 @@ class TestRoundToPeriod(unittest.TestCase):
 
 
 class TestInitialization(unittest.TestCase):
-    def test_initialization(self):
-        """Test that the object initializes correctly."""
-        df = pl.DataFrame({
+    def setUp(self):
+        self.df = pl.DataFrame({
             "time": [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)],
             "value": [1, 2, 3]
         })
 
+    def test_initialization(self):
+        """Test that the object initializes correctly."""
         ts_polars = TimeSeriesPolars(
-            df=df,
+            df=self.df,
             time_name="time",
             resolution=Period.of_days(1),
             periodicity=Period.of_days(1),
@@ -185,13 +186,8 @@ class TestInitialization(unittest.TestCase):
 
     def test_initialization_no_supp_cols(self):
         """Test that the object initializes correctly with no supplematery columns set."""
-        df = pl.DataFrame({
-            "time": [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)],
-            "value": [1, 2, 3]
-        })
-
         ts_polars = TimeSeriesPolars(
-            df=df,
+            df=self.df,
             time_name="time",
         )
         self.assertEqual(ts_polars.data_col_names, ["value"])
@@ -199,13 +195,8 @@ class TestInitialization(unittest.TestCase):
 
     def test_initialization_with_supp_cols(self):
         """Test that the object initializes correctly with supplementary columns set."""
-        df = pl.DataFrame({
-            "time": [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)],
-            "value": [1, 2, 3]
-        })
-
         ts_polars = TimeSeriesPolars(
-            df=df,
+            df=self.df,
             time_name="time",
             supp_col_names=["value"]
         )
