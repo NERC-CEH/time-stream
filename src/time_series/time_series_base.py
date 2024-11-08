@@ -42,7 +42,7 @@ class TimeSeries(ABC):
         resolution: Optional[Period] = None,
         periodicity: Optional[Period] = None,
         time_zone: Optional[str] = None,
-        supp_col_names: Optional[list] = [],
+        supp_col_names: Optional[list] = None,
     ) -> "TimeSeries":
         # Lazy import to avoid recursive importing
         from time_series.time_series_polars import TimeSeriesPolars

@@ -20,7 +20,7 @@ class TimeSeriesPolars(TimeSeries):
         resolution: Optional[Period] = None,
         periodicity: Optional[Period] = None,
         time_zone: Optional[str] = None,
-        supp_col_names: Optional[list] = [],
+        supp_col_names: Optional[list] = None,
     ) -> None:
         """Initialize a TimeSeriesPolars instance.
 
@@ -170,6 +170,10 @@ class TimeSeriesPolars(TimeSeries):
         supplemenary columns.
         If not specifed, assume all but the time column are data columns
         """
+        # Initialize supp_col_names as an empty list if it’s None
+        if self._supp_col_names is None:
+            self._supp_col_names = []
+
         # Check given supplementary columns are in df
         for supp_col in self._supp_col_names:
             if supp_col not in self._df.columns:
