@@ -20,6 +20,7 @@ class TimeSeries(ABC):
         self._periodicity = periodicity
         self._time_zone = time_zone
         self._supp_col_names = supp_col_names
+        self._data_col_names = []
 
     @property
     def time_name(self) -> str:
@@ -36,6 +37,10 @@ class TimeSeries(ABC):
     @property
     def time_zone(self) -> str:
         return self._time_zone
+
+    @property
+    def data_col_names(self) -> list:
+        return self._data_col_names
 
     @property
     def supp_col_names(self) -> list:
