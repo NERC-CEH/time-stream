@@ -13,14 +13,11 @@ class TimeSeries(ABC):
         resolution: Optional[Period] = None,
         periodicity: Optional[Period] = None,
         time_zone: Optional[str] = None,
-        supp_col_names: Optional[list] = [],
     ) -> None:
         self._time_name = time_name
         self._resolution = resolution
         self._periodicity = periodicity
         self._time_zone = time_zone
-        self._supp_col_names = supp_col_names
-        self._data_col_names = []
 
     @property
     def time_name(self) -> str:
@@ -37,14 +34,6 @@ class TimeSeries(ABC):
     @property
     def time_zone(self) -> str:
         return self._time_zone
-
-    @property
-    def data_col_names(self) -> list:
-        return self._data_col_names
-
-    @property
-    def supp_col_names(self) -> list:
-        return self._supp_col_names
 
     @staticmethod
     def from_polars(

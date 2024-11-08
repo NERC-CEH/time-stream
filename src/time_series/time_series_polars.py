@@ -31,8 +31,9 @@ class TimeSeriesPolars(TimeSeries):
             periodicity: The periodicity of the time series. Defaults to None.
             time_zone: The time zone of the time series. Defaults to None.
         """
-        super().__init__(time_name, resolution, periodicity, time_zone, supp_col_names)
+        super().__init__(time_name, resolution, periodicity, time_zone)
         self._df = df
+        self._supp_col_names = supp_col_names
         self._setup()
 
     def _setup(self) -> None:
@@ -47,6 +48,14 @@ class TimeSeriesPolars(TimeSeries):
     def df(self) -> pl.DataFrame:
         """Get the underlying Polars DataFrame."""
         return self._df
+
+    @property
+    def data_col_names(self) -> list:
+        return self._data_col_names
+
+    @property
+    def supp_col_names(self) -> list:
+        return self._supp_col_names
 
     def add_supp_column(self, col_name: str, data: Union[int, float, str, Iterable]) -> None:
         """Add a supplementary column to df"""
