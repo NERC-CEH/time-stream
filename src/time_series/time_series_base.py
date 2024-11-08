@@ -42,11 +42,12 @@ class TimeSeries(ABC):
         resolution: Optional[Period] = None,
         periodicity: Optional[Period] = None,
         time_zone: Optional[str] = None,
+        supp_col_names: Optional[list] = None,
     ) -> "TimeSeries":
         # Lazy import to avoid recursive importing
         from time_series.time_series_polars import TimeSeriesPolars
 
-        return TimeSeriesPolars(df, time_name, resolution, periodicity, time_zone)
+        return TimeSeriesPolars(df, time_name, resolution, periodicity, time_zone, supp_col_names)
 
     @abstractmethod
     def _validate_resolution(self) -> None:
@@ -62,6 +63,10 @@ class TimeSeries(ABC):
 
     @abstractmethod
     def _sort_time(self) -> None:
+        pass
+
+    @abstractmethod
+    def add_supp_column(self) -> None:
         pass
 
     def aggregate(
