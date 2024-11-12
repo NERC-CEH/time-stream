@@ -2288,7 +2288,6 @@ class TestTotalMicroseconds(unittest.TestCase):
         self.assertEqual(p._total_microseconds(delta), expected)
 
 
-# ----------------------------------------------------------------------
 _GOOD_ISO_DURATION = set(
     [
         "p0.00001s",
@@ -2487,7 +2486,6 @@ class TestPeriodOf(unittest.TestCase):
             Period.of(text)
 
 
-# ----------------------------------------------------------------------
 class TestPeriodOfIsoDuration(unittest.TestCase):
     """Test Period.of_iso_duration static method"""
 
@@ -2504,7 +2502,6 @@ class TestPeriodOfIsoDuration(unittest.TestCase):
             Period.of_iso_duration(text)
 
 
-# ----------------------------------------------------------------------
 class TestPeriodOfDuration(unittest.TestCase):
     """Test Period.of_duration static method"""
 
@@ -7054,7 +7051,6 @@ class TestMatchRepr(unittest.TestCase):
         self.assertEqual(ordinal2, 0)
 
 
-# ----------------------------------------------------------------------
 S_YYYY: str = r"\d{4}"
 S_YYYY_MM: str = r"\d{4}-\d{2}"
 S_YYYY_MM_DD: str = r"\d{4}-\d{2}-\d{2}"
@@ -7933,7 +7929,6 @@ class TestPeriodItems(unittest.TestCase):
             self.assertTrue(match_years < len(years), f"Period {period} is epoch agnostic")
 
 
-# ----------------------------------------------------------------------
 _EQUIVALENT_PERIODS = [
     (
         "P5Y",
@@ -8137,8 +8132,6 @@ class TestEquivalentPeriods(unittest.TestCase):
         period_set: set[Period] = set(period_list)
         self.assertEqual(len(period_set), 1, f"Multiple periods in set: {name}: {period_set}")
 
-
-# ----------------------------------------------------------------------
 
 if __name__ == "__main__":
     unittest.main()
