@@ -2288,6 +2288,11 @@ class TestTotalMicroseconds(unittest.TestCase):
         self.assertEqual(p._total_microseconds(delta), expected)
 
 
+# A set of strings that yield valid Period objects when passed to the
+# Period.of() or Period.of_iso_duration() static methods.
+#
+# Used to test those methods and also to create Period objects for
+# other tests.
 _GOOD_ISO_DURATION = set(
     [
         "p0.00001s",
@@ -2316,6 +2321,8 @@ _GOOD_ISO_DURATION = set(
     ]
 )
 
+# A set of strings that should cause an error to be raised when passed
+# to the Period.of() or Period.of_iso_duration() static methods.
 _BAD_ISO_DURATION = set(
     [
         "",
@@ -2355,6 +2362,11 @@ _BAD_ISO_DURATION = set(
     ]
 )
 
+# A set of strings that yield valid Period objects when passed to the
+# Period.of() or Period.of_duration() static methods.
+#
+# Used to test those methods and also to create Period objects for
+# other tests.
 _GOOD_DURATION = set(
     [
         "p1y+1d",
@@ -2368,6 +2380,8 @@ _GOOD_DURATION = set(
     ]
 )
 
+# A set of strings that should cause an error to be raised when passed
+# to the Period.of() or Period.of_duration() static methods.
 _BAD_DURATION = set(
     [
         "",
@@ -2382,6 +2396,7 @@ _BAD_DURATION = set(
     + [f"{bad_iso}+0.001s" for bad_iso in _BAD_ISO_DURATION]
 )
 
+# A set of valid date strings
 _GOOD_DATE = set(
     [
         "1066",
@@ -2414,6 +2429,7 @@ _GOOD_DATE = set(
     ]
 )
 
+# A set of invalid date strings
 _BAD_DATE = set(
     [
         "",
@@ -2437,8 +2453,15 @@ _BAD_DATE = set(
     ]
 )
 
+# A set of strings that yield valid Period objects when passed to the
+# Period.of() or Period.of_date_and_duration() static methods.
+#
+# Used to test those methods and also to create Period objects for
+# other tests.
 _GOOD_DATE_AND_DURATION = set([f"{d}/{p}" for d in _GOOD_DATE for p in _GOOD_ISO_DURATION])
 
+# A set of strings that should cause an error to be raised when passed
+# to the Period.of() or Period.of_date_and_duration() static methods.
 _BAD_DATE_AND_DURATION = set(
     [""]
     + [f"{d}/{p}" for d in _BAD_DATE for p in _BAD_ISO_DURATION]
@@ -2449,6 +2472,11 @@ _BAD_DATE_AND_DURATION = set(
     + []
 )
 
+# A set of strings that yield valid Period objects when passed to the
+# Period.of() or Period.of_repr() static methods.
+#
+# Used to test those methods and also to create Period objects for
+# other tests.
 _GOOD_REPR = set(
     [f"{p}[]0" for p in _GOOD_ISO_DURATION]
     + [f"{p}[]-1" for p in _GOOD_ISO_DURATION]
@@ -2460,6 +2488,8 @@ _GOOD_REPR = set(
     + []
 )
 
+# A set of strings that should cause an error to be raised when passed
+# to the Period.of() or Period.of_repr() static methods.
 _BAD_REPR = set(
     [""]
     + [f"{p}" for p in _GOOD_ISO_DURATION]
@@ -6363,6 +6393,10 @@ class TestGetBasePeriod(unittest.TestCase):
             p._get_base_period(offset_properties)
 
 
+# A list of tuples used to test that offset periods are created with
+# the correct properties.
+#
+# Used with @parameterized.expand
 _OFFSET_PARAMS = [
     (
         "P1Y+1M",
@@ -6565,6 +6599,10 @@ class TestOffsetPeriod(unittest.TestCase):
         )
 
 
+# A list of tuples used to test that ordinal shifted periods are
+# created with the correct properties.
+#
+# Used with @parameterized.expand
 _BASE_PARAMS = [
     ("P1Y", None, datetime.datetime(1066, 2, 1, 0, 0, 0, 0, None), 1066, p.YearPeriod),
     (
@@ -6768,6 +6806,9 @@ class TestShiftedPeriod(unittest.TestCase):
         )
 
 
+# A list of tuples used to test datetime parsing.
+#
+# Used with @parameterized.expand
 _DATE_TIME_PARSE = [
     ("1980", datetime.date(1980, 1, 1), datetime.time(0, 0, 0, 0, None)),
     ("1980-01", datetime.date(1980, 1, 1), datetime.time(0, 0, 0, 0, None)),
@@ -6993,6 +7034,7 @@ class TestMatchDatetimePeriod(unittest.TestCase):
         self.assertEqual(period, match_period)
 
 
+# A regular expression used for testing the _match_repr function
 _REPR_RE_STR: str = (
     p._period_regex("period")
     + r","
@@ -7079,6 +7121,10 @@ RE_A_YYYY_MM_DD_HH_MM_SS_SSS: re.Pattern = re.compile(r"^" + S_YYYY_MM_DD_HH_MM_
 RE_A_YYYY_MM_DD_HH_MM_SS_SSSSSS: re.Pattern = re.compile(r"^" + S_YYYY_MM_DD_HH_MM_SS_SSSSSS + S_TZ + r"$")
 
 
+# A class containing information that is used to test the basic
+# invariants of instances of the Period class.
+# i.e. If a Period is created with Period.of_iso_duration(iso_duration)
+# then all the other properties of the Item should be True.
 @dataclass(frozen=True)
 class Item:
     iso_duration: str
@@ -7929,6 +7975,12 @@ class TestPeriodItems(unittest.TestCase):
             self.assertTrue(match_years < len(years), f"Period {period} is epoch agnostic")
 
 
+# A list of tuples containing "equaivalent periods".
+# The tuples ore of the form: tuple[str,list[Period]]
+#
+# The first element is a name for the list of periods.
+# The second element is a list of periods that are created in
+# different ways but which should all be identical.
 _EQUIVALENT_PERIODS = [
     (
         "P5Y",
