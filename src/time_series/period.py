@@ -821,6 +821,28 @@ class Properties:
         if (self.step != _STEP_MONTHS) and (self.month_offset != 0):
             raise AssertionError("Illegal month offset for non-month step")
 
+    def normalise_step_and_multiplier(self) -> "Properties":
+        """Return an equivalent Properties object where
+        step and multiplier are potentially adjusted
+
+        If step is microseconds see if it can be converted to seconds.
+
+        Returns:
+            A Properties object
+        """
+        if self.step == _STEP_MICROSECONDS:
+            seconds, microseconds = divmod(self.multiplier, 1_000_000)
+            if microseconds == 0:
+                return Properties(
+                    step=_STEP_SECONDS,
+                    multiplier=seconds,
+                    month_offset=self.month_offset,
+                    microsecond_offset=self.microsecond_offset,
+                    tzinfo=self.tzinfo,
+                    ordinal_shift=self.ordinal_shift,
+                )
+        return self
+
     def normalise_offsets(self) -> "Properties":
         """Return an equivalent Properties object where
         month_offset and microsecond_offset are within the
@@ -1258,8 +1280,8 @@ class Properties:
         if self.step == _STEP_MICROSECONDS:
             if self.multiplier > 1_000_000:
                 return False
-            num_per_second: int = 1_000_000 // self.multiplier
-            return (self.multiplier * num_per_second) == 1_000_000
+            num_per_day: int = 86_400_000_000 // self.multiplier
+            return (self.multiplier * num_per_day) == 86_400_000_000
         elif self.step == _STEP_SECONDS:
             if self.multiplier > 86_400:
                 return False
@@ -2002,7 +2024,9 @@ class Period(ABC):
                 microsecond_offset=properties.microsecond_offset,
                 tzinfo=properties.tzinfo,
                 ordinal_shift=0,
-            ).normalise_offsets()
+            )
+            .normalise_step_and_multiplier()
+            .normalise_offsets()
         )
 
     def with_year_offset(self, year_amount: int) -> "Period":

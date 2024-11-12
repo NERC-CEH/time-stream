@@ -51,16 +51,23 @@ include = ["dritimeseriesprocessor*", "databuilder"]
 "*" = ["*.*"]
 
 [tool.pytest.ini_options]
-addopts = "--cov=dritimeseriesprocessor --cov=databuilder --cov-report=term-missing"
+addopts = "--cov=dritimeseriesprocessor --cov=databuilder --cov time_series --cov-report=term-missing"
 markers = ["slow: Marks slow tests"]
+
+[tool.coverage.run]
+omit = [
+    "*__init__.py",
+    "src/dritimeseriesprocessor/__main__.py",
+    "src/dritimeseriesprocessor/metrics_exporter.py",
+    "src/time_series/example.py",
+    "src/time_series/period.py",
+    "src/time_series/time_series_base.py",
+]
 
 filterwarnings = [
     "ignore::DeprecationWarning:autosemver.*:",
     "ignore::DeprecationWarning:pkg_resources.*:",
 ]
-
-[tool.coverage.run]
-omit = ["*__init__.py"]
 
 [tool.ruff]
 src = ["src", "tests"]
