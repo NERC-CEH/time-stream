@@ -1,6 +1,6 @@
 import unittest
 from unittest.mock import MagicMock, patch
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 import polars as pl
@@ -221,6 +221,49 @@ class TestInitialization(unittest.TestCase):
                 time_name="time",
                 supp_col_names=supp_col_names
             )
+
+class TestAddSuppColumn(unittest.TestCase):
+    """Test the TimeSeries.add_supp_column method."""
+
+    def setUp(self):
+        """Set up a sample DataFrame for testing."""
+        self.df = pl.DataFrame({
+            "time": [datetime(2024, 1, 1, tzinfo=timezone.utc),
+                     datetime(2024, 1, 2, tzinfo=timezone.utc),
+                     datetime(2024, 1, 3, tzinfo=timezone.utc)],
+            "value": [1, 2, 3]
+        })
+        self.ts = TimeSeriesPolars(self.df, time_name="time")
+
+    def test_add_supp_column_with_int(self):
+        """Test adding a supplementary column with an integer."""
+        self.ts.add_supp_column("new_int_col", 5)
+        expected_df = self.df.with_columns(pl.lit(5).alias("new_int_col"))
+        pl.testing.assert_frame_equal(self.ts.df, expected_df)
+
+    def test_add_supp_column_with_float(self):
+        """Test adding a supplementary column with a float."""
+        self.ts.add_supp_column("new_float_col", 3.14)
+        expected_df = self.df.with_columns(pl.lit(3.14).alias("new_float_col"))
+        pl.testing.assert_frame_equal(self.ts.df, expected_df)
+
+    def test_add_supp_column_with_string(self):
+        """Test adding a supplementary column with a string."""
+        self.ts.add_supp_column("new_str_col", "test")
+        expected_df = self.df.with_columns(pl.lit("test").alias("new_str_col"))
+        pl.testing.assert_frame_equal(self.ts.df, expected_df)
+
+    def test_add_supp_column_with_iterable(self):
+        """Test adding a supplementary column with an iterable."""
+        self.ts.add_supp_column("new_iter_col", [10, 20, 30])
+        expected_df = self.df.with_columns(pl.Series([10, 20, 30]).alias("new_iter_col"))
+        pl.testing.assert_frame_equal(self.ts.df, expected_df)
+
+    def test_add_supp_column_updates_supp_col_names(self):
+        """Test that the supplementary column names are updated correctly."""
+        self.ts.add_supp_column("new_col", 1)
+        self.assertIn("new_col", self.ts.supp_col_names)
+
 
 class TestValidateResolution(unittest.TestCase):
     """Test the _validate_resolution method."""
