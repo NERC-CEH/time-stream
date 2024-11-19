@@ -56,6 +56,9 @@ Run below to setup the pre-commit hooks.
 git config --local core.hooksPath .githooks/
 ```
 
+## Metrics
+Metrics are collected using prometheus. The app is run as a cron job and the metrics are pushed to the prometheus [pushgateway](https://prometheus.io/docs/practices/pushing/). These can be accessed locally via `localhost:9091`
+
 ## localstack
 Local stack is used to create local AWS resources for testing the app locally. `localstack-setup.sh` is run when the container is initialised which creates the buckets and loads the sample parquet files.
 
