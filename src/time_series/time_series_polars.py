@@ -1,4 +1,4 @@
-from typing import Any, Callable, Dict, Iterable, Iterator, Optional, Union
+from typing import Any, Callable, Dict, Iterable, Iterator, Optional
 
 import polars as pl
 
@@ -121,20 +121,16 @@ class TimeSeriesPolars(TimeSeries):
             tuple(supp_col_names),
         )
 
-    def add_supp_column(self, col_name: str, data: Union[int, float, str, Iterable]) -> None:
-        """Add a supplementary column to df"""
-        if isinstance(data, (float, int, str)):
-            data = pl.lit(data)
-        else:
-            data = pl.Series(data)
-
+    def set_columns_supplemental(self, supp_col_names: Iterable) -> TimeSeries:
+        """Specify columns as supplemental columns"""
+        new_supp_col_names = tuple(set(self.supp_col_names + tuple(supp_col_names)))
         return self.from_polars(
-            self.df.with_columns(data.alias(col_name)),
+            self.df,
             self.time_name,
             self.resolution,
             self.periodicity,
             self.time_zone,
-            self.supp_col_names + (col_name),
+            new_supp_col_names,
         )
 
     def _validate_resolution(self) -> None:

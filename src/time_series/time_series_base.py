@@ -69,6 +69,10 @@ class TimeSeries(ABC):
     def df_operation(self) -> None:
         pass
 
+    @abstractmethod
+    def set_columns_supplemental(self) -> None:
+        pass
+
     def aggregate(
         self, aggregation_period: Period, aggregation_function: "AggregationFunction", column_name: str
     ) -> "TimeSeries":

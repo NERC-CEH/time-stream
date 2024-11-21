@@ -190,8 +190,8 @@ class TestInitialization(unittest.TestCase):
             df=self.df,
             time_name="time",
         )
-        self.assertEqual(ts_polars.data_col_names, ["value"])
-        self.assertEqual(ts_polars.supp_col_names, [])
+        self.assertEqual(ts_polars.data_col_names, ("value",))
+        self.assertEqual(ts_polars.supp_col_names, ())
 
     def test_initialization_with_supp_cols(self):
         """Test that the object initializes correctly with supplementary columns set."""
@@ -200,8 +200,8 @@ class TestInitialization(unittest.TestCase):
             time_name="time",
             supp_col_names=["value"]
         )
-        self.assertEqual(ts_polars.data_col_names, [])
-        self.assertEqual(ts_polars.supp_col_names, ["value"])
+        self.assertEqual(ts_polars.data_col_names, ())
+        self.assertEqual(ts_polars.supp_col_names, ("value",))
 
     @parameterized.expand([
         ("One bad", ["value", "non_col"]),
@@ -382,8 +382,8 @@ class TestDFOperation(unittest.TestCase):
         self.assertEqual(result.data_col_names, ("value",))
 
 
-class TestAddSuppColumn(unittest.TestCase):
-    """Test the TimeSeries.add_supp_column method."""
+class TestSetSupplementalColumns(unittest.TestCase):
+    """Test the TimeSeries.set_columns_supplemental method."""
 
     def setUp(self):
         """Set up a sample DataFrame for testing."""
@@ -391,38 +391,21 @@ class TestAddSuppColumn(unittest.TestCase):
             "time": [datetime(2024, 1, 1, tzinfo=timezone.utc),
                      datetime(2024, 1, 2, tzinfo=timezone.utc),
                      datetime(2024, 1, 3, tzinfo=timezone.utc)],
-            "value": [1, 2, 3]
+            "value": [1, 2, 3],
+            "supp1": [4, 5, 6],
+            "supp2": [7, 8, 9],
         })
-        self.ts = TimeSeriesPolars(self.df, time_name="time")
+        self.ts = TimeSeriesPolars(self.df, time_name="time", supp_col_names=("supp1",))
 
-    def test_add_supp_column_with_int(self):
-        """Test adding a supplementary column with an integer."""
-        self.ts.add_supp_column("new_int_col", 5)
-        expected_df = self.df.with_columns(pl.lit(5).alias("new_int_col"))
-        pl.testing.assert_frame_equal(self.ts.df, expected_df)
+    def test_set_new_supp_column(self):
+        """Test setting an addtional column as supplemental."""
+        result = self.ts.set_columns_supplemental(("supp2",))
+        self.assertEqual(set(result.supp_col_names), set(("supp2", "supp1")))
 
-    def test_add_supp_column_with_float(self):
-        """Test adding a supplementary column with a float."""
-        self.ts.add_supp_column("new_float_col", 3.14)
-        expected_df = self.df.with_columns(pl.lit(3.14).alias("new_float_col"))
-        pl.testing.assert_frame_equal(self.ts.df, expected_df)
-
-    def test_add_supp_column_with_string(self):
-        """Test adding a supplementary column with a string."""
-        self.ts.add_supp_column("new_str_col", "test")
-        expected_df = self.df.with_columns(pl.lit("test").alias("new_str_col"))
-        pl.testing.assert_frame_equal(self.ts.df, expected_df)
-
-    def test_add_supp_column_with_iterable(self):
-        """Test adding a supplementary column with an iterable."""
-        self.ts.add_supp_column("new_iter_col", [10, 20, 30])
-        expected_df = self.df.with_columns(pl.Series([10, 20, 30]).alias("new_iter_col"))
-        pl.testing.assert_frame_equal(self.ts.df, expected_df)
-
-    def test_add_supp_column_updates_supp_col_names(self):
-        """Test that the supplementary column names are updated correctly."""
-        self.ts.add_supp_column("new_col", 1)
-        self.assertIn("new_col", self.ts.supp_col_names)
+    def test_set_existing_supp_column(self):
+        """Test setting a current supplemental column makes no difference."""
+        result = self.ts.set_columns_supplemental(("supp1",))
+        self.assertEqual(result.supp_col_names, ("supp1",))
 
 
 class TestValidateResolution(unittest.TestCase):
