@@ -1,4 +1,4 @@
-from typing import Iterable, Iterator, Optional, Union
+from typing import Any, Callable, Dict, Iterable, Iterator, Optional, Union
 
 import polars as pl
 
@@ -20,7 +20,7 @@ class TimeSeriesPolars(TimeSeries):
         resolution: Optional[Period] = None,
         periodicity: Optional[Period] = None,
         time_zone: Optional[str] = None,
-        supp_col_names: Optional[list] = None,
+        supp_col_names: Optional[tuple] = None,
     ) -> None:
         """Initialize a TimeSeriesPolars instance.
 
@@ -50,12 +50,76 @@ class TimeSeriesPolars(TimeSeries):
         return self._df
 
     @property
-    def data_col_names(self) -> list:
+    def data_col_names(self) -> tuple:
         return self._data_col_names
 
     @property
-    def supp_col_names(self) -> list:
+    def supp_col_names(self) -> tuple:
         return self._supp_col_names
+
+    def df_operation(
+        self,
+        func: Callable[[pl.DataFrame], pl.DataFrame],
+        time_name: Optional[str] = None,
+        resolution: Optional[Period] = None,
+        periodicity: Optional[Period] = None,
+        time_zone: Optional[str] = None,
+        supp_col_names: Optional[tuple] = None,
+        **kwargs: Dict[str, Any],
+    ) -> TimeSeries:
+        """
+        Pass a function which operates on a dataframe.
+        The TimeSeries object is immutable therefore the df cannot be changed.
+        Use this method to make updates to the TimeSeries dataframe and it will
+        return a new TimeSeries object.
+
+        Args:
+            func: Callable function. Must accept and return a Polars Dataframe
+            time_name: New time_name if function changes current.
+            resolution: New resolution if function changes current.
+            periodicity: New periodicity if function changes current.
+            time_zone: New time_zone if function changes current.
+            supp_col_names: New supp_col_names if function changes current.
+            kwargs: Key word arguments passed into given function
+
+        Returns:
+            TimeSeries
+        """
+        df = func(self._df, **kwargs)
+
+        if not isinstance(df, pl.DataFrame):
+            raise ValueError("Callable has not returned a Polars DataFrame.")
+
+        if time_name is None:
+            time_name = self.time_name
+        # Check time name have not been changed
+        if time_name not in df.columns:
+            raise ValueError(f"Time column {time_name} not found.")
+
+        if resolution is None:
+            resolution = self.resolution
+
+        if periodicity is None:
+            periodicity = self.periodicity
+
+        if time_zone is None:
+            time_zone = self.time_zone
+
+        if supp_col_names is None:
+            # Make sure any removed supplementary columns are ignored.
+            supp_col_names = []
+            for supp_col in self._supp_col_names:
+                if supp_col in df.columns:
+                    supp_col_names.append(supp_col)
+
+        return self.from_polars(
+            df,
+            time_name,
+            resolution,
+            periodicity,
+            time_zone,
+            tuple(supp_col_names),
+        )
 
     def add_supp_column(self, col_name: str, data: Union[int, float, str, Iterable]) -> None:
         """Add a supplementary column to df"""
@@ -64,9 +128,14 @@ class TimeSeriesPolars(TimeSeries):
         else:
             data = pl.Series(data)
 
-        self._df = self._df.with_columns(data.alias(col_name))
-
-        self._supp_col_names.append(col_name)
+        return self.from_polars(
+            self.df.with_columns(data.alias(col_name)),
+            self.time_name,
+            self.resolution,
+            self.periodicity,
+            self.time_zone,
+            self.supp_col_names + (col_name),
+        )
 
     def _validate_resolution(self) -> None:
         """Validate the resolution of the time series.
@@ -172,7 +241,9 @@ class TimeSeriesPolars(TimeSeries):
         """
         # Initialize supp_col_names as an empty list if it’s None
         if self._supp_col_names is None:
-            self._supp_col_names = []
+            self._supp_col_names = ()
+        else:
+            self._supp_col_names = tuple(self._supp_col_names)
 
         # Check given supplementary columns are in df
         for supp_col in self._supp_col_names:
@@ -187,7 +258,7 @@ class TimeSeriesPolars(TimeSeries):
             if col not in self._supp_col_names:
                 data_col_names.append(col)
 
-        self._data_col_names = data_col_names
+        self._data_col_names = tuple(data_col_names)
 
     def _round_time_to_period(self, period: Period) -> pl.Series:
         """Round the time column to the given period.

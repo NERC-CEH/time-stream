@@ -5,7 +5,7 @@ from typing import Optional
 
 import polars as pl
 from parameterized import parameterized
-from polars.testing import assert_series_equal
+from polars.testing import assert_series_equal, assert_frame_equal
 
 from time_series.time_series_polars import TimeSeriesPolars
 from time_series.period import Period
@@ -221,6 +221,166 @@ class TestInitialization(unittest.TestCase):
                 time_name="time",
                 supp_col_names=supp_col_names
             )
+
+
+class TestDFOperation(unittest.TestCase):
+    """Test the TimeSeries.df_operation method"""
+
+    def setUp(self):
+        """Set up a sample DataFrame for testing."""
+        self.df = pl.DataFrame({
+            "time": [datetime(2024, 1, 1, tzinfo=timezone.utc),
+                     datetime(2024, 1, 2, tzinfo=timezone.utc),
+                     datetime(2024, 1, 3, tzinfo=timezone.utc)],
+            "value": [1, 2, 3],
+            "flags": ["E", None, "S"]
+        })
+        self.ts = TimeSeriesPolars(
+            self.df,
+            time_name="time",
+            resolution=Period.of_days(1),
+            periodicity=Period.of_days(1),
+            time_zone="UTC",
+            supp_col_names=("flags",))
+
+    @parameterized.expand([
+        ("value_change", pl.DataFrame({"time": [datetime(2024, 1, 1, tzinfo=timezone.utc),
+                                                datetime(2024, 1, 2, tzinfo=timezone.utc),
+                                                datetime(2024, 1, 3, tzinfo=timezone.utc)],
+                                      "value": [3, 4, 5],
+                                      "flags": ["E", None, "S"]})),
+        ("time_change", pl.DataFrame({"time": [datetime(2024, 1, 4, tzinfo=timezone.utc),
+                                               datetime(2024, 1, 5, tzinfo=timezone.utc),
+                                               datetime(2024, 1, 6, tzinfo=timezone.utc)],
+                                      "value": [1, 2, 3],
+                                      "flags": ["E", None, "S"]})),
+        ("col_added", pl.DataFrame({"time": [datetime(2024, 1, 1, tzinfo=timezone.utc),
+                                             datetime(2024, 1, 2, tzinfo=timezone.utc),
+                                             datetime(2024, 1, 3, tzinfo=timezone.utc)],
+                                   "value": [1, 2, 3],
+                                   "new_col": [3, 4, 5],
+                                   "flags": ["E", None, "S"]})),
+        ("row_added", pl.DataFrame({"time": [datetime(2024, 1, 1, tzinfo=timezone.utc),
+                                             datetime(2024, 1, 2, tzinfo=timezone.utc),
+                                             datetime(2024, 1, 3, tzinfo=timezone.utc),
+                                             datetime(2024, 1, 4, tzinfo=timezone.utc)],
+                                      "value": [1, 2, 3, 4],
+                                      "flags": ["E", None, "S", None]})),
+    ])
+    def test_valid_df_operation(self, name, return_df):
+        """Test function that returns a valid dataframe."""
+        # Mock a function that returns a DataFrame
+        mock_func = MagicMock(return_value=return_df)
+        result = self.ts.df_operation(mock_func)
+
+        self.assertIsInstance(result, TimeSeriesPolars)
+        assert_frame_equal(result.df, return_df)
+
+    def test_invalid_df_operation_return_type(self):
+        """Test function that returns an invalid dataframe."""
+        # Mock a function that returns an invalid type
+        mock_func = MagicMock(return_value="not a dataframe")
+        with self.assertRaises(ValueError):
+            self.ts.df_operation(mock_func)
+
+    def test_time_name_change_not_specified(self):
+        """Test function that returns a dataframe with changed time name."""
+        # Mock a function that changes the time name
+        mock_func = MagicMock(return_value=pl.DataFrame({
+            "new_time": [datetime(2024, 1, 1, tzinfo=timezone.utc),
+                         datetime(2024, 1, 2, tzinfo=timezone.utc),
+                         datetime(2024, 1, 3, tzinfo=timezone.utc)],
+            "value": [10, 20, 30]}))
+        with self.assertRaises(ValueError):
+            self.ts.df_operation(mock_func)
+
+    def test_time_name_change_specified(self):
+        """Test function with optional parameters."""
+        # Mock a function that changes the time name
+        return_df = pl.DataFrame({
+            "new_time": [datetime(2024, 1, 1, tzinfo=timezone.utc),
+                         datetime(2024, 1, 2, tzinfo=timezone.utc),
+                         datetime(2024, 1, 3, tzinfo=timezone.utc)],
+             "value": [15, 25, 35]})
+        mock_func = MagicMock(return_value=return_df)
+        result = self.ts.df_operation(mock_func, time_name="new_time")
+
+        assert_frame_equal(result.df, return_df)
+
+    def test_resolution_change_not_specified(self):
+        """Test function with  resolution change not specified."""
+        # Mock a function that changes the time name
+        return_df = pl.DataFrame({
+            "time": [datetime(2024, 1, 1, 0, tzinfo=timezone.utc),
+                     datetime(2024, 1, 1, 1, tzinfo=timezone.utc),
+                     datetime(2024, 1, 1, 2, tzinfo=timezone.utc)],
+             "value": [15, 25, 35]})
+        mock_func = MagicMock(return_value=return_df)
+
+        with self.assertRaises(UserWarning):
+            self.ts.df_operation(mock_func)
+
+    def test_resolution_change_specified(self):
+        """Test function with optional period parameters."""
+        # Mock a function that changes the time name
+        return_df = pl.DataFrame({
+            "time": [datetime(2024, 1, 1, 0, tzinfo=timezone.utc),
+                     datetime(2024, 1, 1, 1, tzinfo=timezone.utc),
+                     datetime(2024, 1, 1, 2, tzinfo=timezone.utc)],
+             "value": [15, 25, 35]})
+        mock_func = MagicMock(return_value=return_df)
+        result = self.ts.df_operation(mock_func, resolution=Period.of_hours(1), periodicity=Period.of_hours(1))
+
+        assert_frame_equal(result.df, return_df)
+
+    def test_supp_cols_changed_not_specified(self):
+        """Test function which adds new supp col."""
+        # Mock a function that changes the time name
+        return_df = pl.DataFrame({
+            "time": [datetime(2024, 1, 1, tzinfo=timezone.utc),
+                     datetime(2024, 1, 2, tzinfo=timezone.utc),
+                     datetime(2024, 1, 3, tzinfo=timezone.utc)],
+             "value": [1, 2, 3],
+             "flags_new": ["E", None, "S"]})
+        mock_func = MagicMock(return_value=return_df)
+        result = self.ts.df_operation(mock_func)
+
+        # As new supp col name not specified and old one removed, there shouldn't be any
+        self.assertEqual(result.supp_col_names, ())
+        self.assertEqual(result.data_col_names, ("value", "flags_new"))
+
+    def test_supp_cols_changed_specified(self):
+        """Test function which adds new supp col and specifies which."""
+        # Mock a function that changes the time name
+        return_df = pl.DataFrame({
+            "time": [datetime(2024, 1, 1, tzinfo=timezone.utc),
+                     datetime(2024, 1, 2, tzinfo=timezone.utc),
+                     datetime(2024, 1, 3, tzinfo=timezone.utc)],
+             "value": [1, 2, 3],
+             "flags_new": ["E", None, "S"]})
+        mock_func = MagicMock(return_value=return_df)
+        result = self.ts.df_operation(mock_func, supp_col_names=("flags_new",))
+
+        # As new supp col name not specified and old one removed, there shouldn't be any
+        self.assertEqual(result.supp_col_names, ("flags_new",))
+        self.assertEqual(result.data_col_names, ("value",))
+
+    def test_supp_cols_not_changed(self):
+        """Test function which adds new supp col and specifies which."""
+        # Mock a function that changes the time name
+        return_df = pl.DataFrame({
+            "time": [datetime(2024, 1, 1, tzinfo=timezone.utc),
+                     datetime(2024, 1, 2, tzinfo=timezone.utc),
+                     datetime(2024, 1, 3, tzinfo=timezone.utc)],
+             "value": [1, 2, 3],
+             "flags": ["E", None, "R"]})
+        mock_func = MagicMock(return_value=return_df)
+        result = self.ts.df_operation(mock_func)
+
+        # As new supp col name not specified and old one removed, there shouldn't be any
+        self.assertEqual(result.supp_col_names, ("flags",))
+        self.assertEqual(result.data_col_names, ("value",))
+
 
 class TestAddSuppColumn(unittest.TestCase):
     """Test the TimeSeries.add_supp_column method."""
@@ -928,3 +1088,6 @@ class TestSetTimeZone(unittest.TestCase):
 
         self.assertEqual(ts_polars._time_zone, "America/New_York")
         self.assertEqual(ts_polars.df.schema["time"].time_zone, "America/New_York")
+
+if __name__ == "__main__":
+    unittest.main()
