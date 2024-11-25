@@ -17,7 +17,7 @@ import polars as pl
 from parameterized import parameterized
 
 from time_series.period import Period
-from time_series.time_series_base import AggregationFunction, TimeSeries
+from time_series.base import AggregationFunction, TimeSeries
 
 TIME: str = "datetime"
 VALUE: str = "value"

@@ -190,8 +190,8 @@ class TestInitialization(unittest.TestCase):
             df=self.df,
             time_name="time",
         )
-        self.assertEqual(ts_polars.data_col_names, ["value"])
-        self.assertEqual(ts_polars.supp_col_names, [])
+        self.assertEqual(ts_polars.data_columns, ["value"])
+        self.assertEqual(ts_polars.supplementary_columns, [])
 
     def test_initialization_with_supp_cols(self):
         """Test that the object initializes correctly with supplementary columns set."""
@@ -200,8 +200,8 @@ class TestInitialization(unittest.TestCase):
             time_name="time",
             supp_col_names=["value"]
         )
-        self.assertEqual(ts_polars.data_col_names, [])
-        self.assertEqual(ts_polars.supp_col_names, ["value"])
+        self.assertEqual(ts_polars.data_columns, [])
+        self.assertEqual(ts_polars.supplementary_columns, ["value"])
 
     @parameterized.expand([
         ("One bad", ["value", "non_col"]),
@@ -237,32 +237,32 @@ class TestAddSuppColumn(unittest.TestCase):
 
     def test_add_supp_column_with_int(self):
         """Test adding a supplementary column with an integer."""
-        self.ts.add_supp_column("new_int_col", 5)
+        self.ts.init_supplementary_column("new_int_col", 5)
         expected_df = self.df.with_columns(pl.lit(5).alias("new_int_col"))
         pl.testing.assert_frame_equal(self.ts.df, expected_df)
 
     def test_add_supp_column_with_float(self):
         """Test adding a supplementary column with a float."""
-        self.ts.add_supp_column("new_float_col", 3.14)
+        self.ts.init_supplementary_column("new_float_col", 3.14)
         expected_df = self.df.with_columns(pl.lit(3.14).alias("new_float_col"))
         pl.testing.assert_frame_equal(self.ts.df, expected_df)
 
     def test_add_supp_column_with_string(self):
         """Test adding a supplementary column with a string."""
-        self.ts.add_supp_column("new_str_col", "test")
+        self.ts.init_supplementary_column("new_str_col", "test")
         expected_df = self.df.with_columns(pl.lit("test").alias("new_str_col"))
         pl.testing.assert_frame_equal(self.ts.df, expected_df)
 
     def test_add_supp_column_with_iterable(self):
         """Test adding a supplementary column with an iterable."""
-        self.ts.add_supp_column("new_iter_col", [10, 20, 30])
+        self.ts.init_supplementary_column("new_iter_col", [10, 20, 30])
         expected_df = self.df.with_columns(pl.Series([10, 20, 30]).alias("new_iter_col"))
         pl.testing.assert_frame_equal(self.ts.df, expected_df)
 
     def test_add_supp_column_updates_supp_col_names(self):
         """Test that the supplementary column names are updated correctly."""
-        self.ts.add_supp_column("new_col", 1)
-        self.assertIn("new_col", self.ts.supp_col_names)
+        self.ts.init_supplementary_column("new_col", 1)
+        self.assertIn("new_col", self.ts.supplementary_columns)
 
 
 class TestValidateResolution(unittest.TestCase):
