@@ -1,3 +1,4 @@
+import copy
 from collections import Counter, defaultdict
 from typing import TYPE_CHECKING, Any, Iterable, Iterator, Optional, Type, Union
 
@@ -38,7 +39,10 @@ class TimeSeries:
         self._periodicity = periodicity
         self._time_zone = time_zone
         self._supplementary_columns = set(supplementary_columns) if supplementary_columns else set()
-        self._metadata = metadata or {}
+
+        #  NOTE: Doing a deep copy of this mutable object, otherwise the original object will refer to the same
+        #   object in memory and will be changed by class methods.
+        self._metadata = copy.deepcopy(metadata) or {}
 
         self._df = df
 
@@ -274,8 +278,8 @@ class TimeSeries:
 
     @property
     def data_columns(self) -> list:
-        """List of data column names in the TimeSeries."""
-        return [col for col in self.columns if col not in self.supplementary_columns]
+        """Sorted list of data column names in the TimeSeries."""
+        return sorted([col for col in self.columns if col not in self.supplementary_columns])
 
     @property
     def supplementary_columns(self) -> list:
@@ -295,6 +299,8 @@ class TimeSeries:
         Args:
             columns: A list of column names to retain in the updated TimeSeries.
         """
+        if not columns:
+            raise ValueError("No columns specified.")
         self.df = self._df.select([self.time_name] + columns)
 
     def init_supplementary_column(self, column: str, data: Optional[Union[int, float, str, Iterable]] = None) -> None:
@@ -315,10 +321,10 @@ class TimeSeries:
         if column in self.df.columns:
             raise ValueError(f"Column '{column}' already exists in the DataFrame.")
 
-        if isinstance(data, (None, float, int, str)):
+        if data is None or isinstance(data, (float, int, str)):
             data = pl.lit(data)
         else:
-            data = pl.Series(data, name=column)
+            data = pl.Series(column, data)
 
         self.df = self._df.with_columns(data.alias(column))
         self.set_supplementary_columns(column)
@@ -364,10 +370,6 @@ class TimeSeries:
     def metadata(self, key: Optional[Union[str, list[str], tuple[str, ...]]] = None) -> dict:
         """Retrieve metadata for all or specific keys across columns.
 
-        Fetches metadata stored for the columns of the time series. If only one column exists, the metadata
-        for that column is returned directly. If multiple columns exist, metadata is returned as a dictionary,
-        keyed by column names.
-
         Args:
             key: A specific key or list/tuple of keys to filter the metadata. If None, all metadata for the
                  relevant columns is returned.
@@ -379,13 +381,10 @@ class TimeSeries:
             KeyError: If the requested key(s) are not found in the metadata.
         """
         try:
-            if len(self.columns) == 1:
-                return self._get_metadata(self.columns[0], key)
-            else:
-                result = defaultdict(dict)
-                for column in self.columns:
-                    result[column] |= self._get_metadata(column, key)
-                return dict(result)
+            result = defaultdict(dict)
+            for column in self.columns:
+                result[column] |= self._get_metadata(column, key)
+            return dict(result)
 
         except (KeyError, TypeError):
             raise KeyError(key)
@@ -426,7 +425,7 @@ class TimeSeries:
             self._metadata = {col: col_metadata for col, col_metadata in self._metadata.items() if col != column}
         else:
             column_metadata = self._metadata.get(column, {})
-            self._metadata[column] = {k: v for k, v in column_metadata[column].items() if k not in key}
+            self._metadata[column] = {k: v for k, v in column_metadata.items() if k not in key}
 
     def aggregate(
         self, aggregation_period: Period, aggregation_function: Type["AggregationFunction"], column_name: str

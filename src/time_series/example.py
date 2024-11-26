@@ -37,4 +37,5 @@ ts = TimeSeries(df, "timestamp", resolution, periodicity, metadata=metadata)
 
 ts.df = ts.df.with_columns((pl.col("pressure") * 2).alias("pressure"))
 
-print(ts.df)
+print(ts.pressure.metadata("units"))
+# print(ts.df)
