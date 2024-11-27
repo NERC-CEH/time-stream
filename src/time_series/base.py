@@ -7,7 +7,8 @@ import polars as pl
 from time_series.period import Period
 
 if TYPE_CHECKING:
-    from time_series.aggregation import AggregationFunction  # Type hint only, no runtime import, to avoid recursion
+    # Import is for type hinting only.  Make sure there is no runtime import, to avoid recursion.
+    from time_series.aggregation import AggregationFunction
 
 
 class TimeSeries:

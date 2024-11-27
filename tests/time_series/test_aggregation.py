@@ -17,7 +17,8 @@ import polars as pl
 from parameterized import parameterized
 
 from time_series.period import Period
-from time_series.base import AggregationFunction, TimeSeries
+from time_series.base import TimeSeries
+from time_series.aggregation import AggregationFunction, Max, Mean, Min
 
 TIME: str = "datetime"
 VALUE: str = "value"
@@ -57,7 +58,7 @@ def _create_ts(
     """
     """Create a TimeSeries
     """
-    return TimeSeries.from_polars(
+    return TimeSeries(
         df=_create_df(datetime_list, value_list),
         time_name=TIME,
         resolution=resolution,
@@ -496,7 +497,7 @@ class TestFunctions(unittest.TestCase):
     @parameterized.expand(PARAMS_CASE1)
     def test_mean(self, _: Any, case1: Case1) -> None:
         self._test_basic(
-            case1=case1, name="mean", aggregation_function=AggregationFunction.mean(), value_fn=_get_mean_list
+            case1=case1, name="mean", aggregation_function=Mean, value_fn=_get_mean_list
         )
 
     @parameterized.expand(PARAMS_CASE1)
@@ -504,7 +505,7 @@ class TestFunctions(unittest.TestCase):
         self._test_with_datetime(
             case1=case1,
             name="min",
-            aggregation_function=AggregationFunction.min(),
+            aggregation_function=Min,
             datetime_fn=_get_datetime_of_min_list,
             value_fn=_get_min_list,
         )
@@ -514,7 +515,7 @@ class TestFunctions(unittest.TestCase):
         self._test_with_datetime(
             case1=case1,
             name="max",
-            aggregation_function=AggregationFunction.max(),
+            aggregation_function=Max,
             datetime_fn=_get_datetime_of_max_list,
             value_fn=_get_max_list,
         )
