@@ -308,7 +308,8 @@ class TimeSeries:
             raise ValueError("No columns specified.")
 
         new_df = self.df.select([self.time_name] + columns)
-        self._remove_missing_columns(new_df)
+        new_supplementary_columns = [col for col in self.supplementary_columns if col in columns]
+        new_metadata = {col: self._get_metadata(col) for col in columns}
 
         ts = TimeSeries(
             new_df,
@@ -316,9 +317,10 @@ class TimeSeries:
             self.resolution,
             self.periodicity,
             self.time_zone,
-            self.supplementary_columns,
-            self.metadata(),
+            new_supplementary_columns,
+            new_metadata,
         )
+
         return ts
 
     def init_supplementary_column(self, column: str, data: Optional[Union[int, float, str, Iterable]] = None) -> None:
