@@ -5,7 +5,7 @@ This module is very much a work-in-progress and the classes
 contained within will evolve considerably.
 """
 
-from abc import ABC
+from abc import ABC, abstractmethod
 from collections.abc import (
     Callable,
 )
@@ -13,9 +13,7 @@ from typing import override
 
 import polars as pl
 
-from time_series.period import Period
-from time_series.time_series_base import AggregationFunction, TimeSeries
-from time_series.time_series_polars import TimeSeriesPolars
+from time_series import Period, TimeSeries
 
 # A function that takes a Polars GroupBy as an argument and returns a DataFrame
 GroupByToDataFrame = Callable[[pl.dataframe.group_by.GroupBy], pl.DataFrame]
@@ -242,6 +240,51 @@ class GroupByBasic(AggregationStage):
         return [self._gb2df(pl.col(self._value_column)).alias(f"{self.name}_{self._value_column}")]
 
 
+class AggregationFunction(ABC):
+    """An aggregation function that can be applied to a field
+    in a TimeSeries.
+
+    A new aggregated TimeSeries can be created from an existing
+    TimeSeries by passing a subclass of AggregationFunction
+    into the TimeSeries.aggregate method.
+
+    Attributes:
+        name: The name of the aggregation function
+    """
+
+    def __init__(self, name: str) -> None:
+        self._name = name
+
+    @property
+    def name(self) -> str:
+        """Return the name of this aggregation function"""
+        return self._name
+
+    @abstractmethod
+    def apply(self, ts: TimeSeries, aggregation_period: Period, column_name: str) -> TimeSeries:
+        """Apply this aggregation function to the supplied
+        TimeSeries column and return a new TimeSeries containing
+        the aggregated data
+
+        Note: This is the first attempt at a mechanism for aggregating
+        time-series data.  The signature of this method is likely to
+        evolve considerably.
+
+        Args:
+            ts: The TimeSeries containing the data to be aggregated
+            aggregation_period: The time period over which to aggregate
+            column_name: The column containing the data to be aggregated
+
+        Returns:
+            A TimeSeries containing the aggregated data
+        """
+        raise NotImplementedError
+
+    @classmethod
+    def create(cls) -> "AggregationFunction":
+        raise NotImplementedError
+
+
 class Mean(AggregationFunction):
     """A mean AggregationFunction
 
@@ -258,11 +301,15 @@ class Mean(AggregationFunction):
 
     """
 
-    def __init__(self) -> None:
-        super().__init__("mean")
+    @classmethod
+    def create(cls) -> "AggregationFunction":
+        return cls("mean")
+
+    def __init__(self, name: str) -> None:
+        super().__init__(name)
 
     @override
-    def apply(self, ts: TimeSeriesPolars, aggregation_period: Period, column_name: str) -> TimeSeries:
+    def apply(self, ts: TimeSeries, aggregation_period: Period, column_name: str) -> TimeSeries:
         aggregator: PolarsAggregator = PolarsAggregator(ts, aggregation_period)
         df: pl.DataFrame = aggregator.aggregate(
             [
@@ -271,12 +318,14 @@ class Mean(AggregationFunction):
                 ExpectedCount(aggregator),
             ]
         )
-        return TimeSeries.from_polars(
+        return TimeSeries(
             df=df,
             time_name=ts.time_name,
             resolution=aggregation_period,
             periodicity=aggregation_period,
             time_zone=ts.time_zone,
+            supplementary_columns=ts.supplementary_columns,
+            metadata=ts.metadata(),
         )
 
 
@@ -298,11 +347,15 @@ class Min(AggregationFunction):
 
     """
 
-    def __init__(self) -> None:
-        super().__init__("min")
+    @classmethod
+    def create(cls) -> "AggregationFunction":
+        return cls("min")
+
+    def __init__(self, name: str) -> None:
+        super().__init__(name)
 
     @override
-    def apply(self, ts: TimeSeriesPolars, aggregation_period: Period, column_name: str) -> TimeSeries:
+    def apply(self, ts: TimeSeries, aggregation_period: Period, column_name: str) -> TimeSeries:
         aggregator: PolarsAggregator = PolarsAggregator(ts, aggregation_period)
         df: pl.DataFrame = aggregator.aggregate(
             [
@@ -311,12 +364,14 @@ class Min(AggregationFunction):
                 ExpectedCount(aggregator),
             ]
         )
-        return TimeSeries.from_polars(
+        return TimeSeries(
             df=df,
             time_name=ts.time_name,
-            resolution=ts.resolution,
+            resolution=aggregation_period,
             periodicity=aggregation_period,
             time_zone=ts.time_zone,
+            supplementary_columns=ts.supplementary_columns,
+            metadata=ts.metadata(),
         )
 
 
@@ -338,11 +393,15 @@ class Max(AggregationFunction):
 
     """
 
-    def __init__(self) -> None:
-        super().__init__("max")
+    @classmethod
+    def create(cls) -> "AggregationFunction":
+        return cls("max")
+
+    def __init__(self, name: str) -> None:
+        super().__init__(name)
 
     @override
-    def apply(self, ts: TimeSeriesPolars, aggregation_period: Period, column_name: str) -> TimeSeries:
+    def apply(self, ts: TimeSeries, aggregation_period: Period, column_name: str) -> TimeSeries:
         aggregator: PolarsAggregator = PolarsAggregator(ts, aggregation_period)
         df: pl.DataFrame = aggregator.aggregate(
             [
@@ -351,10 +410,12 @@ class Max(AggregationFunction):
                 ExpectedCount(aggregator),
             ]
         )
-        return TimeSeries.from_polars(
+        return TimeSeries(
             df=df,
             time_name=ts.time_name,
-            resolution=ts.resolution,
+            resolution=aggregation_period,
             periodicity=aggregation_period,
             time_zone=ts.time_zone,
+            supplementary_columns=ts.supplementary_columns,
+            metadata=ts.metadata(),
         )
