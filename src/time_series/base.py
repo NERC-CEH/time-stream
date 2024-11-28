@@ -83,7 +83,8 @@ class TimeSeries:
         else:
             time_zone = default_time_zone
 
-        self.df = self.df.with_columns(pl.col(self.time_name).dt.replace_time_zone(time_zone))
+        # Set _df directly, otherwise the df setter considers the time column is mutated due to time zone added
+        self._df = self.df.with_columns(pl.col(self.time_name).dt.replace_time_zone(time_zone))
         self._time_zone = time_zone
 
     def select_time(self) -> pl.Series:
@@ -294,15 +295,31 @@ class TimeSeries:
         """
         return sorted([col for col in self.df.columns if col != self.time_name])
 
-    def select_columns(self, columns: list[str]) -> None:
-        """Update the TimeSeries instance to include only the specified columns.
+    def select_columns(self, columns: list[str]) -> "TimeSeries":
+        """Filter TimeSeries instance to include only the specified columns.
 
         Args:
             columns: A list of column names to retain in the updated TimeSeries.
+
+        Returns:
+            New TimeSeries instance with only selected columns.
         """
         if not columns:
             raise ValueError("No columns specified.")
-        self.df = self.df.select([self.time_name] + columns)
+
+        new_df = self.df.select([self.time_name] + columns)
+        self._remove_missing_columns(new_df)
+
+        ts = TimeSeries(
+            new_df,
+            self.time_name,
+            self.resolution,
+            self.periodicity,
+            self.time_zone,
+            self.supplementary_columns,
+            self.metadata(),
+        )
+        return ts
 
     def init_supplementary_column(self, column: str, data: Optional[Union[int, float, str, Iterable]] = None) -> None:
         """Initialises a supplementary column, adding it to the TimeSeries DataFrame.
@@ -492,8 +509,7 @@ class TimeSeries:
             elif name in self.columns:
                 # If the attribute name matches a column in the DataFrame (excluding the time column), select that
                 #  column and return the TimeSeries instance.
-                self.select_columns([name])
-                return self
+                return self.select_columns([name])
             elif name not in self.columns and len(self.columns) == 1:
                 # If the attribute name does not match a column, it assumes this is a Metadata key. In this case,
                 #   the TimeSeries can only contain one data column. Check for metadata for that column.
@@ -535,8 +551,7 @@ class TimeSeries:
             return self.select_time()
         if isinstance(key, str):
             key = [key]
-        self.select_columns(key)
-        return self
+        return self.select_columns(key)
 
     def __len__(self) -> int:
         """Get the number of rows in the time series."""

@@ -39,3 +39,7 @@ ts.df = ts.df.with_columns((pl.col("pressure") * 2).alias("pressure"))
 
 print(ts.pressure.metadata("units"))
 # print(ts.df)
+
+print(ts.pressure)
+print(ts.temperature)
+print(ts)
