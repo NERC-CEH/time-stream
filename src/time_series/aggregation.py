@@ -42,7 +42,7 @@ class PolarsAggregator:
         aggregation_period: The Period we are aggregating over
     """
 
-    def __init__(self, ts: "TimeSeries", aggregation_period: Period) -> None:
+    def __init__(self, ts: TimeSeries, aggregation_period: Period) -> None:
         self.ts = ts
         self.aggregation_period = aggregation_period
 
