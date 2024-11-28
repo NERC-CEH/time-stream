@@ -3,8 +3,7 @@ from datetime import datetime
 
 import polars as pl
 
-from time_series import TimeSeries
-from time_series.period import Period
+from time_series import Period, TimeSeries
 
 # Create a DataFrame to simulate random datetime and value data over several years
 # this example simulates AMAX style data, with each year having one value on a random day
@@ -27,8 +26,18 @@ resolution = Period.of_minutes(15)
 periodicity = Period.of_years(1).with_month_offset(9).with_hour_offset(9)
 
 # Convert to a Polars DataFrame
-df = pl.DataFrame({"timestamp": timestamps, "value": values})
+df = pl.DataFrame({"timestamp": timestamps, "pressure": values, "temperature": values})
 
-ts = TimeSeries.from_polars(df, "timestamp", resolution, periodicity)
+metadata = {
+    "pressure": {"units": "hpa", "description": "Hello world!"},
+    "temperature": {"description": "Hello temperature!"},
+}
 
+ts = TimeSeries(df, "timestamp", resolution, periodicity, metadata=metadata)
+
+ts.df = ts.df.with_columns((pl.col("pressure") * 2).alias("pressure"))
+
+print(ts.pressure)
+print(ts.pressure.metadata("units"))
+print(ts.temperature)
 print(ts)
