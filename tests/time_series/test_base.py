@@ -90,6 +90,35 @@ class TestInitSupplementaryColumn(unittest.TestCase):
         self.assertIn(new_col_name, ts.supplementary_columns)
 
     @parameterized.expand([
+        ("int_int", "new_int_col", 5, pl.Int32),
+        ("int_float", "new_float_col", 3, pl.Float64),
+        ("float_int", "new_int_col", 3.4, pl.Int32), # Expect this to convert to 3
+        ("none_float", "new_float_col", None, pl.Float64),
+        ("none_string", "new_str_col", None, pl.String),
+        ("str_int", "new_int_col", "5", pl.Int32),
+        ("str_float", "new_float_col", "3.5", pl.Float64),
+        ("float_string", "new_null_col", 3.4, pl.String),
+    ])
+    def test_init_supplementary_column_with_single_value_and_dtype(self, _, new_col_name, new_col_value, dtype):
+        """Test initialising a supplementary column with a single value set to sensible dtype"""
+        ts = init_timeseries(self.times, self.values)
+        ts.init_supplementary_column(new_col_name, new_col_value, dtype)
+        expected_df = ts.df.with_columns(pl.Series(new_col_name, [new_col_value] * len(self.times)).cast(dtype))
+
+        pl.testing.assert_frame_equal(ts.df, expected_df)
+        self.assertIn(new_col_name, ts.supplementary_columns)
+
+    @parameterized.expand([
+        ("str_int", "new_int_col", "test", pl.Int32),
+        ("str_float", "new_float_col", "test", pl.Float64),
+    ])
+    def test_init_supplementary_column_with_single_value_and_bad_dtype(self, _, new_col_name, new_col_value, dtype):
+        """Test initialising a supplementary column with a single value set to sensible dtype"""
+        ts = init_timeseries(self.times, self.values)
+        with self.assertRaises(pl.exceptions.InvalidOperationError):
+            ts.init_supplementary_column(new_col_name, new_col_value, dtype)
+
+    @parameterized.expand([
         ("int_iterable", "new_int_iter_col", [5, 6, 7]),
         ("float_iterable", "new_float_iter_col", [1.1, 1.2, 1.3]),
         ("str_iterable", "new_str_iter_col", ["a", "b", "c"]),
@@ -113,6 +142,38 @@ class TestInitSupplementaryColumn(unittest.TestCase):
         ts = init_timeseries(self.times, self.values)
         with self.assertRaises(pl.ShapeError):
             ts.init_supplementary_column(new_col_name, new_col_value)
+
+    @parameterized.expand([
+        ("int_int", "new_int_col", [5, 6, 7], pl.Int32),
+        ("int_float", "new_float_col", [3, 4, 5], pl.Float64),
+        ("none_float", "new_float_col", [None, None, None], pl.Float64),
+        ("str_int", "new_int_col", ["5", "6", "7"], pl.Int32),
+        ("none_string", "new_str_col", [None, None, None], pl.String),
+    ])
+    def test_init_supp_column_with_iterable_and_dtype(self, _, new_col_name, new_col_value, dtype):
+        """Test initialising a supplementary column with a single value set to sensible dtype"""
+        ts = init_timeseries(self.times, self.values)
+        ts.init_supplementary_column(new_col_name, new_col_value, dtype)
+        expected_df = ts.df.with_columns(pl.Series(new_col_name, new_col_value).cast(dtype))
+
+        pl.testing.assert_frame_equal(ts.df, expected_df)
+        self.assertIn(new_col_name, ts.supplementary_columns)
+
+    @parameterized.expand([
+        ("str_int", "new_int_col", ["t1", "t2", "t3"], pl.Int32),
+        ("str_float", "new_float_col", ["t1", "t2", "t3"], pl.Float64),
+        ("mix_float", "new_float_col", [4.5, "3", None], pl.Float64),
+    ])
+    def test_init_supp_column_with_iterable_and_bad_dtype(self, name, new_col_name, new_col_value, dtype):
+        """Test initialising a supplementary column with a single value set to sensible dtype"""
+        ts = init_timeseries(self.times, self.values)
+        if name == "mix_float":
+            # Special case where mixed types cause TypeError
+            with self.assertRaises(TypeError):
+                ts.init_supplementary_column(new_col_name, new_col_value, dtype)
+        else:
+            with self.assertRaises(pl.exceptions.InvalidOperationError):
+                ts.init_supplementary_column(new_col_name, new_col_value, dtype)
 
 
 class TestSetSupplementaryColumns(unittest.TestCase):
@@ -1542,3 +1603,6 @@ class TestGetItem(unittest.TestCase):
         ts = init_timeseries(self.times, self.values, metadata=self.metadata)
         with self.assertRaises(pl.ColumnNotFoundError):
             result = ts["col0"]
+
+if __name__ == '__main__':
+    unittest.main()

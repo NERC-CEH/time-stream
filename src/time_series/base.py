@@ -323,7 +323,9 @@ class TimeSeries:
 
         return ts
 
-    def init_supplementary_column(self, column: str, data: Optional[Union[int, float, str, Iterable]] = None) -> None:
+    def init_supplementary_column(
+        self, column: str, data: Optional[Union[int, float, str, Iterable]] = None, dtype: Optional[pl.DataType] = None
+    ) -> None:
         """Initialises a supplementary column, adding it to the TimeSeries DataFrame.
 
         Supplementary columns are additional columns that are not considered part of the
@@ -334,6 +336,7 @@ class TimeSeries:
             data: The data to populate the column. Can be a scalar, an iterable, or None.
                   If iterable, must have the same length as the current TimeSeries.
                   If None, the column will be filled with `None`.
+            dtype: The data type to use. If set to None (default), the data type is inferred from the values input.
 
         Raises:
             ValueError: If the column name already exists in the DataFrame.
@@ -342,9 +345,12 @@ class TimeSeries:
             raise ValueError(f"Column '{column}' already exists in the DataFrame.")
 
         if data is None or isinstance(data, (float, int, str)):
-            data = pl.lit(data)
+            data = pl.lit(data, dtype=dtype)
         else:
-            data = pl.Series(column, data)
+            if dtype is None:
+                data = pl.Series(column, data)
+            else:
+                data = pl.Series(column, data).cast(dtype)
 
         self.df = self.df.with_columns(data.alias(column))
         self.set_supplementary_columns(column)
