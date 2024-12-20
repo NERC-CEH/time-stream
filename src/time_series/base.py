@@ -4,11 +4,104 @@ from typing import TYPE_CHECKING, Any, Iterable, Iterator, Optional, Type, Union
 
 import polars as pl
 
+from time_series.bitwise import create_flag_class
 from time_series.period import Period
 
 if TYPE_CHECKING:
     # Import is for type hinting only.  Make sure there is no runtime import, to avoid recursion.
     from time_series.aggregation import AggregationFunction
+
+
+class DataColumn:
+    pass
+
+
+class SupplementaryColumn:
+    pass
+
+
+class FlagColumn(SupplementaryColumn):
+    def __init__(self, name: str, flag_dict: dict) -> None:
+        """
+        Initialize a FlagColumn instance.
+
+        Args:
+            name: The name of the flag column.
+            flag_dict: A dictionary of flag values and their meanings.
+        """
+        self.name = name
+        self.flag_class = create_flag_class(self.name, flag_dict)
+
+    def _check_df(self, df: pl.DataFrame) -> None:
+        """
+        Check if the DataFrame contains this flag column.
+
+        Args:
+            df: The Polars DataFrame to check.
+
+        Raises:
+            ValueError: If the flag column does not exist in the DataFrame.
+        """
+        if self.name not in df.columns:
+            raise ValueError(f"Flag column '{self.name}' does not exist in the DataFrame.")
+
+    def _check_flag_value(self, flag: Union[int, str]) -> int:
+        """
+        Check if the flag value or flag name is valid and return the corresponding flag value.
+
+        Args:
+            flag: The flag value or flag name to check.
+
+        Raises:
+            ValueError: If the flag value or flag name is not valid for the flag column.
+
+        Returns:
+            The corresponding flag value.
+        """
+        if isinstance(flag, int):
+            if flag not in self.flag_class:
+                raise ValueError(f"Flag value '{flag}' is not valid for flag column '{self.name}'.")
+            return flag
+        elif isinstance(flag, str):
+            if flag not in self.flag_class.__members__:
+                raise ValueError(f"Flag name '{flag}' is not valid for flag column '{self.name}'.")
+            return self.flag_class[flag].value
+        else:
+            raise ValueError(f"Flag '{flag}' is not a valid type. Must be int or str.")
+
+    def add_flag(self, df: pl.DataFrame, flag: Union[int, str], expr: pl.Expr = pl.lit(True)) -> pl.DataFrame:
+        """
+        Add flag value (if not there) to flag column, where expression is True.
+
+        Args:
+            df: Polars DataFrame containing the flag column.
+            flag: The flag value or flag name to add.
+            expr: Polars expression for which rows to add flag to.
+
+        Returns:
+            Updated DataFrame with the flag value added.
+        """
+        self._check_df(df)
+        flag_value = self._check_flag_value(flag)
+
+        return df.with_columns(pl.when(expr).then(pl.col(self.name) | flag_value).otherwise(pl.col(self.name)))
+
+    def remove_flag(self, df: pl.DataFrame, flag: Union[int, str], expr: pl.Expr = pl.lit(True)) -> pl.DataFrame:
+        """
+        Remove flag value (if there) from flag column.
+
+        Args:
+            df: Polars DataFrame containing the flag column.
+            flag: The flag value or flag name to remove.
+            expr: Polars expression for which rows to remove flag from.
+
+        Returns:
+            Updated DataFrame with the flag value removed.
+        """
+        self._check_df(df)
+        flag_value = self._check_flag_value(flag)
+
+        return df.with_columns(pl.when(expr).then(pl.col(self.name) & ~flag_value).otherwise(pl.col(self.name)))
 
 
 class TimeSeries:
@@ -40,10 +133,14 @@ class TimeSeries:
         self._periodicity = periodicity
         self._time_zone = time_zone
         self._supplementary_columns = set(supplementary_columns) if supplementary_columns else set()
+        self._flag_columns = set()
+        self._flag_classes = {}
 
         #  NOTE: Doing a deep copy of this mutable object, otherwise the original object will refer to the same
         #   object in memory and will be changed by class methods.
         self._metadata = copy.deepcopy(metadata) or {}
+
+        self._column_mapping = {}
 
         self._df = df
 
@@ -278,6 +375,30 @@ class TimeSeries:
         for column in removed_columns:
             self.remove_metadata(column)
 
+    def _add_column_mapping(self, column_a: str, column_b: str) -> None:
+        """Add a mapping between two columns.
+
+        Args:
+            column_a: The name of column.
+            column_b: The name of column.
+        """
+        if column_a not in self.columns:
+            raise ValueError(f"Column '{column_a}' does not exist in the DataFrame.")
+        if column_b not in self.columns:
+            raise ValueError(f"Column '{column_b}' does not exist in the DataFrame.")
+
+        # Add columns to mapping if not already present.
+        if column_a not in self._column_mapping:
+            self._column_mapping[column_a] = []
+        if column_b not in self._column_mapping:
+            self._column_mapping[column_b] = []
+
+        # Check if columns are already mapped.
+        if column_b not in self._column_mapping[column_a]:
+            self._column_mapping[column_a].append(column_b)
+        if column_a not in self._column_mapping[column_b]:
+            self._column_mapping[column_b].append(column_a)
+
     @property
     def data_columns(self) -> list:
         """Sorted list of data column names in the TimeSeries."""
@@ -287,6 +408,11 @@ class TimeSeries:
     def supplementary_columns(self) -> list:
         """Sorted list of supplementary column names in the TimeSeries."""
         return sorted(list(self._supplementary_columns))
+
+    @property
+    def flag_columns(self) -> list:
+        """Sorted list of supplementary column names in the TimeSeries."""
+        return sorted(list(self._flag_columns))
 
     @property
     def columns(self) -> list:
@@ -342,7 +468,7 @@ class TimeSeries:
             ValueError: If the column name already exists in the DataFrame.
         """
         if column in self.df.columns:
-            raise ValueError(f"Column '{column}' already exists in the DataFrame.")
+            raise KeyError(f"Column '{column}' already exists in the DataFrame.")
 
         if data is None or isinstance(data, (float, int, str)):
             data = pl.lit(data, dtype=dtype)
@@ -374,7 +500,7 @@ class TimeSeries:
 
         invalid = [col for col in columns if col not in self.columns]
         if invalid:
-            raise ValueError(f"Invalid supplementary columns: {invalid}")
+            raise KeyError(f"Invalid supplementary columns: {invalid}")
 
         for col in columns:
             self._supplementary_columns.add(col)
@@ -392,6 +518,88 @@ class TimeSeries:
 
         for col in columns:
             self._supplementary_columns.discard(col)
+
+    def init_flag_column(self, flag_column: str, data_column: str, flag_dict: dict, data: int = 0) -> None:
+        """
+        Add a flag column to the TimeSeries DataFrame. The flag column is a special type of supplementary column.
+
+        Args:
+            flag_column: The name of the new flag column.
+            data_column: The data column the flag column is for.
+            flag_dict: A dictionary of flag values and their meanings.
+            data: The default value to populate the flag column with. Defaults to 0.
+
+        Raises:
+            KeyError: If the flag column already exists in the DataFrame or the data column does not exist in the
+            DataFrame.
+        """
+        if flag_column in self.df.columns:
+            raise KeyError(f"Column '{flag_column}' already exists in the DataFrame.")
+
+        if data_column not in self.data_columns:
+            raise KeyError(f"Column '{data_column}' is not a data column in the DataFrame.")
+
+        if isinstance(data, (int)):
+            data = pl.lit(data)
+        else:
+            data = pl.Series(flag_column, data, dtype=int)
+
+        self.df = self.df.with_columns(data.alias(flag_column))
+        self.set_flag_column(flag_column, data_column, flag_dict)
+
+    def set_flag_column(self, flag_column: str, data_column: str, flag_dict: dict) -> None:
+        """Mark the specified column as a flag column.
+
+        Flag columns must exist in the DataFrame. Attempting to mark the defined TimeSeries time column
+        as a flag will raise an error. Flag columns are a special type of supplementary column and so are
+        marked as supplementary as well.
+
+        Args:
+            flag_column: A column name (string) to mark as a flag column.
+            data_column: The data column the flag column is for.
+            flag_dict: A dictionary of flag values and their meanings.
+
+        Raises:
+            ValueError: If any of the specified columns do not exist in the DataFrame.
+        """
+        # NOTE: self.columns does not include the time column, so this handles erroring if trying to set the
+        #   time column as a flag column
+        if flag_column not in self.columns:
+            raise ValueError(f"Invalid flag column: {flag_column}")
+
+        self._supplementary_columns.add(flag_column)
+        self._flag_columns.add(flag_column)
+        self._flag_classes[flag_column] = FlagColumn(flag_column, flag_dict)
+
+        self._add_column_mapping(flag_column, data_column)
+
+    def add_flag(self, flag_column: str, flag_value: int, expr: pl.Expr = pl.lit(True)) -> None:
+        """
+        Add flag value (if not there) to flag column, where expression is True.
+
+        Args:
+            flag_column: The name of the flag column
+            flag_value: The flag value to add
+            expr: Polars expression for which rows to add flag to
+        """
+        if flag_column not in self.flag_columns:
+            raise ValueError(f"Column '{flag_column}' is not a flag column in the DataFrame.")
+
+        self.df = self._flag_classes[flag_column].add_flag(self.df, flag_value, expr)
+
+    def remove_flag(self, flag_column: str, flag_value: int, expr: pl.Expr = pl.lit(True)) -> None:
+        """
+        Remove flag value (if there) from flag column.
+
+        Args:
+            flag_column: The name of the flag column
+            flag_value: The flag value to remove
+            expr: Polars expression for which rows to remove flag from
+        """
+        if flag_column not in self.flag_columns:
+            raise ValueError(f"Column '{flag_column}' is not a flag column in the DataFrame.")
+
+        self.df = self._flag_classes[flag_column].remove_flag(self.df, flag_value, expr)
 
     def metadata(self, key: Optional[Union[str, list[str], tuple[str, ...]]] = None) -> dict:
         """Retrieve metadata for all or specific keys across columns.
@@ -494,7 +702,7 @@ class TimeSeries:
         Returns:
             If `name` is:
               - The time column: A Polars Series containing the time data.
-              - A data column: The TimeSeries instance with that column selected.
+              - A non-time column: The TimeSeries instance with that column selected.
               - Metadata key: The metadata value(s) for the single data column.
 
         Raises:
