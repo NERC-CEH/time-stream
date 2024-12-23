@@ -27,10 +27,13 @@ pip install -e '.[dev]'
 ```
 
 ## Running the app
+
+Build the docker container to access local data
+
 ```commandline
 docker compose up -d
 ```
-The app can take two command-line arguments:
+Then call the app which can take two command-line arguments:
 
 period (required): The period of time you want to extract data for.\
     - Must be a valid ISO8601 duration\
@@ -45,12 +48,12 @@ end_date (optional): The date to start extraction from.\
     - If running locally, the default value is overwritten by "2024-03-10" to ensure data is always extrcted.
 
 Get the last two days data
-```
+```commandline
 python -m dritimeseriesprocessor P2D
 ```
 
 Get the last two days data from 2024-03-05
-```
+```commandline
 python -m dritimeseriesprocessor P2D --end_date='2024-03-05'
 ```
 
