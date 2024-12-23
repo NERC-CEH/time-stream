@@ -45,7 +45,7 @@ e.g. P1D: previous days data; P1M: previous months data; P1M14D: previous month 
 end_date (optional): The date to start extraction from.\
     - Must be of the format YYYY-MM-DD\
     - If not provided then todays date is used\
-    - If running locally, the default value is overwritten by "2024-03-10" to ensure data is always extrcted.
+    - If running locally, the default value is overwritten by 2024-03-10 to ensure data is always extrcted.
 
 Get the last two days data
 ```commandline
@@ -54,7 +54,7 @@ python -m dritimeseriesprocessor P2D
 
 Get the last two days data from 2024-03-05
 ```commandline
-python -m dritimeseriesprocessor P2D --end_date='2024-03-05'
+python -m dritimeseriesprocessor P2D --end_date=2024-03-05
 ```
 
 ## Linting
