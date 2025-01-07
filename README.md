@@ -48,7 +48,7 @@ end_date (optional): The date to start extraction from.\
     - If running locally, the value is overwritten by 2024-03-10 to ensure data is always extracted.
     - If running in staging, the value is overwritten by a random date between two specified dates.
 
-Until the live sensor data is available, the `end_date` parameter is hardcoded within the `build_date_range` function to ensure the app can process some data. If the dataset to be processed is changed, then its likely you will need to update these. Check the dates available in `parquet-data` locally and in the [level-0 bucket](https://eu-west-2.console.aws.amazon.com/s3/buckets/ukceh-fdri-staging-timeseries-level-0?region=eu-west-2&bucketType=general) for running in staging.
+Until the live sensor data is available, the `end_date` parameter is hardcoded within the `build_date_range` function to ensure the app can process some data. If the dataset to be processed is changed, then its likely you will need to update these. Check the dates available for each dataset in `parquet-data` (running locally) and in the [level-0 bucket](https://eu-west-2.console.aws.amazon.com/s3/buckets/ukceh-fdri-staging-timeseries-level-0?region=eu-west-2&bucketType=general) (running in staging).
 
 Get the last two days data from hardcoded end dates (as above)
 ```commandline
