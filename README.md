@@ -45,9 +45,12 @@ e.g. P1D: previous days data; P1M: previous months data; P1M14D: previous month 
 end_date (optional): The date to start extraction from.\
     - Must be of the format YYYY-MM-DD\
     - If not provided then todays date is used\
-    - If running locally, the default value is overwritten by 2024-03-10 to ensure data is always extrcted.
+    - If running locally, the value is overwritten by 2024-03-10 to ensure data is always extracted.
+    - If running in staging, the value is overwritten by a random date between two specified dates.
 
-Get the last two days data
+Until the live sensor data is available, the `end_date` parameter is hardcoded within the `build_date_range` function to ensure the app can process some data. If the dataset to be processed is changed, then its likely you will need to update these. Check the dates available in `parquet-data` locally and in the [level-0 bucket](https://eu-west-2.console.aws.amazon.com/s3/buckets/ukceh-fdri-staging-timeseries-level-0?region=eu-west-2&bucketType=general) for running in staging.
+
+Get the last two days data from hardcoded end dates (as above)
 ```commandline
 python -m dritimeseriesprocessor P2D
 ```
