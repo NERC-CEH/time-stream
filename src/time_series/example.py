@@ -41,3 +41,20 @@ print(ts.pressure)
 print(ts.pressure.metadata("units"))
 print(ts.temperature)
 print(ts)
+
+# Adding flag columns
+flag_dict = {
+    "MISSING": 1,
+    "ESTIMATED": 2,
+    "CORRECTED": 4,
+}
+# First register the flag type
+ts.init_flag_type("core_flags", flag_dict)
+# Add the flag column under the new flag type
+ts.init_flag_column("core_flags", "pressure_flags", "pressure")
+# Add a flag to the column. Can be done with flag name...
+ts.add_flag("pressure_flags", "MISSING")
+# or with flag value
+ts.add_flag("pressure_flags", 2)
+
+pass

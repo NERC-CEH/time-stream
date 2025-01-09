@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, Any, Iterable, Iterator, Optional, Type, Union
 
 import polars as pl
 
-from time_series.bitwise import create_flag_class
+from time_series.bitwise import BitwiseFlag, create_flag_class
 from time_series.period import Period
 
 if TYPE_CHECKING:
@@ -21,16 +21,16 @@ class SupplementaryColumn:
 
 
 class FlagColumn(SupplementaryColumn):
-    def __init__(self, name: str, flag_dict: dict) -> None:
+    def __init__(self, name: str, flag_class: BitwiseFlag) -> None:
         """
         Initialize a FlagColumn instance.
 
         Args:
             name: The name of the flag column.
-            flag_dict: A dictionary of flag values and their meanings.
+            flag_class: The class of the flags to manage.
         """
         self.name = name
-        self.flag_class = create_flag_class(self.name, flag_dict)
+        self.flag_class = flag_class
 
     def _check_df(self, df: pl.DataFrame) -> None:
         """
@@ -133,8 +133,9 @@ class TimeSeries:
         self._periodicity = periodicity
         self._time_zone = time_zone
         self._supplementary_columns = set(supplementary_columns) if supplementary_columns else set()
+        self._flag_types = {}
         self._flag_columns = set()
-        self._flag_classes = {}
+        self._flag_column_classes = {}
 
         #  NOTE: Doing a deep copy of this mutable object, otherwise the original object will refer to the same
         #   object in memory and will be changed by class methods.
@@ -493,20 +494,51 @@ class TimeSeries:
         for col in columns:
             self._supplementary_columns.discard(col)
 
-    def init_flag_column(self, flag_column: str, data_column: str, flag_dict: dict, data: int = 0) -> None:
+    def init_flag_type(self, flag_type_name: str, flag_dict: dict) -> None:
         """
-        Add a flag column to the TimeSeries DataFrame. The flag column is a special type of supplementary column.
+        A flag type contains flag values and their meanings, defined by the flag_dict.
+        The new flag type can then be used to create flag columns that are specific to a
+        particular type of flag.
+        The flag_dict must contain valid bitwise values and their name. Using bitwise values
+        allows for multiple flags to be set on a single value.
+
+        For example
+        If we had a quality_control flag type, we could define it as follows,
+
+        flag_type_name = "quality_control"
+        flag_dict = {
+            "OUT_OF_RANGE": 1,
+            "SPIKE": 2,
+            "LOW_BATTERY": 4,
+        }
+
+        A new flag column can then be created as a "quality_control" flag column.
 
         Args:
+            flag_type_name: The name of the new flag type.
+            flag_dict: A dictionary of flag values and their meanings.
+
+        """
+        flag_class = create_flag_class(flag_type_name, flag_dict)
+        self._flag_types[flag_type_name] = flag_class
+
+    def init_flag_column(self, flag_type_name: str, flag_column: str, data_column: str, data: int = 0) -> None:
+        """
+        Add a flag column to the TimeSeries DataFrame.
+
+        Args:
+            flag_type_name: The name of the flag type.
             flag_column: The name of the new flag column.
             data_column: The data column the flag column is for.
-            flag_dict: A dictionary of flag values and their meanings.
-            data: The default value to populate the flag column with. Defaults to 0.
+            data: The default value to populate the flag column with. Can be a scalar or list-like. Defaults to 0.
 
         Raises:
-            KeyError: If the flag column already exists in the DataFrame or the data column does not exist in the
-            DataFrame.
+            KeyError: If flag type has not been created, or if the flag column already exists in the DataFrame or
+            the data column does not exist in the DataFrame.
         """
+        if flag_type_name not in self._flag_types:
+            raise KeyError(f"Flag type '{flag_type_name}' has not been initialised. Use init_flag_type() to create it.")
+
         if flag_column in self.df.columns:
             raise KeyError(f"Column '{flag_column}' already exists in the DataFrame.")
 
@@ -519,9 +551,10 @@ class TimeSeries:
             data = pl.Series(flag_column, data, dtype=int)
 
         self.df = self.df.with_columns(data.alias(flag_column))
-        self.set_flag_column(flag_column, data_column, flag_dict)
 
-    def set_flag_column(self, flag_column: str, data_column: str, flag_dict: dict) -> None:
+        self.set_flag_column(flag_type_name, flag_column, data_column)
+
+    def set_flag_column(self, flag_type_name: str, flag_column: str, data_column: str) -> None:
         """Mark the specified column as a flag column.
 
         Flag columns must exist in the DataFrame. Attempting to mark the defined TimeSeries time column
@@ -529,9 +562,9 @@ class TimeSeries:
         marked as supplementary as well.
 
         Args:
+            flag_type_name: The name of the flag type.
             flag_column: A column name (string) to mark as a flag column.
             data_column: The data column the flag column is for.
-            flag_dict: A dictionary of flag values and their meanings.
 
         Raises:
             ValueError: If any of the specified columns do not exist in the DataFrame.
@@ -546,7 +579,7 @@ class TimeSeries:
         flag_class = self._flag_types[flag_type_name]
         self._flag_column_classes[flag_column] = FlagColumn(flag_column, flag_class)
 
-    def add_flag(self, flag_column: str, flag_value: int, expr: pl.Expr = pl.lit(True)) -> None:
+    def add_flag(self, flag_column: str, flag_value: Union[int, str], expr: pl.Expr = pl.lit(True)) -> None:
         """
         Add flag value (if not there) to flag column, where expression is True.
 
@@ -558,9 +591,9 @@ class TimeSeries:
         if flag_column not in self.flag_columns:
             raise ValueError(f"Column '{flag_column}' is not a flag column in the DataFrame.")
 
-        self.df = self._flag_classes[flag_column].add_flag(self.df, flag_value, expr)
+        self.df = self._flag_column_classes[flag_column].add_flag(self.df, flag_value, expr)
 
-    def remove_flag(self, flag_column: str, flag_value: int, expr: pl.Expr = pl.lit(True)) -> None:
+    def remove_flag(self, flag_column: str, flag_value: Union[int, str], expr: pl.Expr = pl.lit(True)) -> None:
         """
         Remove flag value (if there) from flag column.
 
@@ -572,7 +605,7 @@ class TimeSeries:
         if flag_column not in self.flag_columns:
             raise ValueError(f"Column '{flag_column}' is not a flag column in the DataFrame.")
 
-        self.df = self._flag_classes[flag_column].remove_flag(self.df, flag_value, expr)
+        self.df = self._flag_column_classes[flag_column].remove_flag(self.df, flag_value, expr)
 
     def metadata(self, key: Optional[Union[str, list[str], tuple[str, ...]]] = None) -> dict:
         """Retrieve metadata for all or specific keys across columns.
