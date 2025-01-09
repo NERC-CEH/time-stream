@@ -140,8 +140,6 @@ class TimeSeries:
         #   object in memory and will be changed by class methods.
         self._metadata = copy.deepcopy(metadata) or {}
 
-        self._column_mapping = {}
-
         self._df = df
 
         self._setup()
@@ -375,30 +373,6 @@ class TimeSeries:
         for column in removed_columns:
             self.remove_metadata(column)
 
-    def _add_column_mapping(self, column_a: str, column_b: str) -> None:
-        """Add a mapping between two columns.
-
-        Args:
-            column_a: The name of column.
-            column_b: The name of column.
-        """
-        if column_a not in self.columns:
-            raise ValueError(f"Column '{column_a}' does not exist in the DataFrame.")
-        if column_b not in self.columns:
-            raise ValueError(f"Column '{column_b}' does not exist in the DataFrame.")
-
-        # Add columns to mapping if not already present.
-        if column_a not in self._column_mapping:
-            self._column_mapping[column_a] = []
-        if column_b not in self._column_mapping:
-            self._column_mapping[column_b] = []
-
-        # Check if columns are already mapped.
-        if column_b not in self._column_mapping[column_a]:
-            self._column_mapping[column_a].append(column_b)
-        if column_a not in self._column_mapping[column_b]:
-            self._column_mapping[column_b].append(column_a)
-
     @property
     def data_columns(self) -> list:
         """Sorted list of data column names in the TimeSeries."""
@@ -569,9 +543,8 @@ class TimeSeries:
 
         self._supplementary_columns.add(flag_column)
         self._flag_columns.add(flag_column)
-        self._flag_classes[flag_column] = FlagColumn(flag_column, flag_dict)
-
-        self._add_column_mapping(flag_column, data_column)
+        flag_class = self._flag_types[flag_type_name]
+        self._flag_column_classes[flag_column] = FlagColumn(flag_column, flag_class)
 
     def add_flag(self, flag_column: str, flag_value: int, expr: pl.Expr = pl.lit(True)) -> None:
         """
