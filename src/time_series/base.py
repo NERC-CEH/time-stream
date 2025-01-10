@@ -522,14 +522,13 @@ class TimeSeries:
         flag_class = create_flag_class(flag_type_name, flag_dict)
         self._flag_types[flag_type_name] = flag_class
 
-    def init_flag_column(self, flag_type_name: str, flag_column: str, data_column: str, data: int = 0) -> None:
+    def init_flag_column(self, flag_type_name: str, flag_column: str, data: int = 0) -> None:
         """
         Add a flag column to the TimeSeries DataFrame.
 
         Args:
             flag_type_name: The name of the flag type.
             flag_column: The name of the new flag column.
-            data_column: The data column the flag column is for.
             data: The default value to populate the flag column with. Can be a scalar or list-like. Defaults to 0.
 
         Raises:
@@ -542,9 +541,6 @@ class TimeSeries:
         if flag_column in self.df.columns:
             raise KeyError(f"Column '{flag_column}' already exists in the DataFrame.")
 
-        if data_column not in self.data_columns:
-            raise KeyError(f"Column '{data_column}' is not a data column in the DataFrame.")
-
         if isinstance(data, (int)):
             data = pl.lit(data)
         else:
@@ -552,9 +548,9 @@ class TimeSeries:
 
         self.df = self.df.with_columns(data.alias(flag_column))
 
-        self.set_flag_column(flag_type_name, flag_column, data_column)
+        self.set_flag_column(flag_type_name, flag_column)
 
-    def set_flag_column(self, flag_type_name: str, flag_column: str, data_column: str) -> None:
+    def set_flag_column(self, flag_type_name: str, flag_column: str) -> None:
         """Mark the specified column as a flag column.
 
         Flag columns must exist in the DataFrame. Attempting to mark the defined TimeSeries time column
@@ -564,7 +560,6 @@ class TimeSeries:
         Args:
             flag_type_name: The name of the flag type.
             flag_column: A column name (string) to mark as a flag column.
-            data_column: The data column the flag column is for.
 
         Raises:
             ValueError: If any of the specified columns do not exist in the DataFrame.

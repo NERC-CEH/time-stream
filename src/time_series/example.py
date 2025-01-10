@@ -51,7 +51,7 @@ flag_dict = {
 # First register the flag type
 ts.init_flag_type("core_flags", flag_dict)
 # Add the flag column under the new flag type
-ts.init_flag_column("core_flags", "pressure_flags", "pressure")
+ts.init_flag_column("core_flags", "pressure_flags")
 # Add a flag to the column. Can be done with flag name...
 ts.add_flag("pressure_flags", "MISSING")
 # or with flag value
