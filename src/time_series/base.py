@@ -396,6 +396,11 @@ class TimeSeries:
         """
         return sorted([col for col in self.df.columns if col != self.time_name])
 
+    @property
+    def flag_types(self) -> list:
+        """List of flag types."""
+        return list(self._flag_types.keys())
+
     def select_columns(self, columns: list[str]) -> "TimeSeries":
         """Filter TimeSeries instance to include only the specified columns.
 
