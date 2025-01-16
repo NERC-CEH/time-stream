@@ -519,6 +519,3 @@ class TestFunctions(unittest.TestCase):
             datetime_fn=_get_datetime_of_max_list,
             value_fn=_get_max_list,
         )
-
-if __name__ == "__main__":
-    unittest.main()
