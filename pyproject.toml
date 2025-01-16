@@ -45,14 +45,15 @@ version = { attr = "dritimeseriesprocessor.__version__" }
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["dritimeseriesprocessor*", "databuilder"]
+include = ["dritimeseriesprocessor*", "databuilder*", "time_series*"]
 
 [tool.setuptools.package-data]
 "*" = ["*.*"]
 
 [tool.pytest.ini_options]
-addopts = "--cov=dritimeseriesprocessor --cov=databuilder --cov time_series --cov-report=term-missing"
+addopts = "--cov=dritimeseriesprocessor --cov=databuilder --cov=time_series --cov-report=term-missing"
 markers = ["slow: Marks slow tests"]
+
 
 [tool.coverage.run]
 omit = [
