@@ -3104,7 +3104,7 @@ class TestPeriodNaiveFormatter(unittest.TestCase):
     def test_is_valid(self, text: Any) -> None:
         """Test Period.naive_formatter method is valid for a set of Period instances"""
         period: Period = Period.of(text)
-        naive_formatter: Callable[[datetime.datetime], str] = period.naive_formatter()
+        naive_formatter: Callable[[dt.datetime], str] = period.naive_formatter()
         self.assertTrue(callable(naive_formatter))
 
     @parameterized.expand(sorted(_GOOD_ISO_DURATION | _GOOD_DURATION | _GOOD_DATE_AND_DURATION | _GOOD_REPR))
@@ -3390,7 +3390,7 @@ class TestPeriodAwareFormatter(unittest.TestCase):
     def test_is_valid(self, text: Any) -> None:
         """Test Period.aware_formatter method is valid for a set of Period instances"""
         period: Period = Period.of(text)
-        aware_formatter: Callable[[datetime.datetime], str] = period.aware_formatter()
+        aware_formatter: Callable[[dt.datetime], str] = period.aware_formatter()
         self.assertTrue(callable(aware_formatter))
 
     @parameterized.expand(
@@ -3675,7 +3675,7 @@ class TestPeriodFormatter(unittest.TestCase):
     def test_is_valid(self, text: Any) -> None:
         """Test Period.formatter method is valid for a set of Period instances"""
         period: Period = Period.of(text)
-        formatter: Callable[[datetime.datetime], str] = period.formatter()
+        formatter: Callable[[dt.datetime], str] = period.formatter()
         self.assertTrue(callable(formatter))
 
     @parameterized.expand(
