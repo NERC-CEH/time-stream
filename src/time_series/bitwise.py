@@ -1,152 +1,49 @@
 from enum import Flag
-from typing import Dict, List, TypeVar
-
-BWFlag = TypeVar("BWFlag", bound=Flag)
+from typing import Union
 
 
-class BitwiseFlag(Flag):
-    @classmethod
-    def from_value(cls, value: int) -> "BitwiseFlag":
-        """
-        Create an instance of the flag from an integer value.
-        """
-        if value < 0:
-            raise ValueError(f"Invalid value {value}")
-        return cls(value)
+class BitwiseFlag(int, Flag):
+    def __new__(cls, value):
+        cls._check_type(value)
+        cls._check_bitwise(value)
+        cls._check_unique(value)
 
-
-class FlagManager:
-    def __init__(self, flag_class: "BitwiseFlag") -> None:
-        """
-        Initialize the FlagManager with a specific flag class.
-
-        Args:
-            flag_class: The class of the flags to manage.
-        """
-        self.flag_class = flag_class
-        self.flags = self.flag_class(0)
-
-    def add_flag(self, flag: BWFlag) -> None:
-        """
-        Add a flag to the current flags.
-
-        Args:
-            flag (BWFlag): The flag to add.
-        """
-        self.flags |= flag
-
-    def remove_flag(self, flag: BWFlag) -> None:
-        """
-        Remove a flag from the current flags.
-
-        Args:
-            flag (BWFlag): The flag to remove.
-        """
-        self.flags &= ~flag
-
-    def has_flag(self, flag: BWFlag) -> bool:
-        """
-        Check if a specific flag is set.
-
-        Args:
-            flag (BWFlag): The flag to check.
-
-        Returns:
-            bool: True if the flag is set, False otherwise.
-        """
-        return (self.flags & flag) == flag
-
-
-class BitWiseValidator:
-    """
-    Validates that a list of bitwise values are valid and non-wasteful.
-    """
+        return super().__new__(cls, value)
 
     @staticmethod
-    def _check_flag_type(test_flag: int) -> None:
-        """Checks the type of the flag and raises a TypeError if
-        not an integer.
-
-        Args:
-            test_flag: A numeric value.
-        Raises:
-            TypeError: Raises if type is not int.
-        """
-        if not isinstance(test_flag, int):
-            raise TypeError(f'A bitwise value must be an integer, received "{type(test_flag)}"')
-
-    @staticmethod
-    def _flags_are_unique(test_flags: List[int]) -> bool:
-        """Checks if flags are unique
-
-        Args:
-            test_flags: A list of flag values.
-
-        Raises:
-            ValueError: If flags are not unique.
-        """
-        if len(test_flags) != len(set(test_flags)):
-            raise ValueError(f"Flags are not unique: {test_flags}")
-
-    @staticmethod
-    def _flags_are_sequential(test_flags: List[int]) -> bool:
-        """Checks that flags are sequential and start at number 1.
-
-        Args:
-            test_flags: A list of flag values.
-
-        Raises:
-            ValueError: If flags are not sequential starting at 1.
-        """
-        for i, test_flag in enumerate(test_flags):
-            BitWiseValidator._check_flag_type(test_flag)
-
-            if test_flag != 1 << i:
-                raise ValueError(f"Flags are not sequential: {test_flags}")
-
-    @staticmethod
-    def _flags_are_bitwise(test_flags: List[int]) -> bool:
+    def _check_type(value):
         """Checks that all test flags are bitwise.
-
-        Args:
-            test_flags: A list of flag values.
-
-        Raises:
-            ValueError: If any flag is not a bitwise value.
         """
-
-        for test_flag in test_flags:
-            BitWiseValidator._check_flag_type(test_flag)
-
-            if test_flag == 0 or ((test_flag & (test_flag - 1)) != 0):
-                raise ValueError(f"Flag is not a bitwise value: {test_flag}")
-
-        return True
+        if not isinstance(value, int) and value > 0:
+            raise ValueError(f"Flag value must be a positive integer: {value}")
 
     @staticmethod
-    def validate(flag_values: List[int]) -> bool:
-        """Checks that flags in a list are valid.
-
-        Args:
-            flag_values: A list of flag values.
+    def _check_bitwise(value):
+        """Checks that all test flags are bitwise.
         """
-        BitWiseValidator._flags_are_unique(flag_values)
-        BitWiseValidator._flags_are_bitwise(flag_values)
-        BitWiseValidator._flags_are_sequential(flag_values)
+        if value == 0 or ((value & (value - 1)) != 0):
+            raise ValueError(f"Flag is not a bitwise value: {value}")
 
+    @classmethod
+    def _check_unique(cls, value):
+        if value in cls:
+            raise ValueError(f"Flag is not unique: {value}")
 
-def create_flag_class(name: str, flag_dict: Dict[str, int]) -> BitwiseFlag:
-    """
-    Create a BitwiseFlag class dynamically based on metadata, with validation.
+    @classmethod
+    def get_single_flag(cls, flag: Union[int, str]) -> Flag:
+        """ Create an instance of the flag from an integer or string value.
 
-    Args:
-        name (str): The name of the class.
-        flag_dict (Dict[str, int]): The flag name and value pair dictionary.
-
-    Returns:
-        BitwiseFlag: The dynamically created class.
-    """
-    flag_values = list(flag_dict.values())
-    BitWiseValidator.validate(flag_values)
-
-    return BitwiseFlag(name, flag_dict)
+        This must be a single flag value, for example can't be a combination of integer flag values:
+        "MISSING": 1,
+        "ESTIMATED": 2,
+        "CORRECTED": 4
+        Can't ask for flag "3" - a combination of MISSING and ESTIMATED.
+        """
+        if isinstance(flag, str):
+            return cls.__getitem__(flag)
+        elif isinstance(flag, int):
+            if flag not in cls:
+                raise KeyError(f"Flag value {flag} is not a valid singular flag.")
+            return cls(flag)
+        else:
+            raise TypeError(f"Flag value must be an integer or string, not {type(flag)}.")
