@@ -58,39 +58,102 @@ class TimeSeriesColumn(ABC):
             self._metadata = {k: v for k, v in self.metadata().items() if k not in key}
 
     def set_as_supplementary(self) -> None:
-        supplementary_col = SupplementaryColumn(self.name, self._ts)
-        self._ts._columns[self.name] = supplementary_col
+        """ Converts the column to a SupplementaryColumn while preserving metadata.
+
+        If the column is already a SupplementaryColumn, no changes are made.
+        """
+        if isinstance(self, SupplementaryColumn):
+            return
+        self._ts._columns[self.name] = SupplementaryColumn(self.name, self._ts, self.metadata())
 
     def set_as_flag(self, flag_system: str) -> None:
-        flag_col = FlagColumn(self.name, self._ts, flag_system)
-        self._ts._columns[self.name] = flag_col
+        """ Converts the column to a FlagColumn while preserving metadata.
 
-    def unset(self):
-        # Unsetting basically means it becomes a 'normal' data column
-        data_col = DataColumn(self.name, self._ts)
-        self._ts._columns[self.name] = data_col
+        If the column is already a SupplementaryColumn, no changes are made.
+        """
+        if isinstance(self, FlagColumn):
+            return
+        self._ts._columns[self.name] = FlagColumn(self.name, self._ts, flag_system, self.metadata())
 
-    def remove(self):
+    def unset(self) -> None:
+        """ Converts the column back into a normal DataColumn while preserving metadata.
+
+        If the column is already a DataColumn, no changes are made.
+        """
+        if isinstance(self, DataColumn):
+            return
+        self._ts._columns[self.name] = DataColumn(self.name, self._ts, self.metadata())
+
+    def remove(self) -> None:
+        """ Removes this column from the TimeSeries.
+
+        - Drops the column from the DataFrame (if it exists).
+        - Clear reference to time series prevent further modifications
+        """
         if self.name in self._ts.df.columns:
             self._ts.df = self._ts.df.drop(self.name)
-        del self._ts._columns[self.name]
-        self._ts = None  # Clear reference to time series prevent further modifications
+        self._ts = None
 
-    def add_flag(self, *args, **kwargs):
-        raise TypeError(f"Column '{self.name}' is not set as a flag column.")
+    def add_flag(self, *args, **kwargs) -> None:
+        """ Placeholder method for FlagColumn add_flag. Raises an error if attempting to add a flag to a column that
+        is not a FlagColumn.
 
-    def remove_flag(self, *args, **kwargs):
-        raise TypeError(f"Column '{self.name}' is not set as a flag column.")
+        Raises:
+            AttributeError: If the column is not a FlagColumn.
+        """
+        raise TypeError(
+            f"Column '{self.name}' is not a FlagColumn. "
+            f"Use `set_as_flag(flag_system_name)` first to enable flagging."
+        )
 
-    def data(self):
-        return self._ts.df[[self._ts.time_name, self.name]]
+    def remove_flag(self, *args, **kwargs) -> None:
+        """ Placeholder method for FlagColumn remove_flag. Raises an error if attempting to remove a flag from a
+        column that is not a FlagColumn.
 
-    def as_timeseries(self):
+        Raises:
+            AttributeError: If the column is not a FlagColumn.
+        """
+        raise TypeError(
+            f"Column '{self.name}' is not a FlagColumn. "
+            f"Use `set_as_flag(flag_system_name)` first to enable flagging."
+        )
+
+    @property
+    def data(self) -> pl.DataFrame:
+        """ Returns a DataFrame containing the time column and the current column.
+
+        This ensures that data is always retrieved alongside the primary time column.
+
+        Returns:
+            pl.DataFrame: A DataFrame with the time column and the current column.
+
+        Raises:
+            KeyError: If the column does not exist in the DataFrame.
+        """
+        if self.name not in self._ts.df.columns:
+            raise KeyError(f"Column '{self.name}' not found in TimeSeries.")
+
+        return self._ts.df.select([self._ts.time_name, self.name])
+
+    def as_timeseries(self) -> "TimeSeries":
+        """ Returns a new TimeSeries instance containing only this column.
+
+        This method filters the original TimeSeries to include only the time column and this column.
+
+        Returns:
+            TimeSeries: A new TimeSeries object with just the selected column.
+
+        Raises:
+            KeyError: If the column does not exist in the TimeSeries.
+        """
+        if self.name not in self._ts.df.columns:
+            raise KeyError(f"Column '{self.name}' not found in TimeSeries.")
+
         return self._ts.select([self.name])
 
     def __str__(self) -> str:
         """Return the string representation of the Column."""
-        return str(self.data())
+        return str(self.data)
 
     def __getattr__(self, name: str) -> Any:
         """ Dynamically handle metadata attribute access for the Column object.
@@ -126,17 +189,40 @@ class TimeSeriesColumn(ABC):
 
 
 class PrimaryTimeColumn(TimeSeriesColumn):
-    """Represents the primary datetime column that controls the Time Series."""
-    def set_as_supplementary(self, *args, **kwargs):
-        raise NotImplementedError()
+    """Represents the primary datetime column that controls the Time Series.
+    This column is immutable and cannot be converted to other column types.
+    """
+    def set_as_supplementary(self, *args, **kwargs) -> None:
+        """ Raises an error because the primary time column cannot be converted to a supplementary column.
 
-    def set_as_flag(self, *args, **kwargs):
-        raise NotImplementedError()
+        Raises:
+            NotImplementedError: Always raised because time columns are immutable.
+        """
+        raise NotImplementedError("Primary time column cannot be converted to a supplementary column.")
 
-    def unset(self, *args, **kwargs):
-        raise NotImplementedError()
+    def set_as_flag(self, *args, **kwargs) -> None:
+        """ Raises an error because the primary time column cannot be converted to a flag column.
 
-    def data(self):
+        Raises:
+            NotImplementedError: Always raised because time columns are immutable.
+        """
+        raise NotImplementedError("Primary time column cannot be converted to a flag column.")
+
+    def unset(self, *args, **kwargs) -> None:
+        """ Raises an error because the primary time column cannot be unset.
+
+        Raises:
+            NotImplementedError: Always raised because time columns are immutable.
+        """
+        raise NotImplementedError("Primary time column cannot be unset.")
+
+    @property
+    def data(self) -> pl.Series:
+        """ Returns the time column as a Polars Series.
+
+        Returns:
+            pl.Series: The Polars Series containing the time column.
+        """
         return self._ts.df[self.name]
 
 
@@ -151,18 +237,38 @@ class SupplementaryColumn(TimeSeriesColumn):
 
 
 class FlagColumn(SupplementaryColumn):
-    """Represents a flag column."""
+    """Represents a flag column within a TimeSeries.
+
+    A flag column uses a predefined flagging system to store quality control indicators
+    or other categorical flags. Flags are stored using bitwise operations for efficiency.
+    """
     def __init__(self,
                  name: str,
                  ts: "TimeSeries",
                  flag_system: str,
-                 metadata: Optional[Dict[str, Any]] = None) -> None:
+                 metadata: Optional[Dict[str, Any]] = None
+                 ) -> None:
+        """
+        Initializes a FlagColumn.
+
+        Args:
+            name: The name of the flag column.
+            ts: The TimeSeries instance this column belongs to.
+            flag_system: The name of the flag system used for flagging.
+            metadata: Optional metadata associated with this column.
+        """
         super().__init__(name, ts, metadata)
-        self.flag_system = flag_system
+        self.flag_system = self._ts.flag_systems[flag_system]
 
     def add_flag(self, flag: Union[int, str], expr: pl.Expr = pl.lit(True)) -> None:
-        """Bitwise OR operation to add a flag value to rows that fulfill the expression."""
-        flag = self._ts._flag_manager.flag_systems[self.flag_system].get_single_flag(flag)
+        """ Adds a flag value to this FlagColumn using a bitwise OR operation.
+
+        Args:
+            flag: The flag value to add.
+            expr: A Polars expression defining the condition for applying the flag.
+                  Defaults to `pl.lit(True)`, meaning all rows are flagged.
+        """
+        flag = self.flag_system.get_single_flag(flag)
         self._ts.df = self._ts.df.with_columns(
             pl.when(expr)
             .then(pl.col(self.name) | flag.value)
@@ -170,8 +276,14 @@ class FlagColumn(SupplementaryColumn):
         )
 
     def remove_flag(self, flag: Union[int, str], expr: pl.Expr = pl.lit(True)) -> None:
-        """Bitwise AND operation to remove a flag from rows that fulfill the expression"""
-        flag = self._ts._flag_manager.flag_systems[self.flag_system].get_single_flag(flag)
+        """ Remove a flag value from this FlagColumn using a bitwise AND operation.
+
+        Args:
+            flag: The flag value to remove.
+            expr: A Polars expression defining the condition for removing the flag.
+                  Defaults to `pl.lit(True)`, meaning flag remove from all rows.
+        """
+        flag = self.flag_system.get_single_flag(flag)
         self._ts.df = self._ts.df.with_columns(
             pl.when(expr)
             .then(pl.col(self.name) & ~flag.value)

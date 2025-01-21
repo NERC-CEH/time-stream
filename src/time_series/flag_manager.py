@@ -7,7 +7,15 @@ from time_series.columns import FlagColumn
 
 
 class TimeSeriesFlagManager:
+    """Manages flagging operations for a TimeSeries object using bitwise flags."""
+
     def __init__(self, ts, flag_systems: dict[str, BitwiseFlag] = None):
+        """ Initializes the flag manager for a TimeSeries.
+
+        Args:
+            ts: The parent TimeSeries instance.
+            flag_systems: A dictionary mapping flag system names to BitwiseFlag instances.
+        """
         self._ts = ts
         self._flag_systems = {}
         self._setup_flag_systems(flag_systems or {})
@@ -17,11 +25,17 @@ class TimeSeriesFlagManager:
         return self._flag_systems
 
     def _setup_flag_systems(self, flag_systems: dict[str, Union[dict[str, int], BitwiseFlag]] = None):
+        """ Adds flag systems into the flag manager.
+
+        Args:
+            flag_systems: A dictionary of flag system names mapped to either BitwiseFlag objects or dictionaries
+                          defining flag values (which will be turned into BitwiseFlag objects).
+        """
         for name, flag_system in flag_systems.items():
             self.add_flag_system(name, flag_system)
 
     def add_flag_system(self, name: str, flag_system: Union[dict[str, int], BitwiseFlag]) -> None:
-        """ A flag system contains flag values and their meanings, defined by a mapping.
+        """ Adds a flag system to the flag manager, which contains flag values and their meanings.
 
         A flag system can be used to create flag columns that are specific to a particular type of flag.
         The flag system must contain valid bitwise values and their name. Using bitwise values
@@ -83,7 +97,7 @@ class TimeSeriesFlagManager:
         self._ts._columns[col_name] = flag_col
 
     def set_flag_column(self, flag_system: str, col_name: Union[str, list[str]]) -> None:
-        """Mark the specified existing column(s) as a flag column.
+        """ Mark the specified existing column(s) as a flag column.
 
         Args:
             flag_system: The name of the flag system.
@@ -96,8 +110,7 @@ class TimeSeriesFlagManager:
             self._ts.columns[col].set_as_flag(flag_system)
 
     def add_flag(self, col_name: str, flag_value: Union[int, str], expr: pl.Expr = pl.lit(True)) -> None:
-        """
-        Add flag value (if not there) to flag column, where expression is True.
+        """ Add flag value (if not there) to flag column, where expression is True.
 
         Args:
             col_name: The name of the flag column

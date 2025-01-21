@@ -72,4 +72,8 @@ print(ts)
 print(type(ts.pressure_flags))
 ts.pressure_flags.unset()
 print(type(ts.pressure_flags))
-ts.pressure_flags.add_flag(1)
+#ts.pressure_flags.add_flag(1)
+
+ts.pressure_flags.remove()
+
+print(ts)

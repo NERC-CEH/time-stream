@@ -33,11 +33,14 @@ class TimeSeries:
         Args:
             df: The Polars DataFrame containing the time series data.
             time_name: The name of the time column in the DataFrame.
-            resolution: The resolution of the time series. Defaults to None.
-            periodicity: The periodicity of the time series. Defaults to None.
-            time_zone: The time zone of the time series. Defaults to None.
-            supplementary_columns: Columns within the dataframe that are considered supplementary. Defaults to None.
-            column_metadata: The metadata of the variables within the time series. Defaults to None.
+            resolution: The resolution of the time series.
+            periodicity: The periodicity of the time series.
+            time_zone: The time zone of the time series.
+            supplementary_columns: Columns within the dataframe that are considered supplementary.
+            flag_systems: A dictionary defining the flagging systems that can be used for flag columns.
+            flag_columns: Columns within the dataframe that are considered flag columns.
+                          Mapping of {column name: flag system name}.
+            column_metadata: The metadata of the variables within the time series.
         """
         self._time_name = time_name
         self._resolution = resolution
@@ -51,35 +54,79 @@ class TimeSeries:
 
         self._setup(supplementary_columns or [], flag_columns or {}, column_metadata or {})
 
-    def _setup(self, supplementary_columns, flag_columns, column_metadata) -> None:
-        """Perform initial setup for the TimeSeries instance."""
+    def _setup(self,
+               supplementary_columns: list[str],
+               flag_columns: dict[str, str],
+               column_metadata: dict[str, dict[str, Any]]
+               ) -> None:
+        """
+        Performs the initial setup for the TimeSeries instance.
+
+        This method:
+        - Sets the time zone of the time column.
+        - Sorts the DataFrame by the time column.
+        - Validates the time resolution.
+        - Validates the periodicity of the time column.
+        - Initializes supplementary and flag columns.
+
+        Args:
+            supplementary_columns: A list of column names that are considered supplementary.
+            flag_columns: A dictionary mapping flag column names to their corresponding flag systems.
+            column_metadata: A dictionary containing metadata for columns in the DataFrame.
+        """
         self._set_time_zone()
         self.sort_time()
         self._validate_resolution()
         self._validate_periodicity()
         self._setup_columns(supplementary_columns, flag_columns, column_metadata)
 
-    def _setup_columns(self, supplementary_columns, flag_columns, column_metadata):
-        """Initialise column classifications."""
+    def _setup_columns(self,
+                       supplementary_columns: list[str],
+                       flag_columns: dict[str, str],
+                       column_metadata: dict[str, dict[str, Any]]
+                       ) -> None:
+        """
+        Initializes column classifications for the TimeSeries instance.
+
+        This method:
+        - Validates that all specified supplementary columns exist in the DataFrame.
+        - Validates that all specified flag columns exist in the DataFrame.
+        - Classifies each column into its appropriate type: primary time column, supplementary, flag, or data column.
+
+        Args:
+            supplementary_columns: A list of column names that are considered supplementary.
+            flag_columns: A dictionary mapping flag column names to their corresponding flag systems.
+            column_metadata: A dictionary containing metadata for columns in the DataFrame.
+
+        Raises:
+            KeyError: If any specified supplementary or flag column does not exist in the DataFrame.
+        """
+        # Validate that all supplementary columns exist in the DataFrame
         invalid_supplementary_columns = set(supplementary_columns) - set(self.df.columns)
         if invalid_supplementary_columns:
             raise KeyError(f"Invalid supplementary columns: {invalid_supplementary_columns}")
 
+        # Validate that all flag columns exist in the DataFrame
         invalid_flag_columns = set(flag_columns) - set(self.df.columns)
         if invalid_flag_columns:
             raise KeyError(f"Invalid flag columns: {invalid_flag_columns}")
 
+        # Classify each column in the DataFrame
         for col_name in self.df.columns:
             col_metadata = column_metadata.get(col_name)
+
             if col_name == self.time_name:
                 time_col = PrimaryTimeColumn(col_name, self, col_metadata)
                 self._columns[col_name] = time_col
+
             elif col_name in supplementary_columns:
                 supplementary_col = SupplementaryColumn(col_name, self, col_metadata)
                 self._columns[col_name] = supplementary_col
+
             elif col_name in flag_columns:
                 flag_col = FlagColumn(col_name, self, self._flag_columns[col_name], col_metadata)
                 self._columns[col_name] = flag_col
+
             else:
                 data_col = DataColumn(col_name, self, col_metadata)
                 self._columns[col_name] = data_col
@@ -298,7 +345,7 @@ class TimeSeries:
         """
         removed_columns = list(set(self.df.columns) - set(new_df.columns))
         for col_name in removed_columns:
-            self.columns[col_name].remove()
+            self._columns.pop(col_name, None)
 
     @property
     def time_column(self) -> PrimaryTimeColumn:
