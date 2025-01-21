@@ -325,7 +325,7 @@ class Mean(AggregationFunction):
             periodicity=aggregation_period,
             time_zone=ts.time_zone,
             supplementary_columns=ts.supplementary_columns,
-            metadata=ts.metadata(),
+            column_metadata=ts.metadata(),
         )
 
 
@@ -371,7 +371,7 @@ class Min(AggregationFunction):
             periodicity=aggregation_period,
             time_zone=ts.time_zone,
             supplementary_columns=ts.supplementary_columns,
-            metadata=ts.metadata(),
+            column_metadata=ts.metadata(),
         )
 
 
@@ -417,5 +417,5 @@ class Max(AggregationFunction):
             periodicity=aggregation_period,
             time_zone=ts.time_zone,
             supplementary_columns=ts.supplementary_columns,
-            metadata=ts.metadata(),
+            column_metadata=ts.metadata(),
         )

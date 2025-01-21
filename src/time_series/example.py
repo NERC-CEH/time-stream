@@ -33,14 +33,19 @@ metadata = {
     "temperature": {"description": "Hello temperature!"},
 }
 
-ts = TimeSeries(df, "timestamp", resolution, periodicity, metadata=metadata)
+ts = TimeSeries(df, "timestamp", resolution, periodicity, column_metadata=metadata)
 
 ts.df = ts.df.with_columns((pl.col("pressure") * 2).alias("pressure"))
-
-print(ts.pressure)
-print(ts.pressure.metadata("units"))
-print(ts.temperature)
 print(ts)
+
+
+print(ts.pressure, type(ts.pressure))
+print(ts.pressure.as_timeseries(), type(ts.pressure.as_timeseries()))
+print(ts.pressure.units)
+print(ts["pressure"], type(ts["pressure"]))
+print(ts[["pressure", "temperature"]])
+print(ts.pressure.metadata("units"))
+print(ts.shape)
 
 # Adding flag columns
 flag_dict = {
@@ -49,12 +54,26 @@ flag_dict = {
     "CORRECTED": 4,
 }
 # First register the flag type
-ts.init_flag_type("core_flags", flag_dict)
+ts.add_flag_system("CORE", flag_dict)
 # Add the flag column under the new flag type
-ts.init_flag_column("core_flags", "pressure_flags")
+ts.init_flag_column("CORE", "pressure_flags")
 # Add a flag to the column. Can be done with flag name...
 ts.add_flag("pressure_flags", "MISSING")
 # or with flag value
 ts.add_flag("pressure_flags", 2)
 
-pass
+print(ts)
+
+ts.remove_flag("pressure_flags", "ESTIMATED")
+ts.pressure_flags.add_flag(4)
+
+print(ts)
+
+print(type(ts.pressure_flags))
+ts.pressure_flags.unset()
+print(type(ts.pressure_flags))
+# ts.pressure_flags.add_flag(1)
+
+ts.pressure_flags.remove()
+
+print(ts)

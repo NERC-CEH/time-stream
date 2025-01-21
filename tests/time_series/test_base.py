@@ -61,7 +61,7 @@ def init_timeseries(
             periodicity=periodicity,
             time_zone=time_zone,
             supplementary_columns=supplementary_columns,
-            metadata=metadata
+            column_metadata=metadata
         )
 
     if supplementary_columns:
@@ -1268,7 +1268,7 @@ class TestSelectColumns(unittest.TestCase):
         ts = init_timeseries(self.times, self.values)
         expected_df = pl.DataFrame({"time": self.times} | {"col1": self.values["col1"]})
 
-        ts = ts.select_columns(["col1"])
+        ts = ts.select(["col1"])
         assert_frame_equal(ts.df, expected_df)
 
     def test_select_multiple_columns(self):
@@ -1276,38 +1276,38 @@ class TestSelectColumns(unittest.TestCase):
         ts = init_timeseries(self.times, self.values)
         expected_df = pl.DataFrame({"time": self.times} | {"col1": self.values["col1"], "col2": self.values["col2"]})
 
-        ts = ts.select_columns(["col1", "col2"])
+        ts = ts.select(["col1", "col2"])
         assert_frame_equal(ts.df, expected_df)
 
     def test_select_no_columns_raises_error(self):
         """Test selecting no columns raises error."""
         ts = init_timeseries(self.times, self.values)
         with self.assertRaises(ValueError):
-            ts.select_columns([])
+            ts.select([])
 
     def test_select_nonexistent_column(self):
         """Test selecting a column that does not exist raises error."""
         ts = init_timeseries(self.times, self.values)
         with self.assertRaises(pl.exceptions.ColumnNotFoundError):
-            ts.select_columns(["nonexistent_column"])
+            ts.select(["nonexistent_column"])
 
     def test_select_existing_and_nonexistent_column(self):
         """Test selecting a column that does not exist, alongside existing columns, still raises error"""
         ts = init_timeseries(self.times, self.values)
         with self.assertRaises(pl.exceptions.ColumnNotFoundError):
-            ts.select_columns(["col1", "col2", "nonexistent_column"])
+            ts.select(["col1", "col2", "nonexistent_column"])
 
     def test_select_column_doesnt_mutate_original_ts(self):
         """When selecting a column, the original ts should be unchanged"""
         ts = init_timeseries(self.times, self.values)
         original_df = ts.df
 
-        col1_ts = ts.select_columns(["col1"])
+        col1_ts = ts.select(["col1"])
         expected_df = pl.DataFrame({"time": self.times} | {"col1": self.values["col1"]})
         assert_frame_equal(col1_ts.df, expected_df)
         assert_frame_equal(ts.df, original_df)
 
-        col2_ts = ts.select_columns(["col2"])
+        col2_ts = ts.select(["col2"])
         expected_df = pl.DataFrame({"time": self.times} | {"col2": self.values["col2"]})
         assert_frame_equal(col2_ts.df, expected_df)
         assert_frame_equal(ts.df, original_df)
@@ -1316,7 +1316,7 @@ class TestSelectColumns(unittest.TestCase):
         """When selecting a column, the original ts metadata should be unchanged"""
         ts = init_timeseries(self.times, self.values, metadata=self.metadata)
 
-        col1_ts = ts.select_columns(["col1"])
+        col1_ts = ts.select(["col1"])
         expected_metadata = {"col1": self.metadata["col1"]}
         self.assertEqual(col1_ts.metadata(), expected_metadata)
         # Ensure original ts metadata unchanged
@@ -1326,7 +1326,7 @@ class TestSelectColumns(unittest.TestCase):
         """When selecting a column, the original ts supplementary columns should be unchanged"""
         ts = init_timeseries(self.times, self.values, supplementary_columns=["col2"])
 
-        col1_ts = ts.select_columns(["col1"])
+        col1_ts = ts.select(["col1"])
         self.assertEqual(col1_ts.columns, ["col1"])
         self.assertEqual(col1_ts.supplementary_columns, [])
         self.assertEqual(col1_ts.data_columns, ["col1"])
