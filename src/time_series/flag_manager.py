@@ -65,6 +65,8 @@ class TimeSeriesFlagManager:
         Raises:
             TypeError: If the flag system is not a valid type.
         """
+        if name in self._flag_systems:
+            raise KeyError(f"Flag system '{name}' already exists.")
         if isinstance(flag_system, BitwiseFlag):
             self._flag_systems[name] = flag_system
         elif isinstance(flag_system, dict):
