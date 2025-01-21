@@ -1,16 +1,18 @@
-from typing import Union
+from typing import TYPE_CHECKING, Union
 
 import polars as pl
 
-from time_series.base import TimeSeries
 from time_series.bitwise import BitwiseFlag
 from time_series.columns import FlagColumn
+
+if TYPE_CHECKING:
+    from time_series.base import TimeSeries
 
 
 class TimeSeriesFlagManager:
     """Manages flagging operations for a TimeSeries object using bitwise flags."""
 
-    def __init__(self, ts: TimeSeries, flag_systems: dict[str, BitwiseFlag] = None):
+    def __init__(self, ts: "TimeSeries", flag_systems: dict[str, BitwiseFlag] = None):
         """Initializes the flag manager for a TimeSeries.
 
         Args:
