@@ -44,7 +44,7 @@ class TimeSeries:
         self._periodicity = periodicity
         self._time_zone = time_zone
 
-        self.flag_manager = TimeSeriesFlagManager(self, flag_systems)
+        self._flag_manager = TimeSeriesFlagManager(self, flag_systems)
         self._columns: dict[str, TimeSeriesColumn] = {}
 
         self._df = df
@@ -61,11 +61,11 @@ class TimeSeries:
 
     def _setup_columns(self, supplementary_columns, flag_columns, column_metadata):
         """Initialise column classifications."""
-        invalid_supplementary_columns = [col for col in supplementary_columns if col not in self.df.columns]
+        invalid_supplementary_columns = set(supplementary_columns) - set(self.df.columns)
         if invalid_supplementary_columns:
             raise KeyError(f"Invalid supplementary columns: {invalid_supplementary_columns}")
 
-        invalid_flag_columns = [col for col in flag_columns if col not in self.df.columns]
+        invalid_flag_columns = set(flag_columns) - set(self.df.columns)
         if invalid_flag_columns:
             raise KeyError(f"Invalid flag columns: {invalid_flag_columns}")
 
@@ -344,10 +344,14 @@ class TimeSeries:
         if not col_names:
             raise KeyError("No columns specified.")
 
+        invalid_columns = set(col_names) - set(self.df.columns)
+        if invalid_columns:
+            raise KeyError(f"Invalid columns found: {invalid_columns}")
+
         new_df = self.df.select([self.time_name] + col_names)
         new_supplementary_columns = [self.columns[col].name for col in col_names if col in self.supplementary_columns]
         new_flag_columns = {self.columns[col].name: self.columns[col].flag_system for col in col_names if col in self.flag_columns}
-        new_flag_systems = {k: v for k, v in self.flag_manager.flag_systems.items() if k in new_flag_columns.values()}
+        new_flag_systems = {k: v for k, v in self.flag_systems.items() if k in new_flag_columns.values()}
         new_metadata = {col: self.columns[col].metadata() for col in col_names}
 
         ts = TimeSeries(
@@ -394,7 +398,7 @@ class TimeSeries:
         supplementary_col = SupplementaryColumn(col_name, self)
         self._columns[col_name] = supplementary_col
 
-    def set_as_supplementary_column(self, col_name: Union[str, list[str]]) -> None:
+    def set_supplementary_column(self, col_name: Union[str, list[str]]) -> None:
         """Mark the specified existing column(s) as a supplementary column.
 
         Args:
@@ -457,6 +461,11 @@ class TimeSeries:
             <TimeSeries object, filtered to only contain the "temperature" data column>
         """
         try:
+            # Delegate flag-related (non-private) calls to the flag manager
+            if hasattr(self._flag_manager, name) and not name.startswith("_"):
+                return getattr(self._flag_manager, name)
+
+            # Otherwise, look for name within columns
             if name == self.time_name:
                 # If the attribute name matches the time column, return the PrimaryTimeColumn
                 return self.time_column

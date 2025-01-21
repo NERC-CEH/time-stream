@@ -1,4 +1,5 @@
 import copy
+from abc import ABC
 from typing import TYPE_CHECKING, Any, Dict, Optional, Union
 
 import polars as pl
@@ -8,7 +9,7 @@ if TYPE_CHECKING:
     from time_series import TimeSeries
 
 
-class TimeSeriesColumn:
+class TimeSeriesColumn(ABC):
     """Base class for all column types in a TimeSeries."""
     def __init__(self, name: str, ts: "TimeSeries", metadata: Optional[Dict[str, Any]] = None) -> None:
         self._name = name
@@ -151,7 +152,6 @@ class SupplementaryColumn(TimeSeriesColumn):
 
 class FlagColumn(SupplementaryColumn):
     """Represents a flag column."""
-
     def __init__(self,
                  name: str,
                  ts: "TimeSeries",
@@ -162,7 +162,7 @@ class FlagColumn(SupplementaryColumn):
 
     def add_flag(self, flag: Union[int, str], expr: pl.Expr = pl.lit(True)) -> None:
         """Bitwise OR operation to add a flag value to rows that fulfill the expression."""
-        flag = self._ts.flag_manager.flag_systems[self.flag_system].get_single_flag(flag)
+        flag = self._ts._flag_manager.flag_systems[self.flag_system].get_single_flag(flag)
         self._ts.df = self._ts.df.with_columns(
             pl.when(expr)
             .then(pl.col(self.name) | flag.value)
@@ -171,7 +171,7 @@ class FlagColumn(SupplementaryColumn):
 
     def remove_flag(self, flag: Union[int, str], expr: pl.Expr = pl.lit(True)) -> None:
         """Bitwise AND operation to remove a flag from rows that fulfill the expression"""
-        flag = self._ts.flag_manager.flag_systems[self.flag_system].get_single_flag(flag)
+        flag = self._ts._flag_manager.flag_systems[self.flag_system].get_single_flag(flag)
         self._ts.df = self._ts.df.with_columns(
             pl.when(expr)
             .then(pl.col(self.name) & ~flag.value)

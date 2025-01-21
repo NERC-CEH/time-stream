@@ -82,8 +82,8 @@ class TimeSeriesFlagManager:
         flag_col = FlagColumn(col_name, self._ts, flag_system)
         self._ts._columns[col_name] = flag_col
 
-    def set_as_flag_column(self, flag_system: str, col_name: Union[str, list[str]]) -> None:
-        """Mark the specified existing column as a flag column.
+    def set_flag_column(self, flag_system: str, col_name: Union[str, list[str]]) -> None:
+        """Mark the specified existing column(s) as a flag column.
 
         Args:
             flag_system: The name of the flag system.

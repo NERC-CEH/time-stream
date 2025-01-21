@@ -14,7 +14,7 @@ class BitwiseFlag(int, Flag):
     def _check_type(value):
         """Checks that all test flags are bitwise.
         """
-        if not isinstance(value, int) and value > 0:
+        if not isinstance(value, int) or value < 0:
             raise ValueError(f"Flag value must be a positive integer: {value}")
 
     @staticmethod
