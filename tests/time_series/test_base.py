@@ -9,7 +9,7 @@ from polars.testing import assert_series_equal, assert_frame_equal
 
 from time_series.base import TimeSeries
 from time_series.period import Period
-
+from time_series.columns import DataColumn, FlagColumn, PrimaryTimeColumn, SupplementaryColumn
 
 TZ_UTC = timezone.utc
 
@@ -177,35 +177,57 @@ class TestInitSupplementaryColumn(unittest.TestCase):
 
 
 class TestSetSupplementaryColumns(unittest.TestCase):
-    times = [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)]
-    values = {"data_column": [1, 2, 3], "supp_column1": ["a", "b", "c"], "supp_column2": ["x", "y", "z"]}
+    df = pl.DataFrame({
+        "time": [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)],
+        "data_column": [1, 2, 3],
+        "supp_column1": ["a", "b", "c"],
+        "supp_column2": ["x", "y", "z"]
+    })
 
     def test_no_supplementary_columns(self):
         """Test that a TimeSeries object is initialised without any supplementary columns set."""
-        ts = init_timeseries(self.times, self.values)
-        self.assertEqual(ts.data_columns, ["data_column", "supp_column1", "supp_column2"])
-        self.assertEqual(ts.supplementary_columns, [])
+        ts = TimeSeries(self.df, time_name="time")
+        expected_data_columns = {"data_column": DataColumn("data_column", ts),
+                                 "supp_column1": DataColumn("supp_column1", ts),
+                                 "supp_column2": DataColumn("supp_column2", ts),
+                                 }
+        self.assertEqual(ts.data_columns, expected_data_columns)
+        self.assertEqual(ts.supplementary_columns, {})
 
     def test_empty_list(self):
         """Test that an empty list behaves the same as no list sent"""
-        ts = init_timeseries(self.times, self.values)
-        ts.set_supplementary_columns([])
-        self.assertEqual(ts.data_columns, ["data_column", "supp_column1", "supp_column2"])
-        self.assertEqual(ts.supplementary_columns, [])
+        ts = TimeSeries(self.df, time_name="time")
+        ts.set_supplementary_column([])
+        expected_data_columns = {"data_column": DataColumn("data_column", ts),
+                                 "supp_column1": DataColumn("supp_column1", ts),
+                                 "supp_column2": DataColumn("supp_column2", ts),
+                                 }
+        self.assertEqual(ts.data_columns, expected_data_columns)
+        self.assertEqual(ts.supplementary_columns, {})
 
     def test_single_supplementary_column(self):
         """Test that a single supplementary column is set correctly."""
-        ts = init_timeseries(self.times, self.values)
-        ts.set_supplementary_columns(["supp_column1"])
-        self.assertEqual(ts.data_columns, ["data_column", "supp_column2"])
-        self.assertEqual(ts.supplementary_columns, ["supp_column1"])
+        ts = TimeSeries(self.df, time_name="time")
+        ts.set_supplementary_column(["supp_column1"])
+        expected_data_columns = {"data_column": DataColumn("data_column", ts),
+                                 "supp_column2": DataColumn("supp_column2", ts),
+                                 }
+        expected_supp_columns = {"supp_column1": SupplementaryColumn("supp_column1", ts),
+                                 }
+        self.assertEqual(ts.data_columns, expected_data_columns)
+        self.assertEqual(ts.supplementary_columns, expected_supp_columns)
         
     def test_multiple_supplementary_column(self):
         """Test that multiple supplementary columns are set correctly."""
-        ts = init_timeseries(self.times, self.values)
-        ts.set_supplementary_columns(["supp_column1", "supp_column2"])
-        self.assertEqual(ts.data_columns, ["data_column"])
-        self.assertEqual(ts.supplementary_columns, ["supp_column1", "supp_column2"])
+        ts = TimeSeries(self.df, time_name="time")
+        ts.set_supplementary_column(["supp_column1", "supp_column2"])
+        expected_data_columns = {"data_column": DataColumn("data_column", ts),
+                                 }
+        expected_supp_columns = {"supp_column1": SupplementaryColumn("supp_column1", ts),
+                                 "supp_column2": DataColumn("supp_column2", ts),
+                                 }
+        self.assertEqual(ts.data_columns, expected_data_columns)
+        self.assertEqual(ts.supplementary_columns, expected_supp_columns)
 
     @parameterized.expand([
         ("One bad", ["data_column", "supp_column1", "supp_column2", "non_col"]),
@@ -214,17 +236,22 @@ class TestSetSupplementaryColumns(unittest.TestCase):
     ])
     def test_bad_supplementary_columns(self, _, supplementary_columns):
         """Test that error raised for supplementary columns specified that are not in df"""
-        ts = init_timeseries(self.times, self.values)
-        with self.assertRaises(ValueError):
-            ts.set_supplementary_columns(supplementary_columns)
+        ts = TimeSeries(self.df, time_name="time")
+        with self.assertRaises(KeyError):
+            ts.set_supplementary_column(supplementary_columns)
 
     def test_appending_supplementary_column(self):
         """Test that adding supplementary columns maintains existing supplementary columns."""
-        ts = init_timeseries(self.times, self.values)
-        ts._supplementary_columns.add("supp_column1")
-        ts.set_supplementary_columns(["supp_column2"])
-        self.assertEqual(ts.data_columns, ["data_column"])
-        self.assertEqual(ts.supplementary_columns, ["supp_column1", "supp_column2"])
+        ts = TimeSeries(self.df, time_name="time")
+        ts.set_supplementary_column(["supp_column1"])
+        ts.set_supplementary_column(["supp_column2"])
+        expected_data_columns = {"data_column": DataColumn("data_column", ts),
+                                 }
+        expected_supp_columns = {"supp_column1": SupplementaryColumn("supp_column1", ts),
+                                 "supp_column2": DataColumn("supp_column2", ts),
+                                 }
+        self.assertEqual(ts.data_columns, expected_data_columns)
+        self.assertEqual(ts.supplementary_columns, expected_supp_columns)
 
 
 class TestUnsetSupplementaryColumns(unittest.TestCase):

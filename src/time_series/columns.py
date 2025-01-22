@@ -188,6 +188,23 @@ class TimeSeriesColumn(ABC):
         custom_attrs = default_attrs + list(self._metadata.keys())
         return sorted(set(custom_attrs))
 
+    def __eq__(self, other: object) -> bool:
+        """Check equality between two TimeSeriesColumn instances.
+
+        Two instances are considered equal if they have the same name, reference the same TimeSeries object,
+        and have identical metadata.
+
+        Args:
+            other: The object to compare against.
+
+        Returns:
+            True if both objects are equal, otherwise False.
+        """
+        if not isinstance(other, TimeSeriesColumn):
+            return NotImplemented
+
+        return self.name == other.name and self._ts is other._ts and self._metadata == other._metadata
+
 
 class PrimaryTimeColumn(TimeSeriesColumn):
     """Represents the primary datetime column that controls the Time Series.
