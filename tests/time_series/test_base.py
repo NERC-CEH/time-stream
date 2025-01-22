@@ -1015,9 +1015,8 @@ class TestEpochCheck(unittest.TestCase):
     def test_non_epoch_agnostic_period_fails(self, period):
         """ Test that non epoch agnostic Periods fail the epoch check.
         """
-        ts = init_timeseries()
         with self.assertRaises(NotImplementedError):
-            ts._epoch_check(period)
+            TimeSeries._epoch_check(period)
 
     @parameterized.expand([
         Period.of_years(1),
@@ -1028,9 +1027,8 @@ class TestEpochCheck(unittest.TestCase):
     ])
     def test_epoch_agnostic_period_passes(self, period):
         """ Test that epoch agnostic Periods pass the epoch check.
-        """
-        ts = init_timeseries()
-        ts._epoch_check(period)
+        """        
+        TimeSeries._epoch_check(period)
 
 
 class TestSetTimeZone(unittest.TestCase):
