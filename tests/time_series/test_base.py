@@ -255,7 +255,11 @@ class TestSetSupplementaryColumns(unittest.TestCase):
 
 
 class TestRoundToPeriod(unittest.TestCase):
-    times = [datetime(2020, 6, 1, 8, 10, 5, 2000), datetime(2021, 4, 30, 15, 30, 10, 250), datetime(2022, 12, 31, 12)]
+    df = pl.DataFrame({
+        "time": [datetime(2020, 6, 1, 8, 10, 5, 2000),
+                 datetime(2021, 4, 30, 15, 30, 10, 250),
+                 datetime(2022, 12, 31, 12)]
+    })
 
     @parameterized.expand([
         ("simple yearly", Period.of_years(1),
@@ -268,9 +272,10 @@ class TestRoundToPeriod(unittest.TestCase):
     def test_round_to_year_period(self, _, period, expected):
         """ Test that rounding a time series to a given year period works as expected.
         """
-        ts = init_timeseries(self.times)
+        ts = TimeSeries(self.df, time_name="time")
         result = ts._round_time_to_period(period)
-        assert_series_equal(result, pl.Series("time", expected))
+        expected = pl.Series("time", expected).dt.replace_time_zone("UTC")
+        assert_series_equal(result, expected)
 
     @parameterized.expand([
         ("simple monthly", Period.of_months(1),
@@ -286,9 +291,10 @@ class TestRoundToPeriod(unittest.TestCase):
     def test_round_to_month_period(self, _, period, expected):
         """ Test that rounding a time series to a given month period works as expected.
         """
-        ts = init_timeseries(self.times)
+        ts = TimeSeries(self.df, time_name="time")
         result = ts._round_time_to_period(period)
-        assert_series_equal(result, pl.Series("time", expected))
+        expected = pl.Series("time", expected).dt.replace_time_zone("UTC")
+        assert_series_equal(result, expected)
 
     @parameterized.expand([
         ("simple daily", Period.of_days(1),
@@ -301,9 +307,10 @@ class TestRoundToPeriod(unittest.TestCase):
     def test_round_to_day_period(self, _, period, expected):
         """ Test that rounding a time series to a given day period works as expected.
         """
-        ts = init_timeseries(self.times)
+        ts = TimeSeries(self.df, time_name="time")
         result = ts._round_time_to_period(period)
-        assert_series_equal(result, pl.Series("time", expected))
+        expected = pl.Series("time", expected).dt.replace_time_zone("UTC")
+        assert_series_equal(result, expected)
 
     @parameterized.expand([
         ("simple hourly", Period.of_hours(1),
@@ -319,9 +326,10 @@ class TestRoundToPeriod(unittest.TestCase):
     def test_round_to_hour_period(self, _, period, expected):
         """ Test that rounding a time series to a given hour period works as expected.
         """
-        ts = init_timeseries(self.times)
+        ts = TimeSeries(self.df, time_name="time")
         result = ts._round_time_to_period(period)
-        assert_series_equal(result, pl.Series("time", expected))
+        expected = pl.Series("time", expected).dt.replace_time_zone("UTC")
+        assert_series_equal(result, expected)
 
     @parameterized.expand([
         ("simple minutes", Period.of_minutes(1),
@@ -337,9 +345,10 @@ class TestRoundToPeriod(unittest.TestCase):
     def test_round_to_minute_period(self, _, period, expected):
         """ Test that rounding a time series to a given minute period works as expected.
         """
-        ts = init_timeseries(self.times)
+        ts = TimeSeries(self.df, time_name="time")
         result = ts._round_time_to_period(period)
-        assert_series_equal(result, pl.Series("time", expected))
+        expected = pl.Series("time", expected).dt.replace_time_zone("UTC")
+        assert_series_equal(result, expected)
 
     @parameterized.expand([
         ("simple seconds", Period.of_seconds(1),
@@ -352,9 +361,10 @@ class TestRoundToPeriod(unittest.TestCase):
     def test_round_to_second_period(self, _, period, expected):
         """ Test that rounding a time series to a given second period works as expected.
         """
-        ts = init_timeseries(self.times)
+        ts = TimeSeries(self.df, time_name="time")
         result = ts._round_time_to_period(period)
-        assert_series_equal(result, pl.Series("time", expected))
+        expected = pl.Series("time", expected).dt.replace_time_zone("UTC")
+        assert_series_equal(result, expected)
 
     @parameterized.expand([
         ("simple microseconds", Period.of_microseconds(200),
@@ -364,9 +374,10 @@ class TestRoundToPeriod(unittest.TestCase):
     def test_round_to_microsecond_period(self, _, period, expected):
         """ Test that rounding a time series to a given microsecond period works as expected.
         """
-        ts = init_timeseries(self.times)
+        ts = TimeSeries(self.df, time_name="time")
         result = ts._round_time_to_period(period)
-        assert_series_equal(result, pl.Series("time", expected))
+        expected = pl.Series("time", expected).dt.replace_time_zone("UTC")
+        assert_series_equal(result, expected)
 
 
 class TestValidateResolution(unittest.TestCase):
