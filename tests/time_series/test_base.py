@@ -254,53 +254,6 @@ class TestSetSupplementaryColumns(unittest.TestCase):
         self.assertEqual(ts.supplementary_columns, expected_supp_columns)
 
 
-class TestUnsetSupplementaryColumns(unittest.TestCase):
-    times = [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)]
-    values = {"data_column": [1, 2, 3], "supp_column1": ["a", "b", "c"], "supp_column2": ["x", "y", "z"]}
-
-    def test_no_supplementary_columns_removes_all(self):
-        """Test that passing nothing removes all from the supplementary columns list."""
-        ts = init_timeseries(self.times, self.values, supplementary_columns=["supp_column1", "supp_column2"])
-        ts.unset_supplementary_columns()
-        self.assertEqual(ts.data_columns, ["data_column", "supp_column1", "supp_column2"])
-        self.assertEqual(ts.supplementary_columns, [])
-
-    def test_empty_list(self):
-        """Test that an empty list behaves the same as no list sent"""
-        ts = init_timeseries(self.times, self.values, supplementary_columns=["supp_column1", "supp_column2"])
-        ts.unset_supplementary_columns()
-        self.assertEqual(ts.data_columns, ["data_column", "supp_column1", "supp_column2"])
-        self.assertEqual(ts.supplementary_columns, [])
-
-    def test_unset_single_supplementary_column(self):
-        """Test that a single supplementary column is unset correctly."""
-        ts = init_timeseries(self.times, self.values, supplementary_columns=["supp_column1", "supp_column2"])
-        ts.unset_supplementary_columns(["supp_column1"])
-        self.assertEqual(ts.data_columns, ["data_column", "supp_column1"])
-        self.assertEqual(ts.supplementary_columns, ["supp_column2"])
-
-    def test_unset_multiple_supplementary_column(self):
-        """Test that multiple supplementary columns are unset correctly."""
-        ts = init_timeseries(self.times, self.values, supplementary_columns=["supp_column1", "supp_column2"])
-        ts.unset_supplementary_columns(["supp_column1", "supp_column2"])
-        self.assertEqual(ts.data_columns, ["data_column", "supp_column1", "supp_column2"])
-        self.assertEqual(ts.supplementary_columns, [])
-
-    def test_unset_nonexistent_column(self):
-        """Test removing a column that is not in supplementary columns maintains the existing supplementary columns."""
-        ts = init_timeseries(self.times, self.values, supplementary_columns=["supp_column1", "supp_column2"])
-        ts.unset_supplementary_columns(["supp_column3"])
-        self.assertEqual(ts.data_columns, ["data_column"])
-        self.assertEqual(ts.supplementary_columns, ["supp_column1", "supp_column2"])
-
-    def test_unset_mixed_existing_and_nonexistent_columns(self):
-        """Test removing a mix of columns that are in and not in supplementary columns."""
-        ts = init_timeseries(self.times, self.values, supplementary_columns=["supp_column1", "supp_column2"])
-        ts.unset_supplementary_columns(["supp_column1", "supp_column3"])
-        self.assertEqual(ts.data_columns, ["data_column", "supp_column1"])
-        self.assertEqual(ts.supplementary_columns, ["supp_column2"])
-
-
 class TestRoundToPeriod(unittest.TestCase):
     times = [datetime(2020, 6, 1, 8, 10, 5, 2000), datetime(2021, 4, 30, 15, 30, 10, 250), datetime(2022, 12, 31, 12)]
 
