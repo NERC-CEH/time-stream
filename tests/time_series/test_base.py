@@ -1027,7 +1027,7 @@ class TestEpochCheck(unittest.TestCase):
     ])
     def test_epoch_agnostic_period_passes(self, period):
         """ Test that epoch agnostic Periods pass the epoch check.
-        """        
+        """
         TimeSeries._epoch_check(period)
 
 
@@ -1037,38 +1037,47 @@ class TestSetTimeZone(unittest.TestCase):
     def test_time_zone_provided(self):
         """Test that the time zone is set to time_zone if it is provided.
         """
-        ts = init_timeseries(self.times, time_zone="America/New_York")
-        ts._set_time_zone()
+        with patch.object(TimeSeries, '_setup'):
+            ts = TimeSeries(pl.DataFrame({"time": self.times}), time_name="time", time_zone="America/New_York")
+            ts._set_time_zone()
 
-        self.assertEqual(ts._time_zone, "America/New_York")
-        self.assertEqual(ts.df.schema["time"].time_zone, "America/New_York")
+            self.assertEqual(ts._time_zone, "America/New_York")
+            self.assertEqual(ts.df.schema["time"].time_zone, "America/New_York")
 
     def test_time_zone_not_provided_but_df_has_tz(self):
         """Test that the time zone is set to the DataFrame's time zone if time_zone is None.
         """
-        ts = init_timeseries(self.times, time_zone=None, df_time_zone="Europe/London")
-        ts._set_time_zone()
+        with patch.object(TimeSeries, '_setup'):
+            times = pl.Series("time", self.times).dt.replace_time_zone("Europe/London")
+            ts = TimeSeries(pl.DataFrame(times), time_name="time", time_zone=None)
+            ts._set_time_zone()
 
-        self.assertEqual(ts._time_zone, "Europe/London")
-        self.assertEqual(ts.df.schema["time"].time_zone, "Europe/London")
+            self.assertEqual(ts._time_zone, "Europe/London")
+            self.assertEqual(ts.df.schema["time"].time_zone, "Europe/London")
 
     def test_time_zone_default(self):
         """Test that the default time zone is used if both time_zone and the dataframe time zone are None.
         """
-        ts = init_timeseries(self.times)
-        ts._set_time_zone()
+        with patch.object(TimeSeries, '_setup'):
+            ts = TimeSeries(pl.DataFrame({"time": self.times}), time_name="time", time_zone=None)
+            ts._set_time_zone()
 
-        self.assertEqual(ts._time_zone, "UTC")
-        self.assertEqual(ts.df.schema["time"].time_zone, "UTC")
+            self.assertEqual(ts._time_zone, "UTC")
+            self.assertEqual(ts.df.schema["time"].time_zone, "UTC")
 
     def test_time_zone_provided_but_df_has_different_tz(self):
         """Test that the time zone is changed if the provided time zone is different to that of the df
         """
-        ts = init_timeseries(self.times, time_zone="America/New_York", df_time_zone="Europe/London")
-        ts._set_time_zone()
+        with patch.object(TimeSeries, '_setup'):
+            times = pl.Series("time", self.times).dt.replace_time_zone("Europe/London")
+            ts = TimeSeries(pl.DataFrame(times), time_name="time", time_zone=None)
+            ts._set_time_zone()
 
-        self.assertEqual(ts._time_zone, "America/New_York")
-        self.assertEqual(ts.df.schema["time"].time_zone, "America/New_York")
+            ts = TimeSeries(pl.DataFrame({"time": self.times}), time_name="time", time_zone="America/New_York")
+            ts._set_time_zone()
+
+            self.assertEqual(ts._time_zone, "America/New_York")
+            self.assertEqual(ts.df.schema["time"].time_zone, "America/New_York")
 
 
 class TestSelectTime(unittest.TestCase):
