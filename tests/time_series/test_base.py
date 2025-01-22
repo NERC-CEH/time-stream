@@ -403,8 +403,9 @@ class TestValidateResolution(unittest.TestCase):
     def test_validate_year_resolution_success(self, _, times, resolution):
         """ Test that a year based time series that does conform to the given resolution passes the validation.
         """
-        ts = init_timeseries(times, resolution=resolution)
-        ts._validate_resolution()
+        with patch.object(TimeSeries, '_setup'):
+            ts = TimeSeries(pl.DataFrame({"time": times}), time_name="time", resolution=resolution)
+            ts._validate_resolution()
 
     @parameterized.expand([
         ("simple yearly error",
@@ -418,9 +419,10 @@ class TestValidateResolution(unittest.TestCase):
     def test_validate_year_resolution_error(self, _, times, resolution):
         """ Test that a year based time series that doesn't conform to the given resolution raises an error.
         """
-        ts = init_timeseries(times, resolution=resolution)
-        with self.assertRaises(UserWarning):
-            ts._validate_resolution()
+        with patch.object(TimeSeries, '_setup'):
+            ts = TimeSeries(pl.DataFrame({"time": times}), time_name="time", resolution=resolution)
+            with self.assertRaises(UserWarning):
+                ts._validate_resolution()
 
     @parameterized.expand([
         ("simple monthly",
@@ -454,8 +456,9 @@ class TestValidateResolution(unittest.TestCase):
     def test_validate_month_resolution_success(self, _, times, resolution):
         """ Test that a month based time series that does conform to the given resolution passes the validation.
         """
-        ts = init_timeseries(times, resolution=resolution)
-        ts._validate_resolution()
+        with patch.object(TimeSeries, '_setup'):
+            ts = TimeSeries(pl.DataFrame({"time": times}), time_name="time", resolution=resolution)
+            ts._validate_resolution()
 
     @parameterized.expand([
         ("simple monthly",
@@ -469,9 +472,10 @@ class TestValidateResolution(unittest.TestCase):
     def test_validate_month_resolution_error(self, _, times, resolution):
         """ Test that a month based time series that doesn't conform to the given resolution raises an error.
         """
-        ts = init_timeseries(times, resolution=resolution)
-        with self.assertRaises(UserWarning):
-            ts._validate_resolution()
+        with patch.object(TimeSeries, '_setup'):
+            ts = TimeSeries(pl.DataFrame({"time": times}), time_name="time", resolution=resolution)
+            with self.assertRaises(UserWarning):
+                ts._validate_resolution()
 
     @parameterized.expand([
         ("simple daily",
@@ -497,8 +501,9 @@ class TestValidateResolution(unittest.TestCase):
     def test_validate_day_resolution_success(self, _, times, resolution):
         """ Test that a day based time series that does conform to the given resolution passes the validation.
         """
-        ts = init_timeseries(times, resolution=resolution)
-        ts._validate_resolution()
+        with patch.object(TimeSeries, '_setup'):
+            ts = TimeSeries(pl.DataFrame({"time": times}), time_name="time", resolution=resolution)
+            ts._validate_resolution()
 
     @parameterized.expand([
         ("simple daily error",
@@ -512,9 +517,10 @@ class TestValidateResolution(unittest.TestCase):
     def test_validate_day_resolution_error(self, _, times, resolution):
         """ Test that a day based time series that doesn't conform to the given resolution raises an error.
         """
-        ts = init_timeseries(times, resolution=resolution)
-        with self.assertRaises(UserWarning):
-            ts._validate_resolution()
+        with patch.object(TimeSeries, '_setup'):
+            ts = TimeSeries(pl.DataFrame({"time": times}), time_name="time", resolution=resolution)
+            with self.assertRaises(UserWarning):
+                ts._validate_resolution()
 
     @parameterized.expand([
         ("simple hourly",
@@ -548,8 +554,9 @@ class TestValidateResolution(unittest.TestCase):
     def test_validate_hour_resolution_success(self, _, times, resolution):
         """ Test that an hour based time series that does conform to the given resolution passes the validation.
         """
-        ts = init_timeseries(times, resolution=resolution)
-        ts._validate_resolution()
+        with patch.object(TimeSeries, '_setup'):
+            ts = TimeSeries(pl.DataFrame({"time": times}), time_name="time", resolution=resolution)
+            ts._validate_resolution()
 
     @parameterized.expand([
         ("simple hourly",
@@ -563,9 +570,10 @@ class TestValidateResolution(unittest.TestCase):
     def test_validate_hour_resolution_error(self, _, times, resolution):
         """ Test that an hour based time series that doesn't conform to the given resolution raises an error.
         """
-        ts = init_timeseries(times, resolution=resolution)
-        with self.assertRaises(UserWarning):
-            ts._validate_resolution()
+        with patch.object(TimeSeries, '_setup'):
+            ts = TimeSeries(pl.DataFrame({"time": times}), time_name="time", resolution=resolution)
+            with self.assertRaises(UserWarning):
+                ts._validate_resolution()
 
     @parameterized.expand([
         ("simple minute",
@@ -595,8 +603,9 @@ class TestValidateResolution(unittest.TestCase):
     def test_validate_minute_resolution_success(self, _, times, resolution):
         """ Test that a minute based time series that does conform to the given resolution passes the validation.
         """
-        ts = init_timeseries(times, resolution=resolution)
-        ts._validate_resolution()
+        with patch.object(TimeSeries, '_setup'):
+            ts = TimeSeries(pl.DataFrame({"time": times}), time_name="time", resolution=resolution)
+            ts._validate_resolution()
 
     @parameterized.expand([
         ("simple minute",
@@ -610,9 +619,10 @@ class TestValidateResolution(unittest.TestCase):
     def test_validate_minute_resolution_error(self, _, times, resolution):
         """ Test that a minute based time series that doesn't conform to the given resolution raises an error.
         """
-        ts = init_timeseries(times, resolution=resolution)
-        with self.assertRaises(UserWarning):
-            ts._validate_resolution()
+        with patch.object(TimeSeries, '_setup'):
+            ts = TimeSeries(pl.DataFrame({"time": times}), time_name="time", resolution=resolution)
+            with self.assertRaises(UserWarning):
+                ts._validate_resolution()
 
     @parameterized.expand([
         ("simple seconds",
@@ -642,8 +652,9 @@ class TestValidateResolution(unittest.TestCase):
     def test_validate_second_resolution_success(self, _, times, resolution):
         """ Test that a second based time series that does conform to the given resolution passes the validation.
         """
-        ts = init_timeseries(times, resolution=resolution)
-        ts._validate_resolution()
+        with patch.object(TimeSeries, '_setup'):
+            ts = TimeSeries(pl.DataFrame({"time": times}), time_name="time", resolution=resolution)
+            ts._validate_resolution()
 
     @parameterized.expand([
         ("simple seconds",
@@ -657,9 +668,10 @@ class TestValidateResolution(unittest.TestCase):
     def test_validate_second_resolution_error(self, _, times, resolution):
         """ Test that a second based time series that doesn't conform to the given resolution raises an error.
         """
-        ts = init_timeseries(times, resolution=resolution)
-        with self.assertRaises(UserWarning):
-            ts._validate_resolution()
+        with patch.object(TimeSeries, '_setup'):
+            ts = TimeSeries(pl.DataFrame({"time": times}), time_name="time", resolution=resolution)
+            with self.assertRaises(UserWarning):
+                ts._validate_resolution()
 
     @parameterized.expand([
         ("simple microseconds",
@@ -685,8 +697,9 @@ class TestValidateResolution(unittest.TestCase):
     def test_validate_microsecond_resolution_success(self, _, times, resolution):
         """ Test that a microsecond based time series that does conform to the given resolution passes the validation.
         """
-        ts = init_timeseries(times, resolution=resolution)
-        ts._validate_resolution()
+        with patch.object(TimeSeries, '_setup'):
+            ts = TimeSeries(pl.DataFrame({"time": times}), time_name="time", resolution=resolution)
+            ts._validate_resolution()
 
     @parameterized.expand([
         ("40Hz",
@@ -696,9 +709,10 @@ class TestValidateResolution(unittest.TestCase):
     def test_validate_microsecond_resolution_error(self, _, times, resolution):
         """ Test that a microsecond based time series that doesn't conform to the given resolution raises an error.
         """
-        ts = init_timeseries(times, resolution=resolution)
-        with self.assertRaises(UserWarning):
-            ts._validate_resolution()
+        with patch.object(TimeSeries, '_setup'):
+            ts = TimeSeries(pl.DataFrame({"time": times}), time_name="time", resolution=resolution)
+            with self.assertRaises(UserWarning):
+                ts._validate_resolution()
 
 
 class TestValidatePeriodicity(unittest.TestCase):
