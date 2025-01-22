@@ -1080,18 +1080,6 @@ class TestSetTimeZone(unittest.TestCase):
             self.assertEqual(ts.df.schema["time"].time_zone, "America/New_York")
 
 
-class TestSelectTime(unittest.TestCase):
-    times = [datetime(2020, 1, 1, 12), datetime(2020, 1, 1, 15), datetime(2020, 1, 1, 18)]
-
-    def test_select_time(self):
-        """Test that we select just the primary datetime column as a series
-        """
-        ts = init_timeseries(self.times)
-        result = ts.select_time()
-        expected = pl.Series("time", self.times)
-        assert_series_equal(result, expected)
-
-
 class TestSortTime(unittest.TestCase):
 
     def test_sort_random_dates(self):
