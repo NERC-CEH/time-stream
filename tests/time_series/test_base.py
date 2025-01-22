@@ -740,8 +740,9 @@ class TestValidatePeriodicity(unittest.TestCase):
     def test_validate_year_periodicity_success(self, _, times, periodicity):
         """ Test that a year based time series that does conform to the given periodicity passes the validation.
         """
-        ts = init_timeseries(times, periodicity=periodicity)
-        ts._validate_periodicity()
+        with patch.object(TimeSeries, '_setup'):
+            ts = TimeSeries(pl.DataFrame({"time": times}), time_name="time", periodicity=periodicity)
+            ts._validate_periodicity()
 
     @parameterized.expand([
         ("simple yearly",
@@ -755,9 +756,10 @@ class TestValidatePeriodicity(unittest.TestCase):
     def test_validate_year_periodicity_error(self, _, times, periodicity):
         """ Test that a year based time series that doesn't conform to the given periodicity raises an error.
         """
-        ts = init_timeseries(times, periodicity=periodicity)
-        with self.assertRaises(UserWarning):
-            ts._validate_periodicity()
+        with patch.object(TimeSeries, '_setup'):
+            ts = TimeSeries(pl.DataFrame({"time": times}), time_name="time", periodicity=periodicity)
+            with self.assertRaises(UserWarning):
+                ts._validate_periodicity()
 
     @parameterized.expand([
         ("simple monthly",
@@ -787,8 +789,9 @@ class TestValidatePeriodicity(unittest.TestCase):
     def test_validate_month_periodicity_success(self, _, times, periodicity):
         """ Test that a month based time series that does conform to the given periodicity passes the validation.
         """
-        ts = init_timeseries(times, periodicity=periodicity)
-        ts._validate_periodicity()
+        with patch.object(TimeSeries, '_setup'):
+            ts = TimeSeries(pl.DataFrame({"time": times}), time_name="time", periodicity=periodicity)
+            ts._validate_periodicity()
 
     @parameterized.expand([
         ("simple monthly",
@@ -802,9 +805,10 @@ class TestValidatePeriodicity(unittest.TestCase):
     def test_validate_month_periodicity_error(self, _, times, periodicity):
         """ Test that a month based time series that doesn't conform to the given periodicity raises an error.
         """
-        ts = init_timeseries(times, periodicity=periodicity)
-        with self.assertRaises(UserWarning):
-            ts._validate_periodicity()
+        with patch.object(TimeSeries, '_setup'):
+            ts = TimeSeries(pl.DataFrame({"time": times}), time_name="time", periodicity=periodicity)
+            with self.assertRaises(UserWarning):
+                ts._validate_periodicity()
 
     @parameterized.expand([
         ("simple daily",
@@ -830,8 +834,9 @@ class TestValidatePeriodicity(unittest.TestCase):
     def test_validate_day_periodicity_success(self, _, times, periodicity):
         """ Test that a day based time series that does conform to the given periodicity passes the validation.
         """
-        ts = init_timeseries(times, periodicity=periodicity)
-        ts._validate_periodicity()
+        with patch.object(TimeSeries, '_setup'):
+            ts = TimeSeries(pl.DataFrame({"time": times}), time_name="time", periodicity=periodicity)
+            ts._validate_periodicity()
 
     @parameterized.expand([
         ("simple daily",
@@ -845,9 +850,10 @@ class TestValidatePeriodicity(unittest.TestCase):
     def test_validate_day_periodicity_error(self, _, times, periodicity):
         """ Test that a day based time series that doesn't conform to the given periodicity raises an error.
         """
-        ts = init_timeseries(times, periodicity=periodicity)
-        with self.assertRaises(UserWarning):
-            ts._validate_periodicity()
+        with patch.object(TimeSeries, '_setup'):
+            ts = TimeSeries(pl.DataFrame({"time": times}), time_name="time", periodicity=periodicity)
+            with self.assertRaises(UserWarning):
+                ts._validate_periodicity()
 
     @parameterized.expand([
         ("simple hourly",
@@ -869,8 +875,9 @@ class TestValidatePeriodicity(unittest.TestCase):
     def test_validate_hour_periodicity_success(self, _, times, periodicity):
         """ Test that an hour based time series that does conform to the given periodicity passes the validation.
         """
-        ts = init_timeseries(times, periodicity=periodicity)
-        ts._validate_periodicity()
+        with patch.object(TimeSeries, '_setup'):
+            ts = TimeSeries(pl.DataFrame({"time": times}), time_name="time", periodicity=periodicity)
+            ts._validate_periodicity()
 
     @parameterized.expand([
         ("simple hourly",
@@ -880,9 +887,10 @@ class TestValidatePeriodicity(unittest.TestCase):
     def test_validate_hour_periodicity_error(self, _, times, periodicity):
         """ Test that an hour based time series that doesn't conform to the given periodicity raises an error.
         """
-        ts = init_timeseries(times, periodicity=periodicity)
-        with self.assertRaises(UserWarning):
-            ts._validate_periodicity()
+        with patch.object(TimeSeries, '_setup'):
+            ts = TimeSeries(pl.DataFrame({"time": times}), time_name="time", periodicity=periodicity)
+            with self.assertRaises(UserWarning):
+                ts._validate_periodicity()
 
     @parameterized.expand([
         ("simple minute",
@@ -904,8 +912,9 @@ class TestValidatePeriodicity(unittest.TestCase):
     def test_validate_minute_periodicity_success(self, _, times, periodicity):
         """ Test that a minute based time series that does conform to the given periodicity passes the validation.
         """
-        ts = init_timeseries(times, periodicity=periodicity)
-        ts._validate_periodicity()
+        with patch.object(TimeSeries, '_setup'):
+            ts = TimeSeries(pl.DataFrame({"time": times}), time_name="time", periodicity=periodicity)
+            ts._validate_periodicity()
 
     @parameterized.expand([
         ("simple minute",
@@ -915,9 +924,10 @@ class TestValidatePeriodicity(unittest.TestCase):
     def test_validate_minute_periodicity_error(self, _, times, periodicity):
         """ Test that a minute based time series that doesn't conform to the given periodicity raises an error.
         """
-        ts = init_timeseries(times, periodicity=periodicity)
-        with self.assertRaises(UserWarning):
-            ts._validate_periodicity()
+        with patch.object(TimeSeries, '_setup'):
+            ts = TimeSeries(pl.DataFrame({"time": times}), time_name="time", periodicity=periodicity)
+            with self.assertRaises(UserWarning):
+                ts._validate_periodicity()
 
     @parameterized.expand([
         ("simple seconds",
@@ -939,8 +949,9 @@ class TestValidatePeriodicity(unittest.TestCase):
     def test_validate_second_periodicity_success(self, _, times, periodicity):
         """ Test that a second based time series that does conform to the given periodicity passes the validation.
         """
-        ts = init_timeseries(times, periodicity=periodicity)
-        ts._validate_periodicity()
+        with patch.object(TimeSeries, '_setup'):
+            ts = TimeSeries(pl.DataFrame({"time": times}), time_name="time", periodicity=periodicity)
+            ts._validate_periodicity()
 
     @parameterized.expand([
         ("simple seconds",
@@ -950,9 +961,10 @@ class TestValidatePeriodicity(unittest.TestCase):
     def test_validate_second_periodicity_error(self, _, times, periodicity):
         """ Test that a second based time series that doesn't conform to the given periodicity raises an error.
         """
-        ts = init_timeseries(times, periodicity=periodicity)
-        with self.assertRaises(UserWarning):
-            ts._validate_periodicity()
+        with patch.object(TimeSeries, '_setup'):
+            ts = TimeSeries(pl.DataFrame({"time": times}), time_name="time", periodicity=periodicity)
+            with self.assertRaises(UserWarning):
+                ts._validate_periodicity()
 
     @parameterized.expand([
         ("simple microseconds",
@@ -972,8 +984,9 @@ class TestValidatePeriodicity(unittest.TestCase):
     def test_validate_microsecond_periodicity_success(self, _, times, periodicity):
         """ Test that a microsecond based time series that does conform to the given periodicity passes the validation.
         """
-        ts = init_timeseries(times, periodicity=periodicity)
-        ts._validate_periodicity()
+        with patch.object(TimeSeries, '_setup'):
+            ts = TimeSeries(pl.DataFrame({"time": times}), time_name="time", periodicity=periodicity)
+            ts._validate_periodicity()
 
     @parameterized.expand([
         ("40Hz",
@@ -984,9 +997,10 @@ class TestValidatePeriodicity(unittest.TestCase):
     def test_validate_microsecond_periodicity_error(self, _, times, periodicity):
         """ Test that a microsecond based time series that doesn't conform to the given periodicity raises an error.
         """
-        ts = init_timeseries(times, periodicity=periodicity)
-        with self.assertRaises(UserWarning):
-            ts._validate_periodicity()
+        with patch.object(TimeSeries, '_setup'):
+            ts = TimeSeries(pl.DataFrame({"time": times}), time_name="time", periodicity=periodicity)
+            with self.assertRaises(UserWarning):
+                ts._validate_periodicity()
 
 
 class TestEpochCheck(unittest.TestCase):
