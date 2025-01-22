@@ -79,7 +79,10 @@ class TimeSeries:
         self._setup_columns(supplementary_columns, flag_columns, column_metadata)
 
     def _setup_columns(
-        self, supplementary_columns: list[str], flag_columns: dict[str, str], column_metadata: dict[str, dict[str, Any]]
+        self,
+        supplementary_columns: list[str] = None,
+        flag_columns: dict[str, str] = None,
+        column_metadata: dict[str, dict[str, Any]] = None,
     ) -> None:
         """
         Initializes column classifications for the TimeSeries instance.
@@ -98,6 +101,13 @@ class TimeSeries:
             KeyError: If any specified supplementary or flag column does not exist in the DataFrame.
         """
         # Validate that all supplementary columns exist in the DataFrame
+        if supplementary_columns is None:
+            supplementary_columns = []
+        if flag_columns is None:
+            flag_columns = {}
+        if column_metadata is None:
+            column_metadata = {}
+
         invalid_supplementary_columns = set(supplementary_columns) - set(self.df.columns)
         if invalid_supplementary_columns:
             raise KeyError(f"Invalid supplementary columns: {invalid_supplementary_columns}")

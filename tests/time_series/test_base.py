@@ -1081,38 +1081,43 @@ class TestSetTimeZone(unittest.TestCase):
 
 
 class TestSortTime(unittest.TestCase):
-
     def test_sort_random_dates(self):
         """Test that random dates are sorted appropriately
         """
         times = [date(1990, 1, 1), date(2019, 5, 8), date(1967, 12, 25), date(2059, 8, 12)]
-        ts = init_timeseries(times)
-        ts.sort_time()
-
         expected = pl.Series("time", [date(1967, 12, 25), date(1990, 1, 1), date(2019, 5, 8), date(2059, 8, 12)])
-        assert_series_equal(ts.select_time(), expected)
+
+        with patch.object(TimeSeries, '_setup'):
+            ts = TimeSeries(pl.DataFrame({"time": times}), time_name="time")
+            ts._setup_columns()
+            ts.sort_time()
+            assert_series_equal(ts.time_column.data, expected)
 
     def test_sort_sorted_dates(self):
         """Test that already sorted dates are maintained
         """
         times = [date(1967, 12, 25), date(1990, 1, 1), date(2019, 5, 8), date(2059, 8, 12)]
-        ts = init_timeseries(times)
-        ts.sort_time()
-
         expected = pl.Series("time", times)
-        assert_series_equal(ts.select_time(), expected)
+
+        with patch.object(TimeSeries, '_setup'):
+            ts = TimeSeries(pl.DataFrame({"time": times}), time_name="time")
+            ts._setup_columns()
+            ts.sort_time()
+            assert_series_equal(ts.time_column.data, expected)
 
     def test_sort_times(self):
         """Test that times are sorted appropriately
         """
         times = [datetime(2024, 1, 1, 12, 59), datetime(2024, 1, 1, 12, 55), datetime(2024, 1, 1, 12, 18),
                  datetime(2024, 1, 1, 1, 5)]
-        ts = init_timeseries(times)
-        ts.sort_time()
 
         expected = pl.Series("time", [datetime(2024, 1, 1, 1, 5), datetime(2024, 1, 1, 12, 18),
                                       datetime(2024, 1, 1, 12, 55), datetime(2024, 1, 1, 12, 59)])
-        assert_series_equal(ts.select_time(), expected)
+        with patch.object(TimeSeries, '_setup'):
+            ts = TimeSeries(pl.DataFrame({"time": times}), time_name="time")
+            ts._setup_columns()
+            ts.sort_time()
+            assert_series_equal(ts.time_column.data, expected)
 
 
 class TestValidateTimeColumn(unittest.TestCase):
