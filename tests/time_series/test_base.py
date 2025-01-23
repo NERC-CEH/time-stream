@@ -1176,8 +1176,10 @@ class TestValidateTimeColumn(unittest.TestCase):
 
 
 class TestRemoveMissingColumns(unittest.TestCase):
-    times = [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)]
-    values = {"col1": [1, 2, 3], "col2": [4, 5, 6], "col3": [7, 8, 9]}
+    df = pl.DataFrame({
+        "time": [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)],
+        "col1": [1, 2, 3], "col2": [4, 5, 6], "col3": [7, 8, 9]
+    })
     metadata = {
         "col1": {"description": "meta1"},
         "col2": {"description": "meta2"},
@@ -1186,91 +1188,72 @@ class TestRemoveMissingColumns(unittest.TestCase):
 
     def test_no_columns_removed(self):
         """Test that no columns are removed when all columns are present in the new DataFrame."""
-        ts = init_timeseries(self.times, self.values, supplementary_columns=["col1"], metadata=self.metadata)
+        ts = TimeSeries(self.df, time_name="time", supplementary_columns=["col1"], column_metadata=self.metadata)
 
-        new_df = pl.DataFrame({
-            "time": self.times,
-            "col1": [1, 2, 3],
-            "col2": [4, 5, 6],
-            "col3": [7, 8, 9]
-        })
-        ts._remove_missing_columns(new_df)
-        ts._df = new_df
+        ts._remove_missing_columns(self.df)
+        ts._df = self.df
 
-        self.assertIn("col1", ts.supplementary_columns)
-        self.assertIn("col2", ts.data_columns)
-        self.assertIn("col3", ts.data_columns)
-        self.assertEqual(ts.metadata(), self.metadata)
+        self.assertEqual(list(ts.columns.keys()), ["col1", "col2", "col3"])
+        self.assertEqual(list(ts.supplementary_columns.keys()), ["col1"])
+        self.assertEqual(list(ts.data_columns.keys()), ["col2", "col3"])
+        self.assertEqual(ts.col1.metadata(), self.metadata["col1"])
+        self.assertEqual(ts.col2.metadata(), self.metadata["col2"])
+        self.assertEqual(ts.col3.metadata(), self.metadata["col3"])
 
     def test_single_data_column_removed(self):
         """Test that single data column is removed correctly."""
-        ts = init_timeseries(self.times, self.values, supplementary_columns=["col1"], metadata=self.metadata)
+        ts = TimeSeries(self.df, time_name="time", supplementary_columns=["col1"], column_metadata=self.metadata)
 
-        new_df = pl.DataFrame({
-            "time": self.times,
-            "col1": [1, 2, 3],
-            "col3": [7, 8, 9]
-        })
+        new_df = self.df.drop("col2")
         ts._remove_missing_columns(new_df)
         ts._df = new_df
 
-        self.assertEqual(ts.columns, ["col1", "col3"])
-        self.assertEqual(ts.supplementary_columns, ["col1"])
-        self.assertEqual(ts.data_columns, ["col3"])
-        self.assertEqual(ts.metadata(), {"col1": {"description": "meta1"}, "col3": {"description": "meta3"}})
+        self.assertEqual(list(ts.columns.keys()), ["col1", "col3"])
+        self.assertEqual(list(ts.supplementary_columns.keys()), ["col1"])
+        self.assertEqual(list(ts.data_columns.keys()), ["col3"])
+        self.assertEqual(ts.col1.metadata(), self.metadata["col1"])
+        self.assertEqual(ts.col3.metadata(), self.metadata["col3"])
+
+        # try to access removed columns
+        with self.assertRaises(AttributeError):
+            _ = ts.col2
 
     def test_single_supplementary_column_removed(self):
         """Test that single supplementary column is removed correctly."""
-        ts = init_timeseries(self.times, self.values, supplementary_columns=["col1"], metadata=self.metadata)
+        ts = TimeSeries(self.df, time_name="time", supplementary_columns=["col1"], column_metadata=self.metadata)
 
-        new_df = pl.DataFrame({
-            "time": self.times,
-            "col2": [4, 5, 6],
-            "col3": [7, 8, 9]
-        })
+        new_df = self.df.drop("col1")
         ts._remove_missing_columns(new_df)
         ts._df = new_df
 
-        self.assertEqual(ts.columns, ["col2", "col3"])
-        self.assertEqual(ts.supplementary_columns, [])
-        self.assertEqual(ts.data_columns, ["col2", "col3"])
-        self.assertEqual(ts.metadata(), {"col2": {"description": "meta2"}, "col3": {"description": "meta3"}})
+        self.assertEqual(list(ts.columns.keys()), ["col2", "col3"])
+        self.assertEqual(list(ts.supplementary_columns.keys()), [])
+        self.assertEqual(list(ts.data_columns.keys()), ["col2", "col3"])
+        self.assertEqual(ts.col2.metadata(), self.metadata["col2"])
+        self.assertEqual(ts.col3.metadata(), self.metadata["col3"])
+
+        # try to access removed columns
+        with self.assertRaises(AttributeError):
+            _ = ts.col1
 
     def test_multiple_columns_removed(self):
         """Test that multiple columns are removed correctly."""
-        ts = init_timeseries(self.times, self.values, supplementary_columns=["col1"], metadata=self.metadata)
+        ts = TimeSeries(self.df, time_name="time", supplementary_columns=["col1"], column_metadata=self.metadata)
 
-        new_df = pl.DataFrame({
-            "time": self.times,
-            "col3": [7, 8, 9]
-        })
+        new_df = self.df.drop(["col1", "col2"])
         ts._remove_missing_columns(new_df)
         ts._df = new_df
 
-        self.assertEqual(ts.columns, ["col3"])
-        self.assertEqual(ts.supplementary_columns, [])
-        self.assertEqual(ts.data_columns, ["col3"])
-        self.assertEqual(ts.metadata(), {"col3": {"description": "meta3"}})
+        self.assertEqual(list(ts.columns.keys()), ["col3"])
+        self.assertEqual(list(ts.supplementary_columns.keys()), [])
+        self.assertEqual(list(ts.data_columns.keys()), ["col3"])
+        self.assertEqual(ts.col3.metadata(), self.metadata["col3"])
 
-    def test_added_column(self):
-        """Test that adding a new column works"""
-        ts = init_timeseries(self.times, self.values, supplementary_columns=["col1"], metadata=self.metadata)
-
-        new_df = pl.DataFrame({
-            "time": self.times,
-            "col1": [1, 2, 3],
-            "col2": [4, 5, 6],
-            "col3": [7, 8, 9],
-            "col4": [10, 11, 12],
-        })
-        ts._remove_missing_columns(new_df)
-        ts._df = new_df
-
-        self.assertEqual(ts.columns, ["col1", "col2", "col3", "col4"])
-        self.assertEqual(ts.supplementary_columns, ["col1"])
-        self.assertEqual(ts.data_columns, ["col2", "col3", "col4"])
-        self.assertEqual(ts.metadata(), {"col1": {"description": "meta1"}, "col2": {"description": "meta2"},
-                                         "col3": {"description": "meta3"}, "col4": {}})
+        # try to access removed columns
+        with self.assertRaises(AttributeError):
+            _ = ts.col1
+        with self.assertRaises(AttributeError):
+            _ = ts.col2
 
 
 class TestSelectColumns(unittest.TestCase):

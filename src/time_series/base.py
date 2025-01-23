@@ -320,6 +320,7 @@ class TimeSeries:
         """
         self._validate_time_column(new_df)
         self._remove_missing_columns(new_df)
+        self._add_new_columns(new_df)
         self._df = new_df
 
     def _validate_time_column(self, df: pl.DataFrame) -> None:
@@ -352,6 +353,19 @@ class TimeSeries:
         removed_columns = list(set(self.df.columns) - set(new_df.columns))
         for col_name in removed_columns:
             self._columns.pop(col_name, None)
+
+    def _add_new_columns(self, new_df: pl.DataFrame) -> None:
+        """Add reference to any new columns that are present in the new DataFrame.
+
+        Assumption is all new columns are data columns.
+
+        Args:
+            new_df: The new Polars DataFrame to compare against the current DataFrame.
+        """
+        new_columns = list(set(new_df.columns) - set(self.df.columns))
+        for col_name in new_columns:
+            data_col = DataColumn(col_name, self, {})
+            self._columns[col_name] = data_col
 
     @property
     def time_column(self) -> PrimaryTimeColumn:
