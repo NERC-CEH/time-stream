@@ -1121,33 +1121,35 @@ class TestSortTime(unittest.TestCase):
 
 
 class TestValidateTimeColumn(unittest.TestCase):
-    times = [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)]
-    values = {"data_column": [1, 2, 3]}
+    df = pl.DataFrame({
+        "time": [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)],
+        "data_column": [1, 2, 3]
+    })
 
     def test_validate_unchanged_dataframe(self):
         """Test that an unchanged DataFrame passes validation."""
-        ts = init_timeseries(self.times, self.values)
+        ts = TimeSeries(self.df, time_name="time")
         ts._validate_time_column(ts._df)
 
     def test_validate_dataframe_changed_values(self):
         """Test that a DataFrame with different values, but same times, passes validation."""
-        ts = init_timeseries(self.times, self.values)
+        ts = TimeSeries(self.df, time_name="time")
         new_df = pl.DataFrame({
-            "time": self.times,
+            "time": ts.df["time"],
             "data_column": [10, 20, 30]
         })
-        ts._validate_time_column(ts._df)
+        ts._validate_time_column(new_df)
 
     def test_validate_time_column_missing_time_column(self):
         """Test that a DataFrame missing the time column raises a ValueError."""
-        invalid_df = pl.DataFrame(self.values)
-        ts = init_timeseries()
+        invalid_df = pl.DataFrame(self.df["data_column"])
+        ts = TimeSeries(self.df, time_name="time")
         with self.assertRaises(ValueError):
             ts._validate_time_column(invalid_df)
 
     def test_validate_time_column_mutated_timestamps(self):
         """Test that a DataFrame with mutated timestamps raises a ValueError."""
-        ts = init_timeseries(self.times, self.values)
+        ts = TimeSeries(self.df, time_name="time")
         mutated_df = pl.DataFrame({
             "time": [datetime(1924, 1, 1), datetime(1924, 1, 2), datetime(1924, 1, 3)]
         })
@@ -1156,18 +1158,18 @@ class TestValidateTimeColumn(unittest.TestCase):
 
     def test_validate_time_column_extra_timestamps(self):
         """Test that a DataFrame with extra timestamps raises a ValueError."""
-        ts = init_timeseries(self.times, self.values)
+        ts = TimeSeries(self.df, time_name="time")
         extra_timestamps_df = pl.DataFrame({
-            "time": self.times + [datetime(2024, 1, 4), datetime(2024, 1, 5)]
+            "time": list(ts.df["time"]) + [datetime(2024, 1, 4), datetime(2024, 1, 5)]
         })
         with self.assertRaises(ValueError):
             ts._validate_time_column(extra_timestamps_df)
 
     def test_validate_time_column_fewer_timestamps(self):
         """Test that a DataFrame with fewer timestamps raises a ValueError."""
-        ts = init_timeseries(self.times, self.values)
+        ts = TimeSeries(self.df, time_name="time")
         fewer_timestamps_df = pl.DataFrame({
-            "time": self.times[:-1]
+            "time": list(ts.df["time"])[:-1]
         })
         with self.assertRaises(ValueError):
             ts._validate_time_column(fewer_timestamps_df)
