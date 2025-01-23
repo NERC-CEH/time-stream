@@ -1286,7 +1286,6 @@ class TestSelectColumns(unittest.TestCase):
         result = ts.select(["col1", "col2"])
         self.assertEqual(result, expected)
 
-
     def test_select_no_columns_raises_error(self):
         """Test selecting no columns raises error."""
         ts = TimeSeries(self.df, time_name="time", column_metadata=self.metadata)

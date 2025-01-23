@@ -596,8 +596,21 @@ class TimeSeries:
         return self.df.iter_rows()
 
     def __str__(self) -> str:
-        """Return the string representation of the TimeSeries class."""
+        """Return the string representation of the TimeSeries dataframe."""
         return self.df.__str__()
+
+    def __repr__(self) -> str:
+        """Returns a string representation of the TimeSeries instance, summarising key properties."""
+        return (
+            f"TimeSeries("
+            f"time_name={self.time_name}, "
+            f"resolution={self.resolution}, "
+            f"periodicity={self.periodicity}, "
+            f"time_zone={self.time_zone}, "
+            f"data_columns={list(self.data_columns.keys())}, "
+            f"supplementary_columns={list(self.supplementary_columns.keys())}, "
+            f"flag_columns={list(self.flag_columns.keys())}, "
+        )
 
     def __dir__(self) -> list[str]:
         """Return a list of attributes associated with the TimeSeries class.
@@ -618,7 +631,7 @@ class TimeSeries:
         """Checks if two TimeSeries instances are equal.
 
         Args:
-            other (object): The object to compare.
+            other: The object to compare.
 
         Returns:
             bool: True if the TimeSeries instances are equal, False otherwise.
@@ -651,3 +664,14 @@ class TimeSeries:
             return False
 
         return True
+
+    def __ne__(self, other: object) -> bool:
+        """Checks if two TimeSeries instances are not equal.
+
+        Args:
+            other: The object to compare.
+
+        Returns:
+            bool: True if the TimeSeries instances are not equal, False otherwise.
+        """
+        return not self.__eq__(other)
