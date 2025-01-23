@@ -53,9 +53,9 @@ flag_dict = {
     "ESTIMATED": 2,
     "CORRECTED": 4,
 }
-# First register the flag type
+# First register the flag system
 ts.add_flag_system("CORE", flag_dict)
-# Add the flag column under the new flag type
+# Add the flag column under the new flag system
 ts.init_flag_column("CORE", "pressure_flags")
 # Add a flag to the column. Can be done with flag name...
 ts.add_flag("pressure_flags", "MISSING")

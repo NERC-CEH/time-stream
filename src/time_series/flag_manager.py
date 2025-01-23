@@ -59,7 +59,7 @@ class TimeSeriesFlagManager:
         A new flag column can then be created as a "quality_control" flag column.
 
         Args:
-            name: The name of the new flag type.
+            name: The name of the new flag system.
             flag_system: The flag system containing flag values and their meanings.
 
         Raises:
