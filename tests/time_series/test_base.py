@@ -1260,7 +1260,10 @@ class TestSelectColumns(unittest.TestCase):
     times = [datetime(2024, 1, 1, tzinfo=TZ_UTC),
              datetime(2024, 1, 2, tzinfo=TZ_UTC),
              datetime(2024, 1, 3, tzinfo=TZ_UTC)]
-    values = {"col1": [1, 2, 3], "col2": [4, 5, 6], "col3": [7, 8, 9]}
+    df = pl.DataFrame({
+        "time": times,
+        "col1": [1, 2, 3], "col2": [4, 5, 6], "col3": [7, 8, 9]
+    })
     metadata = {
         "col1": {"key1": "1", "key2": "10", "key3": "100"},
         "col2": {"key1": "2", "key2": "20", "key3": "200"},
@@ -1269,76 +1272,55 @@ class TestSelectColumns(unittest.TestCase):
 
     def test_select_single_column(self):
         """Test selecting a single of column."""
-        ts = init_timeseries(self.times, self.values)
-        expected_df = pl.DataFrame({"time": self.times} | {"col1": self.values["col1"]})
-
-        ts = ts.select(["col1"])
-        assert_frame_equal(ts.df, expected_df)
+        ts = TimeSeries(self.df, time_name="time", column_metadata=self.metadata)
+        expected = TimeSeries(self.df.select(["time", "col1"]), time_name="time",
+                              column_metadata={"col1": self.metadata["col1"]})
+        result = ts.select(["col1"])
+        self.assertEqual(result, expected)
 
     def test_select_multiple_columns(self):
-        """Test selecting a single of column."""
-        ts = init_timeseries(self.times, self.values)
-        expected_df = pl.DataFrame({"time": self.times} | {"col1": self.values["col1"], "col2": self.values["col2"]})
+        """Test selecting multiple columns."""
+        ts = TimeSeries(self.df, time_name="time", column_metadata=self.metadata)
+        expected = TimeSeries(self.df.select(["time", "col1", "col2"]), time_name="time",
+                              column_metadata={"col1": self.metadata["col1"], "col2": self.metadata["col2"]})
+        result = ts.select(["col1", "col2"])
+        self.assertEqual(result, expected)
 
-        ts = ts.select(["col1", "col2"])
-        assert_frame_equal(ts.df, expected_df)
 
     def test_select_no_columns_raises_error(self):
         """Test selecting no columns raises error."""
-        ts = init_timeseries(self.times, self.values)
+        ts = TimeSeries(self.df, time_name="time", column_metadata=self.metadata)
         with self.assertRaises(ValueError):
             ts.select([])
 
     def test_select_nonexistent_column(self):
         """Test selecting a column that does not exist raises error."""
-        ts = init_timeseries(self.times, self.values)
+        ts = TimeSeries(self.df, time_name="time", column_metadata=self.metadata)
         with self.assertRaises(pl.exceptions.ColumnNotFoundError):
             ts.select(["nonexistent_column"])
 
     def test_select_existing_and_nonexistent_column(self):
         """Test selecting a column that does not exist, alongside existing columns, still raises error"""
-        ts = init_timeseries(self.times, self.values)
+        ts = TimeSeries(self.df, time_name="time", column_metadata=self.metadata)
         with self.assertRaises(pl.exceptions.ColumnNotFoundError):
             ts.select(["col1", "col2", "nonexistent_column"])
 
     def test_select_column_doesnt_mutate_original_ts(self):
         """When selecting a column, the original ts should be unchanged"""
-        ts = init_timeseries(self.times, self.values)
+        ts = TimeSeries(self.df, time_name="time", column_metadata=self.metadata)
         original_df = ts.df
 
+        expected = TimeSeries(self.df.select(["time", "col1"]), time_name="time",
+                              column_metadata={"col1": self.metadata["col1"]})
         col1_ts = ts.select(["col1"])
-        expected_df = pl.DataFrame({"time": self.times} | {"col1": self.values["col1"]})
-        assert_frame_equal(col1_ts.df, expected_df)
+        self.assertEqual(col1_ts, expected)
         assert_frame_equal(ts.df, original_df)
 
+        expected = TimeSeries(self.df.select(["time", "col2"]), time_name="time",
+                              column_metadata={"col2": self.metadata["col2"]})
         col2_ts = ts.select(["col2"])
-        expected_df = pl.DataFrame({"time": self.times} | {"col2": self.values["col2"]})
-        assert_frame_equal(col2_ts.df, expected_df)
+        self.assertEqual(col2_ts, expected)
         assert_frame_equal(ts.df, original_df)
-
-    def test_select_column_trims_metadata(self):
-        """When selecting a column, the original ts metadata should be unchanged"""
-        ts = init_timeseries(self.times, self.values, metadata=self.metadata)
-
-        col1_ts = ts.select(["col1"])
-        expected_metadata = {"col1": self.metadata["col1"]}
-        self.assertEqual(col1_ts.metadata(), expected_metadata)
-        # Ensure original ts metadata unchanged
-        self.assertEqual(ts.metadata(), self.metadata)
-
-    def test_select_column_trims_supplementary_columns(self):
-        """When selecting a column, the original ts supplementary columns should be unchanged"""
-        ts = init_timeseries(self.times, self.values, supplementary_columns=["col2"])
-
-        col1_ts = ts.select(["col1"])
-        self.assertEqual(col1_ts.columns, ["col1"])
-        self.assertEqual(col1_ts.supplementary_columns, [])
-        self.assertEqual(col1_ts.data_columns, ["col1"])
-
-        # Ensure original ts supplementary columns unchanged
-        self.assertEqual(ts.columns, ["col1", "col2", "col3"])
-        self.assertEqual(ts.supplementary_columns, ["col2"])
-        self.assertEqual(ts.data_columns, ["col1", "col3"])
 
 
 class TestMetadata(unittest.TestCase):

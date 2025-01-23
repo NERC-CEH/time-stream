@@ -613,3 +613,41 @@ class TimeSeries:
         default_attrs = list(super().__dir__())
         custom_attrs = default_attrs + list(self.columns.keys()) + [self.time_name]
         return sorted(set(custom_attrs))
+
+    def __eq__(self, other: object) -> bool:
+        """Checks if two TimeSeries instances are equal.
+
+        Args:
+            other (object): The object to compare.
+
+        Returns:
+            bool: True if the TimeSeries instances are equal, False otherwise.
+        """
+        if not isinstance(other, TimeSeries):
+            return False
+
+        # Compare DataFrames
+        if not self.df.equals(other.df):
+            return False
+
+        # Compare core metadata attributes
+        if (
+            self.time_name != other.time_name
+            or self.resolution != other.resolution
+            or self.periodicity != other.periodicity
+        ):
+            return False
+
+        # Compare flag systems
+        if self.flag_systems != other.flag_systems:
+            return False
+
+        # Compare column mappings
+        if (
+            self.data_columns.keys() != other.data_columns.keys()
+            or self.supplementary_columns.keys() != other.supplementary_columns.keys()
+            or self.flag_columns.keys() != other.flag_columns.keys()
+        ):
+            return False
+
+        return True
