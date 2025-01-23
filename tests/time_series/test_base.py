@@ -1289,19 +1289,19 @@ class TestSelectColumns(unittest.TestCase):
     def test_select_no_columns_raises_error(self):
         """Test selecting no columns raises error."""
         ts = TimeSeries(self.df, time_name="time", column_metadata=self.metadata)
-        with self.assertRaises(ValueError):
+        with self.assertRaises(KeyError):
             ts.select([])
 
     def test_select_nonexistent_column(self):
         """Test selecting a column that does not exist raises error."""
         ts = TimeSeries(self.df, time_name="time", column_metadata=self.metadata)
-        with self.assertRaises(pl.exceptions.ColumnNotFoundError):
+        with self.assertRaises(KeyError):
             ts.select(["nonexistent_column"])
 
     def test_select_existing_and_nonexistent_column(self):
         """Test selecting a column that does not exist, alongside existing columns, still raises error"""
         ts = TimeSeries(self.df, time_name="time", column_metadata=self.metadata)
-        with self.assertRaises(pl.exceptions.ColumnNotFoundError):
+        with self.assertRaises(KeyError):
             ts.select(["col1", "col2", "nonexistent_column"])
 
     def test_select_column_doesnt_mutate_original_ts(self):
@@ -1362,14 +1362,10 @@ class TestGetattr(unittest.TestCase):
 
 
 class TestGetItem(unittest.TestCase):
-    times = [datetime(2024, 1, 1, tzinfo=TZ_UTC),
-             datetime(2024, 1, 2, tzinfo=TZ_UTC),
-             datetime(2024, 1, 3, tzinfo=TZ_UTC)]
     df = pl.DataFrame({
-        "time": times,
+        "time": [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)],
         "col1": [1, 2, 3], "col2": [4, 5, 6], "col3": [7, 8, 9]
     })
-    values = {"col1": [1, 2, 3], "col2": [4, 5, 6], "col3": [7, 8, 9]}
     metadata = {
         "col1": {"key1": "1", "key2": "10", "key3": "100"},
         "col2": {"key1": "2", "key2": "20", "key3": "200"},
@@ -1378,30 +1374,30 @@ class TestGetItem(unittest.TestCase):
 
     def test_access_time_column(self):
         """Test accessing the time column."""
-        ts = init_timeseries(self.times, self.values, metadata=self.metadata)
+        ts = TimeSeries(self.df, time_name="time", column_metadata=self.metadata)
         result = ts["time"]
-        expected = pl.Series("time", self.times)
-        assert_series_equal(result, expected)
+        expected = PrimaryTimeColumn("time", ts)
+        self.assertEqual(result, expected)
 
     def test_access_data_column(self):
         """Test accessing a data column."""
-        ts = init_timeseries(self.times, self.values, metadata=self.metadata)
+        ts = TimeSeries(self.df, time_name="time", column_metadata=self.metadata)
         result = ts["col1"]
-        expected = pl.DataFrame({"time": self.times, "col1": self.values["col1"]})
-        assert_frame_equal(result.df, expected)
+        expected = TimeSeries(self.df.select(["time", "col1"]),
+                              time_name="time", column_metadata={"col1": self.metadata["col1"]})
+        self.assertEqual(result, expected)
 
     def test_access_multiple_data_columns(self):
         """Test accessing multiple data columns."""
-        ts = init_timeseries(self.times, self.values, metadata=self.metadata)
+        ts = TimeSeries(self.df, time_name="time", column_metadata=self.metadata)
         result = ts[["col1", "col2"]]
-        expected = pl.DataFrame({"time": self.times, "col1": self.values["col1"], "col2": self.values["col2"]})
-        assert_frame_equal(result.df, expected)
+        expected = TimeSeries(self.df.select(["time", "col1", "col2"]),
+                              time_name="time",
+                              column_metadata={"col1": self.metadata["col1"], "col2": self.metadata["col2"]})
+        self.assertEqual(result, expected)
 
     def test_non_existent_column(self):
         """Test accessing non-existent data column raises error."""
-        ts = init_timeseries(self.times, self.values, metadata=self.metadata)
-        with self.assertRaises(pl.ColumnNotFoundError):
-            result = ts["col0"]
-
-if __name__ == '__main__':
-    unittest.main()
+        ts = TimeSeries(self.df, time_name="time", column_metadata=self.metadata)
+        with self.assertRaises(KeyError):
+            _ = ts["col0"]
