@@ -205,6 +205,17 @@ class TimeSeriesColumn(ABC):
 
         return self.name == other.name and self._ts is other._ts and self._metadata == other._metadata
 
+    def __ne__(self, other: object) -> bool:
+        """Checks if two TimeSeriesColumn instances are not equal.
+
+        Args:
+            other: The object to compare.
+
+        Returns:
+            bool: True if the TimeSeriesColumn instances are not equal, False otherwise.
+        """
+        return not self.__eq__(other)
+
 
 class PrimaryTimeColumn(TimeSeriesColumn):
     """Represents the primary datetime column that controls the Time Series.
