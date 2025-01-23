@@ -130,7 +130,8 @@ class TimeSeries:
                 self._columns[col_name] = supplementary_col
 
             elif col_name in flag_columns:
-                flag_col = FlagColumn(col_name, self, self._flag_columns[col_name], col_metadata)
+                flag_system = flag_columns[col_name]
+                flag_col = FlagColumn(col_name, self, flag_system, col_metadata)
                 self._columns[col_name] = flag_col
 
             else:
@@ -652,8 +653,12 @@ class TimeSeries:
             return False
 
         # Compare flag systems
-        if self.flag_systems != other.flag_systems:
+        if self.flag_systems.keys() != other.flag_systems.keys():
             return False
+        for name, flag_system in self.flag_systems.items():
+            other_flag_system = other.flag_systems[name]
+            if str(flag_system) != str(other_flag_system) or flag_system.__members__ != other_flag_system.__members__:
+                return False
 
         # Compare column mappings
         if (

@@ -1256,6 +1256,30 @@ class TestRemoveMissingColumns(unittest.TestCase):
             _ = ts.col2
 
 
+class TestAddNewColumns(unittest.TestCase):
+    df = pl.DataFrame({
+        "time": [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)],
+        "col1": [1, 2, 3], "col2": [4, 5, 6], "col3": [7, 8, 9]
+    })
+
+    def test_add_new_columns(self):
+        """Test that new columns are correctly added as DataColumns."""
+        ts = TimeSeries(self.df, time_name="time")
+        new_df = self.df.with_columns(pl.Series("col4", [1.1, 2.2, 3.3]))
+        ts._add_new_columns(new_df)
+
+        self.assertIn("col4", ts.columns)
+        self.assertIsInstance(ts.col4, DataColumn)
+
+    def test_no_changes_when_no_new_columns(self):
+        """Test that does nothing if there are no new columns."""
+        ts = TimeSeries(self.df, time_name="time")
+        original_columns = ts._columns.copy()
+        ts._add_new_columns(self.df)
+
+        self.assertEqual(original_columns, ts._columns)
+
+
 class TestSelectColumns(unittest.TestCase):
     times = [datetime(2024, 1, 1, tzinfo=TZ_UTC),
              datetime(2024, 1, 2, tzinfo=TZ_UTC),
@@ -1401,3 +1425,157 @@ class TestGetItem(unittest.TestCase):
         ts = TimeSeries(self.df, time_name="time", column_metadata=self.metadata)
         with self.assertRaises(KeyError):
             _ = ts["col0"]
+
+
+class TestSetupColumns(unittest.TestCase):
+    df = pl.DataFrame({
+        "time": [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)],
+         "data_col": [10, 20, 30], "supp_col": ["A", "B", "C"], "flag_col": [1, 2, 3]
+    })
+    flag_systems = {"example_flag_system": {"OK": 1, "WARNING": 2}}
+
+    def test_valid_setup_columns(self):
+        """Test that valid columns are correctly classified."""
+        ts = TimeSeries(df=self.df,
+                        time_name="time",
+                        supplementary_columns=["supp_col"],
+                        flag_columns={"flag_col": "example_flag_system"},
+                        flag_systems=self.flag_systems)
+
+        self.assertIsInstance(ts.time_column, PrimaryTimeColumn)
+        self.assertIsInstance(ts.columns["supp_col"], SupplementaryColumn)
+        self.assertIsInstance(ts.columns["flag_col"], FlagColumn)
+        self.assertIsInstance(ts.columns["data_col"], DataColumn)
+
+    def test_missing_supplementary_column_raises_error(self):
+        """Test that an error raised when supplementary columns do not exist."""
+        with self.assertRaises(KeyError):
+            ts = TimeSeries(df=self.df,
+                            time_name="time",
+                            supplementary_columns=["missing_col"],
+                            flag_columns={"flag_col": "example_flag_system"},
+                            flag_systems=self.flag_systems)
+
+    def test_missing_flag_column_raises_error(self):
+        """Test that an error raised when flag columns do not exist."""
+        with self.assertRaises(KeyError):
+            ts = TimeSeries(df=self.df,
+                            time_name="time",
+                            supplementary_columns=["supp_col"],
+                            flag_columns={"missing_col": "example_flag_system"},
+                            flag_systems=self.flag_systems)
+
+
+class TestTimeColumn(unittest.TestCase):
+    df = pl.DataFrame({
+        "time": [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)],
+        "col1": [1, 2, 3], "col2": [4, 5, 6], "col3": [7, 8, 9]
+    })
+
+    def test_valid_time_column(self):
+        """Test that time_column correctly returns the PrimaryTimeColumn instance."""
+        ts = TimeSeries(self.df, time_name="time")
+        self.assertIsInstance(ts.time_column, PrimaryTimeColumn)
+        self.assertEqual(ts.time_column.name, "time")
+
+    def test_no_time_column_raises_error(self):
+        """Test that error is raised if no primary time column is found."""
+        ts = TimeSeries(self.df, time_name="time")
+        with patch.object(ts, "_columns", {}):  # Simulate missing columns
+            with self.assertRaises(ValueError):
+                _ = ts.time_column
+
+    def test_multiple_time_columns_raises_error(self):
+        """Test that error is raised if multiple primary time columns exist."""
+        ts = TimeSeries(self.df, time_name="time")
+        with patch.object(ts, "_columns", {
+            "time1": PrimaryTimeColumn("time1", ts),
+            "time2": PrimaryTimeColumn("time2", ts),
+        }):
+            with self.assertRaises(ValueError):
+                _ = ts.time_column
+
+
+class TestTimeSeriesEquality(unittest.TestCase):
+    def setUp(self):
+        """Set up multiple TimeSeries objects for testing."""
+        self.df_original = pl.DataFrame({
+            "time": [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)],
+            "value": [10, 20, 30]
+        })
+        self.df_same = pl.DataFrame({
+            "time": [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)],
+            "value": [10, 20, 30]
+        })
+        self.df_different_values = pl.DataFrame({
+            "time": [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)],
+            "value": [100, 200, 300]
+        })
+        self.df_different_times = pl.DataFrame({
+            "time": [datetime(2020, 1, 1), datetime(2020, 1, 2), datetime(2020, 1, 3)],
+            "value": [10, 20, 30]
+        })
+
+        self.flag_systems_1 = {"quality_flags": {"OK": 1, "WARNING": 2}}
+        self.flag_systems_2 = {"quality_flags": {"NOT_OK": 4, "ERROR": 8}}
+
+        self.ts_original = TimeSeries(
+            df=self.df_original, time_name="time", resolution=Period.of_days(1),
+            periodicity=Period.of_days(1), flag_systems=self.flag_systems_1
+        )
+
+    def test_equal_timeseries(self):
+        """Test that two identical TimeSeries objects are considered equal."""
+        ts_same = TimeSeries(
+            df=self.df_same, time_name="time", resolution=Period.of_days(1),
+            periodicity=Period.of_days(1), flag_systems=self.flag_systems_1
+        )
+        self.assertEqual(self.ts_original, ts_same)
+
+    def test_different_data_values(self):
+        """Test that TimeSeries objects with different data values are not equal."""
+        ts_different_df = TimeSeries(
+            df=self.df_different_values, time_name="time", resolution=Period.of_days(1),
+            periodicity=Period.of_days(1), flag_systems=self.flag_systems_1
+        )
+        self.assertNotEqual(self.ts_original, ts_different_df)
+
+    def test_different_time_values(self):
+        """Test that TimeSeries objects with different time values are not equal."""
+        ts_different_times = TimeSeries(
+            df=self.df_different_times, time_name="time", resolution=Period.of_days(1),
+            periodicity=Period.of_days(1), flag_systems=self.flag_systems_1
+        )
+        self.assertNotEqual(self.ts_original, ts_different_times)
+
+    def test_different_time_name(self):
+        """Test that TimeSeries objects with different time column name are not equal."""
+        ts_different_time_name = TimeSeries(
+            df=self.df_original.rename({"time": "timestamp"}), time_name="timestamp", resolution=Period.of_days(1),
+            periodicity=Period.of_days(1), flag_systems=self.flag_systems_1
+        )
+        self.assertNotEqual(self.ts_original, ts_different_time_name)
+
+    def test_different_periodicity(self):
+        """Test that TimeSeries objects with different periodicity are not equal."""
+        ts_different_periodicity = TimeSeries(
+            df=self.df_original, time_name="time", resolution=Period.of_days(1),
+            periodicity=Period.of_seconds(1), flag_systems=self.flag_systems_1
+        )
+        self.assertNotEqual(self.ts_original, ts_different_periodicity)
+
+    def test_different_resolution(self):
+        """Test that TimeSeries objects with different resolution are not equal."""
+        ts_different_resolution = TimeSeries(
+            df=self.df_original, time_name="time", resolution=Period.of_seconds(1),
+            periodicity=Period.of_days(1), flag_systems=self.flag_systems_1
+        )
+        self.assertNotEqual(self.ts_original, ts_different_resolution)
+
+    def test_different_flag_systems(self):
+        """Test that TimeSeries objects with different flag systems are not equal."""
+        ts_different_flags = TimeSeries(
+            df=self.df_original, time_name="time", resolution=Period.of_days(1),
+            periodicity=Period.of_days(1), flag_systems=self.flag_systems_2
+        )
+        self.assertNotEqual(self.ts_original, ts_different_flags)
