@@ -1,7 +1,6 @@
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 from datetime import date, datetime, timezone
-from typing import Optional, Union
 
 import polars as pl
 from parameterized import parameterized
@@ -14,65 +13,13 @@ from time_series.columns import DataColumn, FlagColumn, PrimaryTimeColumn, Suppl
 TZ_UTC = timezone.utc
 
 
-def init_timeseries(
-    times: Optional[list[Union[date, datetime]]] = None,
-    values: Optional[dict] = None,
-    resolution: Optional[Period] = None,
-    periodicity: Optional[Period] = None,
-    time_zone: Optional[str] = None,
-    supplementary_columns: Optional[list[str]] = None,
-    metadata: Optional[dict] = None,
-    df_time_zone: Optional[str] = None
-):
-    """ Initialises a `TimeSeries` object with the given parameters to use within unit tests.
-
-    Args:
-        times: List of datetime objects to be used as the time data.
-        values: Dictionary of {"column name": values} to build up the dataframe
-        resolution: The resolution of the times data.
-        periodicity: The periodicity of the times data.
-        time_zone: The time zone to set for the `TimeSeries` object.
-        supplementary_columns: Columns to set as  supplementary.
-        metadata: Dictionary of column metadata
-        df_time_zone: The time zone to assign to the DataFrame's 'time' column.
-
-    Returns:
-        An instance of `TimeSeries` class.
-
-     Notes:
-        - If `times` is None, a `MagicMock` of a Polars DataFrame is used.
-        - The `_setup` method of `TimeSeries` is patched to prevent side effects during initialization.
-    """
-    if times is None:
-        df = MagicMock(pl.DataFrame)
-    else:
-        df_dict = {"time": times}
-        if values:
-            df_dict |= values
-        df = pl.DataFrame(df_dict)
-        if df_time_zone:
-            df = df.with_columns(pl.col("time").dt.replace_time_zone(df_time_zone))
-
-    with patch.object(TimeSeries, '_setup'):
-        ts = TimeSeries(
-            df=df,
-            time_name="time",
-            resolution=resolution,
-            periodicity=periodicity,
-            time_zone=time_zone,
-            supplementary_columns=supplementary_columns,
-            column_metadata=metadata
-        )
-
-    if supplementary_columns:
-        ts.set_supplementary_columns(supplementary_columns)
-
-    return ts
-
-
 class TestInitSupplementaryColumn(unittest.TestCase):
-    times = [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)]
-    values = {"data_column": [1, 2, 3], "supp_column1": ["a", "b", "c"], "supp_column2": ["x", "y", "z"]}
+    df = pl.DataFrame({
+        "time": [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)],
+        "data_column": [1, 2, 3],
+        "supp_column1": ["a", "b", "c"],
+        "supp_column2": ["x", "y", "z"]
+    })
 
     @parameterized.expand([
         ("int", "new_int_col", 5, pl.Int32),
@@ -82,9 +29,9 @@ class TestInitSupplementaryColumn(unittest.TestCase):
     ])
     def test_init_supplementary_column_with_single_value(self, _, new_col_name, new_col_value, new_col_type):
         """Test initialising a supplementary column with a single value (None, int, float or str)."""
-        ts = init_timeseries(self.times, self.values)
+        ts = TimeSeries(self.df, time_name="time")
         ts.init_supplementary_column(new_col_name, new_col_value)
-        expected_df = ts.df.with_columns(pl.Series(new_col_name, [new_col_value] * len(self.times), new_col_type))
+        expected_df = ts.df.with_columns(pl.Series(new_col_name, [new_col_value] * len(self.df), new_col_type))
 
         pl.testing.assert_frame_equal(ts.df, expected_df)
         self.assertIn(new_col_name, ts.supplementary_columns)
@@ -101,9 +48,9 @@ class TestInitSupplementaryColumn(unittest.TestCase):
     ])
     def test_init_supplementary_column_with_single_value_and_dtype(self, _, new_col_name, new_col_value, dtype):
         """Test initialising a supplementary column with a single value set to sensible dtype"""
-        ts = init_timeseries(self.times, self.values)
+        ts = TimeSeries(self.df, time_name="time")
         ts.init_supplementary_column(new_col_name, new_col_value, dtype)
-        expected_df = ts.df.with_columns(pl.Series(new_col_name, [new_col_value] * len(self.times)).cast(dtype))
+        expected_df = ts.df.with_columns(pl.Series(new_col_name, [new_col_value] * len(self.df)).cast(dtype))
 
         pl.testing.assert_frame_equal(ts.df, expected_df)
         self.assertIn(new_col_name, ts.supplementary_columns)
@@ -114,7 +61,7 @@ class TestInitSupplementaryColumn(unittest.TestCase):
     ])
     def test_init_supplementary_column_with_single_value_and_bad_dtype(self, _, new_col_name, new_col_value, dtype):
         """Test initialising a supplementary column with a single value set to sensible dtype"""
-        ts = init_timeseries(self.times, self.values)
+        ts = TimeSeries(self.df, time_name="time")
         with self.assertRaises(pl.exceptions.InvalidOperationError):
             ts.init_supplementary_column(new_col_name, new_col_value, dtype)
 
@@ -126,7 +73,7 @@ class TestInitSupplementaryColumn(unittest.TestCase):
     ])
     def test_init_supp_column_with_iterable(self, _, new_col_name, new_col_value):
         """Test initialising a supplementary column with an iterable."""
-        ts = init_timeseries(self.times, self.values)
+        ts = TimeSeries(self.df, time_name="time")
         ts.init_supplementary_column(new_col_name, new_col_value)
         expected_df = ts.df.with_columns(pl.Series(new_col_name, new_col_value))
 
@@ -139,7 +86,7 @@ class TestInitSupplementaryColumn(unittest.TestCase):
     ])
     def test_init_supp_column_with_wrong_len_iterable_raises_error(self, _, new_col_name, new_col_value):
         """Test initialising a supplementary column with an iterable of the wrong length raises an error."""
-        ts = init_timeseries(self.times, self.values)
+        ts = TimeSeries(self.df, time_name="time")
         with self.assertRaises(pl.ShapeError):
             ts.init_supplementary_column(new_col_name, new_col_value)
 
@@ -152,7 +99,7 @@ class TestInitSupplementaryColumn(unittest.TestCase):
     ])
     def test_init_supp_column_with_iterable_and_dtype(self, _, new_col_name, new_col_value, dtype):
         """Test initialising a supplementary column with a single value set to sensible dtype"""
-        ts = init_timeseries(self.times, self.values)
+        ts = TimeSeries(self.df, time_name="time")
         ts.init_supplementary_column(new_col_name, new_col_value, dtype)
         expected_df = ts.df.with_columns(pl.Series(new_col_name, new_col_value).cast(dtype))
 
@@ -166,7 +113,7 @@ class TestInitSupplementaryColumn(unittest.TestCase):
     ])
     def test_init_supp_column_with_iterable_and_bad_dtype(self, name, new_col_name, new_col_value, dtype):
         """Test initialising a supplementary column with a single value set to sensible dtype"""
-        ts = init_timeseries(self.times, self.values)
+        ts = TimeSeries(self.df, time_name="time")
         if name == "mix_float":
             # Special case where mixed types cause TypeError
             with self.assertRaises(TypeError):

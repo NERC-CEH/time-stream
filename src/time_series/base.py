@@ -1,9 +1,9 @@
 from collections import Counter
+from enum import Enum
 from typing import TYPE_CHECKING, Any, Dict, Iterable, Iterator, Optional, Type, Union
 
 import polars as pl
 
-from time_series.bitwise import BitwiseFlag
 from time_series.columns import DataColumn, FlagColumn, PrimaryTimeColumn, SupplementaryColumn, TimeSeriesColumn
 from time_series.flag_manager import TimeSeriesFlagManager
 from time_series.period import Period
@@ -24,7 +24,7 @@ class TimeSeries:
         periodicity: Optional[Period] = None,
         time_zone: Optional[str] = None,
         supplementary_columns: Optional[list] = None,
-        flag_systems: Optional[Union[Dict[str, dict], Dict[str, BitwiseFlag]]] = None,
+        flag_systems: Optional[Union[Dict[str, dict], Dict[str, Type[Enum]]]] = None,
         flag_columns: Optional[Dict[str, str]] = None,
         column_metadata: Optional[Dict[str, Dict[str, Any]]] = None,
     ) -> None:
