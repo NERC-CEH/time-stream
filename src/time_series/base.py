@@ -1,9 +1,9 @@
 from collections import Counter
+from enum import Enum
 from typing import TYPE_CHECKING, Any, Dict, Iterable, Iterator, Optional, Type, Union
 
 import polars as pl
 
-from time_series.bitwise import BitwiseFlag
 from time_series.columns import DataColumn, FlagColumn, PrimaryTimeColumn, SupplementaryColumn, TimeSeriesColumn
 from time_series.flag_manager import TimeSeriesFlagManager
 from time_series.period import Period
@@ -24,7 +24,7 @@ class TimeSeries:
         periodicity: Optional[Period] = None,
         time_zone: Optional[str] = None,
         supplementary_columns: Optional[list] = None,
-        flag_systems: Optional[Union[Dict[str, dict], Dict[str, BitwiseFlag]]] = None,
+        flag_systems: Optional[Union[Dict[str, dict], Dict[str, Type[Enum]]]] = None,
         flag_columns: Optional[Dict[str, str]] = None,
         column_metadata: Optional[Dict[str, Dict[str, Any]]] = None,
     ) -> None:
@@ -79,7 +79,10 @@ class TimeSeries:
         self._setup_columns(supplementary_columns, flag_columns, column_metadata)
 
     def _setup_columns(
-        self, supplementary_columns: list[str], flag_columns: dict[str, str], column_metadata: dict[str, dict[str, Any]]
+        self,
+        supplementary_columns: list[str] = None,
+        flag_columns: dict[str, str] = None,
+        column_metadata: dict[str, dict[str, Any]] = None,
     ) -> None:
         """
         Initializes column classifications for the TimeSeries instance.
@@ -98,6 +101,13 @@ class TimeSeries:
             KeyError: If any specified supplementary or flag column does not exist in the DataFrame.
         """
         # Validate that all supplementary columns exist in the DataFrame
+        if supplementary_columns is None:
+            supplementary_columns = []
+        if flag_columns is None:
+            flag_columns = {}
+        if column_metadata is None:
+            column_metadata = {}
+
         invalid_supplementary_columns = set(supplementary_columns) - set(self.df.columns)
         if invalid_supplementary_columns:
             raise KeyError(f"Invalid supplementary columns: {invalid_supplementary_columns}")
@@ -120,7 +130,8 @@ class TimeSeries:
                 self._columns[col_name] = supplementary_col
 
             elif col_name in flag_columns:
-                flag_col = FlagColumn(col_name, self, self._flag_columns[col_name], col_metadata)
+                flag_system = flag_columns[col_name]
+                flag_col = FlagColumn(col_name, self, flag_system, col_metadata)
                 self._columns[col_name] = flag_col
 
             else:
@@ -310,6 +321,7 @@ class TimeSeries:
         """
         self._validate_time_column(new_df)
         self._remove_missing_columns(new_df)
+        self._add_new_columns(new_df)
         self._df = new_df
 
     def _validate_time_column(self, df: pl.DataFrame) -> None:
@@ -342,6 +354,19 @@ class TimeSeries:
         removed_columns = list(set(self.df.columns) - set(new_df.columns))
         for col_name in removed_columns:
             self._columns.pop(col_name, None)
+
+    def _add_new_columns(self, new_df: pl.DataFrame) -> None:
+        """Add reference to any new columns that are present in the new DataFrame.
+
+        Assumption is all new columns are data columns.
+
+        Args:
+            new_df: The new Polars DataFrame to compare against the current DataFrame.
+        """
+        new_columns = list(set(new_df.columns) - set(self.df.columns))
+        for col_name in new_columns:
+            data_col = DataColumn(col_name, self, {})
+            self._columns[col_name] = data_col
 
     @property
     def time_column(self) -> PrimaryTimeColumn:
@@ -572,8 +597,21 @@ class TimeSeries:
         return self.df.iter_rows()
 
     def __str__(self) -> str:
-        """Return the string representation of the TimeSeries class."""
+        """Return the string representation of the TimeSeries dataframe."""
         return self.df.__str__()
+
+    def __repr__(self) -> str:
+        """Returns a string representation of the TimeSeries instance, summarising key properties."""
+        return (
+            f"TimeSeries("
+            f"time_name={self.time_name}, "
+            f"resolution={self.resolution}, "
+            f"periodicity={self.periodicity}, "
+            f"time_zone={self.time_zone}, "
+            f"data_columns={list(self.data_columns.keys())}, "
+            f"supplementary_columns={list(self.supplementary_columns.keys())}, "
+            f"flag_columns={list(self.flag_columns.keys())}, "
+        )
 
     def __dir__(self) -> list[str]:
         """Return a list of attributes associated with the TimeSeries class.
@@ -589,3 +627,56 @@ class TimeSeries:
         default_attrs = list(super().__dir__())
         custom_attrs = default_attrs + list(self.columns.keys()) + [self.time_name]
         return sorted(set(custom_attrs))
+
+    def __eq__(self, other: object) -> bool:
+        """Checks if two TimeSeries instances are equal.
+
+        Args:
+            other: The object to compare.
+
+        Returns:
+            bool: True if the TimeSeries instances are equal, False otherwise.
+        """
+        if not isinstance(other, TimeSeries):
+            return False
+
+        # Compare DataFrames
+        if not self.df.equals(other.df):
+            return False
+
+        # Compare core metadata attributes
+        if (
+            self.time_name != other.time_name
+            or self.resolution != other.resolution
+            or self.periodicity != other.periodicity
+        ):
+            return False
+
+        # Compare flag systems
+        if self.flag_systems.keys() != other.flag_systems.keys():
+            return False
+        for name, flag_system in self.flag_systems.items():
+            other_flag_system = other.flag_systems[name]
+            if str(flag_system) != str(other_flag_system) or flag_system.__members__ != other_flag_system.__members__:
+                return False
+
+        # Compare column mappings
+        if (
+            self.data_columns.keys() != other.data_columns.keys()
+            or self.supplementary_columns.keys() != other.supplementary_columns.keys()
+            or self.flag_columns.keys() != other.flag_columns.keys()
+        ):
+            return False
+
+        return True
+
+    def __ne__(self, other: object) -> bool:
+        """Checks if two TimeSeries instances are not equal.
+
+        Args:
+            other: The object to compare.
+
+        Returns:
+            bool: True if the TimeSeries instances are not equal, False otherwise.
+        """
+        return not self.__eq__(other)

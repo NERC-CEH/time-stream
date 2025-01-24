@@ -1,7 +1,6 @@
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 from datetime import date, datetime, timezone
-from typing import Optional, Union
 
 import polars as pl
 from parameterized import parameterized
@@ -9,70 +8,18 @@ from polars.testing import assert_series_equal, assert_frame_equal
 
 from time_series.base import TimeSeries
 from time_series.period import Period
-
+from time_series.columns import DataColumn, FlagColumn, PrimaryTimeColumn, SupplementaryColumn
 
 TZ_UTC = timezone.utc
 
 
-def init_timeseries(
-    times: Optional[list[Union[date, datetime]]] = None,
-    values: Optional[dict] = None,
-    resolution: Optional[Period] = None,
-    periodicity: Optional[Period] = None,
-    time_zone: Optional[str] = None,
-    supplementary_columns: Optional[list[str]] = None,
-    metadata: Optional[dict] = None,
-    df_time_zone: Optional[str] = None
-):
-    """ Initialises a `TimeSeries` object with the given parameters to use within unit tests.
-
-    Args:
-        times: List of datetime objects to be used as the time data.
-        values: Dictionary of {"column name": values} to build up the dataframe
-        resolution: The resolution of the times data.
-        periodicity: The periodicity of the times data.
-        time_zone: The time zone to set for the `TimeSeries` object.
-        supplementary_columns: Columns to set as  supplementary.
-        metadata: Dictionary of column metadata
-        df_time_zone: The time zone to assign to the DataFrame's 'time' column.
-
-    Returns:
-        An instance of `TimeSeries` class.
-
-     Notes:
-        - If `times` is None, a `MagicMock` of a Polars DataFrame is used.
-        - The `_setup` method of `TimeSeries` is patched to prevent side effects during initialization.
-    """
-    if times is None:
-        df = MagicMock(pl.DataFrame)
-    else:
-        df_dict = {"time": times}
-        if values:
-            df_dict |= values
-        df = pl.DataFrame(df_dict)
-        if df_time_zone:
-            df = df.with_columns(pl.col("time").dt.replace_time_zone(df_time_zone))
-
-    with patch.object(TimeSeries, '_setup'):
-        ts = TimeSeries(
-            df=df,
-            time_name="time",
-            resolution=resolution,
-            periodicity=periodicity,
-            time_zone=time_zone,
-            supplementary_columns=supplementary_columns,
-            column_metadata=metadata
-        )
-
-    if supplementary_columns:
-        ts.set_supplementary_columns(supplementary_columns)
-
-    return ts
-
-
 class TestInitSupplementaryColumn(unittest.TestCase):
-    times = [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)]
-    values = {"data_column": [1, 2, 3], "supp_column1": ["a", "b", "c"], "supp_column2": ["x", "y", "z"]}
+    df = pl.DataFrame({
+        "time": [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)],
+        "data_column": [1, 2, 3],
+        "supp_column1": ["a", "b", "c"],
+        "supp_column2": ["x", "y", "z"]
+    })
 
     @parameterized.expand([
         ("int", "new_int_col", 5, pl.Int32),
@@ -82,9 +29,9 @@ class TestInitSupplementaryColumn(unittest.TestCase):
     ])
     def test_init_supplementary_column_with_single_value(self, _, new_col_name, new_col_value, new_col_type):
         """Test initialising a supplementary column with a single value (None, int, float or str)."""
-        ts = init_timeseries(self.times, self.values)
+        ts = TimeSeries(self.df, time_name="time")
         ts.init_supplementary_column(new_col_name, new_col_value)
-        expected_df = ts.df.with_columns(pl.Series(new_col_name, [new_col_value] * len(self.times), new_col_type))
+        expected_df = ts.df.with_columns(pl.Series(new_col_name, [new_col_value] * len(self.df), new_col_type))
 
         pl.testing.assert_frame_equal(ts.df, expected_df)
         self.assertIn(new_col_name, ts.supplementary_columns)
@@ -101,9 +48,9 @@ class TestInitSupplementaryColumn(unittest.TestCase):
     ])
     def test_init_supplementary_column_with_single_value_and_dtype(self, _, new_col_name, new_col_value, dtype):
         """Test initialising a supplementary column with a single value set to sensible dtype"""
-        ts = init_timeseries(self.times, self.values)
+        ts = TimeSeries(self.df, time_name="time")
         ts.init_supplementary_column(new_col_name, new_col_value, dtype)
-        expected_df = ts.df.with_columns(pl.Series(new_col_name, [new_col_value] * len(self.times)).cast(dtype))
+        expected_df = ts.df.with_columns(pl.Series(new_col_name, [new_col_value] * len(self.df)).cast(dtype))
 
         pl.testing.assert_frame_equal(ts.df, expected_df)
         self.assertIn(new_col_name, ts.supplementary_columns)
@@ -114,7 +61,7 @@ class TestInitSupplementaryColumn(unittest.TestCase):
     ])
     def test_init_supplementary_column_with_single_value_and_bad_dtype(self, _, new_col_name, new_col_value, dtype):
         """Test initialising a supplementary column with a single value set to sensible dtype"""
-        ts = init_timeseries(self.times, self.values)
+        ts = TimeSeries(self.df, time_name="time")
         with self.assertRaises(pl.exceptions.InvalidOperationError):
             ts.init_supplementary_column(new_col_name, new_col_value, dtype)
 
@@ -126,7 +73,7 @@ class TestInitSupplementaryColumn(unittest.TestCase):
     ])
     def test_init_supp_column_with_iterable(self, _, new_col_name, new_col_value):
         """Test initialising a supplementary column with an iterable."""
-        ts = init_timeseries(self.times, self.values)
+        ts = TimeSeries(self.df, time_name="time")
         ts.init_supplementary_column(new_col_name, new_col_value)
         expected_df = ts.df.with_columns(pl.Series(new_col_name, new_col_value))
 
@@ -139,7 +86,7 @@ class TestInitSupplementaryColumn(unittest.TestCase):
     ])
     def test_init_supp_column_with_wrong_len_iterable_raises_error(self, _, new_col_name, new_col_value):
         """Test initialising a supplementary column with an iterable of the wrong length raises an error."""
-        ts = init_timeseries(self.times, self.values)
+        ts = TimeSeries(self.df, time_name="time")
         with self.assertRaises(pl.ShapeError):
             ts.init_supplementary_column(new_col_name, new_col_value)
 
@@ -152,7 +99,7 @@ class TestInitSupplementaryColumn(unittest.TestCase):
     ])
     def test_init_supp_column_with_iterable_and_dtype(self, _, new_col_name, new_col_value, dtype):
         """Test initialising a supplementary column with a single value set to sensible dtype"""
-        ts = init_timeseries(self.times, self.values)
+        ts = TimeSeries(self.df, time_name="time")
         ts.init_supplementary_column(new_col_name, new_col_value, dtype)
         expected_df = ts.df.with_columns(pl.Series(new_col_name, new_col_value).cast(dtype))
 
@@ -166,7 +113,7 @@ class TestInitSupplementaryColumn(unittest.TestCase):
     ])
     def test_init_supp_column_with_iterable_and_bad_dtype(self, name, new_col_name, new_col_value, dtype):
         """Test initialising a supplementary column with a single value set to sensible dtype"""
-        ts = init_timeseries(self.times, self.values)
+        ts = TimeSeries(self.df, time_name="time")
         if name == "mix_float":
             # Special case where mixed types cause TypeError
             with self.assertRaises(TypeError):
@@ -177,35 +124,57 @@ class TestInitSupplementaryColumn(unittest.TestCase):
 
 
 class TestSetSupplementaryColumns(unittest.TestCase):
-    times = [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)]
-    values = {"data_column": [1, 2, 3], "supp_column1": ["a", "b", "c"], "supp_column2": ["x", "y", "z"]}
+    df = pl.DataFrame({
+        "time": [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)],
+        "data_column": [1, 2, 3],
+        "supp_column1": ["a", "b", "c"],
+        "supp_column2": ["x", "y", "z"]
+    })
 
     def test_no_supplementary_columns(self):
         """Test that a TimeSeries object is initialised without any supplementary columns set."""
-        ts = init_timeseries(self.times, self.values)
-        self.assertEqual(ts.data_columns, ["data_column", "supp_column1", "supp_column2"])
-        self.assertEqual(ts.supplementary_columns, [])
+        ts = TimeSeries(self.df, time_name="time")
+        expected_data_columns = {"data_column": DataColumn("data_column", ts),
+                                 "supp_column1": DataColumn("supp_column1", ts),
+                                 "supp_column2": DataColumn("supp_column2", ts),
+                                 }
+        self.assertEqual(ts.data_columns, expected_data_columns)
+        self.assertEqual(ts.supplementary_columns, {})
 
     def test_empty_list(self):
         """Test that an empty list behaves the same as no list sent"""
-        ts = init_timeseries(self.times, self.values)
-        ts.set_supplementary_columns([])
-        self.assertEqual(ts.data_columns, ["data_column", "supp_column1", "supp_column2"])
-        self.assertEqual(ts.supplementary_columns, [])
+        ts = TimeSeries(self.df, time_name="time")
+        ts.set_supplementary_column([])
+        expected_data_columns = {"data_column": DataColumn("data_column", ts),
+                                 "supp_column1": DataColumn("supp_column1", ts),
+                                 "supp_column2": DataColumn("supp_column2", ts),
+                                 }
+        self.assertEqual(ts.data_columns, expected_data_columns)
+        self.assertEqual(ts.supplementary_columns, {})
 
     def test_single_supplementary_column(self):
         """Test that a single supplementary column is set correctly."""
-        ts = init_timeseries(self.times, self.values)
-        ts.set_supplementary_columns(["supp_column1"])
-        self.assertEqual(ts.data_columns, ["data_column", "supp_column2"])
-        self.assertEqual(ts.supplementary_columns, ["supp_column1"])
+        ts = TimeSeries(self.df, time_name="time")
+        ts.set_supplementary_column(["supp_column1"])
+        expected_data_columns = {"data_column": DataColumn("data_column", ts),
+                                 "supp_column2": DataColumn("supp_column2", ts),
+                                 }
+        expected_supp_columns = {"supp_column1": SupplementaryColumn("supp_column1", ts),
+                                 }
+        self.assertEqual(ts.data_columns, expected_data_columns)
+        self.assertEqual(ts.supplementary_columns, expected_supp_columns)
         
     def test_multiple_supplementary_column(self):
         """Test that multiple supplementary columns are set correctly."""
-        ts = init_timeseries(self.times, self.values)
-        ts.set_supplementary_columns(["supp_column1", "supp_column2"])
-        self.assertEqual(ts.data_columns, ["data_column"])
-        self.assertEqual(ts.supplementary_columns, ["supp_column1", "supp_column2"])
+        ts = TimeSeries(self.df, time_name="time")
+        ts.set_supplementary_column(["supp_column1", "supp_column2"])
+        expected_data_columns = {"data_column": DataColumn("data_column", ts),
+                                 }
+        expected_supp_columns = {"supp_column1": SupplementaryColumn("supp_column1", ts),
+                                 "supp_column2": DataColumn("supp_column2", ts),
+                                 }
+        self.assertEqual(ts.data_columns, expected_data_columns)
+        self.assertEqual(ts.supplementary_columns, expected_supp_columns)
 
     @parameterized.expand([
         ("One bad", ["data_column", "supp_column1", "supp_column2", "non_col"]),
@@ -214,68 +183,30 @@ class TestSetSupplementaryColumns(unittest.TestCase):
     ])
     def test_bad_supplementary_columns(self, _, supplementary_columns):
         """Test that error raised for supplementary columns specified that are not in df"""
-        ts = init_timeseries(self.times, self.values)
-        with self.assertRaises(ValueError):
-            ts.set_supplementary_columns(supplementary_columns)
+        ts = TimeSeries(self.df, time_name="time")
+        with self.assertRaises(KeyError):
+            ts.set_supplementary_column(supplementary_columns)
 
     def test_appending_supplementary_column(self):
         """Test that adding supplementary columns maintains existing supplementary columns."""
-        ts = init_timeseries(self.times, self.values)
-        ts._supplementary_columns.add("supp_column1")
-        ts.set_supplementary_columns(["supp_column2"])
-        self.assertEqual(ts.data_columns, ["data_column"])
-        self.assertEqual(ts.supplementary_columns, ["supp_column1", "supp_column2"])
-
-
-class TestUnsetSupplementaryColumns(unittest.TestCase):
-    times = [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)]
-    values = {"data_column": [1, 2, 3], "supp_column1": ["a", "b", "c"], "supp_column2": ["x", "y", "z"]}
-
-    def test_no_supplementary_columns_removes_all(self):
-        """Test that passing nothing removes all from the supplementary columns list."""
-        ts = init_timeseries(self.times, self.values, supplementary_columns=["supp_column1", "supp_column2"])
-        ts.unset_supplementary_columns()
-        self.assertEqual(ts.data_columns, ["data_column", "supp_column1", "supp_column2"])
-        self.assertEqual(ts.supplementary_columns, [])
-
-    def test_empty_list(self):
-        """Test that an empty list behaves the same as no list sent"""
-        ts = init_timeseries(self.times, self.values, supplementary_columns=["supp_column1", "supp_column2"])
-        ts.unset_supplementary_columns()
-        self.assertEqual(ts.data_columns, ["data_column", "supp_column1", "supp_column2"])
-        self.assertEqual(ts.supplementary_columns, [])
-
-    def test_unset_single_supplementary_column(self):
-        """Test that a single supplementary column is unset correctly."""
-        ts = init_timeseries(self.times, self.values, supplementary_columns=["supp_column1", "supp_column2"])
-        ts.unset_supplementary_columns(["supp_column1"])
-        self.assertEqual(ts.data_columns, ["data_column", "supp_column1"])
-        self.assertEqual(ts.supplementary_columns, ["supp_column2"])
-
-    def test_unset_multiple_supplementary_column(self):
-        """Test that multiple supplementary columns are unset correctly."""
-        ts = init_timeseries(self.times, self.values, supplementary_columns=["supp_column1", "supp_column2"])
-        ts.unset_supplementary_columns(["supp_column1", "supp_column2"])
-        self.assertEqual(ts.data_columns, ["data_column", "supp_column1", "supp_column2"])
-        self.assertEqual(ts.supplementary_columns, [])
-
-    def test_unset_nonexistent_column(self):
-        """Test removing a column that is not in supplementary columns maintains the existing supplementary columns."""
-        ts = init_timeseries(self.times, self.values, supplementary_columns=["supp_column1", "supp_column2"])
-        ts.unset_supplementary_columns(["supp_column3"])
-        self.assertEqual(ts.data_columns, ["data_column"])
-        self.assertEqual(ts.supplementary_columns, ["supp_column1", "supp_column2"])
-
-    def test_unset_mixed_existing_and_nonexistent_columns(self):
-        """Test removing a mix of columns that are in and not in supplementary columns."""
-        ts = init_timeseries(self.times, self.values, supplementary_columns=["supp_column1", "supp_column2"])
-        ts.unset_supplementary_columns(["supp_column1", "supp_column3"])
-        self.assertEqual(ts.data_columns, ["data_column", "supp_column1"])
-        self.assertEqual(ts.supplementary_columns, ["supp_column2"])
+        ts = TimeSeries(self.df, time_name="time")
+        ts.set_supplementary_column(["supp_column1"])
+        ts.set_supplementary_column(["supp_column2"])
+        expected_data_columns = {"data_column": DataColumn("data_column", ts),
+                                 }
+        expected_supp_columns = {"supp_column1": SupplementaryColumn("supp_column1", ts),
+                                 "supp_column2": DataColumn("supp_column2", ts),
+                                 }
+        self.assertEqual(ts.data_columns, expected_data_columns)
+        self.assertEqual(ts.supplementary_columns, expected_supp_columns)
 
 
 class TestRoundToPeriod(unittest.TestCase):
-    times = [datetime(2020, 6, 1, 8, 10, 5, 2000), datetime(2021, 4, 30, 15, 30, 10, 250), datetime(2022, 12, 31, 12)]
+    df = pl.DataFrame({
+        "time": [datetime(2020, 6, 1, 8, 10, 5, 2000),
+                 datetime(2021, 4, 30, 15, 30, 10, 250),
+                 datetime(2022, 12, 31, 12)]
+    })
 
     @parameterized.expand([
         ("simple yearly", Period.of_years(1),
@@ -288,9 +219,10 @@ class TestRoundToPeriod(unittest.TestCase):
     def test_round_to_year_period(self, _, period, expected):
         """ Test that rounding a time series to a given year period works as expected.
         """
-        ts = init_timeseries(self.times)
+        ts = TimeSeries(self.df, time_name="time")
         result = ts._round_time_to_period(period)
-        assert_series_equal(result, pl.Series("time", expected))
+        expected = pl.Series("time", expected).dt.replace_time_zone("UTC")
+        assert_series_equal(result, expected)
 
     @parameterized.expand([
         ("simple monthly", Period.of_months(1),
@@ -306,9 +238,10 @@ class TestRoundToPeriod(unittest.TestCase):
     def test_round_to_month_period(self, _, period, expected):
         """ Test that rounding a time series to a given month period works as expected.
         """
-        ts = init_timeseries(self.times)
+        ts = TimeSeries(self.df, time_name="time")
         result = ts._round_time_to_period(period)
-        assert_series_equal(result, pl.Series("time", expected))
+        expected = pl.Series("time", expected).dt.replace_time_zone("UTC")
+        assert_series_equal(result, expected)
 
     @parameterized.expand([
         ("simple daily", Period.of_days(1),
@@ -321,9 +254,10 @@ class TestRoundToPeriod(unittest.TestCase):
     def test_round_to_day_period(self, _, period, expected):
         """ Test that rounding a time series to a given day period works as expected.
         """
-        ts = init_timeseries(self.times)
+        ts = TimeSeries(self.df, time_name="time")
         result = ts._round_time_to_period(period)
-        assert_series_equal(result, pl.Series("time", expected))
+        expected = pl.Series("time", expected).dt.replace_time_zone("UTC")
+        assert_series_equal(result, expected)
 
     @parameterized.expand([
         ("simple hourly", Period.of_hours(1),
@@ -339,9 +273,10 @@ class TestRoundToPeriod(unittest.TestCase):
     def test_round_to_hour_period(self, _, period, expected):
         """ Test that rounding a time series to a given hour period works as expected.
         """
-        ts = init_timeseries(self.times)
+        ts = TimeSeries(self.df, time_name="time")
         result = ts._round_time_to_period(period)
-        assert_series_equal(result, pl.Series("time", expected))
+        expected = pl.Series("time", expected).dt.replace_time_zone("UTC")
+        assert_series_equal(result, expected)
 
     @parameterized.expand([
         ("simple minutes", Period.of_minutes(1),
@@ -357,9 +292,10 @@ class TestRoundToPeriod(unittest.TestCase):
     def test_round_to_minute_period(self, _, period, expected):
         """ Test that rounding a time series to a given minute period works as expected.
         """
-        ts = init_timeseries(self.times)
+        ts = TimeSeries(self.df, time_name="time")
         result = ts._round_time_to_period(period)
-        assert_series_equal(result, pl.Series("time", expected))
+        expected = pl.Series("time", expected).dt.replace_time_zone("UTC")
+        assert_series_equal(result, expected)
 
     @parameterized.expand([
         ("simple seconds", Period.of_seconds(1),
@@ -372,9 +308,10 @@ class TestRoundToPeriod(unittest.TestCase):
     def test_round_to_second_period(self, _, period, expected):
         """ Test that rounding a time series to a given second period works as expected.
         """
-        ts = init_timeseries(self.times)
+        ts = TimeSeries(self.df, time_name="time")
         result = ts._round_time_to_period(period)
-        assert_series_equal(result, pl.Series("time", expected))
+        expected = pl.Series("time", expected).dt.replace_time_zone("UTC")
+        assert_series_equal(result, expected)
 
     @parameterized.expand([
         ("simple microseconds", Period.of_microseconds(200),
@@ -384,9 +321,10 @@ class TestRoundToPeriod(unittest.TestCase):
     def test_round_to_microsecond_period(self, _, period, expected):
         """ Test that rounding a time series to a given microsecond period works as expected.
         """
-        ts = init_timeseries(self.times)
+        ts = TimeSeries(self.df, time_name="time")
         result = ts._round_time_to_period(period)
-        assert_series_equal(result, pl.Series("time", expected))
+        expected = pl.Series("time", expected).dt.replace_time_zone("UTC")
+        assert_series_equal(result, expected)
 
 
 class TestValidateResolution(unittest.TestCase):
@@ -412,8 +350,9 @@ class TestValidateResolution(unittest.TestCase):
     def test_validate_year_resolution_success(self, _, times, resolution):
         """ Test that a year based time series that does conform to the given resolution passes the validation.
         """
-        ts = init_timeseries(times, resolution=resolution)
-        ts._validate_resolution()
+        with patch.object(TimeSeries, '_setup'):
+            ts = TimeSeries(pl.DataFrame({"time": times}), time_name="time", resolution=resolution)
+            ts._validate_resolution()
 
     @parameterized.expand([
         ("simple yearly error",
@@ -427,9 +366,10 @@ class TestValidateResolution(unittest.TestCase):
     def test_validate_year_resolution_error(self, _, times, resolution):
         """ Test that a year based time series that doesn't conform to the given resolution raises an error.
         """
-        ts = init_timeseries(times, resolution=resolution)
-        with self.assertRaises(UserWarning):
-            ts._validate_resolution()
+        with patch.object(TimeSeries, '_setup'):
+            ts = TimeSeries(pl.DataFrame({"time": times}), time_name="time", resolution=resolution)
+            with self.assertRaises(UserWarning):
+                ts._validate_resolution()
 
     @parameterized.expand([
         ("simple monthly",
@@ -463,8 +403,9 @@ class TestValidateResolution(unittest.TestCase):
     def test_validate_month_resolution_success(self, _, times, resolution):
         """ Test that a month based time series that does conform to the given resolution passes the validation.
         """
-        ts = init_timeseries(times, resolution=resolution)
-        ts._validate_resolution()
+        with patch.object(TimeSeries, '_setup'):
+            ts = TimeSeries(pl.DataFrame({"time": times}), time_name="time", resolution=resolution)
+            ts._validate_resolution()
 
     @parameterized.expand([
         ("simple monthly",
@@ -478,9 +419,10 @@ class TestValidateResolution(unittest.TestCase):
     def test_validate_month_resolution_error(self, _, times, resolution):
         """ Test that a month based time series that doesn't conform to the given resolution raises an error.
         """
-        ts = init_timeseries(times, resolution=resolution)
-        with self.assertRaises(UserWarning):
-            ts._validate_resolution()
+        with patch.object(TimeSeries, '_setup'):
+            ts = TimeSeries(pl.DataFrame({"time": times}), time_name="time", resolution=resolution)
+            with self.assertRaises(UserWarning):
+                ts._validate_resolution()
 
     @parameterized.expand([
         ("simple daily",
@@ -506,8 +448,9 @@ class TestValidateResolution(unittest.TestCase):
     def test_validate_day_resolution_success(self, _, times, resolution):
         """ Test that a day based time series that does conform to the given resolution passes the validation.
         """
-        ts = init_timeseries(times, resolution=resolution)
-        ts._validate_resolution()
+        with patch.object(TimeSeries, '_setup'):
+            ts = TimeSeries(pl.DataFrame({"time": times}), time_name="time", resolution=resolution)
+            ts._validate_resolution()
 
     @parameterized.expand([
         ("simple daily error",
@@ -521,9 +464,10 @@ class TestValidateResolution(unittest.TestCase):
     def test_validate_day_resolution_error(self, _, times, resolution):
         """ Test that a day based time series that doesn't conform to the given resolution raises an error.
         """
-        ts = init_timeseries(times, resolution=resolution)
-        with self.assertRaises(UserWarning):
-            ts._validate_resolution()
+        with patch.object(TimeSeries, '_setup'):
+            ts = TimeSeries(pl.DataFrame({"time": times}), time_name="time", resolution=resolution)
+            with self.assertRaises(UserWarning):
+                ts._validate_resolution()
 
     @parameterized.expand([
         ("simple hourly",
@@ -557,8 +501,9 @@ class TestValidateResolution(unittest.TestCase):
     def test_validate_hour_resolution_success(self, _, times, resolution):
         """ Test that an hour based time series that does conform to the given resolution passes the validation.
         """
-        ts = init_timeseries(times, resolution=resolution)
-        ts._validate_resolution()
+        with patch.object(TimeSeries, '_setup'):
+            ts = TimeSeries(pl.DataFrame({"time": times}), time_name="time", resolution=resolution)
+            ts._validate_resolution()
 
     @parameterized.expand([
         ("simple hourly",
@@ -572,9 +517,10 @@ class TestValidateResolution(unittest.TestCase):
     def test_validate_hour_resolution_error(self, _, times, resolution):
         """ Test that an hour based time series that doesn't conform to the given resolution raises an error.
         """
-        ts = init_timeseries(times, resolution=resolution)
-        with self.assertRaises(UserWarning):
-            ts._validate_resolution()
+        with patch.object(TimeSeries, '_setup'):
+            ts = TimeSeries(pl.DataFrame({"time": times}), time_name="time", resolution=resolution)
+            with self.assertRaises(UserWarning):
+                ts._validate_resolution()
 
     @parameterized.expand([
         ("simple minute",
@@ -604,8 +550,9 @@ class TestValidateResolution(unittest.TestCase):
     def test_validate_minute_resolution_success(self, _, times, resolution):
         """ Test that a minute based time series that does conform to the given resolution passes the validation.
         """
-        ts = init_timeseries(times, resolution=resolution)
-        ts._validate_resolution()
+        with patch.object(TimeSeries, '_setup'):
+            ts = TimeSeries(pl.DataFrame({"time": times}), time_name="time", resolution=resolution)
+            ts._validate_resolution()
 
     @parameterized.expand([
         ("simple minute",
@@ -619,9 +566,10 @@ class TestValidateResolution(unittest.TestCase):
     def test_validate_minute_resolution_error(self, _, times, resolution):
         """ Test that a minute based time series that doesn't conform to the given resolution raises an error.
         """
-        ts = init_timeseries(times, resolution=resolution)
-        with self.assertRaises(UserWarning):
-            ts._validate_resolution()
+        with patch.object(TimeSeries, '_setup'):
+            ts = TimeSeries(pl.DataFrame({"time": times}), time_name="time", resolution=resolution)
+            with self.assertRaises(UserWarning):
+                ts._validate_resolution()
 
     @parameterized.expand([
         ("simple seconds",
@@ -651,8 +599,9 @@ class TestValidateResolution(unittest.TestCase):
     def test_validate_second_resolution_success(self, _, times, resolution):
         """ Test that a second based time series that does conform to the given resolution passes the validation.
         """
-        ts = init_timeseries(times, resolution=resolution)
-        ts._validate_resolution()
+        with patch.object(TimeSeries, '_setup'):
+            ts = TimeSeries(pl.DataFrame({"time": times}), time_name="time", resolution=resolution)
+            ts._validate_resolution()
 
     @parameterized.expand([
         ("simple seconds",
@@ -666,9 +615,10 @@ class TestValidateResolution(unittest.TestCase):
     def test_validate_second_resolution_error(self, _, times, resolution):
         """ Test that a second based time series that doesn't conform to the given resolution raises an error.
         """
-        ts = init_timeseries(times, resolution=resolution)
-        with self.assertRaises(UserWarning):
-            ts._validate_resolution()
+        with patch.object(TimeSeries, '_setup'):
+            ts = TimeSeries(pl.DataFrame({"time": times}), time_name="time", resolution=resolution)
+            with self.assertRaises(UserWarning):
+                ts._validate_resolution()
 
     @parameterized.expand([
         ("simple microseconds",
@@ -694,8 +644,9 @@ class TestValidateResolution(unittest.TestCase):
     def test_validate_microsecond_resolution_success(self, _, times, resolution):
         """ Test that a microsecond based time series that does conform to the given resolution passes the validation.
         """
-        ts = init_timeseries(times, resolution=resolution)
-        ts._validate_resolution()
+        with patch.object(TimeSeries, '_setup'):
+            ts = TimeSeries(pl.DataFrame({"time": times}), time_name="time", resolution=resolution)
+            ts._validate_resolution()
 
     @parameterized.expand([
         ("40Hz",
@@ -705,9 +656,10 @@ class TestValidateResolution(unittest.TestCase):
     def test_validate_microsecond_resolution_error(self, _, times, resolution):
         """ Test that a microsecond based time series that doesn't conform to the given resolution raises an error.
         """
-        ts = init_timeseries(times, resolution=resolution)
-        with self.assertRaises(UserWarning):
-            ts._validate_resolution()
+        with patch.object(TimeSeries, '_setup'):
+            ts = TimeSeries(pl.DataFrame({"time": times}), time_name="time", resolution=resolution)
+            with self.assertRaises(UserWarning):
+                ts._validate_resolution()
 
 
 class TestValidatePeriodicity(unittest.TestCase):
@@ -735,8 +687,9 @@ class TestValidatePeriodicity(unittest.TestCase):
     def test_validate_year_periodicity_success(self, _, times, periodicity):
         """ Test that a year based time series that does conform to the given periodicity passes the validation.
         """
-        ts = init_timeseries(times, periodicity=periodicity)
-        ts._validate_periodicity()
+        with patch.object(TimeSeries, '_setup'):
+            ts = TimeSeries(pl.DataFrame({"time": times}), time_name="time", periodicity=periodicity)
+            ts._validate_periodicity()
 
     @parameterized.expand([
         ("simple yearly",
@@ -750,9 +703,10 @@ class TestValidatePeriodicity(unittest.TestCase):
     def test_validate_year_periodicity_error(self, _, times, periodicity):
         """ Test that a year based time series that doesn't conform to the given periodicity raises an error.
         """
-        ts = init_timeseries(times, periodicity=periodicity)
-        with self.assertRaises(UserWarning):
-            ts._validate_periodicity()
+        with patch.object(TimeSeries, '_setup'):
+            ts = TimeSeries(pl.DataFrame({"time": times}), time_name="time", periodicity=periodicity)
+            with self.assertRaises(UserWarning):
+                ts._validate_periodicity()
 
     @parameterized.expand([
         ("simple monthly",
@@ -782,8 +736,9 @@ class TestValidatePeriodicity(unittest.TestCase):
     def test_validate_month_periodicity_success(self, _, times, periodicity):
         """ Test that a month based time series that does conform to the given periodicity passes the validation.
         """
-        ts = init_timeseries(times, periodicity=periodicity)
-        ts._validate_periodicity()
+        with patch.object(TimeSeries, '_setup'):
+            ts = TimeSeries(pl.DataFrame({"time": times}), time_name="time", periodicity=periodicity)
+            ts._validate_periodicity()
 
     @parameterized.expand([
         ("simple monthly",
@@ -797,9 +752,10 @@ class TestValidatePeriodicity(unittest.TestCase):
     def test_validate_month_periodicity_error(self, _, times, periodicity):
         """ Test that a month based time series that doesn't conform to the given periodicity raises an error.
         """
-        ts = init_timeseries(times, periodicity=periodicity)
-        with self.assertRaises(UserWarning):
-            ts._validate_periodicity()
+        with patch.object(TimeSeries, '_setup'):
+            ts = TimeSeries(pl.DataFrame({"time": times}), time_name="time", periodicity=periodicity)
+            with self.assertRaises(UserWarning):
+                ts._validate_periodicity()
 
     @parameterized.expand([
         ("simple daily",
@@ -825,8 +781,9 @@ class TestValidatePeriodicity(unittest.TestCase):
     def test_validate_day_periodicity_success(self, _, times, periodicity):
         """ Test that a day based time series that does conform to the given periodicity passes the validation.
         """
-        ts = init_timeseries(times, periodicity=periodicity)
-        ts._validate_periodicity()
+        with patch.object(TimeSeries, '_setup'):
+            ts = TimeSeries(pl.DataFrame({"time": times}), time_name="time", periodicity=periodicity)
+            ts._validate_periodicity()
 
     @parameterized.expand([
         ("simple daily",
@@ -840,9 +797,10 @@ class TestValidatePeriodicity(unittest.TestCase):
     def test_validate_day_periodicity_error(self, _, times, periodicity):
         """ Test that a day based time series that doesn't conform to the given periodicity raises an error.
         """
-        ts = init_timeseries(times, periodicity=periodicity)
-        with self.assertRaises(UserWarning):
-            ts._validate_periodicity()
+        with patch.object(TimeSeries, '_setup'):
+            ts = TimeSeries(pl.DataFrame({"time": times}), time_name="time", periodicity=periodicity)
+            with self.assertRaises(UserWarning):
+                ts._validate_periodicity()
 
     @parameterized.expand([
         ("simple hourly",
@@ -864,8 +822,9 @@ class TestValidatePeriodicity(unittest.TestCase):
     def test_validate_hour_periodicity_success(self, _, times, periodicity):
         """ Test that an hour based time series that does conform to the given periodicity passes the validation.
         """
-        ts = init_timeseries(times, periodicity=periodicity)
-        ts._validate_periodicity()
+        with patch.object(TimeSeries, '_setup'):
+            ts = TimeSeries(pl.DataFrame({"time": times}), time_name="time", periodicity=periodicity)
+            ts._validate_periodicity()
 
     @parameterized.expand([
         ("simple hourly",
@@ -875,9 +834,10 @@ class TestValidatePeriodicity(unittest.TestCase):
     def test_validate_hour_periodicity_error(self, _, times, periodicity):
         """ Test that an hour based time series that doesn't conform to the given periodicity raises an error.
         """
-        ts = init_timeseries(times, periodicity=periodicity)
-        with self.assertRaises(UserWarning):
-            ts._validate_periodicity()
+        with patch.object(TimeSeries, '_setup'):
+            ts = TimeSeries(pl.DataFrame({"time": times}), time_name="time", periodicity=periodicity)
+            with self.assertRaises(UserWarning):
+                ts._validate_periodicity()
 
     @parameterized.expand([
         ("simple minute",
@@ -899,8 +859,9 @@ class TestValidatePeriodicity(unittest.TestCase):
     def test_validate_minute_periodicity_success(self, _, times, periodicity):
         """ Test that a minute based time series that does conform to the given periodicity passes the validation.
         """
-        ts = init_timeseries(times, periodicity=periodicity)
-        ts._validate_periodicity()
+        with patch.object(TimeSeries, '_setup'):
+            ts = TimeSeries(pl.DataFrame({"time": times}), time_name="time", periodicity=periodicity)
+            ts._validate_periodicity()
 
     @parameterized.expand([
         ("simple minute",
@@ -910,9 +871,10 @@ class TestValidatePeriodicity(unittest.TestCase):
     def test_validate_minute_periodicity_error(self, _, times, periodicity):
         """ Test that a minute based time series that doesn't conform to the given periodicity raises an error.
         """
-        ts = init_timeseries(times, periodicity=periodicity)
-        with self.assertRaises(UserWarning):
-            ts._validate_periodicity()
+        with patch.object(TimeSeries, '_setup'):
+            ts = TimeSeries(pl.DataFrame({"time": times}), time_name="time", periodicity=periodicity)
+            with self.assertRaises(UserWarning):
+                ts._validate_periodicity()
 
     @parameterized.expand([
         ("simple seconds",
@@ -934,8 +896,9 @@ class TestValidatePeriodicity(unittest.TestCase):
     def test_validate_second_periodicity_success(self, _, times, periodicity):
         """ Test that a second based time series that does conform to the given periodicity passes the validation.
         """
-        ts = init_timeseries(times, periodicity=periodicity)
-        ts._validate_periodicity()
+        with patch.object(TimeSeries, '_setup'):
+            ts = TimeSeries(pl.DataFrame({"time": times}), time_name="time", periodicity=periodicity)
+            ts._validate_periodicity()
 
     @parameterized.expand([
         ("simple seconds",
@@ -945,9 +908,10 @@ class TestValidatePeriodicity(unittest.TestCase):
     def test_validate_second_periodicity_error(self, _, times, periodicity):
         """ Test that a second based time series that doesn't conform to the given periodicity raises an error.
         """
-        ts = init_timeseries(times, periodicity=periodicity)
-        with self.assertRaises(UserWarning):
-            ts._validate_periodicity()
+        with patch.object(TimeSeries, '_setup'):
+            ts = TimeSeries(pl.DataFrame({"time": times}), time_name="time", periodicity=periodicity)
+            with self.assertRaises(UserWarning):
+                ts._validate_periodicity()
 
     @parameterized.expand([
         ("simple microseconds",
@@ -967,8 +931,9 @@ class TestValidatePeriodicity(unittest.TestCase):
     def test_validate_microsecond_periodicity_success(self, _, times, periodicity):
         """ Test that a microsecond based time series that does conform to the given periodicity passes the validation.
         """
-        ts = init_timeseries(times, periodicity=periodicity)
-        ts._validate_periodicity()
+        with patch.object(TimeSeries, '_setup'):
+            ts = TimeSeries(pl.DataFrame({"time": times}), time_name="time", periodicity=periodicity)
+            ts._validate_periodicity()
 
     @parameterized.expand([
         ("40Hz",
@@ -979,9 +944,10 @@ class TestValidatePeriodicity(unittest.TestCase):
     def test_validate_microsecond_periodicity_error(self, _, times, periodicity):
         """ Test that a microsecond based time series that doesn't conform to the given periodicity raises an error.
         """
-        ts = init_timeseries(times, periodicity=periodicity)
-        with self.assertRaises(UserWarning):
-            ts._validate_periodicity()
+        with patch.object(TimeSeries, '_setup'):
+            ts = TimeSeries(pl.DataFrame({"time": times}), time_name="time", periodicity=periodicity)
+            with self.assertRaises(UserWarning):
+                ts._validate_periodicity()
 
 
 class TestEpochCheck(unittest.TestCase):
@@ -996,9 +962,8 @@ class TestEpochCheck(unittest.TestCase):
     def test_non_epoch_agnostic_period_fails(self, period):
         """ Test that non epoch agnostic Periods fail the epoch check.
         """
-        ts = init_timeseries()
         with self.assertRaises(NotImplementedError):
-            ts._epoch_check(period)
+            TimeSeries._epoch_check(period)
 
     @parameterized.expand([
         Period.of_years(1),
@@ -1010,8 +975,7 @@ class TestEpochCheck(unittest.TestCase):
     def test_epoch_agnostic_period_passes(self, period):
         """ Test that epoch agnostic Periods pass the epoch check.
         """
-        ts = init_timeseries()
-        ts._epoch_check(period)
+        TimeSeries._epoch_check(period)
 
 
 class TestSetTimeZone(unittest.TestCase):
@@ -1020,115 +984,119 @@ class TestSetTimeZone(unittest.TestCase):
     def test_time_zone_provided(self):
         """Test that the time zone is set to time_zone if it is provided.
         """
-        ts = init_timeseries(self.times, time_zone="America/New_York")
-        ts._set_time_zone()
+        with patch.object(TimeSeries, '_setup'):
+            ts = TimeSeries(pl.DataFrame({"time": self.times}), time_name="time", time_zone="America/New_York")
+            ts._set_time_zone()
 
-        self.assertEqual(ts._time_zone, "America/New_York")
-        self.assertEqual(ts.df.schema["time"].time_zone, "America/New_York")
+            self.assertEqual(ts._time_zone, "America/New_York")
+            self.assertEqual(ts.df.schema["time"].time_zone, "America/New_York")
 
     def test_time_zone_not_provided_but_df_has_tz(self):
         """Test that the time zone is set to the DataFrame's time zone if time_zone is None.
         """
-        ts = init_timeseries(self.times, time_zone=None, df_time_zone="Europe/London")
-        ts._set_time_zone()
+        with patch.object(TimeSeries, '_setup'):
+            times = pl.Series("time", self.times).dt.replace_time_zone("Europe/London")
+            ts = TimeSeries(pl.DataFrame(times), time_name="time", time_zone=None)
+            ts._set_time_zone()
 
-        self.assertEqual(ts._time_zone, "Europe/London")
-        self.assertEqual(ts.df.schema["time"].time_zone, "Europe/London")
+            self.assertEqual(ts._time_zone, "Europe/London")
+            self.assertEqual(ts.df.schema["time"].time_zone, "Europe/London")
 
     def test_time_zone_default(self):
         """Test that the default time zone is used if both time_zone and the dataframe time zone are None.
         """
-        ts = init_timeseries(self.times)
-        ts._set_time_zone()
+        with patch.object(TimeSeries, '_setup'):
+            ts = TimeSeries(pl.DataFrame({"time": self.times}), time_name="time", time_zone=None)
+            ts._set_time_zone()
 
-        self.assertEqual(ts._time_zone, "UTC")
-        self.assertEqual(ts.df.schema["time"].time_zone, "UTC")
+            self.assertEqual(ts._time_zone, "UTC")
+            self.assertEqual(ts.df.schema["time"].time_zone, "UTC")
 
     def test_time_zone_provided_but_df_has_different_tz(self):
         """Test that the time zone is changed if the provided time zone is different to that of the df
         """
-        ts = init_timeseries(self.times, time_zone="America/New_York", df_time_zone="Europe/London")
-        ts._set_time_zone()
+        with patch.object(TimeSeries, '_setup'):
+            times = pl.Series("time", self.times).dt.replace_time_zone("Europe/London")
+            ts = TimeSeries(pl.DataFrame(times), time_name="time", time_zone=None)
+            ts._set_time_zone()
 
-        self.assertEqual(ts._time_zone, "America/New_York")
-        self.assertEqual(ts.df.schema["time"].time_zone, "America/New_York")
+            ts = TimeSeries(pl.DataFrame({"time": self.times}), time_name="time", time_zone="America/New_York")
+            ts._set_time_zone()
 
-
-class TestSelectTime(unittest.TestCase):
-    times = [datetime(2020, 1, 1, 12), datetime(2020, 1, 1, 15), datetime(2020, 1, 1, 18)]
-
-    def test_select_time(self):
-        """Test that we select just the primary datetime column as a series
-        """
-        ts = init_timeseries(self.times)
-        result = ts.select_time()
-        expected = pl.Series("time", self.times)
-        assert_series_equal(result, expected)
+            self.assertEqual(ts._time_zone, "America/New_York")
+            self.assertEqual(ts.df.schema["time"].time_zone, "America/New_York")
 
 
 class TestSortTime(unittest.TestCase):
-
     def test_sort_random_dates(self):
         """Test that random dates are sorted appropriately
         """
         times = [date(1990, 1, 1), date(2019, 5, 8), date(1967, 12, 25), date(2059, 8, 12)]
-        ts = init_timeseries(times)
-        ts.sort_time()
-
         expected = pl.Series("time", [date(1967, 12, 25), date(1990, 1, 1), date(2019, 5, 8), date(2059, 8, 12)])
-        assert_series_equal(ts.select_time(), expected)
+
+        with patch.object(TimeSeries, '_setup'):
+            ts = TimeSeries(pl.DataFrame({"time": times}), time_name="time")
+            ts._setup_columns()
+            ts.sort_time()
+            assert_series_equal(ts.time_column.data, expected)
 
     def test_sort_sorted_dates(self):
         """Test that already sorted dates are maintained
         """
         times = [date(1967, 12, 25), date(1990, 1, 1), date(2019, 5, 8), date(2059, 8, 12)]
-        ts = init_timeseries(times)
-        ts.sort_time()
-
         expected = pl.Series("time", times)
-        assert_series_equal(ts.select_time(), expected)
+
+        with patch.object(TimeSeries, '_setup'):
+            ts = TimeSeries(pl.DataFrame({"time": times}), time_name="time")
+            ts._setup_columns()
+            ts.sort_time()
+            assert_series_equal(ts.time_column.data, expected)
 
     def test_sort_times(self):
         """Test that times are sorted appropriately
         """
         times = [datetime(2024, 1, 1, 12, 59), datetime(2024, 1, 1, 12, 55), datetime(2024, 1, 1, 12, 18),
                  datetime(2024, 1, 1, 1, 5)]
-        ts = init_timeseries(times)
-        ts.sort_time()
 
         expected = pl.Series("time", [datetime(2024, 1, 1, 1, 5), datetime(2024, 1, 1, 12, 18),
                                       datetime(2024, 1, 1, 12, 55), datetime(2024, 1, 1, 12, 59)])
-        assert_series_equal(ts.select_time(), expected)
+        with patch.object(TimeSeries, '_setup'):
+            ts = TimeSeries(pl.DataFrame({"time": times}), time_name="time")
+            ts._setup_columns()
+            ts.sort_time()
+            assert_series_equal(ts.time_column.data, expected)
 
 
 class TestValidateTimeColumn(unittest.TestCase):
-    times = [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)]
-    values = {"data_column": [1, 2, 3]}
+    df = pl.DataFrame({
+        "time": [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)],
+        "data_column": [1, 2, 3]
+    })
 
     def test_validate_unchanged_dataframe(self):
         """Test that an unchanged DataFrame passes validation."""
-        ts = init_timeseries(self.times, self.values)
+        ts = TimeSeries(self.df, time_name="time")
         ts._validate_time_column(ts._df)
 
     def test_validate_dataframe_changed_values(self):
         """Test that a DataFrame with different values, but same times, passes validation."""
-        ts = init_timeseries(self.times, self.values)
+        ts = TimeSeries(self.df, time_name="time")
         new_df = pl.DataFrame({
-            "time": self.times,
+            "time": ts.df["time"],
             "data_column": [10, 20, 30]
         })
-        ts._validate_time_column(ts._df)
+        ts._validate_time_column(new_df)
 
     def test_validate_time_column_missing_time_column(self):
         """Test that a DataFrame missing the time column raises a ValueError."""
-        invalid_df = pl.DataFrame(self.values)
-        ts = init_timeseries()
+        invalid_df = pl.DataFrame(self.df["data_column"])
+        ts = TimeSeries(self.df, time_name="time")
         with self.assertRaises(ValueError):
             ts._validate_time_column(invalid_df)
 
     def test_validate_time_column_mutated_timestamps(self):
         """Test that a DataFrame with mutated timestamps raises a ValueError."""
-        ts = init_timeseries(self.times, self.values)
+        ts = TimeSeries(self.df, time_name="time")
         mutated_df = pl.DataFrame({
             "time": [datetime(1924, 1, 1), datetime(1924, 1, 2), datetime(1924, 1, 3)]
         })
@@ -1137,26 +1105,28 @@ class TestValidateTimeColumn(unittest.TestCase):
 
     def test_validate_time_column_extra_timestamps(self):
         """Test that a DataFrame with extra timestamps raises a ValueError."""
-        ts = init_timeseries(self.times, self.values)
+        ts = TimeSeries(self.df, time_name="time")
         extra_timestamps_df = pl.DataFrame({
-            "time": self.times + [datetime(2024, 1, 4), datetime(2024, 1, 5)]
+            "time": list(ts.df["time"]) + [datetime(2024, 1, 4), datetime(2024, 1, 5)]
         })
         with self.assertRaises(ValueError):
             ts._validate_time_column(extra_timestamps_df)
 
     def test_validate_time_column_fewer_timestamps(self):
         """Test that a DataFrame with fewer timestamps raises a ValueError."""
-        ts = init_timeseries(self.times, self.values)
+        ts = TimeSeries(self.df, time_name="time")
         fewer_timestamps_df = pl.DataFrame({
-            "time": self.times[:-1]
+            "time": list(ts.df["time"])[:-1]
         })
         with self.assertRaises(ValueError):
             ts._validate_time_column(fewer_timestamps_df)
 
 
 class TestRemoveMissingColumns(unittest.TestCase):
-    times = [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)]
-    values = {"col1": [1, 2, 3], "col2": [4, 5, 6], "col3": [7, 8, 9]}
+    df = pl.DataFrame({
+        "time": [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)],
+        "col1": [1, 2, 3], "col2": [4, 5, 6], "col3": [7, 8, 9]
+    })
     metadata = {
         "col1": {"description": "meta1"},
         "col2": {"description": "meta2"},
@@ -1165,98 +1135,106 @@ class TestRemoveMissingColumns(unittest.TestCase):
 
     def test_no_columns_removed(self):
         """Test that no columns are removed when all columns are present in the new DataFrame."""
-        ts = init_timeseries(self.times, self.values, supplementary_columns=["col1"], metadata=self.metadata)
+        ts = TimeSeries(self.df, time_name="time", supplementary_columns=["col1"], column_metadata=self.metadata)
 
-        new_df = pl.DataFrame({
-            "time": self.times,
-            "col1": [1, 2, 3],
-            "col2": [4, 5, 6],
-            "col3": [7, 8, 9]
-        })
-        ts._remove_missing_columns(new_df)
-        ts._df = new_df
+        ts._remove_missing_columns(self.df)
+        ts._df = self.df
 
-        self.assertIn("col1", ts.supplementary_columns)
-        self.assertIn("col2", ts.data_columns)
-        self.assertIn("col3", ts.data_columns)
-        self.assertEqual(ts.metadata(), self.metadata)
+        self.assertEqual(list(ts.columns.keys()), ["col1", "col2", "col3"])
+        self.assertEqual(list(ts.supplementary_columns.keys()), ["col1"])
+        self.assertEqual(list(ts.data_columns.keys()), ["col2", "col3"])
+        self.assertEqual(ts.col1.metadata(), self.metadata["col1"])
+        self.assertEqual(ts.col2.metadata(), self.metadata["col2"])
+        self.assertEqual(ts.col3.metadata(), self.metadata["col3"])
 
     def test_single_data_column_removed(self):
         """Test that single data column is removed correctly."""
-        ts = init_timeseries(self.times, self.values, supplementary_columns=["col1"], metadata=self.metadata)
+        ts = TimeSeries(self.df, time_name="time", supplementary_columns=["col1"], column_metadata=self.metadata)
 
-        new_df = pl.DataFrame({
-            "time": self.times,
-            "col1": [1, 2, 3],
-            "col3": [7, 8, 9]
-        })
+        new_df = self.df.drop("col2")
         ts._remove_missing_columns(new_df)
         ts._df = new_df
 
-        self.assertEqual(ts.columns, ["col1", "col3"])
-        self.assertEqual(ts.supplementary_columns, ["col1"])
-        self.assertEqual(ts.data_columns, ["col3"])
-        self.assertEqual(ts.metadata(), {"col1": {"description": "meta1"}, "col3": {"description": "meta3"}})
+        self.assertEqual(list(ts.columns.keys()), ["col1", "col3"])
+        self.assertEqual(list(ts.supplementary_columns.keys()), ["col1"])
+        self.assertEqual(list(ts.data_columns.keys()), ["col3"])
+        self.assertEqual(ts.col1.metadata(), self.metadata["col1"])
+        self.assertEqual(ts.col3.metadata(), self.metadata["col3"])
+
+        # try to access removed columns
+        with self.assertRaises(AttributeError):
+            _ = ts.col2
 
     def test_single_supplementary_column_removed(self):
         """Test that single supplementary column is removed correctly."""
-        ts = init_timeseries(self.times, self.values, supplementary_columns=["col1"], metadata=self.metadata)
+        ts = TimeSeries(self.df, time_name="time", supplementary_columns=["col1"], column_metadata=self.metadata)
 
-        new_df = pl.DataFrame({
-            "time": self.times,
-            "col2": [4, 5, 6],
-            "col3": [7, 8, 9]
-        })
+        new_df = self.df.drop("col1")
         ts._remove_missing_columns(new_df)
         ts._df = new_df
 
-        self.assertEqual(ts.columns, ["col2", "col3"])
-        self.assertEqual(ts.supplementary_columns, [])
-        self.assertEqual(ts.data_columns, ["col2", "col3"])
-        self.assertEqual(ts.metadata(), {"col2": {"description": "meta2"}, "col3": {"description": "meta3"}})
+        self.assertEqual(list(ts.columns.keys()), ["col2", "col3"])
+        self.assertEqual(list(ts.supplementary_columns.keys()), [])
+        self.assertEqual(list(ts.data_columns.keys()), ["col2", "col3"])
+        self.assertEqual(ts.col2.metadata(), self.metadata["col2"])
+        self.assertEqual(ts.col3.metadata(), self.metadata["col3"])
+
+        # try to access removed columns
+        with self.assertRaises(AttributeError):
+            _ = ts.col1
 
     def test_multiple_columns_removed(self):
         """Test that multiple columns are removed correctly."""
-        ts = init_timeseries(self.times, self.values, supplementary_columns=["col1"], metadata=self.metadata)
+        ts = TimeSeries(self.df, time_name="time", supplementary_columns=["col1"], column_metadata=self.metadata)
 
-        new_df = pl.DataFrame({
-            "time": self.times,
-            "col3": [7, 8, 9]
-        })
+        new_df = self.df.drop(["col1", "col2"])
         ts._remove_missing_columns(new_df)
         ts._df = new_df
 
-        self.assertEqual(ts.columns, ["col3"])
-        self.assertEqual(ts.supplementary_columns, [])
-        self.assertEqual(ts.data_columns, ["col3"])
-        self.assertEqual(ts.metadata(), {"col3": {"description": "meta3"}})
+        self.assertEqual(list(ts.columns.keys()), ["col3"])
+        self.assertEqual(list(ts.supplementary_columns.keys()), [])
+        self.assertEqual(list(ts.data_columns.keys()), ["col3"])
+        self.assertEqual(ts.col3.metadata(), self.metadata["col3"])
 
-    def test_added_column(self):
-        """Test that adding a new column works"""
-        ts = init_timeseries(self.times, self.values, supplementary_columns=["col1"], metadata=self.metadata)
+        # try to access removed columns
+        with self.assertRaises(AttributeError):
+            _ = ts.col1
+        with self.assertRaises(AttributeError):
+            _ = ts.col2
 
-        new_df = pl.DataFrame({
-            "time": self.times,
-            "col1": [1, 2, 3],
-            "col2": [4, 5, 6],
-            "col3": [7, 8, 9],
-            "col4": [10, 11, 12],
-        })
-        ts._remove_missing_columns(new_df)
-        ts._df = new_df
 
-        self.assertEqual(ts.columns, ["col1", "col2", "col3", "col4"])
-        self.assertEqual(ts.supplementary_columns, ["col1"])
-        self.assertEqual(ts.data_columns, ["col2", "col3", "col4"])
-        self.assertEqual(ts.metadata(), {"col1": {"description": "meta1"}, "col2": {"description": "meta2"},
-                                         "col3": {"description": "meta3"}, "col4": {}})
+class TestAddNewColumns(unittest.TestCase):
+    df = pl.DataFrame({
+        "time": [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)],
+        "col1": [1, 2, 3], "col2": [4, 5, 6], "col3": [7, 8, 9]
+    })
+
+    def test_add_new_columns(self):
+        """Test that new columns are correctly added as DataColumns."""
+        ts = TimeSeries(self.df, time_name="time")
+        new_df = self.df.with_columns(pl.Series("col4", [1.1, 2.2, 3.3]))
+        ts._add_new_columns(new_df)
+
+        self.assertIn("col4", ts.columns)
+        self.assertIsInstance(ts.col4, DataColumn)
+
+    def test_no_changes_when_no_new_columns(self):
+        """Test that does nothing if there are no new columns."""
+        ts = TimeSeries(self.df, time_name="time")
+        original_columns = ts._columns.copy()
+        ts._add_new_columns(self.df)
+
+        self.assertEqual(original_columns, ts._columns)
 
 
 class TestSelectColumns(unittest.TestCase):
     times = [datetime(2024, 1, 1, tzinfo=TZ_UTC),
              datetime(2024, 1, 2, tzinfo=TZ_UTC),
              datetime(2024, 1, 3, tzinfo=TZ_UTC)]
-    values = {"col1": [1, 2, 3], "col2": [4, 5, 6], "col3": [7, 8, 9]}
+    df = pl.DataFrame({
+        "time": times,
+        "col1": [1, 2, 3], "col2": [4, 5, 6], "col3": [7, 8, 9]
+    })
     metadata = {
         "col1": {"key1": "1", "key2": "10", "key3": "100"},
         "col2": {"key1": "2", "key2": "20", "key3": "200"},
@@ -1265,267 +1243,61 @@ class TestSelectColumns(unittest.TestCase):
 
     def test_select_single_column(self):
         """Test selecting a single of column."""
-        ts = init_timeseries(self.times, self.values)
-        expected_df = pl.DataFrame({"time": self.times} | {"col1": self.values["col1"]})
-
-        ts = ts.select(["col1"])
-        assert_frame_equal(ts.df, expected_df)
+        ts = TimeSeries(self.df, time_name="time", column_metadata=self.metadata)
+        expected = TimeSeries(self.df.select(["time", "col1"]), time_name="time",
+                              column_metadata={"col1": self.metadata["col1"]})
+        result = ts.select(["col1"])
+        self.assertEqual(result, expected)
 
     def test_select_multiple_columns(self):
-        """Test selecting a single of column."""
-        ts = init_timeseries(self.times, self.values)
-        expected_df = pl.DataFrame({"time": self.times} | {"col1": self.values["col1"], "col2": self.values["col2"]})
-
-        ts = ts.select(["col1", "col2"])
-        assert_frame_equal(ts.df, expected_df)
+        """Test selecting multiple columns."""
+        ts = TimeSeries(self.df, time_name="time", column_metadata=self.metadata)
+        expected = TimeSeries(self.df.select(["time", "col1", "col2"]), time_name="time",
+                              column_metadata={"col1": self.metadata["col1"], "col2": self.metadata["col2"]})
+        result = ts.select(["col1", "col2"])
+        self.assertEqual(result, expected)
 
     def test_select_no_columns_raises_error(self):
         """Test selecting no columns raises error."""
-        ts = init_timeseries(self.times, self.values)
-        with self.assertRaises(ValueError):
+        ts = TimeSeries(self.df, time_name="time", column_metadata=self.metadata)
+        with self.assertRaises(KeyError):
             ts.select([])
 
     def test_select_nonexistent_column(self):
         """Test selecting a column that does not exist raises error."""
-        ts = init_timeseries(self.times, self.values)
-        with self.assertRaises(pl.exceptions.ColumnNotFoundError):
+        ts = TimeSeries(self.df, time_name="time", column_metadata=self.metadata)
+        with self.assertRaises(KeyError):
             ts.select(["nonexistent_column"])
 
     def test_select_existing_and_nonexistent_column(self):
         """Test selecting a column that does not exist, alongside existing columns, still raises error"""
-        ts = init_timeseries(self.times, self.values)
-        with self.assertRaises(pl.exceptions.ColumnNotFoundError):
+        ts = TimeSeries(self.df, time_name="time", column_metadata=self.metadata)
+        with self.assertRaises(KeyError):
             ts.select(["col1", "col2", "nonexistent_column"])
 
     def test_select_column_doesnt_mutate_original_ts(self):
         """When selecting a column, the original ts should be unchanged"""
-        ts = init_timeseries(self.times, self.values)
+        ts = TimeSeries(self.df, time_name="time", column_metadata=self.metadata)
         original_df = ts.df
 
+        expected = TimeSeries(self.df.select(["time", "col1"]), time_name="time",
+                              column_metadata={"col1": self.metadata["col1"]})
         col1_ts = ts.select(["col1"])
-        expected_df = pl.DataFrame({"time": self.times} | {"col1": self.values["col1"]})
-        assert_frame_equal(col1_ts.df, expected_df)
+        self.assertEqual(col1_ts, expected)
         assert_frame_equal(ts.df, original_df)
 
+        expected = TimeSeries(self.df.select(["time", "col2"]), time_name="time",
+                              column_metadata={"col2": self.metadata["col2"]})
         col2_ts = ts.select(["col2"])
-        expected_df = pl.DataFrame({"time": self.times} | {"col2": self.values["col2"]})
-        assert_frame_equal(col2_ts.df, expected_df)
+        self.assertEqual(col2_ts, expected)
         assert_frame_equal(ts.df, original_df)
-
-    def test_select_column_trims_metadata(self):
-        """When selecting a column, the original ts metadata should be unchanged"""
-        ts = init_timeseries(self.times, self.values, metadata=self.metadata)
-
-        col1_ts = ts.select(["col1"])
-        expected_metadata = {"col1": self.metadata["col1"]}
-        self.assertEqual(col1_ts.metadata(), expected_metadata)
-        # Ensure original ts metadata unchanged
-        self.assertEqual(ts.metadata(), self.metadata)
-
-    def test_select_column_trims_supplementary_columns(self):
-        """When selecting a column, the original ts supplementary columns should be unchanged"""
-        ts = init_timeseries(self.times, self.values, supplementary_columns=["col2"])
-
-        col1_ts = ts.select(["col1"])
-        self.assertEqual(col1_ts.columns, ["col1"])
-        self.assertEqual(col1_ts.supplementary_columns, [])
-        self.assertEqual(col1_ts.data_columns, ["col1"])
-
-        # Ensure original ts supplementary columns unchanged
-        self.assertEqual(ts.columns, ["col1", "col2", "col3"])
-        self.assertEqual(ts.supplementary_columns, ["col2"])
-        self.assertEqual(ts.data_columns, ["col1", "col3"])
-
-
-class TestMetadata(unittest.TestCase):
-    times = [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)]
-    values = {"col1": [1, 2, 3], "col2": [4, 5, 6], "col3": [7, 8, 9]}
-    metadata = {
-        "col1": {"key1": "1", "key2": "10", "key3": "100"},
-        "col2": {"key1": "2", "key2": "20", "key3": "200"},
-        "col3": {"key1": "3", "key2": "30", "key3": "300"},
-    }
-    
-    def test_metadata_no_key(self):
-        """Test retrieving all metadata when no key is provided."""
-        ts = init_timeseries(self.times, self.values, metadata=self.metadata)
-        result = ts.metadata()
-        self.assertEqual(result, self.metadata)
-
-    def test_metadata_single_key(self):
-        """Test relevant metadata is returned when a single key is provided."""
-        ts = init_timeseries(self.times, self.values, metadata=self.metadata)
-        result = ts.metadata("key1")
-        expected = {
-            "col1": {"key1": "1"},
-            "col2": {"key1": "2"},
-            "col3": {"key1": "3"},
-        }
-        self.assertEqual(result, expected)
-
-    def test_metadata_multiple_keys(self):
-        """Test relevant metadata is returned when multiple keys are provided."""
-        ts = init_timeseries(self.times, self.values, metadata=self.metadata)
-        result = ts.metadata(["key1", "key2"])
-        expected = {
-            "col1": {"key1": "1", "key2": "10"},
-            "col2": {"key1": "2", "key2": "20"},
-            "col3": {"key1": "3", "key2": "30"},
-        }
-        self.assertEqual(result, expected)
-
-    def test_metadata_non_existent_key_returns_none(self):
-        """Test that a non-existent key returns no metadata"""
-        ts = init_timeseries(self.times, self.values, metadata=self.metadata)
-        result = ts.metadata("nonexistent_key")
-        expected = {
-            "col1": {"nonexistent_key": None},
-            "col2": {"nonexistent_key": None},
-            "col3": {"nonexistent_key": None},
-        }
-        self.assertEqual(result, expected)
-
-    def test_metadata_mix_existent_and_non_existent_key(self):
-        """Test that a mix of existent and non-existent keys returns appropriate metadata"""
-        ts = init_timeseries(self.times, self.values, metadata=self.metadata)
-        result = ts.metadata(["key1", "nonexistent_key"])
-        expected = {
-            "col1": {"key1": "1", "nonexistent_key": None},
-            "col2": {"key1": "2", "nonexistent_key": None},
-            "col3": {"key1": "3", "nonexistent_key": None},
-        }
-        self.assertEqual(result, expected)
-
-
-class TestGetMetadata(unittest.TestCase):
-    times = [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)]
-    values = {"col1": [1, 2, 3], "col2": [4, 5, 6], "col3": [7, 8, 9]}
-    metadata = {
-        "col1": {"key1": "1", "key2": "10", "key3": "100"},
-        "col2": {"key1": "2", "key2": "20", "key3": "200"}
-    }
-
-    def test_get_all_metadata_for_column(self):
-        """Test retrieving all metadata for a single column"""
-        ts = init_timeseries(self.times, self.values, metadata=self.metadata)
-        result = ts._get_metadata("col1")
-        expected = {"key1": "1", "key2": "10", "key3": "100"}
-        self.assertEqual(result, expected)
-
-    def test_get_single_metadata_key_for_column(self):
-        """Test retrieving  a single metadata item for a single column"""
-        ts = init_timeseries(self.times, self.values, metadata=self.metadata)
-        result = ts._get_metadata("col1", "key1")
-        expected = {"key1": "1"}
-        self.assertEqual(result, expected)
-        
-    def test_get_multiple_metadata_keys_for_column(self):
-        """Test retrieving multiple metadata items for a single column"""
-        ts = init_timeseries(self.times, self.values, metadata=self.metadata)
-        result = ts._get_metadata("col1", ["key1", "key2"])
-        expected = {"key1": "1", "key2": "10"}
-        self.assertEqual(result, expected)
-
-    def test_get_non_existent_key_for_column(self):
-        """Test a non-existent key returns None"""
-        ts = init_timeseries(self.times, self.values, metadata=self.metadata)
-        result = ts._get_metadata("col1", "nonexistent_key")
-        expected = {"nonexistent_key": None}
-        self.assertEqual(result, expected)
-
-    def test_get_mix_existing_and_non_existent_key_for_column(self):
-        """Test a mix of existing and non-existent keys returns appropriate metadata"""
-        ts = init_timeseries(self.times, self.values, metadata=self.metadata)
-        result = ts._get_metadata("col1", ["key1", "key2", "nonexistent_key"])
-        expected = {"key1": "1", "key2": "10", "nonexistent_key": None}
-        self.assertEqual(result, expected)
-
-    def test_get_metadata_for_existing_column_with_no_metadata(self):
-        """Test retrieving metadata for a column with no metadata."""
-        ts = init_timeseries(self.times, self.values, metadata=self.metadata)
-        result = ts._get_metadata("col3")
-        expected = {}
-        self.assertEqual(result, expected)
-
-    def test_get_metadata_for_non_existent_column(self):
-        """Test retrieving metadata for a non-existing column returns empty"""
-        ts = init_timeseries(self.times, self.values, metadata=self.metadata)
-        result = ts._get_metadata("nonexistent_column")
-        expected = {}
-        self.assertEqual(result, expected)
-
-
-class TestRemoveMetadata(unittest.TestCase):
-    times = [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)]
-    values = {"col1": [1, 2, 3], "col2": [4, 5, 6], "col3": [7, 8, 9]}
-    metadata = {
-        "col1": {"key1": "1", "key2": "10", "key3": "100"},
-        "col2": {"key1": "2", "key2": "20", "key3": "200"},
-        "col3": {"key1": "3", "key2": "30", "key3": "300"},
-    }
-
-    def test_remove_all_metadata_for_column(self):
-        """Test removing all metadata for a single column."""
-        ts = init_timeseries(self.times, self.values, metadata=self.metadata)
-        ts.remove_metadata("col1")
-        expected = {
-            "col1": {},
-            "col2": {"key1": "2", "key2": "20", "key3": "200"},
-            "col3": {"key1": "3", "key2": "30", "key3": "300"},
-        }
-        self.assertEqual(ts.metadata(), expected)
-
-    def test_remove_all_metadata_by_keys_for_column(self):
-        """Test removing all the metadata keys by name for a single column keeps that column in the metadata dict"""
-        ts = init_timeseries(self.times, self.values, metadata=self.metadata)
-        ts.remove_metadata("col1", ["key1", "key2", "key3"])
-        expected = {
-            "col1": {},
-            "col2": {"key1": "2", "key2": "20", "key3": "200"},
-            "col3": {"key1": "3", "key2": "30", "key3": "300"},
-        }
-        self.assertEqual(ts._metadata, expected)
-
-    def test_remove_single_metadata_key_for_column(self):
-        """Test removing a single metadata key for a single column, ensuring other keys are maintained."""
-        ts = init_timeseries(self.times, self.values, metadata=self.metadata)
-        ts.remove_metadata("col1", "key1")
-        expected = {
-            "col1": {"key2": "10", "key3": "100"},
-            "col2": {"key1": "2", "key2": "20", "key3": "200"},
-            "col3": {"key1": "3", "key2": "30", "key3": "300"},
-        }
-        self.assertEqual(ts._metadata, expected)
-
-    def test_remove_multiple_metadata_key_for_column(self):
-        """Test removing multiple metadata keys for a single column, ensuring other keys are maintained."""
-        ts = init_timeseries(self.times, self.values, metadata=self.metadata)
-        ts.remove_metadata("col1", ["key1", "key2"])
-        expected = {
-            "col1": {"key3": "100"},
-            "col2": {"key1": "2", "key2": "20", "key3": "200"},
-            "col3": {"key1": "3", "key2": "30", "key3": "300"},
-        }
-        self.assertEqual(ts._metadata, expected)
-
-    def test_remove_metadata_for_non_existent_column(self):
-        """Test removing metadata for a non-existent column doesn't change the existing metadata"""
-        ts = init_timeseries(self.times, self.values, metadata=self.metadata)
-        ts.remove_metadata("nonexistent_column")        
-        self.assertEqual(ts._metadata, self.metadata)
-        
-    def test_remove_metadata_for_non_existent_key(self):
-        """Test removing metadata for an existing column, but the metadata key doesn't exist."""
-        ts = init_timeseries(self.times, self.values, metadata=self.metadata)
-        ts.remove_metadata("col1", "nonexistent_key")
-        self.assertEqual(ts._metadata, self.metadata)
 
 
 class TestGetattr(unittest.TestCase):
-    times = [datetime(2024, 1, 1, tzinfo=TZ_UTC),
-             datetime(2024, 1, 2, tzinfo=TZ_UTC),
-             datetime(2024, 1, 3, tzinfo=TZ_UTC)]
-    values = {"col1": [1, 2, 3], "col2": [4, 5, 6], "col3": [7, 8, 9]}
+    df = pl.DataFrame({
+        "time": [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)],
+        "col1": [1, 2, 3], "col2": [4, 5, 6], "col3": [7, 8, 9]
+    })
     metadata = {
         "col1": {"key1": "1", "key2": "10", "key3": "100"},
         "col2": {"key1": "2", "key2": "20", "key3": "200"},
@@ -1534,43 +1306,37 @@ class TestGetattr(unittest.TestCase):
 
     def test_access_time_column(self):
         """Test accessing the time column."""
-        ts = init_timeseries(self.times, self.values, metadata=self.metadata)
+        ts = TimeSeries(self.df, time_name="time", column_metadata=self.metadata)
         result = ts.time
-        expected = pl.Series("time", self.times)
-        assert_series_equal(result, expected)
+        expected = PrimaryTimeColumn("time", ts)
+        self.assertEqual(result, expected)
 
     def test_access_data_column(self):
         """Test accessing a data column."""
-        ts = init_timeseries(self.times, self.values, metadata=self.metadata)
+        ts = TimeSeries(self.df, time_name="time", column_metadata=self.metadata)
         result = ts.col1
-        expected = pl.DataFrame({"time": self.times, "col1": self.values["col1"]})
-        assert_frame_equal(result.df, expected)
+        expected = DataColumn("col1", ts, self.metadata["col1"])
+        self.assertEqual(result, expected)
 
     def test_access_metadata_key(self):
         """Test accessing metadata key for a single column."""
-        ts = init_timeseries(self.times, self.values, metadata=self.metadata)
+        ts = TimeSeries(self.df, time_name="time", column_metadata=self.metadata)
         result = ts.col1.key1
         expected = "1"
         self.assertEqual(result, expected)
 
-    def test_access_metadata_key_without_single_column(self):
-        """Test accessing metadata key without filtering to a single column."""
-        ts = init_timeseries(self.times, self.values, metadata=self.metadata)
-        with self.assertRaises(AttributeError):
-            result = ts.key1
-
     def test_access_nonexistent_attribute(self):
         """Test accessing metadata key without filtering to a single column."""
-        ts = init_timeseries(self.times, self.values, metadata=self.metadata)
+        ts = TimeSeries(self.df, time_name="time", column_metadata=self.metadata)
         with self.assertRaises(AttributeError):
-            result = ts.col1.key0
+            _ = ts.col1.key0
 
 
 class TestGetItem(unittest.TestCase):
-    times = [datetime(2024, 1, 1, tzinfo=TZ_UTC),
-             datetime(2024, 1, 2, tzinfo=TZ_UTC),
-             datetime(2024, 1, 3, tzinfo=TZ_UTC)]
-    values = {"col1": [1, 2, 3], "col2": [4, 5, 6], "col3": [7, 8, 9]}
+    df = pl.DataFrame({
+        "time": [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)],
+        "col1": [1, 2, 3], "col2": [4, 5, 6], "col3": [7, 8, 9]
+    })
     metadata = {
         "col1": {"key1": "1", "key2": "10", "key3": "100"},
         "col2": {"key1": "2", "key2": "20", "key3": "200"},
@@ -1579,30 +1345,184 @@ class TestGetItem(unittest.TestCase):
 
     def test_access_time_column(self):
         """Test accessing the time column."""
-        ts = init_timeseries(self.times, self.values, metadata=self.metadata)
+        ts = TimeSeries(self.df, time_name="time", column_metadata=self.metadata)
         result = ts["time"]
-        expected = pl.Series("time", self.times)
-        assert_series_equal(result, expected)
+        expected = PrimaryTimeColumn("time", ts)
+        self.assertEqual(result, expected)
 
     def test_access_data_column(self):
         """Test accessing a data column."""
-        ts = init_timeseries(self.times, self.values, metadata=self.metadata)
+        ts = TimeSeries(self.df, time_name="time", column_metadata=self.metadata)
         result = ts["col1"]
-        expected = pl.DataFrame({"time": self.times, "col1": self.values["col1"]})
-        assert_frame_equal(result.df, expected)
+        expected = TimeSeries(self.df.select(["time", "col1"]),
+                              time_name="time", column_metadata={"col1": self.metadata["col1"]})
+        self.assertEqual(result, expected)
 
     def test_access_multiple_data_columns(self):
         """Test accessing multiple data columns."""
-        ts = init_timeseries(self.times, self.values, metadata=self.metadata)
+        ts = TimeSeries(self.df, time_name="time", column_metadata=self.metadata)
         result = ts[["col1", "col2"]]
-        expected = pl.DataFrame({"time": self.times, "col1": self.values["col1"], "col2": self.values["col2"]})
-        assert_frame_equal(result.df, expected)
+        expected = TimeSeries(self.df.select(["time", "col1", "col2"]),
+                              time_name="time",
+                              column_metadata={"col1": self.metadata["col1"], "col2": self.metadata["col2"]})
+        self.assertEqual(result, expected)
 
     def test_non_existent_column(self):
         """Test accessing non-existent data column raises error."""
-        ts = init_timeseries(self.times, self.values, metadata=self.metadata)
-        with self.assertRaises(pl.ColumnNotFoundError):
-            result = ts["col0"]
+        ts = TimeSeries(self.df, time_name="time", column_metadata=self.metadata)
+        with self.assertRaises(KeyError):
+            _ = ts["col0"]
 
-if __name__ == '__main__':
-    unittest.main()
+
+class TestSetupColumns(unittest.TestCase):
+    df = pl.DataFrame({
+        "time": [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)],
+         "data_col": [10, 20, 30], "supp_col": ["A", "B", "C"], "flag_col": [1, 2, 3]
+    })
+    flag_systems = {"example_flag_system": {"OK": 1, "WARNING": 2}}
+
+    def test_valid_setup_columns(self):
+        """Test that valid columns are correctly classified."""
+        ts = TimeSeries(df=self.df,
+                        time_name="time",
+                        supplementary_columns=["supp_col"],
+                        flag_columns={"flag_col": "example_flag_system"},
+                        flag_systems=self.flag_systems)
+
+        self.assertIsInstance(ts.time_column, PrimaryTimeColumn)
+        self.assertIsInstance(ts.columns["supp_col"], SupplementaryColumn)
+        self.assertIsInstance(ts.columns["flag_col"], FlagColumn)
+        self.assertIsInstance(ts.columns["data_col"], DataColumn)
+
+    def test_missing_supplementary_column_raises_error(self):
+        """Test that an error raised when supplementary columns do not exist."""
+        with self.assertRaises(KeyError):
+            ts = TimeSeries(df=self.df,
+                            time_name="time",
+                            supplementary_columns=["missing_col"],
+                            flag_columns={"flag_col": "example_flag_system"},
+                            flag_systems=self.flag_systems)
+
+    def test_missing_flag_column_raises_error(self):
+        """Test that an error raised when flag columns do not exist."""
+        with self.assertRaises(KeyError):
+            ts = TimeSeries(df=self.df,
+                            time_name="time",
+                            supplementary_columns=["supp_col"],
+                            flag_columns={"missing_col": "example_flag_system"},
+                            flag_systems=self.flag_systems)
+
+
+class TestTimeColumn(unittest.TestCase):
+    df = pl.DataFrame({
+        "time": [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)],
+        "col1": [1, 2, 3], "col2": [4, 5, 6], "col3": [7, 8, 9]
+    })
+
+    def test_valid_time_column(self):
+        """Test that time_column correctly returns the PrimaryTimeColumn instance."""
+        ts = TimeSeries(self.df, time_name="time")
+        self.assertIsInstance(ts.time_column, PrimaryTimeColumn)
+        self.assertEqual(ts.time_column.name, "time")
+
+    def test_no_time_column_raises_error(self):
+        """Test that error is raised if no primary time column is found."""
+        ts = TimeSeries(self.df, time_name="time")
+        with patch.object(ts, "_columns", {}):  # Simulate missing columns
+            with self.assertRaises(ValueError):
+                _ = ts.time_column
+
+    def test_multiple_time_columns_raises_error(self):
+        """Test that error is raised if multiple primary time columns exist."""
+        ts = TimeSeries(self.df, time_name="time")
+        with patch.object(ts, "_columns", {
+            "time1": PrimaryTimeColumn("time1", ts),
+            "time2": PrimaryTimeColumn("time2", ts),
+        }):
+            with self.assertRaises(ValueError):
+                _ = ts.time_column
+
+
+class TestTimeSeriesEquality(unittest.TestCase):
+    def setUp(self):
+        """Set up multiple TimeSeries objects for testing."""
+        self.df_original = pl.DataFrame({
+            "time": [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)],
+            "value": [10, 20, 30]
+        })
+        self.df_same = pl.DataFrame({
+            "time": [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)],
+            "value": [10, 20, 30]
+        })
+        self.df_different_values = pl.DataFrame({
+            "time": [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)],
+            "value": [100, 200, 300]
+        })
+        self.df_different_times = pl.DataFrame({
+            "time": [datetime(2020, 1, 1), datetime(2020, 1, 2), datetime(2020, 1, 3)],
+            "value": [10, 20, 30]
+        })
+
+        self.flag_systems_1 = {"quality_flags": {"OK": 1, "WARNING": 2}}
+        self.flag_systems_2 = {"quality_flags": {"NOT_OK": 4, "ERROR": 8}}
+
+        self.ts_original = TimeSeries(
+            df=self.df_original, time_name="time", resolution=Period.of_days(1),
+            periodicity=Period.of_days(1), flag_systems=self.flag_systems_1
+        )
+
+    def test_equal_timeseries(self):
+        """Test that two identical TimeSeries objects are considered equal."""
+        ts_same = TimeSeries(
+            df=self.df_same, time_name="time", resolution=Period.of_days(1),
+            periodicity=Period.of_days(1), flag_systems=self.flag_systems_1
+        )
+        self.assertEqual(self.ts_original, ts_same)
+
+    def test_different_data_values(self):
+        """Test that TimeSeries objects with different data values are not equal."""
+        ts_different_df = TimeSeries(
+            df=self.df_different_values, time_name="time", resolution=Period.of_days(1),
+            periodicity=Period.of_days(1), flag_systems=self.flag_systems_1
+        )
+        self.assertNotEqual(self.ts_original, ts_different_df)
+
+    def test_different_time_values(self):
+        """Test that TimeSeries objects with different time values are not equal."""
+        ts_different_times = TimeSeries(
+            df=self.df_different_times, time_name="time", resolution=Period.of_days(1),
+            periodicity=Period.of_days(1), flag_systems=self.flag_systems_1
+        )
+        self.assertNotEqual(self.ts_original, ts_different_times)
+
+    def test_different_time_name(self):
+        """Test that TimeSeries objects with different time column name are not equal."""
+        ts_different_time_name = TimeSeries(
+            df=self.df_original.rename({"time": "timestamp"}), time_name="timestamp", resolution=Period.of_days(1),
+            periodicity=Period.of_days(1), flag_systems=self.flag_systems_1
+        )
+        self.assertNotEqual(self.ts_original, ts_different_time_name)
+
+    def test_different_periodicity(self):
+        """Test that TimeSeries objects with different periodicity are not equal."""
+        ts_different_periodicity = TimeSeries(
+            df=self.df_original, time_name="time", resolution=Period.of_days(1),
+            periodicity=Period.of_seconds(1), flag_systems=self.flag_systems_1
+        )
+        self.assertNotEqual(self.ts_original, ts_different_periodicity)
+
+    def test_different_resolution(self):
+        """Test that TimeSeries objects with different resolution are not equal."""
+        ts_different_resolution = TimeSeries(
+            df=self.df_original, time_name="time", resolution=Period.of_seconds(1),
+            periodicity=Period.of_days(1), flag_systems=self.flag_systems_1
+        )
+        self.assertNotEqual(self.ts_original, ts_different_resolution)
+
+    def test_different_flag_systems(self):
+        """Test that TimeSeries objects with different flag systems are not equal."""
+        ts_different_flags = TimeSeries(
+            df=self.df_original, time_name="time", resolution=Period.of_days(1),
+            periodicity=Period.of_days(1), flag_systems=self.flag_systems_2
+        )
+        self.assertNotEqual(self.ts_original, ts_different_flags)

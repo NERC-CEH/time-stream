@@ -169,8 +169,7 @@ class TimeSeriesColumn(ABC):
             AttributeError: If attribute not found.
         """
         try:
-            metadata_value = self.metadata(name)
-            return metadata_value
+            return self._metadata[name]
         except (KeyError, AttributeError):
             raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
 
@@ -187,6 +186,42 @@ class TimeSeriesColumn(ABC):
         default_attrs = list(super().__dir__())
         custom_attrs = default_attrs + list(self._metadata.keys())
         return sorted(set(custom_attrs))
+
+    def __eq__(self, other: object) -> bool:
+        """Check equality between two TimeSeriesColumn instances.
+
+        Two instances are considered equal if they have the same name, reference the same TimeSeries object,
+        and have identical data and metadata.
+
+        Args:
+            other: The object to compare against.
+
+        Returns:
+            True if both objects are equal, otherwise False.
+        """
+        if not isinstance(other, TimeSeriesColumn):
+            return NotImplemented
+
+        if (
+            self.name != other.name
+            or self._ts is not other._ts
+            or self._metadata != other._metadata
+            or not self.data.equals(other.data)
+        ):
+            return False
+
+        return True
+
+    def __ne__(self, other: object) -> bool:
+        """Checks if two TimeSeriesColumn instances are not equal.
+
+        Args:
+            other: The object to compare.
+
+        Returns:
+            bool: True if the TimeSeriesColumn instances are not equal, False otherwise.
+        """
+        return not self.__eq__(other)
 
 
 class PrimaryTimeColumn(TimeSeriesColumn):

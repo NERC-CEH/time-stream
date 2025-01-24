@@ -1,4 +1,5 @@
-from typing import TYPE_CHECKING, Union
+import enum
+from typing import TYPE_CHECKING, Sequence, Type, Union
 
 import polars as pl
 
@@ -12,7 +13,7 @@ if TYPE_CHECKING:
 class TimeSeriesFlagManager:
     """Manages flagging operations for a TimeSeries object using bitwise flags."""
 
-    def __init__(self, ts: "TimeSeries", flag_systems: dict[str, BitwiseFlag] = None):
+    def __init__(self, ts: "TimeSeries", flag_systems: dict[str, Type[enum.Enum]] = None):
         """Initializes the flag manager for a TimeSeries.
 
         Args:
@@ -24,10 +25,10 @@ class TimeSeriesFlagManager:
         self._setup_flag_systems(flag_systems or {})
 
     @property
-    def flag_systems(self) -> dict[str, BitwiseFlag]:
+    def flag_systems(self) -> dict[str, Type[enum.Enum]]:
         return self._flag_systems
 
-    def _setup_flag_systems(self, flag_systems: dict[str, Union[dict[str, int], BitwiseFlag]] = None) -> None:
+    def _setup_flag_systems(self, flag_systems: dict[str, Union[dict[str, int], Type[enum.Enum]]] = None) -> None:
         """Adds flag systems into the flag manager.
 
         Args:
@@ -37,7 +38,7 @@ class TimeSeriesFlagManager:
         for name, flag_system in flag_systems.items():
             self.add_flag_system(name, flag_system)
 
-    def add_flag_system(self, name: str, flag_system: Union[dict[str, int], BitwiseFlag]) -> None:
+    def add_flag_system(self, name: str, flag_system: Union[dict[str, int], Type[enum.Enum]]) -> None:
         """Adds a flag system to the flag manager, which contains flag values and their meanings.
 
         A flag system can be used to create flag columns that are specific to a particular type of flag.
@@ -67,14 +68,14 @@ class TimeSeriesFlagManager:
         """
         if name in self._flag_systems:
             raise KeyError(f"Flag system '{name}' already exists.")
-        if isinstance(flag_system, BitwiseFlag):
+        if isinstance(flag_system, enum.EnumType):
             self._flag_systems[name] = flag_system
         elif isinstance(flag_system, dict):
             self._flag_systems[name] = BitwiseFlag(name, flag_system)
         else:
             raise TypeError(f"Unknown type of flag system: {type(flag_system)}")
 
-    def init_flag_column(self, flag_system: str, col_name: str, data: int = 0) -> None:
+    def init_flag_column(self, flag_system: str, col_name: str, data: Union[int, Sequence[int]] = 0) -> None:
         """Add a new column to the TimeSeries DataFrame, setting it as a Flag Column.
 
         Args:
@@ -93,7 +94,7 @@ class TimeSeriesFlagManager:
             raise KeyError(f"Column '{col_name}' already exists in the DataFrame.")
 
         if isinstance(data, int):
-            data = pl.lit(data)
+            data = pl.lit(data, dtype=pl.Int64)
         else:
             data = pl.Series(col_name, data, dtype=pl.Int64)
 
