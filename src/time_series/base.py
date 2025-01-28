@@ -207,7 +207,7 @@ class TimeSeries:
         aligned = self.df[self.time_name].equals(rounded_times)
         if not aligned:
             raise UserWarning(
-                f'Values in time field: "{self.time_name}" are not aligned to ' f"resolution: {self.resolution}"
+                f'Values in time field: "{self.time_name}" are not aligned to resolution: {self.resolution}'
             )
 
     @property
@@ -251,7 +251,7 @@ class TimeSeries:
         all_unique = rounded_times.n_unique() == len(self.df[self.time_name])
         if not all_unique:
             raise UserWarning(
-                f'Values in time field: "{self.time_name}" do not conform to ' f"periodicity: {self.periodicity}"
+                f'Values in time field: "{self.time_name}" do not conform to periodicity: {self.periodicity}'
             )
 
     def _round_time_to_period(self, period: Period) -> pl.Series:

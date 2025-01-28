@@ -103,8 +103,7 @@ class TimeSeriesColumn(ABC):
             AttributeError: If the column is not a FlagColumn.
         """
         raise TypeError(
-            f"Column '{self.name}' is not a FlagColumn. "
-            f"Use `set_as_flag(flag_system_name)` first to enable flagging."
+            f"Column '{self.name}' is not a FlagColumn. Use `set_as_flag(flag_system_name)` first to enable flagging."
         )
 
     def remove_flag(self, *args, **kwargs) -> None:
@@ -115,8 +114,7 @@ class TimeSeriesColumn(ABC):
             AttributeError: If the column is not a FlagColumn.
         """
         raise TypeError(
-            f"Column '{self.name}' is not a FlagColumn. "
-            f"Use `set_as_flag(flag_system_name)` first to enable flagging."
+            f"Column '{self.name}' is not a FlagColumn. Use `set_as_flag(flag_system_name)` first to enable flagging."
         )
 
     @property

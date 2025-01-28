@@ -449,7 +449,7 @@ def _fmt_naive_second(obj: dt.datetime, separator: str) -> str:
         The ISO 8601 string representation of the datetime:
             yyyy-mm-dd{separator}hh:mm:ss
     """
-    return f"{obj.year:04}-{obj.month:02}-{obj.day:02}" f"{separator}" f"{obj.hour:02}:{obj.minute:02}:{obj.second:02}"
+    return f"{obj.year:04}-{obj.month:02}-{obj.day:02}{separator}{obj.hour:02}:{obj.minute:02}:{obj.second:02}"
 
 
 def _fmt_naive_minute(obj: dt.datetime, separator: str) -> str:
@@ -464,7 +464,7 @@ def _fmt_naive_minute(obj: dt.datetime, separator: str) -> str:
         The ISO 8601 string representation of the datetime:
             yyyy-mm-dd{separator}hh:mm
     """
-    return f"{obj.year:04}-{obj.month:02}-{obj.day:02}" f"{separator}" f"{obj.hour:02}:{obj.minute:02}"
+    return f"{obj.year:04}-{obj.month:02}-{obj.day:02}{separator}{obj.hour:02}:{obj.minute:02}"
 
 
 def _fmt_naive_hour(obj: dt.datetime, separator: str) -> str:
@@ -479,7 +479,7 @@ def _fmt_naive_hour(obj: dt.datetime, separator: str) -> str:
         The ISO 8601 string representation of the datetime:
             yyyy-mm-dd{separator}hh
     """
-    return f"{obj.year:04}-{obj.month:02}-{obj.day:02}" f"{separator}" f"{obj.hour:02}"
+    return f"{obj.year:04}-{obj.month:02}-{obj.day:02}{separator}{obj.hour:02}"
 
 
 def _fmt_naive_day(obj: dt.datetime) -> str:
@@ -623,12 +623,7 @@ def _fmt_aware_second(obj: dt.datetime, separator: str) -> str:
             yyyy-mm-dd{separator}hh:mm:ss{tz}
     """
     tz_str: str = _fmt_tzinfo(obj.tzinfo)
-    return (
-        f"{obj.year:04}-{obj.month:02}-{obj.day:02}"
-        f"{separator}"
-        f"{obj.hour:02}:{obj.minute:02}:{obj.second:02}"
-        f"{tz_str}"
-    )
+    return f"{obj.year:04}-{obj.month:02}-{obj.day:02}{separator}{obj.hour:02}:{obj.minute:02}:{obj.second:02}{tz_str}"
 
 
 def _fmt_aware_minute(obj: dt.datetime, separator: str) -> str:
@@ -645,7 +640,7 @@ def _fmt_aware_minute(obj: dt.datetime, separator: str) -> str:
             yyyy-mm-dd{separator}hh:mm{tz}
     """
     tz_str: str = _fmt_tzinfo(obj.tzinfo)
-    return f"{obj.year:04}-{obj.month:02}-{obj.day:02}" f"{separator}" f"{obj.hour:02}:{obj.minute:02}" f"{tz_str}"
+    return f"{obj.year:04}-{obj.month:02}-{obj.day:02}{separator}{obj.hour:02}:{obj.minute:02}{tz_str}"
 
 
 def _fmt_aware_hour(obj: dt.datetime, separator: str) -> str:
@@ -662,7 +657,7 @@ def _fmt_aware_hour(obj: dt.datetime, separator: str) -> str:
             yyyy-mm-dd{separator}hh{tz}
     """
     tz_str: str = _fmt_tzinfo(obj.tzinfo)
-    return f"{obj.year:04}-{obj.month:02}-{obj.day:02}" f"{separator}" f"{obj.hour:02}" f"{tz_str}"
+    return f"{obj.year:04}-{obj.month:02}-{obj.day:02}{separator}{obj.hour:02}{tz_str}"
 
 
 @dataclass(eq=True, order=True, frozen=True)
