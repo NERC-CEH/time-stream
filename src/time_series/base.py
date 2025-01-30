@@ -1,6 +1,6 @@
 from collections import Counter
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Dict, Iterable, Iterator, Optional, Type, Union
+from typing import TYPE_CHECKING, Any, Dict, Iterable, Iterator, Optional, Sequence, Type, Union
 
 import polars as pl
 
@@ -417,12 +417,13 @@ class TimeSeries:
             raise KeyError(f"Invalid columns found: {invalid_columns}")
 
         new_df = self.df.select([self.time_name] + col_names)
-        new_supplementary_columns = [self.columns[col].name for col in col_names if col in self.supplementary_columns]
-        new_flag_columns = {
-            self.columns[col].name: self.columns[col].flag_system for col in col_names if col in self.flag_columns
-        }
+        new_columns = [self.columns[col] for col in new_df.columns if col in self.columns]
+
+        # Construct new time series object based on updated columns.  Need to build new column mappings etc.
+        new_supplementary_columns = [col.name for col in new_columns if col.name in self.supplementary_columns]
+        new_flag_columns = {col.name: col.flag_system for col in new_columns if col.name in self.flag_columns}
         new_flag_systems = {k: v for k, v in self.flag_systems.items() if k in new_flag_columns.values()}
-        new_metadata = {col: self.columns[col].metadata() for col in col_names}
+        new_metadata = {col.name: col.metadata() for col in new_columns}
 
         ts = TimeSeries(
             df=new_df,
@@ -504,6 +505,32 @@ class TimeSeries:
             A TimeSeries containing the aggregated data.
         """
         return aggregation_function.create().apply(self, aggregation_period, column_name)
+
+    def column_metadata(
+        self, column: Optional[Union[str, Sequence[str]]] = None, key: Optional[Union[str, Sequence[str]]] = None
+    ) -> Dict[str, Dict[str, Any]]:
+        """Retrieve metadata for a given column(s), for all or specific keys.
+
+        Args:
+            column: A specific column or list of columns to filter the metadata. If None, all columns are returned.
+            key: A specific key or list/tuple of keys to filter the metadata. If None, all metadata is returned.
+
+        Returns:
+            A dictionary of the requested metadata.
+
+        Raises:
+            KeyError: If the requested key(s) are not found in the metadata.
+        """
+        if isinstance(column, str):
+            column = [column]
+        elif column is None:
+            column = self.columns.keys()
+
+        if isinstance(key, str):
+            key = [key]
+
+        result = {col: self.columns[col].metadata(key) for col in column}
+        return result
 
     def __getattr__(self, name: str) -> Any:
         """Dynamically handle attribute access for the TimeSeries object.

@@ -1526,3 +1526,57 @@ class TestTimeSeriesEquality(unittest.TestCase):
             periodicity=Period.of_days(1), flag_systems=self.flag_systems_2
         )
         self.assertNotEqual(self.ts_original, ts_different_flags)
+
+
+class TestColumnMetadata(unittest.TestCase):
+    df = pl.DataFrame({
+        "time": [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)],
+        "col1": [1, 2, 3], "col2": [4, 5, 6], "col3": [7, 8, 9]
+    })
+    metadata = {
+        "col1": {"key1": "1", "key2": "10", "key3": "100"},
+        "col2": {"key1": "2", "key2": "20", "key3": "200"},
+        "col3": {"key1": "3", "key2": "30", "key3": "300"},
+    }
+    ts = TimeSeries(df, time_name="time", column_metadata=metadata)
+
+    def test_retrieve_all_metadata(self):
+        """Test retrieving all metadata for all columns."""
+        self.assertEqual(self.ts.column_metadata(), self.metadata)
+
+    def test_retrieve_metadata_for_single_column(self):
+        """Test retrieving metadata for a single column."""
+        expected = {"col1": {"key1": "1", "key2": "10", "key3": "100"}}
+        result = self.ts.column_metadata("col1")
+        self.assertEqual(result, expected)
+
+    def test_retrieve_metadata_for_multiple_columns(self):
+        """Test retrieving metadata for multiple columns."""
+        expected = {"col1": {"key1": "1", "key2": "10", "key3": "100"},
+                    "col2": {"key1": "2", "key2": "20", "key3": "200"}}
+        result = self.ts.column_metadata(["col1", "col2"])
+        self.assertEqual(result, expected)
+
+    def test_retrieve_metadata_for_specific_key(self):
+        """Test retrieving a specific metadata key."""
+        expected = {"col1": {"key1": "1"}}
+        result = self.ts.column_metadata("col1", "key1")
+        self.assertEqual(result, expected)
+
+    def test_retrieve_metadata_for_multiple_keys(self):
+        """Test retrieving multiple metadata keys."""
+        expected = {"col1": {"key1": "1", "key3": "100"}}
+        result = self.ts.column_metadata("col1", ["key1", "key3"])
+        self.assertEqual(result, expected)
+
+    def test_retrieve_metadata_for_nonexistent_column(self):
+        """Test that a KeyError is raised when requesting a non-existent column."""
+        with self.assertRaises(KeyError):
+            self.ts.column_metadata("nonexistent_column")
+
+    def test_retrieve_metadata_for_nonexistent_key(self):
+        """Test that an empty dictionary value is returned when requesting a non-existent metadata key for an
+        existing column"""
+        expected = {"col1": {"nonexistent_key": None}}
+        result = self.ts.column_metadata("col1", ["nonexistent_key"])
+        self.assertEqual(result, expected)
