@@ -1,6 +1,6 @@
 import copy
 from abc import ABC
-from typing import TYPE_CHECKING, Any, Dict, Optional, Union
+from typing import TYPE_CHECKING, Any, Dict, Optional, Sequence, Union
 
 import polars as pl
 
@@ -40,7 +40,7 @@ class TimeSeriesColumn(ABC):
         if self.name not in self._ts.df.columns:
             raise ValueError(f"Column '{self.name}' not found in TimeSeries.")
 
-    def metadata(self, key: Optional[Union[str, list[str], tuple[str, ...]]] = None) -> Dict[str, Any]:
+    def metadata(self, key: Optional[Sequence[str]] = None) -> Dict[str, Any]:
         """Retrieve metadata for all or specific keys.
 
         Args:

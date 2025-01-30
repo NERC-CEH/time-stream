@@ -1,3 +1,4 @@
+import copy
 from collections import Counter
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Dict, Iterable, Iterator, Optional, Sequence, Type, Union
@@ -26,6 +27,7 @@ class TimeSeries:
         supplementary_columns: Optional[list] = None,
         flag_systems: Optional[Union[Dict[str, dict], Dict[str, Type[Enum]]]] = None,
         flag_columns: Optional[Dict[str, str]] = None,
+        metadata: Optional[Dict[str, Any]] = None,
         column_metadata: Optional[Dict[str, Dict[str, Any]]] = None,
     ) -> None:
         """Initialise a TimeSeries instance.
@@ -40,6 +42,7 @@ class TimeSeries:
             flag_systems: A dictionary defining the flagging systems that can be used for flag columns.
             flag_columns: Columns within the dataframe that are considered flag columns.
                           Mapping of {column name: flag system name}.
+            metadata: Metadata relevant to the overall time series, e.g. network, site ID, license, etc.
             column_metadata: The metadata of the variables within the time series.
         """
         self._time_name = time_name
@@ -49,6 +52,10 @@ class TimeSeries:
 
         self._flag_manager = TimeSeriesFlagManager(self, flag_systems)
         self._columns: dict[str, TimeSeriesColumn] = {}
+
+        #  NOTE: Doing a deep copy of this mutable object, otherwise the original object will refer to the same
+        #   object in memory and will be changed by class methods.
+        self._metadata = copy.deepcopy(metadata) or {}
 
         self._df = df
 
@@ -321,8 +328,8 @@ class TimeSeries:
         """
         self._validate_time_column(new_df)
         self._remove_missing_columns(new_df)
-        self._add_new_columns(new_df)
         self._df = new_df
+        self._add_new_columns(new_df)
 
     def _validate_time_column(self, df: pl.DataFrame) -> None:
         """Validate that the DataFrame contains the required time column with unchanged timestamps.
@@ -365,11 +372,15 @@ class TimeSeries:
         """
         new_columns = list(set(new_df.columns) - set(self.df.columns))
         for col_name in new_columns:
+            # Add a placeholder for the new column, so that the Column init knows there is a new column expected.
+            self._columns[col_name] = None
+
+            # Now add the actual column.
             data_col = DataColumn(col_name, self, {})
             self._columns[col_name] = data_col
 
     @property
-    def time_column(self) -> PrimaryTimeColumn:
+    def time_column(self) -> Union[PrimaryTimeColumn, None]:
         """The primary time column of the TimeSeries."""
         time_column = [col for col in self._columns.values() if isinstance(col, PrimaryTimeColumn)]
         num_cols = len(time_column)
@@ -506,6 +517,28 @@ class TimeSeries:
         """
         return aggregation_function.create().apply(self, aggregation_period, column_name)
 
+    def metadata(self, key: Optional[Union[str, Sequence[str]]] = None) -> dict:
+        """Retrieve metadata for all or specific keys.
+
+        Args:
+            key: A specific key or list/tuple of keys to filter the metadata. If None, all metadata is returned.
+
+        Returns:
+            A dictionary of the requested metadata.
+
+        Raises:
+            KeyError: If the requested key(s) are not found in the metadata.
+        """
+        if isinstance(key, str):
+            key = [key]
+        try:
+            if key is None:
+                return self._metadata
+            else:
+                return {k: self._metadata[k] for k in key}
+        except KeyError:
+            raise KeyError(key)
+
     def column_metadata(
         self, column: Optional[Union[str, Sequence[str]]] = None, key: Optional[Union[str, Sequence[str]]] = None
     ) -> Dict[str, Dict[str, Any]]:
@@ -541,6 +574,7 @@ class TimeSeries:
         - If the attribute name matches the time column, it returns the time column as a Polars Series.
         - If the attribute name matches a column in the DataFrame (excluding the time column), it selects that column
             and returns a new TimeSeries instance.
+        - If the attribute name does not match a column, it assumes this is a Metadata key. Return that.
 
         Args:
             name: The attribute name being accessed.
@@ -549,9 +583,10 @@ class TimeSeries:
             If `name` is:
               - The time column: A Polars Series containing the time data.
               - A non-time column: The TimeSeries instance with that column selected.
+              - Metadata key: The metadata value for that key.
 
         Raises:
-            AttributeError: If attribute does not match a column or the time column.
+            AttributeError: If attribute does not match a column or the time column or a metadata key.
 
         Examples:
             >>> ts.timestamp  # Access the time column (assumed time_name set to "timestamp")
@@ -559,6 +594,9 @@ class TimeSeries:
 
             >>> ts.temperature  # Access a column named "temperature"
             <TimeSeries object, filtered to only contain the "temperature" data column>
+
+            >>> ts.site_id
+            <Metadata value for the given key>
         """
         try:
             # Delegate flag-related (non-private) calls to the flag manager
@@ -573,6 +611,9 @@ class TimeSeries:
                 # If the attribute name matches a column in the DataFrame (excluding the time column),
                 # select that Column
                 return self.columns[name]
+            elif name not in self.columns:
+                # If the attribute name does not match a column, it assumes this is a Metadata key.
+                return self.metadata(name)[name]
             else:
                 raise AttributeError
 
@@ -652,7 +693,7 @@ class TimeSeries:
             DataFrame's columns.
         """
         default_attrs = list(super().__dir__())
-        custom_attrs = default_attrs + list(self.columns.keys()) + [self.time_name]
+        custom_attrs = default_attrs + list(self.columns.keys()) + [self.time_name] + list(self._metadata.keys())
         return sorted(set(custom_attrs))
 
     def __eq__(self, other: object) -> bool:
@@ -676,6 +717,7 @@ class TimeSeries:
             self.time_name != other.time_name
             or self.resolution != other.resolution
             or self.periodicity != other.periodicity
+            or self._metadata != other._metadata
         ):
             return False
 
