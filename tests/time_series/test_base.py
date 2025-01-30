@@ -1326,7 +1326,7 @@ class TestGetattr(unittest.TestCase):
         self.assertEqual(result, expected)
 
     def test_access_nonexistent_attribute(self):
-        """Test accessing metadata key without filtering to a single column."""
+        """Test accessing metadata key that doesn't exist"""
         ts = TimeSeries(self.df, time_name="time", column_metadata=self.metadata)
         with self.assertRaises(AttributeError):
             _ = ts.col1.key0
@@ -1397,20 +1397,20 @@ class TestSetupColumns(unittest.TestCase):
     def test_missing_supplementary_column_raises_error(self):
         """Test that an error raised when supplementary columns do not exist."""
         with self.assertRaises(KeyError):
-            ts = TimeSeries(df=self.df,
-                            time_name="time",
-                            supplementary_columns=["missing_col"],
-                            flag_columns={"flag_col": "example_flag_system"},
-                            flag_systems=self.flag_systems)
+            TimeSeries(df=self.df,
+                       time_name="time",
+                       supplementary_columns=["missing_col"],
+                       flag_columns={"flag_col": "example_flag_system"},
+                       flag_systems=self.flag_systems)
 
     def test_missing_flag_column_raises_error(self):
         """Test that an error raised when flag columns do not exist."""
         with self.assertRaises(KeyError):
-            ts = TimeSeries(df=self.df,
-                            time_name="time",
-                            supplementary_columns=["supp_col"],
-                            flag_columns={"missing_col": "example_flag_system"},
-                            flag_systems=self.flag_systems)
+            TimeSeries(df=self.df,
+                       time_name="time",
+                       supplementary_columns=["supp_col"],
+                       flag_columns={"missing_col": "example_flag_system"},
+                       flag_systems=self.flag_systems)
 
 
 class TestTimeColumn(unittest.TestCase):

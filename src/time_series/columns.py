@@ -13,16 +13,32 @@ class TimeSeriesColumn(ABC):
     """Base class for all column types in a TimeSeries."""
 
     def __init__(self, name: str, ts: "TimeSeries", metadata: Optional[Dict[str, Any]] = None) -> None:
+        if self.__class__ is TimeSeriesColumn:
+            raise TypeError(
+                f"Cannot instantiate TimeSeriesColumn directly. "
+                f"Use one of the subclasses: {TimeSeriesColumn.__subclasses__()}."
+            )
+
         self._name = name
         self._ts = ts
 
         #  NOTE: Doing a deep copy of this mutable object, otherwise the original object will refer to the same
         #   object in memory and will be changed by class methods.
         self._metadata = copy.deepcopy(metadata) or {}
+        self._validate_name()
 
     @property
     def name(self) -> str:
         return self._name
+
+    def _validate_name(self) -> None:
+        """Check if column name is within the TimeSeries.
+
+        Raises:
+            ValueError: If the column name is not within the TimeSeries.
+        """
+        if self.name not in self._ts.df.columns:
+            raise ValueError(f"Column '{self.name}' not found in TimeSeries.")
 
     def metadata(self, key: Optional[Union[str, list[str], tuple[str, ...]]] = None) -> Dict[str, Any]:
         """Retrieve metadata for all or specific keys.
@@ -58,32 +74,38 @@ class TimeSeriesColumn(ABC):
         else:
             self._metadata = {k: v for k, v in self.metadata().items() if k not in key}
 
-    def set_as_supplementary(self) -> None:
+    def set_as_supplementary(self) -> "TimeSeriesColumn":
         """Converts the column to a SupplementaryColumn while preserving metadata.
 
         If the column is already a SupplementaryColumn, no changes are made.
         """
-        if isinstance(self, SupplementaryColumn):
-            return
-        self._ts._columns[self.name] = SupplementaryColumn(self.name, self._ts, self.metadata())
+        if type(self) is SupplementaryColumn:
+            return self
+        column = SupplementaryColumn(self.name, self._ts, self.metadata())
+        self._ts._columns[self.name] = column
+        return column
 
-    def set_as_flag(self, flag_system: str) -> None:
+    def set_as_flag(self, flag_system: str) -> "TimeSeriesColumn":
         """Converts the column to a FlagColumn while preserving metadata.
 
         If the column is already a SupplementaryColumn, no changes are made.
         """
-        if isinstance(self, FlagColumn):
-            return
-        self._ts._columns[self.name] = FlagColumn(self.name, self._ts, flag_system, self.metadata())
+        if type(self) is FlagColumn:
+            return self
+        column = FlagColumn(self.name, self._ts, flag_system, self.metadata())
+        self._ts._columns[self.name] = column
+        return column
 
-    def unset(self) -> None:
+    def unset(self) -> "TimeSeriesColumn":
         """Converts the column back into a normal DataColumn while preserving metadata.
 
         If the column is already a DataColumn, no changes are made.
         """
-        if isinstance(self, DataColumn):
-            return
-        self._ts._columns[self.name] = DataColumn(self.name, self._ts, self.metadata())
+        if type(self) is DataColumn:
+            return self
+        column = DataColumn(self.name, self._ts, self.metadata())
+        self._ts._columns[self.name] = column
+        return column
 
     def remove(self) -> None:
         """Removes this column from the TimeSeries.
@@ -91,7 +113,7 @@ class TimeSeriesColumn(ABC):
         - Drops the column from the DataFrame (if it exists).
         - Clear reference to time series prevent further modifications
         """
-        if self.name in self._ts.df.columns:
+        if self.name in self._ts.columns:
             self._ts.df = self._ts.df.drop(self.name)
         self._ts = None
 
@@ -200,12 +222,18 @@ class TimeSeriesColumn(ABC):
         if not isinstance(other, TimeSeriesColumn):
             return NotImplemented
 
+        if type(self) is not type(other):
+            return False
+
         if (
             self.name != other.name
             or self._ts is not other._ts
             or self._metadata != other._metadata
             or not self.data.equals(other.data)
         ):
+            return False
+
+        if type(self) is FlagColumn and (self.flag_system != other.flag_system):
             return False
 
         return True

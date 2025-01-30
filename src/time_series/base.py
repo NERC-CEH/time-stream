@@ -381,23 +381,23 @@ class TimeSeries:
             raise ValueError(f"Multiple primary time columns found: {time_column}")
 
     @property
-    def data_columns(self) -> dict[str, DataColumn]:
-        columns = {col.name: col for col in self._columns.values() if isinstance(col, DataColumn)}
+    def data_columns(self) -> dict[str, TimeSeriesColumn]:
+        columns = {col.name: col for col in self._columns.values() if type(col) is DataColumn}
         return columns
 
     @property
-    def supplementary_columns(self) -> dict[str, SupplementaryColumn]:
-        columns = {col.name: col for col in self._columns.values() if isinstance(col, SupplementaryColumn)}
+    def supplementary_columns(self) -> dict[str, TimeSeriesColumn]:
+        columns = {col.name: col for col in self._columns.values() if type(col) is SupplementaryColumn}
         return columns
 
     @property
-    def flag_columns(self) -> dict[str, FlagColumn]:
-        columns = {col.name: col for col in self._columns.values() if isinstance(col, FlagColumn)}
+    def flag_columns(self) -> dict[str, TimeSeriesColumn]:
+        columns = {col.name: col for col in self._columns.values() if type(col) is FlagColumn}
         return columns
 
     @property
     def columns(self) -> dict[str, TimeSeriesColumn]:
-        columns = {col.name: col for col in self._columns.values() if not isinstance(col, PrimaryTimeColumn)}
+        columns = {col.name: col for col in self._columns.values() if type(col) is not PrimaryTimeColumn}
         return columns
 
     def select(self, col_names: list[str]) -> "TimeSeries":
