@@ -1,9 +1,11 @@
-import copy
-from collections import Counter, defaultdict
-from typing import TYPE_CHECKING, Any, Iterable, Iterator, Optional, Type, Union
+from collections import Counter
+from enum import Enum
+from typing import TYPE_CHECKING, Any, Dict, Iterable, Iterator, Optional, Type, Union
 
 import polars as pl
 
+from time_series.columns import DataColumn, FlagColumn, PrimaryTimeColumn, SupplementaryColumn, TimeSeriesColumn
+from time_series.flag_manager import TimeSeriesFlagManager
 from time_series.period import Period
 
 if TYPE_CHECKING:
@@ -22,40 +24,119 @@ class TimeSeries:
         periodicity: Optional[Period] = None,
         time_zone: Optional[str] = None,
         supplementary_columns: Optional[list] = None,
-        metadata: Optional[dict[str, dict[str, Any]]] = None,
+        flag_systems: Optional[Union[Dict[str, dict], Dict[str, Type[Enum]]]] = None,
+        flag_columns: Optional[Dict[str, str]] = None,
+        column_metadata: Optional[Dict[str, Dict[str, Any]]] = None,
     ) -> None:
         """Initialise a TimeSeries instance.
 
         Args:
             df: The Polars DataFrame containing the time series data.
             time_name: The name of the time column in the DataFrame.
-            resolution: The resolution of the time series. Defaults to None.
-            periodicity: The periodicity of the time series. Defaults to None.
-            time_zone: The time zone of the time series. Defaults to None.
-            supplementary_columns: Columns within the dataframe that are considered supplementary. Defaults to None.
-            metadata: The metadata of the variables within the time series. Defaults to None.
+            resolution: The resolution of the time series.
+            periodicity: The periodicity of the time series.
+            time_zone: The time zone of the time series.
+            supplementary_columns: Columns within the dataframe that are considered supplementary.
+            flag_systems: A dictionary defining the flagging systems that can be used for flag columns.
+            flag_columns: Columns within the dataframe that are considered flag columns.
+                          Mapping of {column name: flag system name}.
+            column_metadata: The metadata of the variables within the time series.
         """
         self._time_name = time_name
         self._resolution = resolution
         self._periodicity = periodicity
         self._time_zone = time_zone
-        self._supplementary_columns = set(supplementary_columns) if supplementary_columns else set()
 
-        #  NOTE: Doing a deep copy of this mutable object, otherwise the original object will refer to the same
-        #   object in memory and will be changed by class methods.
-        self._metadata = copy.deepcopy(metadata) or {}
+        self._flag_manager = TimeSeriesFlagManager(self, flag_systems)
+        self._columns: dict[str, TimeSeriesColumn] = {}
 
         self._df = df
 
-        self._setup()
+        self._setup(supplementary_columns or [], flag_columns or {}, column_metadata or {})
 
-    def _setup(self) -> None:
-        """Perform initial setup for the TimeSeries instance."""
+    def _setup(
+        self, supplementary_columns: list[str], flag_columns: dict[str, str], column_metadata: dict[str, dict[str, Any]]
+    ) -> None:
+        """
+        Performs the initial setup for the TimeSeries instance.
+
+        This method:
+        - Sets the time zone of the time column.
+        - Sorts the DataFrame by the time column.
+        - Validates the time resolution.
+        - Validates the periodicity of the time column.
+        - Initializes supplementary and flag columns.
+
+        Args:
+            supplementary_columns: A list of column names that are considered supplementary.
+            flag_columns: A dictionary mapping flag column names to their corresponding flag systems.
+            column_metadata: A dictionary containing metadata for columns in the DataFrame.
+        """
         self._set_time_zone()
         self.sort_time()
         self._validate_resolution()
         self._validate_periodicity()
-        self.set_supplementary_columns(self.supplementary_columns)
+        self._setup_columns(supplementary_columns, flag_columns, column_metadata)
+
+    def _setup_columns(
+        self,
+        supplementary_columns: list[str] = None,
+        flag_columns: dict[str, str] = None,
+        column_metadata: dict[str, dict[str, Any]] = None,
+    ) -> None:
+        """
+        Initializes column classifications for the TimeSeries instance.
+
+        This method:
+        - Validates that all specified supplementary columns exist in the DataFrame.
+        - Validates that all specified flag columns exist in the DataFrame.
+        - Classifies each column into its appropriate type: primary time column, supplementary, flag, or data column.
+
+        Args:
+            supplementary_columns: A list of column names that are considered supplementary.
+            flag_columns: A dictionary mapping flag column names to their corresponding flag systems.
+            column_metadata: A dictionary containing metadata for columns in the DataFrame.
+
+        Raises:
+            KeyError: If any specified supplementary or flag column does not exist in the DataFrame.
+        """
+        # Validate that all supplementary columns exist in the DataFrame
+        if supplementary_columns is None:
+            supplementary_columns = []
+        if flag_columns is None:
+            flag_columns = {}
+        if column_metadata is None:
+            column_metadata = {}
+
+        invalid_supplementary_columns = set(supplementary_columns) - set(self.df.columns)
+        if invalid_supplementary_columns:
+            raise KeyError(f"Invalid supplementary columns: {invalid_supplementary_columns}")
+
+        # Validate that all flag columns exist in the DataFrame
+        invalid_flag_columns = set(flag_columns) - set(self.df.columns)
+        if invalid_flag_columns:
+            raise KeyError(f"Invalid flag columns: {invalid_flag_columns}")
+
+        # Classify each column in the DataFrame
+        for col_name in self.df.columns:
+            col_metadata = column_metadata.get(col_name)
+
+            if col_name == self.time_name:
+                time_col = PrimaryTimeColumn(col_name, self, col_metadata)
+                self._columns[col_name] = time_col
+
+            elif col_name in supplementary_columns:
+                supplementary_col = SupplementaryColumn(col_name, self, col_metadata)
+                self._columns[col_name] = supplementary_col
+
+            elif col_name in flag_columns:
+                flag_system = flag_columns[col_name]
+                flag_col = FlagColumn(col_name, self, flag_system, col_metadata)
+                self._columns[col_name] = flag_col
+
+            else:
+                data_col = DataColumn(col_name, self, col_metadata)
+                self._columns[col_name] = data_col
 
     @property
     def time_name(self) -> str:
@@ -86,10 +167,6 @@ class TimeSeries:
         # Set _df directly, otherwise the df setter considers the time column is mutated due to time zone added
         self._df = self.df.with_columns(pl.col(self.time_name).dt.replace_time_zone(time_zone))
         self._time_zone = time_zone
-
-    def select_time(self) -> pl.Series:
-        """Return just the data series of the primary datetime field."""
-        return self.df[self.time_name]
 
     def sort_time(self) -> None:
         """Sort the TimeSeries DataFrame by the time column."""
@@ -244,6 +321,7 @@ class TimeSeries:
         """
         self._validate_time_column(new_df)
         self._remove_missing_columns(new_df)
+        self._add_new_columns(new_df)
         self._df = new_df
 
     def _validate_time_column(self, df: pl.DataFrame) -> None:
@@ -268,190 +346,142 @@ class TimeSeries:
             raise ValueError("Time column has mutated.")
 
     def _remove_missing_columns(self, new_df: pl.DataFrame) -> None:
-        """Remove metadata and supplementary column settings for columns that are missing in the new DataFrame.
+        """Remove reference to columns that are missing in the new DataFrame.
 
         Args:
             new_df: The new Polars DataFrame to compare against the current DataFrame.
         """
         removed_columns = list(set(self.df.columns) - set(new_df.columns))
-        self.unset_supplementary_columns(removed_columns)
-        for column in removed_columns:
-            self.remove_metadata(column)
+        for col_name in removed_columns:
+            self._columns.pop(col_name, None)
 
-    @property
-    def data_columns(self) -> list:
-        """Sorted list of data column names in the TimeSeries."""
-        return sorted([col for col in self.columns if col not in self.supplementary_columns])
+    def _add_new_columns(self, new_df: pl.DataFrame) -> None:
+        """Add reference to any new columns that are present in the new DataFrame.
 
-    @property
-    def supplementary_columns(self) -> list:
-        """Sorted list of supplementary column names in the TimeSeries."""
-        return sorted(list(self._supplementary_columns))
+        Assumption is all new columns are data columns.
 
-    @property
-    def columns(self) -> list:
-        """Sorted list of all columns (data columns and supplementary columns) in the TimeSeries,
-        excluding the time column.
+        Args:
+            new_df: The new Polars DataFrame to compare against the current DataFrame.
         """
-        return sorted([col for col in self.df.columns if col != self.time_name])
+        new_columns = list(set(new_df.columns) - set(self.df.columns))
+        for col_name in new_columns:
+            data_col = DataColumn(col_name, self, {})
+            self._columns[col_name] = data_col
 
-    def select_columns(self, columns: list[str]) -> "TimeSeries":
+    @property
+    def time_column(self) -> PrimaryTimeColumn:
+        """The primary time column of the TimeSeries."""
+        time_column = [col for col in self._columns.values() if isinstance(col, PrimaryTimeColumn)]
+        num_cols = len(time_column)
+        if num_cols == 1:
+            return time_column[0]
+        elif num_cols == 0:
+            raise ValueError("No primary time column found.")
+        elif num_cols > 1:
+            raise ValueError(f"Multiple primary time columns found: {time_column}")
+
+    @property
+    def data_columns(self) -> dict[str, DataColumn]:
+        columns = {col.name: col for col in self._columns.values() if isinstance(col, DataColumn)}
+        return columns
+
+    @property
+    def supplementary_columns(self) -> dict[str, SupplementaryColumn]:
+        columns = {col.name: col for col in self._columns.values() if isinstance(col, SupplementaryColumn)}
+        return columns
+
+    @property
+    def flag_columns(self) -> dict[str, FlagColumn]:
+        columns = {col.name: col for col in self._columns.values() if isinstance(col, FlagColumn)}
+        return columns
+
+    @property
+    def columns(self) -> dict[str, TimeSeriesColumn]:
+        columns = {col.name: col for col in self._columns.values() if not isinstance(col, PrimaryTimeColumn)}
+        return columns
+
+    def select(self, col_names: list[str]) -> "TimeSeries":
         """Filter TimeSeries instance to include only the specified columns.
 
         Args:
-            columns: A list of column names to retain in the updated TimeSeries.
+            col_names: A list of column names to retain in the updated TimeSeries.
 
         Returns:
             New TimeSeries instance with only selected columns.
         """
-        if not columns:
-            raise ValueError("No columns specified.")
+        if not col_names:
+            raise KeyError("No columns specified.")
 
-        new_df = self.df.select([self.time_name] + columns)
-        new_supplementary_columns = [col for col in self.supplementary_columns if col in columns]
-        new_metadata = {col: self._get_metadata(col) for col in columns}
+        invalid_columns = set(col_names) - set(self.df.columns)
+        if invalid_columns:
+            raise KeyError(f"Invalid columns found: {invalid_columns}")
+
+        new_df = self.df.select([self.time_name] + col_names)
+        new_supplementary_columns = [self.columns[col].name for col in col_names if col in self.supplementary_columns]
+        new_flag_columns = {
+            self.columns[col].name: self.columns[col].flag_system for col in col_names if col in self.flag_columns
+        }
+        new_flag_systems = {k: v for k, v in self.flag_systems.items() if k in new_flag_columns.values()}
+        new_metadata = {col: self.columns[col].metadata() for col in col_names}
 
         ts = TimeSeries(
-            new_df,
-            self.time_name,
-            self.resolution,
-            self.periodicity,
-            self.time_zone,
-            new_supplementary_columns,
-            new_metadata,
+            df=new_df,
+            time_name=self.time_name,
+            resolution=self.resolution,
+            periodicity=self.periodicity,
+            time_zone=self.time_zone,
+            supplementary_columns=new_supplementary_columns,
+            flag_columns=new_flag_columns,
+            flag_systems=new_flag_systems,
+            column_metadata=new_metadata,
         )
 
         return ts
 
     def init_supplementary_column(
-        self, column: str, data: Optional[Union[int, float, str, Iterable]] = None, dtype: Optional[pl.DataType] = None
+        self,
+        col_name: str,
+        data: Optional[Union[int, float, str, Iterable]] = None,
+        dtype: Optional[pl.DataType] = None,
     ) -> None:
-        """Initialises a supplementary column, adding it to the TimeSeries DataFrame.
-
-        Supplementary columns are additional columns that are not considered part of the
-        primary data but provide supporting information.
+        """Add a new column to the TimeSeries DataFrame, marking it as a supplementary column.
 
         Args:
-            column: The name of the new supplementary column.
+            col_name: The name of the new supplementary column.
             data: The data to populate the column. Can be a scalar, an iterable, or None.
                   If iterable, must have the same length as the current TimeSeries.
                   If None, the column will be filled with `None`.
             dtype: The data type to use. If set to None (default), the data type is inferred from the values input.
 
         Raises:
-            ValueError: If the column name already exists in the DataFrame.
+            KeyError: If the column name already exists in the DataFrame.
         """
-        if column in self.df.columns:
-            raise ValueError(f"Column '{column}' already exists in the DataFrame.")
+        if col_name in self.columns:
+            raise KeyError(f"Column '{col_name}' already exists in the DataFrame.")
 
         if data is None or isinstance(data, (float, int, str)):
             data = pl.lit(data, dtype=dtype)
         else:
             if dtype is None:
-                data = pl.Series(column, data)
+                data = pl.Series(col_name, data)
             else:
-                data = pl.Series(column, data).cast(dtype)
+                data = pl.Series(col_name, data).cast(dtype)
 
-        self.df = self.df.with_columns(data.alias(column))
-        self.set_supplementary_columns(column)
+        self.df = self.df.with_columns(data.alias(col_name))
+        supplementary_col = SupplementaryColumn(col_name, self)
+        self._columns[col_name] = supplementary_col
 
-    def set_supplementary_columns(self, columns: Union[str, list]) -> None:
-        """Mark the specified columns as supplementary columns.
-
-        Supplementary columns must exist in the DataFrame. Attempting to mark the defined TimeSeries time column
-        as supplementary will raise an error.
+    def set_supplementary_column(self, col_name: Union[str, list[str]]) -> None:
+        """Mark the specified existing column(s) as a supplementary column.
 
         Args:
-            columns: A column name (string) or a list of column names to mark as supplementary.
-
-        Raises:
-            ValueError: If any of the specified columns do not exist in the DataFrame.
+            col_name: A column name (or list of column names) to mark as a supplementary column.
         """
-        # NOTE: self.columns does not include the time column, so this handles erroring if trying to set the
-        #   time column as a supplementary column
-        if isinstance(columns, str):
-            columns = [columns]
+        if isinstance(col_name, str):
+            col_name = [col_name]
 
-        invalid = [col for col in columns if col not in self.columns]
-        if invalid:
-            raise ValueError(f"Invalid supplementary columns: {invalid}")
-
-        for col in columns:
-            self._supplementary_columns.add(col)
-
-    def unset_supplementary_columns(self, columns: Optional[list] = None) -> None:
-        """Remove the specified columns from the supplementary columns list.
-
-        Args:
-            columns: A list of column names to remove from the supplementary columns list.
-                     If None, all supplementary columns will be removed.
-        """
-        if columns is None:
-            # If None provided, remove all current supplementary columns
-            columns = self.supplementary_columns
-
-        for col in columns:
-            self._supplementary_columns.discard(col)
-
-    def metadata(self, key: Optional[Union[str, list[str], tuple[str, ...]]] = None) -> dict:
-        """Retrieve metadata for all or specific keys across columns.
-
-        Args:
-            key: A specific key or list/tuple of keys to filter the metadata. If None, all metadata for the
-                 relevant columns is returned.
-
-        Returns:
-            A dictionary of the requested metadata.
-
-        Raises:
-            KeyError: If the requested key(s) are not found in the metadata.
-        """
-        try:
-            result = defaultdict(dict)
-            for column in self.columns:
-                result[column] |= self._get_metadata(column, key)
-            return dict(result)
-
-        except (KeyError, TypeError):
-            raise KeyError(key)
-
-    def _get_metadata(self, column: str, key: Optional[Union[str, list[str], tuple[str, ...]]] = None) -> dict:
-        """Retrieve metadata for a specific column and key(s).
-
-        This is an internal method that retrieves metadata for a single column, optionally filtered by specific key(s).
-
-        Args:
-            column: The column name for which metadata should be retrieved.
-            key: A specific key or list/tuple of keys to filter the metadata. If None, all metadata for the column
-                 is returned.
-
-        Returns:
-            A dictionary of the requested metadata.
-        """
-        column_metadata = self._metadata.get(column, {})
-        if isinstance(key, str):
-            key = [key]
-
-        if key is None:
-            return column_metadata
-        else:
-            return {k: column_metadata.get(k) for k in key}
-
-    def remove_metadata(self, column: str, key: Optional[Union[str, list[str], tuple[str, ...]]] = None) -> None:
-        """Removes metadata associated with a column, either completely or for specific keys.
-
-        Args:
-            column: The name of the column for which metadata should be removed.
-            key: A specific key or list/tuple of keys to remove. If None, all metadata for the column is removed.
-        """
-        if isinstance(key, str):
-            key = [key]
-
-        if key is None:
-            self._metadata = {col: col_metadata for col, col_metadata in self._metadata.items() if col != column}
-        else:
-            column_metadata = self._metadata.get(column, {})
-            self._metadata[column] = {k: v for k, v in column_metadata.items() if k not in key}
+        for col in col_name:
+            self.columns[col].set_as_supplementary()
 
     def aggregate(
         self, aggregation_period: Period, aggregation_function: Type["AggregationFunction"], column_name: str
@@ -478,15 +508,12 @@ class TimeSeries:
     def __getattr__(self, name: str) -> Any:
         """Dynamically handle attribute access for the TimeSeries object.
 
-        This method provides convenience for accessing data columns, metadata, or the time column of the DataFrame.
+        This method provides convenience for accessing data columns or the time column of the DataFrame.
         It supports the following behaviors:
 
         - If the attribute name matches the time column, it returns the time column as a Polars Series.
         - If the attribute name matches a column in the DataFrame (excluding the time column), it selects that column
             and returns a new TimeSeries instance.
-        - If the attribute name does not match a column, it assumes this is a Metadata key. In this case,
-            The TimeSeries should only contain one data column (i.e. has already been filtered to a selected
-            column of interest), and then it checks for metadata with the requested attribute name for that column.
 
         Args:
             name: The attribute name being accessed.
@@ -494,11 +521,10 @@ class TimeSeries:
         Returns:
             If `name` is:
               - The time column: A Polars Series containing the time data.
-              - A data column: The TimeSeries instance with that column selected.
-              - Metadata key: The metadata value(s) for the single data column.
+              - A non-time column: The TimeSeries instance with that column selected.
 
         Raises:
-            AttributeError: If attribute does not match a column, metadata key for a single column, or the time column.
+            AttributeError: If attribute does not match a column or the time column.
 
         Examples:
             >>> ts.timestamp  # Access the time column (assumed time_name set to "timestamp")
@@ -506,30 +532,27 @@ class TimeSeries:
 
             >>> ts.temperature  # Access a column named "temperature"
             <TimeSeries object, filtered to only contain the "temperature" data column>
-
-            >>> ts.temperature.metadata_key
-            <Metadata value for the given key on the given column>
         """
         try:
+            # Delegate flag-related (non-private) calls to the flag manager
+            if hasattr(self._flag_manager, name) and not name.startswith("_"):
+                return getattr(self._flag_manager, name)
+
+            # Otherwise, look for name within columns
             if name == self.time_name:
-                # If the attribute name matches the time column, return the time column as a Polars Series.
-                return self.select_time()
+                # If the attribute name matches the time column, return the PrimaryTimeColumn
+                return self.time_column
             elif name in self.columns:
-                # If the attribute name matches a column in the DataFrame (excluding the time column), select that
-                #  column and return the TimeSeries instance.
-                return self.select_columns([name])
-            elif name not in self.columns and len(self.columns) == 1:
-                # If the attribute name does not match a column, it assumes this is a Metadata key. In this case,
-                #   the TimeSeries can only contain one data column. Check for metadata for that column.
-                metadata_value = self._metadata[self.columns[0]][name]
-                return metadata_value
+                # If the attribute name matches a column in the DataFrame (excluding the time column),
+                # select that Column
+                return self.columns[name]
             else:
                 raise AttributeError
 
         except (KeyError, AttributeError):
             raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
 
-    def __getitem__(self, key: Union[str, list[str], tuple[str]]) -> Union["TimeSeries", pl.Series]:
+    def __getitem__(self, key: Union[str, list[str], tuple[str]]) -> Union["TimeSeries", PrimaryTimeColumn]:
         """Access columns or the time column using indexing syntax.
 
         This method enables convenient access to DataFrame columns or the time column by using indexing. It supports:
@@ -543,7 +566,7 @@ class TimeSeries:
 
         Returns:
             - If `key` is a column name: A TimeSeries instance with the specified column(s) selected.
-            - If `key` is the time column name: A Polars Series containing the time data.
+            - If `key` is the time column name: The PrimaryTimeColumn object.
 
         Examples:
             >>> ts["timestamp"]  # Access the time column (assumed time_name set to "timestamp")
@@ -556,10 +579,14 @@ class TimeSeries:
             <TimeSeries object, filtered to only contain the "temperature" and "pressure" data columns>
         """
         if key == self.time_name:
-            return self.select_time()
+            return self.time_column
         if isinstance(key, str):
             key = [key]
-        return self.select_columns(key)
+        return self.select(key)
+
+    @property
+    def shape(self) -> tuple[int, int]:
+        return self.df.shape
 
     def __len__(self) -> int:
         """Get the number of rows in the time series."""
@@ -570,8 +597,21 @@ class TimeSeries:
         return self.df.iter_rows()
 
     def __str__(self) -> str:
-        """Return the string representation of the TimeSeries class."""
+        """Return the string representation of the TimeSeries dataframe."""
         return self.df.__str__()
+
+    def __repr__(self) -> str:
+        """Returns a string representation of the TimeSeries instance, summarising key properties."""
+        return (
+            f"TimeSeries("
+            f"time_name={self.time_name}, "
+            f"resolution={self.resolution}, "
+            f"periodicity={self.periodicity}, "
+            f"time_zone={self.time_zone}, "
+            f"data_columns={list(self.data_columns.keys())}, "
+            f"supplementary_columns={list(self.supplementary_columns.keys())}, "
+            f"flag_columns={list(self.flag_columns.keys())}, "
+        )
 
     def __dir__(self) -> list[str]:
         """Return a list of attributes associated with the TimeSeries class.
@@ -585,5 +625,58 @@ class TimeSeries:
             DataFrame's columns.
         """
         default_attrs = list(super().__dir__())
-        custom_attrs = default_attrs + self.columns + [self.time_name]
+        custom_attrs = default_attrs + list(self.columns.keys()) + [self.time_name]
         return sorted(set(custom_attrs))
+
+    def __eq__(self, other: object) -> bool:
+        """Checks if two TimeSeries instances are equal.
+
+        Args:
+            other: The object to compare.
+
+        Returns:
+            bool: True if the TimeSeries instances are equal, False otherwise.
+        """
+        if not isinstance(other, TimeSeries):
+            return False
+
+        # Compare DataFrames
+        if not self.df.equals(other.df):
+            return False
+
+        # Compare core metadata attributes
+        if (
+            self.time_name != other.time_name
+            or self.resolution != other.resolution
+            or self.periodicity != other.periodicity
+        ):
+            return False
+
+        # Compare flag systems
+        if self.flag_systems.keys() != other.flag_systems.keys():
+            return False
+        for name, flag_system in self.flag_systems.items():
+            other_flag_system = other.flag_systems[name]
+            if str(flag_system) != str(other_flag_system) or flag_system.__members__ != other_flag_system.__members__:
+                return False
+
+        # Compare column mappings
+        if (
+            self.data_columns.keys() != other.data_columns.keys()
+            or self.supplementary_columns.keys() != other.supplementary_columns.keys()
+            or self.flag_columns.keys() != other.flag_columns.keys()
+        ):
+            return False
+
+        return True
+
+    def __ne__(self, other: object) -> bool:
+        """Checks if two TimeSeries instances are not equal.
+
+        Args:
+            other: The object to compare.
+
+        Returns:
+            bool: True if the TimeSeries instances are not equal, False otherwise.
+        """
+        return not self.__eq__(other)

@@ -318,14 +318,17 @@ class Mean(AggregationFunction):
                 ExpectedCount(aggregator),
             ]
         )
+
+        # Aggregator just returns a dataframe with the selected column in. This might need to change when considering
+        #   linked supp/flag columns.  But for now, not sending any lists/dicts for supp or flag columns or flag systems
         return TimeSeries(
             df=df,
             time_name=ts.time_name,
             resolution=aggregation_period,
             periodicity=aggregation_period,
             time_zone=ts.time_zone,
-            supplementary_columns=ts.supplementary_columns,
-            metadata=ts.metadata(),
+            flag_systems=ts.flag_systems,
+            column_metadata={column_name: ts.columns[column_name].metadata()},
         )
 
 
@@ -364,14 +367,16 @@ class Min(AggregationFunction):
                 ExpectedCount(aggregator),
             ]
         )
+        # Aggregator just returns a dataframe with the selected column in. This might need to change when considering
+        #   linked supp/flag columns.  But for now, not sending any lists/dicts for supp or flag columns or flag systems
         return TimeSeries(
             df=df,
             time_name=ts.time_name,
             resolution=aggregation_period,
             periodicity=aggregation_period,
             time_zone=ts.time_zone,
-            supplementary_columns=ts.supplementary_columns,
-            metadata=ts.metadata(),
+            flag_systems=ts.flag_systems,
+            column_metadata={column_name: ts.columns[column_name].metadata()},
         )
 
 
@@ -410,12 +415,14 @@ class Max(AggregationFunction):
                 ExpectedCount(aggregator),
             ]
         )
+        # Aggregator just returns a dataframe with the selected column in. This might need to change when considering
+        #   linked supp/flag columns.  But for now, not sending any lists/dicts for supp or flag columns or flag systems
         return TimeSeries(
             df=df,
             time_name=ts.time_name,
             resolution=aggregation_period,
             periodicity=aggregation_period,
             time_zone=ts.time_zone,
-            supplementary_columns=ts.supplementary_columns,
-            metadata=ts.metadata(),
+            flag_systems=ts.flag_systems,
+            column_metadata={column_name: ts.columns[column_name].metadata()},
         )
