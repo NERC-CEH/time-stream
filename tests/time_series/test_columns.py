@@ -360,14 +360,14 @@ class TestAsTimeSeries(BaseTimeSeriesTest):
 class TestGetattr(BaseTimeSeriesTest):
     def test_access_metadata_key(self):
         """Test accessing metadata key for a column."""
-        column = DataColumn("data_col1", self.ts)
+        column = DataColumn("data_col1", self.ts, self.metadata["data_col1"])
         result = column.key1
         expected = "1"
         self.assertEqual(result, expected)
 
     def test_access_nonexistent_attribute(self):
         """Test accessing metadata key that doesn't exist"""
-        column = DataColumn("data_col1", self.ts)
+        column = DataColumn("data_col1", self.ts, self.metadata["data_col1"])
         with self.assertRaises(AttributeError):
             _ = column.key0
 
