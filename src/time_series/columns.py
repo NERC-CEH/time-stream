@@ -1,8 +1,10 @@
 import copy
-from abc import ABC
+from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any, Dict, Optional, Sequence, Union
 
 import polars as pl
+
+from time_series.relationships import DeletionPolicy, Relationship, RelationshipType
 
 if TYPE_CHECKING:
     # Import is for type hinting only.  Make sure there is no runtime import, to avoid recursion.
@@ -13,6 +15,13 @@ class TimeSeriesColumn(ABC):
     """Base class for all column types in a TimeSeries."""
 
     def __init__(self, name: str, ts: "TimeSeries", metadata: Optional[Dict[str, Any]] = None) -> None:
+        """Initializes a TimeSeriesColumn instance.
+
+        Args:
+            name: The name of the column.
+            ts: The TimeSeries instance this column belongs to.
+            metadata: Optional metadata for the column.
+        """
         if self.__class__ is TimeSeriesColumn:
             raise TypeError(
                 f"Cannot instantiate TimeSeriesColumn directly. "
@@ -21,11 +30,11 @@ class TimeSeriesColumn(ABC):
 
         self._name = name
         self._ts = ts
+        self._validate_name()
 
         #  NOTE: Doing a deep copy of this mutable object, otherwise the original object will refer to the same
         #   object in memory and will be changed by class methods.
         self._metadata = copy.deepcopy(metadata) or {}
-        self._validate_name()
 
     @property
     def name(self) -> str:
@@ -187,9 +196,36 @@ class TimeSeriesColumn(ABC):
 
         return self._ts.select([self.name])
 
+    @abstractmethod
+    def add_relationship(self, other: Union["TimeSeriesColumn", str]) -> None:
+        """Defines relationships between columns.
+
+        Args:
+            other: Column(s) to establish a relationship with.
+        """
+        pass
+
+    def remove_relationship(self, other: Union["TimeSeriesColumn", str]) -> None:
+        """Remove relationships between columns.
+
+        Args:
+            other: Column(s) to remove relationship from.
+        """
+        if isinstance(other, str):
+            other = self._ts.columns[other]
+
+        relationships = self._ts._relationship_manager._get_relationships(self).copy()
+        for relationship in relationships:
+            if relationship.other_column == other:
+                self._ts._relationship_manager._remove(relationship)
+
     def __str__(self) -> str:
         """Return the string representation of the Column."""
         return str(self.data)
+
+    def __repr__(self) -> str:
+        """Returns a string representation of the Colum instance, summarising key properties."""
+        return f"{type(self).__name__}('{self.name}')"
 
     def __getattr__(self, name: str) -> Any:
         """Dynamically handle metadata attribute access for the Column object.
@@ -294,6 +330,22 @@ class PrimaryTimeColumn(TimeSeriesColumn):
         """
         raise NotImplementedError("Primary time column cannot be unset.")
 
+    def add_relationship(self, *args, **kwargs) -> None:
+        """Raises an error because the primary time column cannot set related columns.
+
+        Raises:
+            NotImplementedError: Always raised because time columns are immutable.
+        """
+        raise NotImplementedError("Primary time column cannot set related columns.")
+
+    def remove_relationship(self, *args, **kwargs) -> None:
+        """Raises an error because the primary time column cannot have other column relationships.
+
+        Raises:
+            NotImplementedError: Always raised because time columns are immutable.
+        """
+        raise NotImplementedError("Primary time column cannot unset related columns.")
+
     @property
     def data(self) -> pl.Series:
         """Returns the time column as a Polars Series.
@@ -307,13 +359,54 @@ class PrimaryTimeColumn(TimeSeriesColumn):
 class DataColumn(TimeSeriesColumn):
     """Represents primary data columns."""
 
-    pass
+    def add_relationship(self, other: Union["TimeSeriesColumn", str]) -> None:
+        """Adds a relationship between this data column and another supplementary or flag column.
+
+        Args:
+            other: Supplementary or flag column to associate.
+
+        Raises:
+            TypeError: If any other column is not supplementary or flag.
+        """
+        if isinstance(other, str):
+            other = self._ts.columns[other]
+
+        if type(other) is SupplementaryColumn:
+            primary_relationship = Relationship(self, other, RelationshipType.MANY_TO_MANY, DeletionPolicy.UNLINK)
+            other_relationship = Relationship(other, self, RelationshipType.MANY_TO_MANY, DeletionPolicy.UNLINK)
+        elif type(other) is FlagColumn:
+            primary_relationship = Relationship(self, other, RelationshipType.ONE_TO_MANY, DeletionPolicy.CASCADE)
+            other_relationship = Relationship(other, self, RelationshipType.MANY_TO_ONE, DeletionPolicy.UNLINK)
+        else:
+            raise TypeError(f"Related column must be supplementary or flag: {other.name}:{type(other)}")
+
+        self._ts._relationship_manager._add(primary_relationship)
+        self._ts._relationship_manager._add(other_relationship)
 
 
 class SupplementaryColumn(TimeSeriesColumn):
     """Represents supplementary columns (e.g., metadata, extra information)."""
 
-    pass
+    def add_relationship(self, other: Union["TimeSeriesColumn", str]) -> None:
+        """Adds a relationship between this supplementary column and another data column.
+
+        Args:
+            other: Data column to associate.
+
+        Raises:
+            TypeError: If any other column is not data.
+        """
+        if isinstance(other, str):
+            other = self._ts.columns[other]
+
+        if type(other) is DataColumn:
+            primary_relationship = Relationship(self, other, RelationshipType.MANY_TO_MANY, DeletionPolicy.UNLINK)
+            other_relationship = Relationship(other, self, RelationshipType.MANY_TO_MANY, DeletionPolicy.UNLINK)
+        else:
+            raise TypeError(f"Related column must be data: {other.name}:{type(other)}")
+
+        self._ts._relationship_manager._add(primary_relationship)
+        self._ts._relationship_manager._add(other_relationship)
 
 
 class FlagColumn(SupplementaryColumn):
@@ -337,6 +430,27 @@ class FlagColumn(SupplementaryColumn):
         """
         super().__init__(name, ts, metadata)
         self.flag_system = self._ts.flag_systems[flag_system]
+
+    def add_relationship(self, other: Union["TimeSeriesColumn", str]) -> None:
+        """Adds a relationship between this flag column and another data column.
+
+        Args:
+            other: Data column to associate.
+
+        Raises:
+            TypeError: If any other column is not data.
+        """
+        if isinstance(other, str):
+            other = self._ts.columns[other]
+
+        if type(other) is DataColumn:
+            primary_relationship = Relationship(self, other, RelationshipType.MANY_TO_ONE, DeletionPolicy.UNLINK)
+            other_relationship = Relationship(other, self, RelationshipType.ONE_TO_MANY, DeletionPolicy.CASCADE)
+        else:
+            raise TypeError(f"Related column must be data: {other.name}:{type(other)}")
+
+        self._ts._relationship_manager._add(primary_relationship)
+        self._ts._relationship_manager._add(other_relationship)
 
     def add_flag(self, flag: Union[int, str], expr: pl.Expr = pl.lit(True)) -> None:
         """Adds a flag value to this FlagColumn using a bitwise OR operation.
