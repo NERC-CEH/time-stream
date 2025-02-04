@@ -70,7 +70,7 @@ class Relationship:
         Returns:
             int: The hash value of the relationship.
         """
-        return hash((self.primary_column.name, self.other_column.name, self.relationship_type))
+        return hash((self.primary_column.name, self.other_column.name, self.relationship_type, self.deletion_policy))
 
     def __eq__(self, other: object) -> bool:
         """Check equality between two Relationship instances.

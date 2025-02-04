@@ -26,60 +26,46 @@ resolution = Period.of_minutes(15)
 periodicity = Period.of_years(1).with_month_offset(9).with_hour_offset(9)
 
 # Convert to a Polars DataFrame
-df = pl.DataFrame({"timestamp": timestamps, "pressure": values, "temperature": values})
+df = pl.DataFrame(
+    {"timestamp": timestamps, "pressure": values, "temperature": values, "supp1": values, "flagcol": values}
+)
 
 metadata = {
     "pressure": {"units": "hpa", "description": "Hello world!"},
     "temperature": {"description": "Hello temperature!"},
 }
 
-ts = TimeSeries(df, "timestamp", resolution, periodicity, metadata={"site_id": "BUNNY"}, column_metadata=metadata)
+flag_systems = {"quality_flags": {"OK": 1, "WARNING": 2}}
+
+ts = TimeSeries(
+    df,
+    "timestamp",
+    resolution,
+    periodicity,
+    column_metadata=metadata,
+    supplementary_columns=["supp1"],
+    flag_columns={"flagcol": "quality_flags"},
+    flag_systems=flag_systems,
+)
 
 ts.df = ts.df.with_columns((pl.col("pressure") * 2).alias("pressure"))
 
-print(ts.metadata("site_id"))
-print(ts.column_metadata(["pressure", "temperature"], ["units"]))
-# print(ts.column_metadata(["pressure", "temperature"], ["gfsdsddsf"]))
-# print(ts.pressure.metadata("gfsdsddsf"))
-print(ts.pressure.gfsdsddsf)
-# print(ts)
-#
-#
-# print(ts.pressure, type(ts.pressure))
-# print(ts.pressure.as_timeseries(), type(ts.pressure.as_timeseries()))
-# print(ts.pressure.units)
-# print(ts["pressure"], type(ts["pressure"]))
-# print(ts[["pressure", "temperature"]])
-# print(ts.pressure.metadata("units"))
-# print(ts.shape)
-#
-# # Adding flag columns
-# flag_dict = {
-#     "MISSING": 1,
-#     "ESTIMATED": 2,
-#     "CORRECTED": 4,
-# }
-# # First register the flag system
-# ts.add_flag_system("CORE", flag_dict)
-# # Add the flag column under the new flag system
-# ts.init_flag_column("CORE", "pressure_flags")
-# # Add a flag to the column. Can be done with flag name...
-# ts.add_flag("pressure_flags", "MISSING")
-# # or with flag value
-# ts.add_flag("pressure_flags", 2)
-#
-# print(ts)
-#
-# ts.remove_flag("pressure_flags", "ESTIMATED")
-# ts.pressure_flags.add_flag(4)
-#
-# print(ts)
-#
-# print(type(ts.pressure_flags))
-# ts.pressure_flags.unset()
-# print(type(ts.pressure_flags))
-# # ts.pressure_flags.add_flag(1)
-#
-# ts.pressure_flags.remove()
-#
-# print(ts)
+
+ts.supp1.add_relationship("pressure")
+print(ts._relationship_manager._relationships)
+
+ts.supp1.remove()
+print(ts.columns)
+print(ts._relationship_manager._relationships)
+
+
+ts.temperature.add_relationship("flagcol")
+print(ts._relationship_manager._relationships)
+
+# ts.flagcol.add_relationship("temperature")
+# print(ts._relationship_manager._relationships)
+
+ts.flagcol.remove()
+print(ts.columns)
+print(ts._relationship_manager._relationships)
+pass
