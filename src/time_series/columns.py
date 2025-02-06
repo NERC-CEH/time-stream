@@ -78,6 +78,9 @@ class TimeSeriesColumn(ABC):
         """Converts the column to a SupplementaryColumn while preserving metadata.
 
         If the column is already a SupplementaryColumn, no changes are made.
+
+        Returns:
+            The supplementary column object.
         """
         if type(self) is SupplementaryColumn:
             return self
@@ -89,6 +92,9 @@ class TimeSeriesColumn(ABC):
         """Converts the column to a FlagColumn while preserving metadata.
 
         If the column is already a SupplementaryColumn, no changes are made.
+
+        Returns:
+            The flag column object.
         """
         if type(self) is FlagColumn:
             return self
@@ -100,6 +106,9 @@ class TimeSeriesColumn(ABC):
         """Converts the column back into a normal DataColumn while preserving metadata.
 
         If the column is already a DataColumn, no changes are made.
+
+        Returns:
+            The data column object.
         """
         if type(self) is DataColumn:
             return self
