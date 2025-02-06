@@ -660,6 +660,14 @@ def _fmt_aware_hour(obj: dt.datetime, separator: str) -> str:
     return f"{obj.year:04}-{obj.month:02}-{obj.day:02}{separator}{obj.hour:02}{tz_str}"
 
 
+# Some constants returned by the Properties.count() method.
+# *** DO NOT CHANGE THESE VALUES ***
+# The constant names are used in the code for clarity but
+# the method documentation refers to the values 0 and -1.
+_COUNT_ALIGNED_UNKNOWN: int = 0
+_COUNT_UNALIGNED: int = -1
+
+
 @dataclass(eq=True, order=True, frozen=True)
 class Properties:
     """The basic properties of a period. Each specific Period
@@ -1289,6 +1297,174 @@ class Properties:
             return (self.multiplier * num_per_year) == 12
         else:
             raise AssertionError(f"Illegal step: {self.step}")
+
+    def count(self, other: "Properties") -> int:
+        """
+        See the Period.count method for more documentation.
+
+        Return the number of intervals of the "self" period within
+        each interval of the "other" period, or some other special
+        value if no such constant count exists.
+        """
+        # Periods over different timezones are not aligned
+        if self.tzinfo != other.tzinfo:
+            return _COUNT_UNALIGNED
+
+        # The same period fits itself exactly once
+        # The ordinal_shift can be ignored as it does not affect how the
+        # timeline is split
+        if (
+            (self.step == other.step)
+            and (self.multiplier == other.multiplier)
+            and (self.month_offset == other.month_offset)
+            and (self.microsecond_offset == other.microsecond_offset)
+        ):
+            return 1
+
+        # some working variables used in the following calculations
+        mult_q: int  # other.multiplier // self.multiplier
+        mult_r: int  # other.multiplier % self.multiplier
+        offset_r: int  # other.{offset} % self.multiplier
+
+        # The details of how to do the calculation vary depending on the step
+        # of "self" and "other", but typically the returned value will be
+        # some variation of:
+        #     other.multiplier / self.multiplier
+        # unless the remainder is non-zero. The exact details vary depending
+        # on self.step and other.step.
+        if self.step == _STEP_MICROSECONDS:
+            if other.step == _STEP_MICROSECONDS:
+                # A microsecond period within some other microsecond period.
+                #
+                # A return value of _COUNT_ALIGNED_UNKNOWN is not possible; if the
+                # periods are aligned then we can always calculate a constant count.
+                #
+                # For a known constant count:
+                # - other.multiplier MUST be a multiple of self.multiplier
+                # - self must not have a microsecond_offset (unless self and other are the
+                #   same period, and that case has already been dealt with)
+                # - if other.microsecond_offset > 0 then it MUST be a multiple of self.multiplier
+                mult_q, mult_r = divmod(other.multiplier, self.multiplier)
+                if mult_r != 0:
+                    return _COUNT_UNALIGNED
+                if self.microsecond_offset > 0:
+                    return _COUNT_UNALIGNED
+                if other.microsecond_offset > 0:
+                    offset_r = other.microsecond_offset % self.multiplier
+                    if offset_r != 0:
+                        return _COUNT_UNALIGNED
+                return mult_q
+
+            if other.step == _STEP_SECONDS:
+                # A microsecond period within a second period.
+                #
+                # Similar rules to the microsecond/microsecond case above.
+                mult_q, mult_r = divmod(other.multiplier * 1_000_000, self.multiplier)
+                if mult_r != 0:
+                    return _COUNT_UNALIGNED
+                if self.microsecond_offset > 0:
+                    return _COUNT_UNALIGNED
+                if other.microsecond_offset > 0:
+                    offset_r = other.microsecond_offset % self.multiplier
+                    if offset_r != 0:
+                        return _COUNT_UNALIGNED
+                return mult_q
+
+            if other.step == _STEP_MONTHS:
+                # A microsecond period within a month period.
+                #
+                # Months have variable length so there is never a constant count; the return
+                # value is either _COUNT_UNALIGNED or _COUNT_ALIGNED_UNKNOWN.
+                #
+                # For periods to be aligned:
+                # - math.gcd(28,29,30,31) == 1, so to check month alignment we just need to
+                #   check that the microsecond period is aligned to a day.
+                # - other.month_offset can be ignored
+                # - self.microsecond_offset == other.microsecond_offset
+                mult_q, mult_r = divmod(86_400_000_000, self.multiplier)
+                if mult_r != 0:
+                    return _COUNT_UNALIGNED
+                if self.microsecond_offset == 0:
+                    if other.microsecond_offset > 0:
+                        offset_r = other.microsecond_offset % self.multiplier
+                        if offset_r != 0:
+                            return _COUNT_UNALIGNED
+                elif self.microsecond_offset != other.microsecond_offset:
+                    return _COUNT_UNALIGNED
+                return _COUNT_ALIGNED_UNKNOWN
+
+        if self.step == _STEP_SECONDS:
+            if other.step == _STEP_MICROSECONDS:
+                # A second period within a microsecond period.
+                #
+                # This is always unaligned.
+                return _COUNT_UNALIGNED
+
+            if other.step == _STEP_SECONDS:
+                # A second period within a second period.
+                #
+                # Similar rules to the microsecond/microsecond case above.
+                mult_q, mult_r = divmod(other.multiplier, self.multiplier)
+                if mult_r != 0:
+                    return _COUNT_UNALIGNED
+                if self.microsecond_offset == 0:
+                    if other.microsecond_offset > 0:
+                        offset_r = other.microsecond_offset % (self.multiplier * 1_000_000)
+                        if offset_r != 0:
+                            return _COUNT_UNALIGNED
+                elif self.microsecond_offset != other.microsecond_offset:
+                    return _COUNT_UNALIGNED
+                return mult_q
+
+            if other.step == _STEP_MONTHS:
+                # A second period within a month period.
+                #
+                # Similar rules to the microsecond/month case above.
+                mult_q, mult_r = divmod(86_400, self.multiplier)
+                if mult_r != 0:
+                    return _COUNT_UNALIGNED
+                if self.microsecond_offset == 0:
+                    if other.microsecond_offset > 0:
+                        offset_r = other.microsecond_offset % (self.multiplier * 1_000_000)
+                        if offset_r != 0:
+                            return _COUNT_UNALIGNED
+                elif self.microsecond_offset != other.microsecond_offset:
+                    return _COUNT_UNALIGNED
+                return _COUNT_ALIGNED_UNKNOWN
+
+        if self.step == _STEP_MONTHS:
+            if other.step == _STEP_MICROSECONDS:
+                # A month period within a microsecond period.
+                #
+                # This is always unaligned.
+                return _COUNT_UNALIGNED
+
+            if other.step == _STEP_SECONDS:
+                # A month period within a second period.
+                #
+                # This is always unaligned.
+                return _COUNT_UNALIGNED
+
+            if other.step == _STEP_MONTHS:
+                # A month period within some other month period.
+                #
+                # Similar rules to the microsecond/microsecond and second/second cases,
+                # but we also need to take month_offset into account.
+                mult_q, mult_r = divmod(other.multiplier, self.multiplier)
+                if mult_r != 0:
+                    return _COUNT_UNALIGNED
+                if self.month_offset == 0:
+                    if other.month_offset > 0:
+                        offset_r = other.month_offset % self.multiplier
+                        if offset_r != 0:
+                            return _COUNT_UNALIGNED
+                elif self.month_offset != other.month_offset:
+                    return _COUNT_UNALIGNED
+                if self.microsecond_offset != other.microsecond_offset:
+                    return _COUNT_UNALIGNED
+                return mult_q
+
+        raise AssertionError("Internal error")
 
     def __str__(self) -> str:
         elems: list[str] = ["P"]
@@ -2212,6 +2388,71 @@ class Period(ABC):
             .normalise_offsets()
             .with_ordinal_shift(0 - origin_ordinal)
         )
+
+    def count(self, other: "Period") -> int:
+        """Return an exact count of how many intervals of this period
+        fit into an interval of the other period, for all intervals
+        across the entire timeline, if such a count exists.
+        Otherwise return one of two special values that provide
+        information about why there is no exact count.
+
+        If the interval boundaries are not aligned then a value of -1
+        is returned.
+
+        If the interval boundaries are aligned but no exact count
+        can be determined then a value of 0 is returned.
+
+        Otherwise the returned value is >0 and is the number of
+        "self" intervals that lie within each interval of "other",
+        for all intervals of "other".
+
+        Args:
+            other: The period over which we are counting the intervals
+                   of this period.
+
+        Notes:
+            If the intervals of "self" are not wholy contained within
+            an interval of "other" then -1 is returned. This basically
+            means that if "self" is a larger period than "other" then
+            -1 is returned.
+
+        Examples:
+            p1h = Period.of_hours( 1 )
+            p1d = Period.of_days( 1 )
+            # There are 24 hours in a day.
+            assert p1h.count( p1d ) == 24
+
+            p1h_1m = Period.of_hours( 1 ).with_minute_offset( 1 )
+            # Unaligned periods never return an exact count
+            assert p1h_1m.count( p1d ) == -1
+
+            p1d_1m = Period.of_days( 1 ).with_minute_offset( 1 )
+            # There are 24 hours in a day, when both have the same offset
+            assert p1h_1m.count( p1d_1m ) == 24
+
+            p1s = Period.of_seconds( 1 )
+            # Counting the number of hours in a second is not possible
+            assert p1h.count( p1s ) == -1
+
+            # There are 3_600 seconds in an hour.
+            assert p1s.count( p1h ) == 3_600
+
+            p1m = Period.of_months( 1 )
+            # The number of days in a month is not constant, but the
+            # periods are aligned and the value could be calculated
+            assert p1d.count( p1m ) == 0
+
+            # There are 12 months in a year.
+            assert p1m.count( p1y ) == 12
+
+        Returns:
+             -1: This period is not aligned with "other".
+              0: This period is aligned with "other" but the count is
+                 not constant.
+            n>0: This period is aligned with "other" and each interval of
+                 "other" contains exactly n intervals of this period.
+        """
+        return self._properties.count(other._properties)
 
     def __str__(self) -> str:
         return self._properties.__str__()
