@@ -1,8 +1,8 @@
-from enum import EnumMeta, Flag
+from enum import EnumType, Flag
 from typing import Union
 
 
-class BitwiseMeta(EnumMeta):
+class BitwiseMeta(EnumType):
     def __repr__(self):
         """Return a helpful representation of the flag, listing all enum members."""
         members = ", ".join(f"{name}={member.value}" for name, member in self.__members__.items())
