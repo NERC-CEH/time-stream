@@ -114,7 +114,6 @@ class RelationshipManager:
         """
         self._ts = ts
         self._relationships = {}
-
         self._setup_relationships()
 
     def _setup_relationships(self) -> None:
@@ -131,6 +130,11 @@ class RelationshipManager:
         Raises:
             ValueError: If a one-to-one or many-to-one relationship already exists.
         """
+        self._check_relationship_type_validity(relationship)
+        self._relationships[relationship.primary_column.name].add(relationship)
+        self._relationships[relationship.other_column.name].add(relationship)
+
+    def _check_relationship_type_validity(self, relationship: Relationship) -> None:
         if (
             relationship.relationship_type in (RelationshipType.ONE_TO_ONE, RelationshipType.MANY_TO_ONE)
             and self._relationships[relationship.primary_column.name]
@@ -140,8 +144,6 @@ class RelationshipManager:
                 f"Existing relationships: {self._relationships[relationship.primary_column.name]}"
             )
 
-        self._relationships[relationship.primary_column.name].add(relationship)
-
     def _remove(self, relationship: Relationship) -> None:
         """Removes a relationship (from both directions).
 
@@ -150,7 +152,8 @@ class RelationshipManager:
         """
         if relationship in self._get_relationships(relationship.primary_column):
             self._relationships[relationship.primary_column.name].remove(relationship)
-            self._relationships[relationship.other_column.name].remove(self._get_reverse(relationship))
+        if relationship in self._get_relationships(relationship.other_column):
+            self._relationships[relationship.other_column.name].remove(relationship)
 
     def _get_relationships(self, column: "TimeSeriesColumn") -> set[Relationship]:
         """Retrieves relationships for a column.
@@ -159,35 +162,9 @@ class RelationshipManager:
             column: The column.
 
         Returns:
-            The set of relationships the column has
+            The set of relationships the column has.
         """
         return self._relationships.get(column.name, set())
-
-    def _get_reverse(self, relationship: Relationship) -> Relationship:
-        """Finds the reverse relationship.
-
-        For example, if there is a relationship between ColumnA to ColumnB, should return the equivalent
-        relationship of ColumnB to ColumnA.
-
-        Args:
-            relationship: The relationship to find the reverse for.
-
-        Returns:
-            The reverse relationship.
-
-        Raises:
-            ValueError: If more than one, or no, reverse relationship is found.
-        """
-        reverse = None
-        for other_relationship in self._get_relationships(relationship.other_column):
-            if relationship.other_column == other_relationship.primary_column:
-                if not reverse:
-                    reverse = other_relationship
-                else:
-                    raise ValueError(f"More than one reverse relationship found: {relationship}")
-        if not reverse:
-            raise ValueError(f"No reverse relationship found for: {relationship}")
-        return reverse
 
     def _handle_deletion(self, column: "TimeSeriesColumn") -> None:
         """Handles the deletion of a column based on the relationship's deletion policy.
@@ -199,16 +176,18 @@ class RelationshipManager:
            ValueError: If RESTRICT policy is enforced and relationships exist.
         """
         relationships = self._get_relationships(column).copy()
+
         for relationship in relationships:
             if relationship.deletion_policy == DeletionPolicy.CASCADE:
-                self._relationships.pop(relationship.other_column.name)
+                self._relationships[relationship.other_column.name].discard(relationship)
+                self._remove(relationship)
                 relationship.other_column.remove()
 
             elif relationship.deletion_policy == DeletionPolicy.UNLINK:
                 self._remove(relationship)
 
             elif relationship.deletion_policy == DeletionPolicy.RESTRICT:
-                raise ValueError(
+                raise UserWarning(
                     f"Cannot delete {column} because it has restricted relationship "
                     f"with: {relationship.other_column.name}"
                 )

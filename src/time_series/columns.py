@@ -372,16 +372,13 @@ class DataColumn(TimeSeriesColumn):
             other = self._ts.columns[other]
 
         if type(other) is SupplementaryColumn:
-            primary_relationship = Relationship(self, other, RelationshipType.MANY_TO_MANY, DeletionPolicy.UNLINK)
-            other_relationship = Relationship(other, self, RelationshipType.MANY_TO_MANY, DeletionPolicy.UNLINK)
+            relationship = Relationship(self, other, RelationshipType.MANY_TO_MANY, DeletionPolicy.UNLINK)
         elif type(other) is FlagColumn:
-            primary_relationship = Relationship(self, other, RelationshipType.ONE_TO_MANY, DeletionPolicy.CASCADE)
-            other_relationship = Relationship(other, self, RelationshipType.MANY_TO_ONE, DeletionPolicy.UNLINK)
+            relationship = Relationship(self, other, RelationshipType.ONE_TO_MANY, DeletionPolicy.CASCADE)
         else:
             raise TypeError(f"Related column must be supplementary or flag: {other.name}:{type(other)}")
 
-        self._ts._relationship_manager._add(primary_relationship)
-        self._ts._relationship_manager._add(other_relationship)
+        self._ts._relationship_manager._add(relationship)
 
 
 class SupplementaryColumn(TimeSeriesColumn):
@@ -400,13 +397,11 @@ class SupplementaryColumn(TimeSeriesColumn):
             other = self._ts.columns[other]
 
         if type(other) is DataColumn:
-            primary_relationship = Relationship(self, other, RelationshipType.MANY_TO_MANY, DeletionPolicy.UNLINK)
-            other_relationship = Relationship(other, self, RelationshipType.MANY_TO_MANY, DeletionPolicy.UNLINK)
+            relationship = Relationship(other, self, RelationshipType.MANY_TO_MANY, DeletionPolicy.UNLINK)
         else:
             raise TypeError(f"Related column must be data: {other.name}:{type(other)}")
 
-        self._ts._relationship_manager._add(primary_relationship)
-        self._ts._relationship_manager._add(other_relationship)
+        self._ts._relationship_manager._add(relationship)
 
 
 class FlagColumn(SupplementaryColumn):
@@ -444,13 +439,11 @@ class FlagColumn(SupplementaryColumn):
             other = self._ts.columns[other]
 
         if type(other) is DataColumn:
-            primary_relationship = Relationship(self, other, RelationshipType.MANY_TO_ONE, DeletionPolicy.UNLINK)
-            other_relationship = Relationship(other, self, RelationshipType.ONE_TO_MANY, DeletionPolicy.CASCADE)
+            relationship = Relationship(other, self, RelationshipType.ONE_TO_MANY, DeletionPolicy.CASCADE)
         else:
             raise TypeError(f"Related column must be data: {other.name}:{type(other)}")
 
-        self._ts._relationship_manager._add(primary_relationship)
-        self._ts._relationship_manager._add(other_relationship)
+        self._ts._relationship_manager._add(relationship)
 
     def add_flag(self, flag: Union[int, str], expr: pl.Expr = pl.lit(True)) -> None:
         """Adds a flag value to this FlagColumn using a bitwise OR operation.

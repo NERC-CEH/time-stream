@@ -54,9 +54,9 @@ ts.df = ts.df.with_columns((pl.col("pressure") * 2).alias("pressure"))
 ts.supp1.add_relationship("pressure")
 print(ts._relationship_manager._relationships)
 
-ts.supp1.remove()
-print(ts.columns)
-print(ts._relationship_manager._relationships)
+# ts.supp1.remove()
+# print(ts.columns)
+# print(ts._relationship_manager._relationships)
 
 
 ts.temperature.add_relationship("flagcol")
@@ -65,7 +65,7 @@ print(ts._relationship_manager._relationships)
 # ts.flagcol.add_relationship("temperature")
 # print(ts._relationship_manager._relationships)
 
-ts.flagcol.remove()
-print(ts.columns)
+ts.pressure.remove()
+# print(ts.columns)
 print(ts._relationship_manager._relationships)
-pass
+# pass

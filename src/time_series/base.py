@@ -56,6 +56,7 @@ class TimeSeries:
         self._df = df
 
         self._setup(supplementary_columns or [], flag_columns or {}, column_metadata or {}, metadata or {})
+        self._relationship_manager = RelationshipManager(self)
 
     def _setup(
         self,
@@ -380,6 +381,7 @@ class TimeSeries:
         """
         removed_columns = list(set(self.df.columns) - set(new_df.columns))
         for col_name in removed_columns:
+            self._relationship_manager._handle_deletion(self._columns[col_name])
             self._columns.pop(col_name, None)
 
     def _add_new_columns(self, new_df: pl.DataFrame) -> None:
