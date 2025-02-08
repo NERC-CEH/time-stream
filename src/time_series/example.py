@@ -39,8 +39,8 @@ ts.df = ts.df.with_columns((pl.col("pressure") * 2).alias("pressure"))
 
 print(ts.metadata("site_id"))
 print(ts.column_metadata(["pressure", "temperature"], ["units"]))
-#print(ts.column_metadata(["pressure", "temperature"], ["gfsdsddsf"]))
-#print(ts.pressure.metadata("gfsdsddsf"))
+# print(ts.column_metadata(["pressure", "temperature"], ["gfsdsddsf"]))
+# print(ts.pressure.metadata("gfsdsddsf"))
 print(ts.pressure.gfsdsddsf)
 # print(ts)
 #

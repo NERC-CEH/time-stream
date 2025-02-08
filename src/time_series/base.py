@@ -1,4 +1,3 @@
-import copy
 from collections import Counter
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Dict, Iterable, Iterator, Optional, Sequence, Type, Union
@@ -52,17 +51,17 @@ class TimeSeries:
 
         self._flag_manager = TimeSeriesFlagManager(self, flag_systems)
         self._columns: dict[str, TimeSeriesColumn] = {}
-
-        #  NOTE: Doing a deep copy of this mutable object, otherwise the original object will refer to the same
-        #   object in memory and will be changed by class methods.
-        self._metadata = copy.deepcopy(metadata) or {}
-
+        self._metadata = {}
         self._df = df
 
-        self._setup(supplementary_columns or [], flag_columns or {}, column_metadata or {})
+        self._setup(supplementary_columns or [], flag_columns or {}, column_metadata or {}, metadata or {})
 
     def _setup(
-        self, supplementary_columns: list[str], flag_columns: dict[str, str], column_metadata: dict[str, dict[str, Any]]
+        self,
+        supplementary_columns: list[str],
+        flag_columns: dict[str, str],
+        column_metadata: dict[str, dict[str, Any]],
+        metadata: dict[str, Any],
     ) -> None:
         """
         Performs the initial setup for the TimeSeries instance.
@@ -78,12 +77,14 @@ class TimeSeries:
             supplementary_columns: A list of column names that are considered supplementary.
             flag_columns: A dictionary mapping flag column names to their corresponding flag systems.
             column_metadata: A dictionary containing metadata for columns in the DataFrame.
+            metadata: The user defined metadata for this time series instance.
         """
         self._set_time_zone()
         self.sort_time()
         self._validate_resolution()
         self._validate_periodicity()
         self._setup_columns(supplementary_columns, flag_columns, column_metadata)
+        self._setup_metadata(metadata)
 
     def _setup_columns(
         self,
@@ -144,6 +145,24 @@ class TimeSeries:
             else:
                 data_col = DataColumn(col_name, self, col_metadata)
                 self._columns[col_name] = data_col
+
+    def _setup_metadata(self, metadata: dict[str, Any]) -> None:
+        """Configure metadata for the Time Series instance.
+
+        Processes a dictionary of metadata entries and adds them to the instance's internal metadata storage
+        (`_metadata`). Verifies that the key does not conflict with any existing column names stored in `_columns`.
+        KeyError is raised to prevent naming collisions between metadata and column identifiers.
+
+        Args:
+            metadata: The user defined metadata for this time series instance.
+
+        Raises:
+            KeyError: If a metadata key is already present in the instance's `_columns`.
+        """
+        for k, v in metadata.items():
+            if k in self._df.columns:
+                raise KeyError(f"Metadata key {k} exists as a Column in the Time Series.")
+            self._metadata[k] = v
 
     @property
     def time_name(self) -> str:
@@ -569,7 +588,9 @@ class TimeSeries:
         result = {col: self.columns[col].metadata(key, strict=False) for col in column}
 
         missing_keys = {
-            k for col, metadata in result.items() for k, v in metadata.items()
+            k
+            for col, metadata in result.items()
+            for k, v in metadata.items()
             if all(metadata.get(k) is None for metadata in result.values())
         }
 

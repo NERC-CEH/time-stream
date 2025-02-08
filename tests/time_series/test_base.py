@@ -1635,3 +1635,33 @@ class TestMetadata(unittest.TestCase):
         expected = {'nonexistent_key': None}
         result = self.ts.metadata("nonexistent_key", strict=False)
         self.assertEqual(result, expected)
+
+class TestSetupMetadata(unittest.TestCase):
+    df = pl.DataFrame({
+        "time": [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)],
+        "col1": [1, 2, 3], "col2": [4, 5, 6], "col3": [7, 8, 9]
+    })
+
+    def test_setup_metadata_success(self):
+        """Test that metadata entries with keys not in _columns are added successfully."""
+        metadata = {"site_id": 1234, "network": "FDRI", "some_info": {1: "a", 2: "b", 3: "c"}}
+        with patch.object(TimeSeries, '_setup'):
+            ts = TimeSeries(self.df, time_name="time")
+            ts._setup_metadata(metadata)
+        self.assertEqual(ts._metadata, metadata)
+
+    def test_setup_metadata_conflict(self):
+        """Test that providing a metadata key that conflicts with _columns raises a KeyError."""
+        metadata = {"col1": 1234}
+        with patch.object(TimeSeries, '_setup'):
+            with self.assertRaises(KeyError):
+                ts = TimeSeries(self.df, time_name="time")
+                ts._setup_metadata(metadata)
+
+    def test_setup_metadata_empty(self):
+        """Test that passing an empty metadata dictionary leaves _metadata unchanged."""
+        metadata = {}
+        with patch.object(TimeSeries, '_setup'):
+            ts = TimeSeries(self.df, time_name="time")
+            ts._setup_metadata(metadata)
+        self.assertEqual(ts._metadata, {})

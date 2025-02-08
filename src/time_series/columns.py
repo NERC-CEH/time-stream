@@ -205,7 +205,7 @@ class TimeSeriesColumn(ABC):
         """
         try:
             return self.metadata(name, strict=True)[name]
-        except (KeyError):
+        except KeyError:
             raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
 
     def __dir__(self) -> list[str]:
