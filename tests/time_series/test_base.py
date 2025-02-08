@@ -1543,7 +1543,7 @@ class TestColumnMetadata(unittest.TestCase):
         "col1": [1, 2, 3], "col2": [4, 5, 6], "col3": [7, 8, 9]
     })
     metadata = {
-        "col1": {"key1": "1", "key2": "10", "key3": "100"},
+        "col1": {"key1": "1", "key2": "10", "key3": "100", "key4": "1000"},
         "col2": {"key1": "2", "key2": "20", "key3": "200"},
         "col3": {"key1": "3", "key2": "30", "key3": "300"},
     }
@@ -1555,13 +1555,13 @@ class TestColumnMetadata(unittest.TestCase):
 
     def test_retrieve_metadata_for_single_column(self):
         """Test retrieving metadata for a single column."""
-        expected = {"col1": {"key1": "1", "key2": "10", "key3": "100"}}
+        expected = {"col1": {"key1": "1", "key2": "10", "key3": "100", "key4": "1000"}}
         result = self.ts.column_metadata("col1")
         self.assertEqual(result, expected)
 
     def test_retrieve_metadata_for_multiple_columns(self):
         """Test retrieving metadata for multiple columns."""
-        expected = {"col1": {"key1": "1", "key2": "10", "key3": "100"},
+        expected = {"col1": {"key1": "1", "key2": "10", "key3": "100", "key4": "1000"},
                     "col2": {"key1": "2", "key2": "20", "key3": "200"}}
         result = self.ts.column_metadata(["col1", "col2"])
         self.assertEqual(result, expected)
@@ -1583,11 +1583,15 @@ class TestColumnMetadata(unittest.TestCase):
         with self.assertRaises(KeyError):
             self.ts.column_metadata("nonexistent_column")
 
-    def test_retrieve_metadata_for_nonexistent_key(self):
-        """Test that an empty dictionary value is returned when requesting a non-existent metadata key for an
-        existing column"""
-        expected = {"col1": {"nonexistent_key": None}}
-        result = self.ts.column_metadata("col1", ["nonexistent_key"])
+    def test_retrieve_metadata_for_nonexistent_key_single_column(self):
+        """Test that error raised when requesting a non-existent metadata key for an existing single column"""
+        with self.assertRaises(KeyError):
+            self.ts.column_metadata("col1", "nonexistent_key")
+
+    def test_retrieve_metadata_for_nonexistent_key_in_one_column(self):
+        """Test that dict returned when requesting a metadata key exists in one column, but not another"""
+        expected = {"col1": {"key4": "1000"}, "col2": {"key4": None}}
+        result = self.ts.column_metadata(["col1", "col2"], "key4")
         self.assertEqual(result, expected)
 
 
@@ -1624,4 +1628,10 @@ class TestMetadata(unittest.TestCase):
     def test_retrieve_metadata_for_nonexistent_key_raises_error(self):
         """Test that an error is raised for a non-existent key."""
         with self.assertRaises(KeyError):
-            _ = self.ts.metadata("nonexistent_key")
+            self.ts.metadata("nonexistent_key")
+
+    def test_retrieve_metadata_for_nonexistent_key_strict_false(self):
+        """Test that an empty result is returned when strict is false for non-existent key."""
+        expected = {'nonexistent_key': None}
+        result = self.ts.metadata("nonexistent_key", strict=False)
+        self.assertEqual(result, expected)

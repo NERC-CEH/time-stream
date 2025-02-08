@@ -58,10 +58,14 @@ class TestMetadata(BaseTimeSeriesTest):
         self.assertEqual(result, expected)
 
     def test_retrieve_metadata_for_nonexistent_key(self):
-        """Test that an empty dictionary value is returned when requesting a non-existent metadata key for an
-        existing column"""
-        expected = {"nonexistent_key": None}
-        result = self.column.metadata("nonexistent_key")
+        """Test that error raised when requesting a non-existent metadata key"""
+        with self.assertRaises(KeyError):
+            self.column.metadata("nonexistent_key")
+
+    def test_retrieve_metadata_for_nonexistent_key_strict_false(self):
+        """Test that an empty result is returned when strict is false for non-existent key."""
+        expected = {'nonexistent_key': None}
+        result = self.column.metadata("nonexistent_key", strict=False)
         self.assertEqual(result, expected)
 
 

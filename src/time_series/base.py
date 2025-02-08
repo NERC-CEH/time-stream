@@ -517,27 +517,31 @@ class TimeSeries:
         """
         return aggregation_function.create().apply(self, aggregation_period, column_name)
 
-    def metadata(self, key: Optional[Union[str, Sequence[str]]] = None) -> dict:
+    def metadata(self, key: Optional[Sequence[str]] = None, strict: bool = True) -> Dict[str, Any]:
         """Retrieve metadata for all or specific keys.
 
         Args:
             key: A specific key or list/tuple of keys to filter the metadata. If None, all metadata is returned.
-
+            strict: If True, raises a KeyError when a key is missing.  Otherwise, missing keys return None.
         Returns:
             A dictionary of the requested metadata.
 
         Raises:
             KeyError: If the requested key(s) are not found in the metadata.
         """
+        if not key:
+            return self._metadata
+
         if isinstance(key, str):
             key = [key]
-        try:
-            if key is None:
-                return self._metadata
-            else:
-                return {k: self._metadata[k] for k in key}
-        except KeyError:
-            raise KeyError(key)
+
+        result = {}
+        for k in key:
+            value = self._metadata.get(k)
+            if strict and value is None:
+                raise KeyError(f"Metadata key '{k}' not found")
+            result[k] = value
+        return result
 
     def column_metadata(
         self, column: Optional[Union[str, Sequence[str]]] = None, key: Optional[Union[str, Sequence[str]]] = None
@@ -552,7 +556,7 @@ class TimeSeries:
             A dictionary of the requested metadata.
 
         Raises:
-            KeyError: If the requested key(s) are not found in the metadata.
+            KeyError: If the requested key(s) are not found in the metadata of any column.
         """
         if isinstance(column, str):
             column = [column]
@@ -562,7 +566,16 @@ class TimeSeries:
         if isinstance(key, str):
             key = [key]
 
-        result = {col: self.columns[col].metadata(key) for col in column}
+        result = {col: self.columns[col].metadata(key, strict=False) for col in column}
+
+        missing_keys = {
+            k for col, metadata in result.items() for k, v in metadata.items()
+            if all(metadata.get(k) is None for metadata in result.values())
+        }
+
+        if missing_keys:
+            raise KeyError(f"Metadata key(s) '{missing_keys}' not found in any column.")
+
         return result
 
     def __getattr__(self, name: str) -> Any:
@@ -613,7 +626,7 @@ class TimeSeries:
                 return self.columns[name]
             elif name not in self.columns:
                 # If the attribute name does not match a column, it assumes this is a Metadata key.
-                return self.metadata(name)[name]
+                return self.metadata(name, strict=True)[name]
             else:
                 raise AttributeError
 

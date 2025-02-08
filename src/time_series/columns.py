@@ -40,25 +40,31 @@ class TimeSeriesColumn(ABC):
         if self.name not in self._ts.df.columns:
             raise ValueError(f"Column '{self.name}' not found in TimeSeries.")
 
-    def metadata(self, key: Optional[Sequence[str]] = None) -> Dict[str, Any]:
+    def metadata(self, key: Optional[Sequence[str]] = None, strict: bool = True) -> Dict[str, Any]:
         """Retrieve metadata for all or specific keys.
 
         Args:
             key: A specific key or list/tuple of keys to filter the metadata. If None, all metadata is returned.
-
+            strict: If True, raises a KeyError when a key is missing.  Otherwise, missing keys return None.
         Returns:
             A dictionary of the requested metadata.
 
         Raises:
             KeyError: If the requested key(s) are not found in the metadata.
         """
+        if not key:
+            return self._metadata
+
         if isinstance(key, str):
             key = [key]
 
-        if key is None:
-            return self._metadata
-        else:
-            return {k: self._metadata.get(k) for k in key}
+        result = {}
+        for k in key:
+            value = self._metadata.get(k)
+            if strict and value is None:
+                raise KeyError(f"Metadata key '{k}' not found")
+            result[k] = value
+        return result
 
     def remove_metadata(self, key: Optional[Union[str, list[str], tuple[str, ...]]] = None) -> None:
         """Removes metadata associated with a column, either completely or for specific keys.
@@ -198,8 +204,8 @@ class TimeSeriesColumn(ABC):
             AttributeError: If attribute not found.
         """
         try:
-            return self._metadata[name]
-        except (KeyError, AttributeError):
+            return self.metadata(name, strict=True)[name]
+        except (KeyError):
             raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
 
     def __dir__(self) -> list[str]:
