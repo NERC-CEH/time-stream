@@ -231,7 +231,7 @@ class TestRelationshipManagerGetRelationships(BaseRelationshipTest):
         """Test getting relationships when there are none for a column."""
         for _, col in self.ts.columns.items():
             result = self.relationship_manager._get_relationships(col)
-            self.assertEqual(set(), result)
+            self.assertEqual(result, [])
 
 
 class TestRelationshipManagerHandleDeletion(BaseRelationshipTest):
@@ -249,8 +249,8 @@ class TestRelationshipManagerHandleDeletion(BaseRelationshipTest):
 
         self.ts._relationship_manager._handle_deletion(self.ts.colA)
 
-        self.assertEqual(set(), self.ts._relationship_manager._get_relationships(col_a))
-        self.assertEqual(set(), self.ts._relationship_manager._get_relationships(col_b))
+        self.assertEqual([], self.ts._relationship_manager._get_relationships(col_a))
+        self.assertEqual([], self.ts._relationship_manager._get_relationships(col_b))
         self.assertNotIn(col_b.name, self.ts.columns)
 
     def test_multiple_cascade(self):
@@ -267,9 +267,9 @@ class TestRelationshipManagerHandleDeletion(BaseRelationshipTest):
 
         self.ts._relationship_manager._handle_deletion(self.ts.colA)
 
-        self.assertEqual(set(), self.ts._relationship_manager._get_relationships(col_a))
-        self.assertEqual(set(), self.ts._relationship_manager._get_relationships(col_b))
-        self.assertEqual(set(), self.ts._relationship_manager._get_relationships(col_c))
+        self.assertEqual([], self.ts._relationship_manager._get_relationships(col_a))
+        self.assertEqual([], self.ts._relationship_manager._get_relationships(col_b))
+        self.assertEqual([], self.ts._relationship_manager._get_relationships(col_c))
         self.assertNotIn(col_b.name, self.ts.columns)
         self.assertNotIn(col_c.name, self.ts.columns)
 
@@ -285,8 +285,8 @@ class TestRelationshipManagerHandleDeletion(BaseRelationshipTest):
 
         self.ts._relationship_manager._handle_deletion(self.ts.colA)
 
-        self.assertEqual(set(), self.ts._relationship_manager._get_relationships(col_a))
-        self.assertEqual(set(), self.ts._relationship_manager._get_relationships(col_b))
+        self.assertEqual([], self.ts._relationship_manager._get_relationships(col_a))
+        self.assertEqual([], self.ts._relationship_manager._get_relationships(col_b))
         self.assertIn(col_b.name, self.ts.columns)
 
     def test_multiple_unlink(self):
@@ -303,8 +303,8 @@ class TestRelationshipManagerHandleDeletion(BaseRelationshipTest):
 
         self.ts._relationship_manager._handle_deletion(self.ts.colA)
 
-        self.assertEqual(set(), self.ts._relationship_manager._get_relationships(col_a))
-        self.assertEqual({relationship2}, self.ts._relationship_manager._get_relationships(col_b))
+        self.assertEqual([], self.ts._relationship_manager._get_relationships(col_a))
+        self.assertEqual([relationship2], self.ts._relationship_manager._get_relationships(col_b))
         self.assertIn(col_b.name, self.ts.columns)
         self.assertIn(col_c.name, self.ts.columns)
 

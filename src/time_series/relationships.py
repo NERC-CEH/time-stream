@@ -155,7 +155,7 @@ class RelationshipManager:
         if relationship in self._get_relationships(relationship.other_column):
             self._relationships[relationship.other_column.name].remove(relationship)
 
-    def _get_relationships(self, column: "TimeSeriesColumn") -> set[Relationship]:
+    def _get_relationships(self, column: "TimeSeriesColumn") -> list[Relationship]:
         """Retrieves relationships for a column.
 
         Args:
@@ -164,7 +164,7 @@ class RelationshipManager:
         Returns:
             The set of relationships the column has.
         """
-        return self._relationships.get(column.name, set())
+        return list(self._relationships.get(column.name, set()))
 
     def _handle_deletion(self, column: "TimeSeriesColumn") -> None:
         """Handles the deletion of a column based on the relationship's deletion policy.
