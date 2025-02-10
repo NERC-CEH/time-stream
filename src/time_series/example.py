@@ -50,22 +50,31 @@ ts = TimeSeries(
 
 ts.df = ts.df.with_columns((pl.col("pressure") * 2).alias("pressure"))
 
+# Examples of adding relationships etc.
 
+# Add to column object, by string name
 ts.supp1.add_relationship("pressure")
-print(ts._relationship_manager._relationships)
+print(ts.supp1.get_relationships())
+print(ts.pressure.get_relationships())
 
-# ts.supp1.remove()
-# print(ts.columns)
-# print(ts._relationship_manager._relationships)
+# Add to column object, by column object
+ts.temperature.add_relationship(ts.flagcol)
+print(ts.temperature.get_relationships())
+print(ts.flagcol.get_relationships())
 
+# Remove relationship from one column should remove it from the other
+ts.temperature.remove_relationship(ts.flagcol)
+print(ts.temperature.get_relationships())
+print(ts.flagcol.get_relationships())
 
-ts.temperature.add_relationship("flagcol")
-print(ts._relationship_manager._relationships)
+# Removing a column completely should handle the relationships
+print(ts.columns)
+ts.supp1.remove()
+print(ts.columns)
+print(ts.pressure.get_relationships())
 
-# ts.flagcol.add_relationship("temperature")
-# print(ts._relationship_manager._relationships)
-
-ts.pressure.remove()
-# print(ts.columns)
-print(ts._relationship_manager._relationships)
-# pass
+# Removing a data column removes any linked flag columns
+ts.temperature.add_relationship(ts.flagcol)
+print(ts.columns)
+ts.temperature.remove()
+print(ts.columns)
