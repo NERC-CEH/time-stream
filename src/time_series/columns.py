@@ -1,6 +1,6 @@
 import copy
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any, Dict, Optional, Sequence, Union
+from typing import TYPE_CHECKING, Any, Dict, Optional, Sequence, Type, Union
 
 import polars as pl
 
@@ -89,32 +89,73 @@ class TimeSeriesColumn(ABC):
         else:
             self._metadata = {k: v for k, v in self.metadata().items() if k not in key}
 
-    def set_as_supplementary(self) -> "TimeSeriesColumn":
+    def _set_as(
+        self,
+        column_type: "Type[TimeSeriesColumn]",
+        related_columns: Optional[Union["TimeSeriesColumn", str, list[Union["TimeSeriesColumn", str]]]] = None,
+        *args,
+        **kwargs,
+    ) -> "TimeSeriesColumn":
+        """Converts the column to a specified column type while preserving metadata.
+
+        Args:
+            column_type: Type of TimeSeriesColumn to convert to.
+            related_columns: Optional column(s) to relate to this converted column
+            args: Arguments passed to column_type init.
+            kwargs: Keyword arguments passed to column_type init.
+
+        Returns:
+            The converted column object.
+        """
+        if type(self) is column_type:
+            return self
+
+        column = column_type(*args, **kwargs)
+        self._ts._columns[self.name] = column
+
+        # Remove existing relationships from related columns
+        for relationship in self.get_relationships():
+            self.remove_relationship(relationship.other_column)
+
+        # Add new relationships as specified by the user
+        if related_columns:
+            column.add_relationship(related_columns)
+
+        return column
+
+    def set_as_supplementary(
+        self, related_columns: Optional[Union["TimeSeriesColumn", str, list[Union["TimeSeriesColumn", str]]]] = None
+    ) -> "TimeSeriesColumn":
         """Converts the column to a SupplementaryColumn while preserving metadata.
 
         If the column is already a SupplementaryColumn, no changes are made.
 
+        Args:
+            related_columns: Column(s) to be given a relationship with the new supplementary column.
+
         Returns:
             The supplementary column object.
         """
-        if type(self) is SupplementaryColumn:
-            return self
-        column = SupplementaryColumn(self.name, self._ts, self.metadata())
-        self._ts._columns[self.name] = column
+        column = self._set_as(SupplementaryColumn, related_columns, self.name, self._ts, self.metadata())
         return column
 
-    def set_as_flag(self, flag_system: str) -> "TimeSeriesColumn":
+    def set_as_flag(
+        self,
+        flag_system: str,
+        related_columns: Optional[Union["TimeSeriesColumn", str, list[Union["TimeSeriesColumn", str]]]] = None,
+    ) -> "TimeSeriesColumn":
         """Converts the column to a FlagColumn while preserving metadata.
 
-        If the column is already a SupplementaryColumn, no changes are made.
+        If the column is already a FlagColumn, no changes are made.
+
+        Args:
+            flag_system: The name of the flag system used for flagging.
+            related_columns: Column(s) to be given a relationship with the new flag column.
 
         Returns:
             The flag column object.
         """
-        if type(self) is FlagColumn:
-            return self
-        column = FlagColumn(self.name, self._ts, flag_system, self.metadata())
-        self._ts._columns[self.name] = column
+        column = self._set_as(FlagColumn, related_columns, self.name, self._ts, flag_system, self.metadata())
         return column
 
     def unset(self) -> "TimeSeriesColumn":
@@ -125,10 +166,7 @@ class TimeSeriesColumn(ABC):
         Returns:
             The data column object.
         """
-        if type(self) is DataColumn:
-            return self
-        column = DataColumn(self.name, self._ts, self.metadata())
-        self._ts._columns[self.name] = column
+        column = self._set_as(DataColumn, None, self.name, self._ts, self.metadata())
         return column
 
     def remove(self) -> None:
@@ -197,7 +235,7 @@ class TimeSeriesColumn(ABC):
         return self._ts.select([self.name])
 
     @abstractmethod
-    def add_relationship(self, other: Union["TimeSeriesColumn", str]) -> None:
+    def add_relationship(self, other: Union["TimeSeriesColumn", str, list[Union["TimeSeriesColumn", str]]]) -> None:
         """Defines relationships between columns.
 
         Args:
@@ -214,10 +252,17 @@ class TimeSeriesColumn(ABC):
         if isinstance(other, str):
             other = self._ts.columns[other]
 
-        relationships = self._ts._relationship_manager._get_relationships(self).copy()
-        for relationship in relationships:
+        for relationship in self.get_relationships():
             if relationship.other_column == other:
                 self._ts._relationship_manager._remove(relationship)
+
+    def get_relationships(self) -> list["Relationship"]:
+        """Retrieves all relationships associated with this column.
+
+        Returns:
+            The list of Relationship objects for this column.
+        """
+        return self._ts._relationship_manager._get_relationships(self)
 
     def __str__(self) -> str:
         """Return the string representation of the Column."""
@@ -359,49 +404,55 @@ class PrimaryTimeColumn(TimeSeriesColumn):
 class DataColumn(TimeSeriesColumn):
     """Represents primary data columns."""
 
-    def add_relationship(self, other: Union["TimeSeriesColumn", str]) -> None:
-        """Adds a relationship between this data column and another supplementary or flag column.
+    def add_relationship(self, other: Union["TimeSeriesColumn", str, list[Union["TimeSeriesColumn", str]]]) -> None:
+        """Adds a relationship between this data column and supplementary or flag column(s).
 
         Args:
-            other: Supplementary or flag column to associate.
+            other: Supplementary or flag column(s) to associate.
 
         Raises:
             TypeError: If any other column is not supplementary or flag.
         """
-        if isinstance(other, str):
-            other = self._ts.columns[other]
+        if not isinstance(other, list):
+            other = [other]
 
-        if type(other) is SupplementaryColumn:
-            relationship = Relationship(self, other, RelationshipType.MANY_TO_MANY, DeletionPolicy.UNLINK)
-        elif type(other) is FlagColumn:
-            relationship = Relationship(self, other, RelationshipType.ONE_TO_MANY, DeletionPolicy.CASCADE)
-        else:
-            raise TypeError(f"Related column must be supplementary or flag: {other.name}:{type(other)}")
+        other = [self._ts.columns[col] if isinstance(col, str) else col for col in other]
 
-        self._ts._relationship_manager._add(relationship)
+        for col in other:
+            if type(col) is SupplementaryColumn:
+                relationship = Relationship(self, col, RelationshipType.MANY_TO_MANY, DeletionPolicy.UNLINK)
+            elif type(col) is FlagColumn:
+                relationship = Relationship(self, col, RelationshipType.ONE_TO_MANY, DeletionPolicy.CASCADE)
+            else:
+                raise TypeError(f"Related column must be supplementary or flag: {col.name}:{type(col)}")
+
+            self._ts._relationship_manager._add(relationship)
 
 
 class SupplementaryColumn(TimeSeriesColumn):
     """Represents supplementary columns (e.g., metadata, extra information)."""
 
-    def add_relationship(self, other: Union["TimeSeriesColumn", str]) -> None:
-        """Adds a relationship between this supplementary column and another data column.
+    def add_relationship(self, other: Union["TimeSeriesColumn", str, list[Union["TimeSeriesColumn", str]]]) -> None:
+        """Adds a relationship between this supplementary column and data column(s).
 
         Args:
-            other: Data column to associate.
+            other: Data column(s) to associate.
 
         Raises:
             TypeError: If any other column is not data.
         """
-        if isinstance(other, str):
-            other = self._ts.columns[other]
+        if not isinstance(other, list):
+            other = [other]
 
-        if type(other) is DataColumn:
-            relationship = Relationship(other, self, RelationshipType.MANY_TO_MANY, DeletionPolicy.UNLINK)
-        else:
-            raise TypeError(f"Related column must be data: {other.name}:{type(other)}")
+        other = [self._ts.columns[col] if isinstance(col, str) else col for col in other]
 
-        self._ts._relationship_manager._add(relationship)
+        for col in other:
+            if type(col) is DataColumn:
+                relationship = Relationship(col, self, RelationshipType.MANY_TO_MANY, DeletionPolicy.UNLINK)
+            else:
+                raise TypeError(f"Related column must be data: {col.name}:{type(col)}")
+
+            self._ts._relationship_manager._add(relationship)
 
 
 class FlagColumn(SupplementaryColumn):
@@ -426,24 +477,27 @@ class FlagColumn(SupplementaryColumn):
         super().__init__(name, ts, metadata)
         self.flag_system = self._ts.flag_systems[flag_system]
 
-    def add_relationship(self, other: Union["TimeSeriesColumn", str]) -> None:
-        """Adds a relationship between this flag column and another data column.
+    def add_relationship(self, other: Union["TimeSeriesColumn", str, list[Union["TimeSeriesColumn", str]]]) -> None:
+        """Adds a relationship between this flag column and data column(s).
 
         Args:
-            other: Data column to associate.
+            other: Data column(s) to associate.
 
         Raises:
             TypeError: If any other column is not data.
         """
-        if isinstance(other, str):
-            other = self._ts.columns[other]
+        if not isinstance(other, list):
+            other = [other]
 
-        if type(other) is DataColumn:
-            relationship = Relationship(other, self, RelationshipType.ONE_TO_MANY, DeletionPolicy.CASCADE)
-        else:
-            raise TypeError(f"Related column must be data: {other.name}:{type(other)}")
+        other = [self._ts.columns[col] if isinstance(col, str) else col for col in other]
 
-        self._ts._relationship_manager._add(relationship)
+        for col in other:
+            if type(col) is DataColumn:
+                relationship = Relationship(col, self, RelationshipType.ONE_TO_MANY, DeletionPolicy.CASCADE)
+            else:
+                raise TypeError(f"Related column must be data: {col.name}:{type(col)}")
+
+            self._ts._relationship_manager._add(relationship)
 
     def add_flag(self, flag: Union[int, str], expr: pl.Expr = pl.lit(True)) -> None:
         """Adds a flag value to this FlagColumn using a bitwise OR operation.
