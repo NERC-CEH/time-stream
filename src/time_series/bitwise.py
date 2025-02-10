@@ -1,8 +1,15 @@
-from enum import Flag
+from enum import EnumType, Flag
 from typing import Union
 
 
-class BitwiseFlag(int, Flag):
+class BitwiseMeta(EnumType):
+    def __repr__(self):
+        """Return a helpful representation of the flag, listing all enum members."""
+        members = ", ".join(f"{name}={member.value}" for name, member in self.__members__.items())
+        return f"<{self.__name__} ({members})>"
+
+
+class BitwiseFlag(int, Flag, metaclass=BitwiseMeta):
     """A flag enumeration that allows efficient flagging using bitwise operations."""
 
     def __new__(cls, value: int) -> Union[int, Flag]:

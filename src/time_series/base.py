@@ -1,6 +1,6 @@
 from collections import Counter
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Dict, Iterable, Iterator, Optional, Type, Union
+from typing import TYPE_CHECKING, Any, Dict, Iterable, Iterator, Optional, Sequence, Type, Union
 
 import polars as pl
 
@@ -26,6 +26,7 @@ class TimeSeries:
         supplementary_columns: Optional[list] = None,
         flag_systems: Optional[Union[Dict[str, dict], Dict[str, Type[Enum]]]] = None,
         flag_columns: Optional[Dict[str, str]] = None,
+        metadata: Optional[Dict[str, Any]] = None,
         column_metadata: Optional[Dict[str, Dict[str, Any]]] = None,
     ) -> None:
         """Initialise a TimeSeries instance.
@@ -40,6 +41,7 @@ class TimeSeries:
             flag_systems: A dictionary defining the flagging systems that can be used for flag columns.
             flag_columns: Columns within the dataframe that are considered flag columns.
                           Mapping of {column name: flag system name}.
+            metadata: Metadata relevant to the overall time series, e.g. network, site ID, license, etc.
             column_metadata: The metadata of the variables within the time series.
         """
         self._time_name = time_name
@@ -49,13 +51,17 @@ class TimeSeries:
 
         self._flag_manager = TimeSeriesFlagManager(self, flag_systems)
         self._columns: dict[str, TimeSeriesColumn] = {}
-
+        self._metadata = {}
         self._df = df
 
-        self._setup(supplementary_columns or [], flag_columns or {}, column_metadata or {})
+        self._setup(supplementary_columns or [], flag_columns or {}, column_metadata or {}, metadata or {})
 
     def _setup(
-        self, supplementary_columns: list[str], flag_columns: dict[str, str], column_metadata: dict[str, dict[str, Any]]
+        self,
+        supplementary_columns: list[str],
+        flag_columns: dict[str, str],
+        column_metadata: dict[str, dict[str, Any]],
+        metadata: dict[str, Any],
     ) -> None:
         """
         Performs the initial setup for the TimeSeries instance.
@@ -71,12 +77,14 @@ class TimeSeries:
             supplementary_columns: A list of column names that are considered supplementary.
             flag_columns: A dictionary mapping flag column names to their corresponding flag systems.
             column_metadata: A dictionary containing metadata for columns in the DataFrame.
+            metadata: The user defined metadata for this time series instance.
         """
         self._set_time_zone()
         self.sort_time()
         self._validate_resolution()
         self._validate_periodicity()
         self._setup_columns(supplementary_columns, flag_columns, column_metadata)
+        self._setup_metadata(metadata)
 
     def _setup_columns(
         self,
@@ -137,6 +145,24 @@ class TimeSeries:
             else:
                 data_col = DataColumn(col_name, self, col_metadata)
                 self._columns[col_name] = data_col
+
+    def _setup_metadata(self, metadata: dict[str, Any]) -> None:
+        """Configure metadata for the Time Series instance.
+
+        Processes a dictionary of metadata entries and adds them to the instance's internal metadata storage
+        (`_metadata`). Verifies that the key does not conflict with any existing column names stored in `_columns`.
+        KeyError is raised to prevent naming collisions between metadata and column identifiers.
+
+        Args:
+            metadata: The user defined metadata for this time series instance.
+
+        Raises:
+            KeyError: If a metadata key is already present in the instance's `_columns`.
+        """
+        for k, v in metadata.items():
+            if k in self._df.columns:
+                raise KeyError(f"Metadata key {k} exists as a Column in the Time Series.")
+            self._metadata[k] = v
 
     @property
     def time_name(self) -> str:
@@ -321,8 +347,8 @@ class TimeSeries:
         """
         self._validate_time_column(new_df)
         self._remove_missing_columns(new_df)
-        self._add_new_columns(new_df)
         self._df = new_df
+        self._add_new_columns(new_df)
 
     def _validate_time_column(self, df: pl.DataFrame) -> None:
         """Validate that the DataFrame contains the required time column with unchanged timestamps.
@@ -365,11 +391,15 @@ class TimeSeries:
         """
         new_columns = list(set(new_df.columns) - set(self.df.columns))
         for col_name in new_columns:
+            # Add a placeholder for the new column, so that the Column init knows there is a new column expected.
+            self._columns[col_name] = None
+
+            # Now add the actual column.
             data_col = DataColumn(col_name, self, {})
             self._columns[col_name] = data_col
 
     @property
-    def time_column(self) -> PrimaryTimeColumn:
+    def time_column(self) -> Union[PrimaryTimeColumn, None]:
         """The primary time column of the TimeSeries."""
         time_column = [col for col in self._columns.values() if isinstance(col, PrimaryTimeColumn)]
         num_cols = len(time_column)
@@ -381,23 +411,23 @@ class TimeSeries:
             raise ValueError(f"Multiple primary time columns found: {time_column}")
 
     @property
-    def data_columns(self) -> dict[str, DataColumn]:
-        columns = {col.name: col for col in self._columns.values() if isinstance(col, DataColumn)}
+    def data_columns(self) -> dict[str, TimeSeriesColumn]:
+        columns = {col.name: col for col in self._columns.values() if type(col) is DataColumn}
         return columns
 
     @property
-    def supplementary_columns(self) -> dict[str, SupplementaryColumn]:
-        columns = {col.name: col for col in self._columns.values() if isinstance(col, SupplementaryColumn)}
+    def supplementary_columns(self) -> dict[str, TimeSeriesColumn]:
+        columns = {col.name: col for col in self._columns.values() if type(col) is SupplementaryColumn}
         return columns
 
     @property
-    def flag_columns(self) -> dict[str, FlagColumn]:
-        columns = {col.name: col for col in self._columns.values() if isinstance(col, FlagColumn)}
+    def flag_columns(self) -> dict[str, TimeSeriesColumn]:
+        columns = {col.name: col for col in self._columns.values() if type(col) is FlagColumn}
         return columns
 
     @property
     def columns(self) -> dict[str, TimeSeriesColumn]:
-        columns = {col.name: col for col in self._columns.values() if not isinstance(col, PrimaryTimeColumn)}
+        columns = {col.name: col for col in self._columns.values() if type(col) is not PrimaryTimeColumn}
         return columns
 
     def select(self, col_names: list[str]) -> "TimeSeries":
@@ -417,12 +447,13 @@ class TimeSeries:
             raise KeyError(f"Invalid columns found: {invalid_columns}")
 
         new_df = self.df.select([self.time_name] + col_names)
-        new_supplementary_columns = [self.columns[col].name for col in col_names if col in self.supplementary_columns]
-        new_flag_columns = {
-            self.columns[col].name: self.columns[col].flag_system for col in col_names if col in self.flag_columns
-        }
+        new_columns = [self.columns[col] for col in new_df.columns if col in self.columns]
+
+        # Construct new time series object based on updated columns.  Need to build new column mappings etc.
+        new_supplementary_columns = [col.name for col in new_columns if col.name in self.supplementary_columns]
+        new_flag_columns = {col.name: col.flag_system for col in new_columns if col.name in self.flag_columns}
         new_flag_systems = {k: v for k, v in self.flag_systems.items() if k in new_flag_columns.values()}
-        new_metadata = {col: self.columns[col].metadata() for col in col_names}
+        new_metadata = {col.name: col.metadata() for col in new_columns}
 
         ts = TimeSeries(
             df=new_df,
@@ -505,6 +536,69 @@ class TimeSeries:
         """
         return aggregation_function.create().apply(self, aggregation_period, column_name)
 
+    def metadata(self, key: Optional[Sequence[str]] = None, strict: bool = True) -> Dict[str, Any]:
+        """Retrieve metadata for all or specific keys.
+
+        Args:
+            key: A specific key or list/tuple of keys to filter the metadata. If None, all metadata is returned.
+            strict: If True, raises a KeyError when a key is missing.  Otherwise, missing keys return None.
+        Returns:
+            A dictionary of the requested metadata.
+
+        Raises:
+            KeyError: If the requested key(s) are not found in the metadata.
+        """
+        if not key:
+            return self._metadata
+
+        if isinstance(key, str):
+            key = [key]
+
+        result = {}
+        for k in key:
+            value = self._metadata.get(k)
+            if strict and value is None:
+                raise KeyError(f"Metadata key '{k}' not found")
+            result[k] = value
+        return result
+
+    def column_metadata(
+        self, column: Optional[Union[str, Sequence[str]]] = None, key: Optional[Union[str, Sequence[str]]] = None
+    ) -> Dict[str, Dict[str, Any]]:
+        """Retrieve metadata for a given column(s), for all or specific keys.
+
+        Args:
+            column: A specific column or list of columns to filter the metadata. If None, all columns are returned.
+            key: A specific key or list/tuple of keys to filter the metadata. If None, all metadata is returned.
+
+        Returns:
+            A dictionary of the requested metadata.
+
+        Raises:
+            KeyError: If the requested key(s) are not found in the metadata of any column.
+        """
+        if isinstance(column, str):
+            column = [column]
+        elif column is None:
+            column = self.columns.keys()
+
+        if isinstance(key, str):
+            key = [key]
+
+        result = {col: self.columns[col].metadata(key, strict=False) for col in column}
+
+        missing_keys = {
+            k
+            for col, metadata in result.items()
+            for k, v in metadata.items()
+            if all(metadata.get(k) is None for metadata in result.values())
+        }
+
+        if missing_keys:
+            raise KeyError(f"Metadata key(s) '{missing_keys}' not found in any column.")
+
+        return result
+
     def __getattr__(self, name: str) -> Any:
         """Dynamically handle attribute access for the TimeSeries object.
 
@@ -514,6 +608,7 @@ class TimeSeries:
         - If the attribute name matches the time column, it returns the time column as a Polars Series.
         - If the attribute name matches a column in the DataFrame (excluding the time column), it selects that column
             and returns a new TimeSeries instance.
+        - If the attribute name does not match a column, it assumes this is a Metadata key. Return that.
 
         Args:
             name: The attribute name being accessed.
@@ -522,9 +617,10 @@ class TimeSeries:
             If `name` is:
               - The time column: A Polars Series containing the time data.
               - A non-time column: The TimeSeries instance with that column selected.
+              - Metadata key: The metadata value for that key.
 
         Raises:
-            AttributeError: If attribute does not match a column or the time column.
+            AttributeError: If attribute does not match a column or the time column or a metadata key.
 
         Examples:
             >>> ts.timestamp  # Access the time column (assumed time_name set to "timestamp")
@@ -532,6 +628,9 @@ class TimeSeries:
 
             >>> ts.temperature  # Access a column named "temperature"
             <TimeSeries object, filtered to only contain the "temperature" data column>
+
+            >>> ts.site_id
+            <Metadata value for the given key>
         """
         try:
             # Delegate flag-related (non-private) calls to the flag manager
@@ -546,6 +645,9 @@ class TimeSeries:
                 # If the attribute name matches a column in the DataFrame (excluding the time column),
                 # select that Column
                 return self.columns[name]
+            elif name not in self.columns:
+                # If the attribute name does not match a column, it assumes this is a Metadata key.
+                return self.metadata(name, strict=True)[name]
             else:
                 raise AttributeError
 
@@ -625,7 +727,7 @@ class TimeSeries:
             DataFrame's columns.
         """
         default_attrs = list(super().__dir__())
-        custom_attrs = default_attrs + list(self.columns.keys()) + [self.time_name]
+        custom_attrs = default_attrs + list(self.columns.keys()) + [self.time_name] + list(self._metadata.keys())
         return sorted(set(custom_attrs))
 
     def __eq__(self, other: object) -> bool:
@@ -649,6 +751,7 @@ class TimeSeries:
             self.time_name != other.time_name
             or self.resolution != other.resolution
             or self.periodicity != other.periodicity
+            or self._metadata != other._metadata
         ):
             return False
 

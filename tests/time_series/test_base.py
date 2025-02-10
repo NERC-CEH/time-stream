@@ -8,7 +8,7 @@ from polars.testing import assert_series_equal, assert_frame_equal
 
 from time_series.base import TimeSeries
 from time_series.period import Period
-from time_series.columns import DataColumn, FlagColumn, PrimaryTimeColumn, SupplementaryColumn
+from time_series.columns import DataColumn, FlagColumn, PrimaryTimeColumn, SupplementaryColumn, TimeSeriesColumn
 
 TZ_UTC = timezone.utc
 
@@ -171,7 +171,7 @@ class TestSetSupplementaryColumns(unittest.TestCase):
         expected_data_columns = {"data_column": DataColumn("data_column", ts),
                                  }
         expected_supp_columns = {"supp_column1": SupplementaryColumn("supp_column1", ts),
-                                 "supp_column2": DataColumn("supp_column2", ts),
+                                 "supp_column2": SupplementaryColumn("supp_column2", ts),
                                  }
         self.assertEqual(ts.data_columns, expected_data_columns)
         self.assertEqual(ts.supplementary_columns, expected_supp_columns)
@@ -195,7 +195,7 @@ class TestSetSupplementaryColumns(unittest.TestCase):
         expected_data_columns = {"data_column": DataColumn("data_column", ts),
                                  }
         expected_supp_columns = {"supp_column1": SupplementaryColumn("supp_column1", ts),
-                                 "supp_column2": DataColumn("supp_column2", ts),
+                                 "supp_column2": SupplementaryColumn("supp_column2", ts),
                                  }
         self.assertEqual(ts.data_columns, expected_data_columns)
         self.assertEqual(ts.supplementary_columns, expected_supp_columns)
@@ -1213,7 +1213,9 @@ class TestAddNewColumns(unittest.TestCase):
         """Test that new columns are correctly added as DataColumns."""
         ts = TimeSeries(self.df, time_name="time")
         new_df = self.df.with_columns(pl.Series("col4", [1.1, 2.2, 3.3]))
-        ts._add_new_columns(new_df)
+
+        with patch.object(TimeSeriesColumn, "_validate_name", lambda *args, **kwargs: None):
+            ts._add_new_columns(new_df)
 
         self.assertIn("col4", ts.columns)
         self.assertIsInstance(ts.col4, DataColumn)
@@ -1298,36 +1300,42 @@ class TestGetattr(unittest.TestCase):
         "time": [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)],
         "col1": [1, 2, 3], "col2": [4, 5, 6], "col3": [7, 8, 9]
     })
-    metadata = {
+    column_metadata = {
         "col1": {"key1": "1", "key2": "10", "key3": "100"},
         "col2": {"key1": "2", "key2": "20", "key3": "200"},
         "col3": {"key1": "3", "key2": "30", "key3": "300"},
     }
 
+    metadata = {"site_id": 1234, "network": "FDRI", "some_info": {1: "a", 2: "b", 3: "c"}}
+
     def test_access_time_column(self):
         """Test accessing the time column."""
-        ts = TimeSeries(self.df, time_name="time", column_metadata=self.metadata)
+        ts = TimeSeries(self.df, time_name="time", column_metadata=self.column_metadata)
         result = ts.time
         expected = PrimaryTimeColumn("time", ts)
         self.assertEqual(result, expected)
 
     def test_access_data_column(self):
         """Test accessing a data column."""
-        ts = TimeSeries(self.df, time_name="time", column_metadata=self.metadata)
+        ts = TimeSeries(self.df, time_name="time", column_metadata=self.column_metadata)
         result = ts.col1
-        expected = DataColumn("col1", ts, self.metadata["col1"])
+        expected = DataColumn("col1", ts, self.column_metadata["col1"])
         self.assertEqual(result, expected)
 
-    def test_access_metadata_key(self):
-        """Test accessing metadata key for a single column."""
-        ts = TimeSeries(self.df, time_name="time", column_metadata=self.metadata)
-        result = ts.col1.key1
-        expected = "1"
+    @parameterized.expand([
+        ("int", "site_id", 1234),
+        ("str", "network", "FDRI"),
+        ("dict", "some_info", {1: "a", 2: "b", 3: "c"}),
+    ])
+    def test_access_metadata_key(self, _, key, expected):
+        """Test accessing metadata key."""
+        ts = TimeSeries(self.df, time_name="time", metadata=self.metadata)
+        result = ts.__getattr__(key)
         self.assertEqual(result, expected)
 
     def test_access_nonexistent_attribute(self):
-        """Test accessing metadata key without filtering to a single column."""
-        ts = TimeSeries(self.df, time_name="time", column_metadata=self.metadata)
+        """Test accessing metadata key that doesn't exist"""
+        ts = TimeSeries(self.df, time_name="time", column_metadata=self.column_metadata)
         with self.assertRaises(AttributeError):
             _ = ts.col1.key0
 
@@ -1397,20 +1405,20 @@ class TestSetupColumns(unittest.TestCase):
     def test_missing_supplementary_column_raises_error(self):
         """Test that an error raised when supplementary columns do not exist."""
         with self.assertRaises(KeyError):
-            ts = TimeSeries(df=self.df,
-                            time_name="time",
-                            supplementary_columns=["missing_col"],
-                            flag_columns={"flag_col": "example_flag_system"},
-                            flag_systems=self.flag_systems)
+            TimeSeries(df=self.df,
+                       time_name="time",
+                       supplementary_columns=["missing_col"],
+                       flag_columns={"flag_col": "example_flag_system"},
+                       flag_systems=self.flag_systems)
 
     def test_missing_flag_column_raises_error(self):
         """Test that an error raised when flag columns do not exist."""
         with self.assertRaises(KeyError):
-            ts = TimeSeries(df=self.df,
-                            time_name="time",
-                            supplementary_columns=["supp_col"],
-                            flag_columns={"missing_col": "example_flag_system"},
-                            flag_systems=self.flag_systems)
+            TimeSeries(df=self.df,
+                       time_name="time",
+                       supplementary_columns=["supp_col"],
+                       flag_columns={"missing_col": "example_flag_system"},
+                       flag_systems=self.flag_systems)
 
 
 class TestTimeColumn(unittest.TestCase):
@@ -1435,12 +1443,13 @@ class TestTimeColumn(unittest.TestCase):
     def test_multiple_time_columns_raises_error(self):
         """Test that error is raised if multiple primary time columns exist."""
         ts = TimeSeries(self.df, time_name="time")
-        with patch.object(ts, "_columns", {
-            "time1": PrimaryTimeColumn("time1", ts),
-            "time2": PrimaryTimeColumn("time2", ts),
-        }):
-            with self.assertRaises(ValueError):
-                _ = ts.time_column
+        with patch.object(TimeSeriesColumn, "_validate_name", lambda *args, **kwargs: None):
+            with patch.object(ts, "_columns", {
+                "time1": PrimaryTimeColumn("time1", ts),
+                "time2": PrimaryTimeColumn("time2", ts),
+            }):
+                with self.assertRaises(ValueError):
+                    _ = ts.time_column
 
 
 class TestTimeSeriesEquality(unittest.TestCase):
@@ -1526,3 +1535,133 @@ class TestTimeSeriesEquality(unittest.TestCase):
             periodicity=Period.of_days(1), flag_systems=self.flag_systems_2
         )
         self.assertNotEqual(self.ts_original, ts_different_flags)
+
+
+class TestColumnMetadata(unittest.TestCase):
+    df = pl.DataFrame({
+        "time": [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)],
+        "col1": [1, 2, 3], "col2": [4, 5, 6], "col3": [7, 8, 9]
+    })
+    metadata = {
+        "col1": {"key1": "1", "key2": "10", "key3": "100", "key4": "1000"},
+        "col2": {"key1": "2", "key2": "20", "key3": "200"},
+        "col3": {"key1": "3", "key2": "30", "key3": "300"},
+    }
+    ts = TimeSeries(df, time_name="time", column_metadata=metadata)
+
+    def test_retrieve_all_metadata(self):
+        """Test retrieving all metadata for all columns."""
+        self.assertEqual(self.ts.column_metadata(), self.metadata)
+
+    def test_retrieve_metadata_for_single_column(self):
+        """Test retrieving metadata for a single column."""
+        expected = {"col1": {"key1": "1", "key2": "10", "key3": "100", "key4": "1000"}}
+        result = self.ts.column_metadata("col1")
+        self.assertEqual(result, expected)
+
+    def test_retrieve_metadata_for_multiple_columns(self):
+        """Test retrieving metadata for multiple columns."""
+        expected = {"col1": {"key1": "1", "key2": "10", "key3": "100", "key4": "1000"},
+                    "col2": {"key1": "2", "key2": "20", "key3": "200"}}
+        result = self.ts.column_metadata(["col1", "col2"])
+        self.assertEqual(result, expected)
+
+    def test_retrieve_metadata_for_specific_key(self):
+        """Test retrieving a specific metadata key."""
+        expected = {"col1": {"key1": "1"}}
+        result = self.ts.column_metadata("col1", "key1")
+        self.assertEqual(result, expected)
+
+    def test_retrieve_metadata_for_multiple_keys(self):
+        """Test retrieving multiple metadata keys."""
+        expected = {"col1": {"key1": "1", "key3": "100"}}
+        result = self.ts.column_metadata("col1", ["key1", "key3"])
+        self.assertEqual(result, expected)
+
+    def test_retrieve_metadata_for_nonexistent_column(self):
+        """Test that a KeyError is raised when requesting a non-existent column."""
+        with self.assertRaises(KeyError):
+            self.ts.column_metadata("nonexistent_column")
+
+    def test_retrieve_metadata_for_nonexistent_key_single_column(self):
+        """Test that error raised when requesting a non-existent metadata key for an existing single column"""
+        with self.assertRaises(KeyError):
+            self.ts.column_metadata("col1", "nonexistent_key")
+
+    def test_retrieve_metadata_for_nonexistent_key_in_one_column(self):
+        """Test that dict returned when requesting a metadata key exists in one column, but not another"""
+        expected = {"col1": {"key4": "1000"}, "col2": {"key4": None}}
+        result = self.ts.column_metadata(["col1", "col2"], "key4")
+        self.assertEqual(result, expected)
+
+
+class TestMetadata(unittest.TestCase):
+    df = pl.DataFrame({
+        "time": [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)],
+        "col1": [1, 2, 3], "col2": [4, 5, 6], "col3": [7, 8, 9]
+    })
+    metadata = {"site_id": 1234, "network": "FDRI", "some_info": {1: "a", 2: "b", 3: "c"}}
+    ts = TimeSeries(df, time_name="time", metadata=metadata)
+
+    def test_retrieve_all_metadata(self):
+        """Test retrieving all metadata"""
+        result = self.ts.metadata()
+        self.assertEqual(result, self.metadata)
+
+    @parameterized.expand([
+        ("int", "site_id"),
+        ("str", "network"),
+        ("dict", "some_info"),
+    ])
+    def test_retrieve_metadata_for_specific_key(self, _, key):
+        """Test retrieving a specific metadata key."""
+        result = self.ts.metadata(key)
+        expected = {key: self.metadata[key]}
+        self.assertEqual(result, expected)
+
+    def test_retrieve_metadata_for_multiple_keys(self):
+        """Test retrieving multiple metadata keys."""
+        result = self.ts.metadata(["site_id", "network"])
+        expected = {"site_id": 1234, "network": "FDRI"}
+        self.assertEqual(result, expected)
+
+    def test_retrieve_metadata_for_nonexistent_key_raises_error(self):
+        """Test that an error is raised for a non-existent key."""
+        with self.assertRaises(KeyError):
+            self.ts.metadata("nonexistent_key")
+
+    def test_retrieve_metadata_for_nonexistent_key_strict_false(self):
+        """Test that an empty result is returned when strict is false for non-existent key."""
+        expected = {'nonexistent_key': None}
+        result = self.ts.metadata("nonexistent_key", strict=False)
+        self.assertEqual(result, expected)
+
+class TestSetupMetadata(unittest.TestCase):
+    df = pl.DataFrame({
+        "time": [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)],
+        "col1": [1, 2, 3], "col2": [4, 5, 6], "col3": [7, 8, 9]
+    })
+
+    def test_setup_metadata_success(self):
+        """Test that metadata entries with keys not in _columns are added successfully."""
+        metadata = {"site_id": 1234, "network": "FDRI", "some_info": {1: "a", 2: "b", 3: "c"}}
+        with patch.object(TimeSeries, '_setup'):
+            ts = TimeSeries(self.df, time_name="time")
+            ts._setup_metadata(metadata)
+        self.assertEqual(ts._metadata, metadata)
+
+    def test_setup_metadata_conflict(self):
+        """Test that providing a metadata key that conflicts with _columns raises a KeyError."""
+        metadata = {"col1": 1234}
+        with patch.object(TimeSeries, '_setup'):
+            with self.assertRaises(KeyError):
+                ts = TimeSeries(self.df, time_name="time")
+                ts._setup_metadata(metadata)
+
+    def test_setup_metadata_empty(self):
+        """Test that passing an empty metadata dictionary leaves _metadata unchanged."""
+        metadata = {}
+        with patch.object(TimeSeries, '_setup'):
+            ts = TimeSeries(self.df, time_name="time")
+            ts._setup_metadata(metadata)
+        self.assertEqual(ts._metadata, {})
