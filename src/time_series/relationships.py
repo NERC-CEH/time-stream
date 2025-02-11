@@ -141,7 +141,7 @@ class RelationshipManager:
             relationship: The relationship to check.
         """
 
-        def __check(col: TimeSeriesColumn) -> None:
+        def __check(col: "TimeSeriesColumn") -> None:
             existing_relationships = self._relationships[col.name]
 
             for _relationship in existing_relationships:
