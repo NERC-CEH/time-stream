@@ -152,11 +152,12 @@ class ExpectedCount(AggregationStage):
 
     def with_columns(self) -> list[pl.Expr]:
         time_name = self.aggregator.ts.time_name
+        column_name: str = f"expected_count_{time_name}"
         # For some aggregations the expected count is a constant so just use that if possible.
         # For example, when aggregating 15-minute data over a day, the expected count is always 96.
         count: int = self.aggregator.ts.periodicity.count(self.aggregator.aggregation_period)
         if count > 0:
-            return [pl.lit(count).alias(f"expected_count_{time_name}")]
+            return [pl.lit(count).alias(column_name)]
 
         start_expr: pl.Expr = pl.col(time_name)
         end_expr: pl.Expr = pl.col(time_name).dt.offset_by(self.aggregator.aggregation_period.pl_interval)
@@ -165,11 +166,7 @@ class ExpectedCount(AggregationStage):
         delta: Optional[datetime.timedelta] = self.aggregator.ts.periodicity.timedelta
         if delta is not None:
             i_micros: int = delta // datetime.timedelta(microseconds=1)
-            return [
-                ((end_expr - start_expr).dt.total_microseconds().floordiv(i_micros)).alias(
-                    f"expected_count_{time_name}"
-                )
-            ]
+            return [((end_expr - start_expr).dt.total_microseconds().floordiv(i_micros)).alias(column_name)]
 
         # If the data we are aggregating is monthly then there is no simple way to do the calculation,
         # so use Polars to create a Series of lists of date ranges and just get the length of each list.
@@ -186,7 +183,7 @@ class ExpectedCount(AggregationStage):
                 start=start_expr, end=end_expr, interval=self.aggregator.ts.periodicity.pl_interval, closed="right"
             )
             .list.len()
-            .alias(f"expected_count_{time_name}")
+            .alias(column_name)
         ]
 
 
