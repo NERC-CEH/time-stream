@@ -135,14 +135,43 @@ class RelationshipManager:
         self._relationships[relationship.other_column.name].add(relationship)
 
     def _check_relationship_type_validity(self, relationship: Relationship) -> None:
-        if (
-            relationship.relationship_type in (RelationshipType.ONE_TO_ONE, RelationshipType.MANY_TO_ONE)
-            and self._relationships[relationship.primary_column.name]
-        ):
-            raise ValueError(
-                f"{relationship.primary_column.name} can only be related to one column. "
-                f"Existing relationships: {self._relationships[relationship.primary_column.name]}"
-            )
+        """Checks that the relationship type is valid, based on the relationship type and existing relationships.
+
+        Args:
+            relationship: The relationship to check.
+        """
+
+        def __check(col: TimeSeriesColumn) -> None:
+            existing_relationships = self._relationships[col.name]
+
+            for _relationship in existing_relationships:
+                try:
+                    if _relationship.primary_column == col:
+                        # If this column is the primary column in the relationship, any "_TO_ONE" relationship type
+                        #   means that it can only have one relationship with another column
+                        if _relationship.relationship_type in (
+                            RelationshipType.ONE_TO_ONE,
+                            RelationshipType.MANY_TO_ONE,
+                        ):
+                            raise ValueError
+
+                    elif _relationship.other_column == col:
+                        # If this column is the secondary column in the relationship, any "ONE_TO_" relationship type
+                        #   means that it can only have one relationship with another column
+                        if _relationship.relationship_type in (
+                            RelationshipType.ONE_TO_ONE,
+                            RelationshipType.ONE_TO_MANY,
+                        ):
+                            raise ValueError
+
+                except ValueError:
+                    raise ValueError(
+                        f"{col.name} can only be related to one column. "
+                        f"Existing relationships: {existing_relationships}"
+                    )
+
+        __check(relationship.primary_column)
+        __check(relationship.other_column)
 
     def _remove(self, relationship: Relationship) -> None:
         """Removes a relationship (from both directions).
@@ -175,18 +204,18 @@ class RelationshipManager:
         Raises:
            ValueError: If RESTRICT policy is enforced and relationships exist.
         """
-        relationships = self._get_relationships(column).copy()
+        relationships = self._get_relationships(column)
 
         for relationship in relationships:
-            if relationship.deletion_policy == DeletionPolicy.CASCADE:
+            if relationship.deletion_policy.value == DeletionPolicy.CASCADE.value:
                 self._relationships[relationship.other_column.name].discard(relationship)
                 self._remove(relationship)
                 relationship.other_column.remove()
 
-            elif relationship.deletion_policy == DeletionPolicy.UNLINK:
+            elif relationship.deletion_policy.value == DeletionPolicy.UNLINK.value:
                 self._remove(relationship)
 
-            elif relationship.deletion_policy == DeletionPolicy.RESTRICT:
+            elif relationship.deletion_policy.value == DeletionPolicy.RESTRICT.value:
                 raise UserWarning(
                     f"Cannot delete {column} because it has restricted relationship "
                     f"with: {relationship.other_column.name}"

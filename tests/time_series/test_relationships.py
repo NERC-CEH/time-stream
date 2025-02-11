@@ -184,6 +184,16 @@ class TestRelationshipManagerAdd(BaseRelationshipTest):
         self.assertIn(relationship1, result)
         self.assertIn(relationship2, result)
 
+    @parameterized.expand([(str(d), d) for d in DeletionPolicy])
+    def test_add_relationship_to_existing_one_to_many_fails(self, _, deletion_policy):
+        """Test adding another Relationship to a column that has a ONE-TO-MANY Relationship already raises error."""
+        relationship1 = Relationship(self.ts.colA, self.ts.colB, RelationshipType.ONE_TO_MANY, deletion_policy)
+        relationship2 = Relationship(self.ts.colB, self.ts.colC, RelationshipType.MANY_TO_MANY, deletion_policy)
+
+        self.relationship_manager._add(relationship1)
+        with self.assertRaises(ValueError):
+            self.relationship_manager._add(relationship2)
+
 
 class TestRelationshipManagerRemove(BaseRelationshipTest):
     def setUp(self):
@@ -256,8 +266,8 @@ class TestRelationshipManagerHandleDeletion(BaseRelationshipTest):
     def test_multiple_cascade(self):
         """Test deletion handling with CASCADE policy, where the second column also has a CASCADE relationship.
         """
-        relationship1 = Relationship(self.ts.colA, self.ts.colB, RelationshipType.ONE_TO_MANY, DeletionPolicy.CASCADE)
-        relationship2 = Relationship(self.ts.colB, self.ts.colC, RelationshipType.ONE_TO_MANY, DeletionPolicy.CASCADE)
+        relationship1 = Relationship(self.ts.colA, self.ts.colB, RelationshipType.MANY_TO_MANY, DeletionPolicy.CASCADE)
+        relationship2 = Relationship(self.ts.colB, self.ts.colC, RelationshipType.MANY_TO_MANY, DeletionPolicy.CASCADE)
         self.ts._relationship_manager._add(relationship1)
         self.ts._relationship_manager._add(relationship2)
 
@@ -292,8 +302,8 @@ class TestRelationshipManagerHandleDeletion(BaseRelationshipTest):
     def test_multiple_unlink(self):
         """Test deletion handling with UNLINK policy, where second column has other relationships.
         """
-        relationship1 = Relationship(self.ts.colA, self.ts.colB, RelationshipType.ONE_TO_MANY, DeletionPolicy.UNLINK)
-        relationship2 = Relationship(self.ts.colB, self.ts.colC, RelationshipType.ONE_TO_MANY, DeletionPolicy.UNLINK)
+        relationship1 = Relationship(self.ts.colA, self.ts.colB, RelationshipType.MANY_TO_MANY, DeletionPolicy.UNLINK)
+        relationship2 = Relationship(self.ts.colB, self.ts.colC, RelationshipType.MANY_TO_MANY, DeletionPolicy.UNLINK)
         self.ts._relationship_manager._add(relationship1)
         self.ts._relationship_manager._add(relationship2)
 

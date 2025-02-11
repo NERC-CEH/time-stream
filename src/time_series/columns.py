@@ -173,7 +173,7 @@ class TimeSeriesColumn(ABC):
         """Removes this column from the TimeSeries.
 
         - Drops the column from the DataFrame (if it exists).
-        - Clear reference to time series prevent further modifications
+        - Clear reference to time series to prevent further modifications
         """
         if self.name in self._ts.columns:
             self._ts.df = self._ts.df.drop(self.name)

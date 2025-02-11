@@ -613,8 +613,7 @@ class TimeSeries:
             other = [other]
 
         primary = self.columns[primary]
-        for other_column in other:
-            primary.add_relationship(other_column)
+        primary.add_relationship(other)
 
     def remove_column_relationship(self, primary: str, other: Union[str, list[str]]) -> None:
         """Removes a relationship between the primary column and other column(s).

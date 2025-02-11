@@ -227,7 +227,7 @@ class TestUnset(BaseTimeSeriesTest):
         self.assertEqual(len(column.get_relationships()), 1)
         self.assertEqual(len(other.get_relationships()), 1)
 
-        unset_column = column.unset()
+        column.unset()
 
         self.assertEqual(column.get_relationships(), [])
         self.assertEqual(other.get_relationships(), [])
@@ -553,6 +553,10 @@ class TestAddRelationship(BaseTimeSeriesTest):
         with self.assertRaises(TypeError):
             self.ts.flag_col.add_relationship("supp_col")
 
+    def test_flag_column_only_allowed_one_relationship(self):
+        self.ts.flag_col.add_relationship("data_col1")
+        with self.assertRaises(ValueError):
+            self.ts.flag_col.add_relationship("data_col2")
 
 class TestRemoveRelationship(BaseTimeSeriesTest):
     def setUp(self):
