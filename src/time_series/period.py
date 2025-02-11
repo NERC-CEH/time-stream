@@ -879,7 +879,7 @@ class Properties:
             assert self.month_offset == 0
             new_microsecond_offset = self.microsecond_offset % self.multiplier
         else:
-            raise AssertionError("Oops")
+            raise AssertionError(f"Illegal step: {self.step}")
 
         if (
             (new_month_offset == self.month_offset)
@@ -1464,7 +1464,7 @@ class Properties:
                     return _COUNT_UNALIGNED
                 return mult_q
 
-        raise AssertionError("Internal error")
+        raise AssertionError(f"Unhandled step combination: {self.step}/{other.step}")
 
     def __str__(self) -> str:
         elems: list[str] = ["P"]
