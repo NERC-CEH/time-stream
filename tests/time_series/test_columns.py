@@ -518,7 +518,7 @@ class TestAddRelationship(BaseTimeSeriesTest):
 
     def test_add_relationship_by_object(self):
         """Test that can add a relationship using column object."""
-        self.ts.data_col1.add_relationship("supp_col")
+        self.ts.data_col1.add_relationship(self.ts.supp_col)
 
         self.assertEqual(len(self.ts.data_col1.get_relationships()), 1)
         self.assertEqual(len(self.ts.supp_col.get_relationships()), 1)

@@ -178,11 +178,17 @@ class TestRelationshipManagerAdd(BaseRelationshipTest):
         self.relationship_manager._add(relationship1)
         self.relationship_manager._add(relationship2)
 
-        result = self.relationship_manager._get_relationships(self.ts.colA)
+        colA_relationships = self.relationship_manager._get_relationships(self.ts.colA)
+        colB_relationships = self.relationship_manager._get_relationships(self.ts.colB)
+        colC_relationships = self.relationship_manager._get_relationships(self.ts.colC)
 
-        self.assertEqual(len(result), 2)
-        self.assertIn(relationship1, result)
-        self.assertIn(relationship2, result)
+        self.assertEqual(len(colA_relationships), 2)
+        self.assertEqual(len(colB_relationships), 1)
+        self.assertEqual(len(colC_relationships), 1)
+        self.assertIn(relationship1, colA_relationships)
+        self.assertIn(relationship2, colA_relationships)
+        self.assertIn(relationship1, colB_relationships)
+        self.assertIn(relationship2, colC_relationships)
 
     @parameterized.expand([(str(d), d) for d in DeletionPolicy])
     def test_add_relationship_to_existing_one_to_many_fails(self, _, deletion_policy):
