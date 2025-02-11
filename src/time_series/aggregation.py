@@ -151,6 +151,11 @@ class ExpectedCount(AggregationStage):
         super().__init__(aggregator, "datetime_count")
 
     def with_columns(self) -> list[pl.Expr]:
+        """Return a list of expressions to be included in the final aggregated DataFrame.
+
+        Add column "expected_count_{time_name}", which is the number of values that would be aggregated in each interval
+        if the input timeseries was complete.
+        """
         time_name = self.aggregator.ts.time_name
         column_name: str = f"expected_count_{time_name}"
         # For some aggregations the expected count is a constant so just use that if possible.
