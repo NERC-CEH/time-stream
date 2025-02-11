@@ -7,6 +7,7 @@ import polars as pl
 from time_series.columns import DataColumn, FlagColumn, PrimaryTimeColumn, SupplementaryColumn, TimeSeriesColumn
 from time_series.flag_manager import TimeSeriesFlagManager
 from time_series.period import Period
+from time_series.relationships import RelationshipManager
 
 if TYPE_CHECKING:
     # Import is for type hinting only.  Make sure there is no runtime import, to avoid recursion.
@@ -55,6 +56,7 @@ class TimeSeries:
         self._df = df
 
         self._setup(supplementary_columns or [], flag_columns or {}, column_metadata or {}, metadata or {})
+        self._relationship_manager = RelationshipManager(self)
 
     def _setup(
         self,
@@ -379,6 +381,7 @@ class TimeSeries:
         """
         removed_columns = list(set(self.df.columns) - set(new_df.columns))
         for col_name in removed_columns:
+            self._relationship_manager._handle_deletion(self._columns[col_name])
             self._columns.pop(col_name, None)
 
     def _add_new_columns(self, new_df: pl.DataFrame) -> None:
@@ -598,6 +601,33 @@ class TimeSeries:
             raise KeyError(f"Metadata key(s) '{missing_keys}' not found in any column.")
 
         return result
+
+    def add_column_relationship(self, primary: str, other: Union[str, list[str]]) -> None:
+        """Adds a relationship between the primary column and other column(s).
+
+        Args:
+            primary: The primary column in the relationship.
+            other: Other column(s) to associate.
+        """
+        if isinstance(other, str):
+            other = [other]
+
+        primary = self.columns[primary]
+        primary.add_relationship(other)
+
+    def remove_column_relationship(self, primary: str, other: Union[str, list[str]]) -> None:
+        """Removes a relationship between the primary column and other column(s).
+
+        Args:
+            primary: The primary column in the relationship.
+            other: Other column(s) to remove association.
+        """
+        if isinstance(other, str):
+            other = [other]
+
+        primary = self.columns[primary]
+        for other_column in other:
+            primary.remove_relationship(other_column)
 
     def __getattr__(self, name: str) -> Any:
         """Dynamically handle attribute access for the TimeSeries object.

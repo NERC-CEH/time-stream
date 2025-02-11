@@ -80,34 +80,86 @@ class TestRemoveMetadata(BaseTimeSeriesTest):
         self.assertEqual(self.column.metadata(), expected)
 
     def test_remove_single_metadata(self):
-        """Test removing all metadata from a column"""
+        """Test removing single metadata key from a column"""
         self.column.remove_metadata("key1")
         expected = {"key2": "10", "key3": "100"}
         self.assertEqual(self.column.metadata(), expected)
 
     def test_remove_multiple_metadata(self):
-        """Test removing all metadata from a column"""
+        """Test removing multiple metadata keys from a column"""
         self.column.remove_metadata(["key1", "key2"])
         expected = {"key3": "100"}
         self.assertEqual(self.column.metadata(), expected)
 
 
-class TestSetAsSupplementary(BaseTimeSeriesTest):
-    def test_data_to_supplementary(self):
-        """ Test that a data column gets converted to a supplementary column"""
-        column = DataColumn("data_col1", self.ts, self.metadata["data_col1"])
+class TestSetAs(BaseTimeSeriesTest):
+    def setUp(self):
+        """Ensure ts is reset before each test."""
+        super().setUpClass()
 
-        column = column.set_as_supplementary()
+    def test_conversion_adds_relationships(self):
+        """ Test that column conversion adds specified new relationships. """
+        self.assertEqual(len(self.ts.data_col1.get_relationships()), 0)
+        self.assertEqual(len(self.ts.supp_col.get_relationships()), 0)
+
+        rels = ["data_col2"]
+        column = self.ts.data_col1._set_as(SupplementaryColumn, rels, self.ts.data_col1.name, self.ts.data_col1._ts,
+                                           self.ts.data_col1.metadata())
+
+        self.assertIsInstance(column, SupplementaryColumn)
+        self.assertEqual(len(self.ts.data_col1.get_relationships()), 1)
+        self.assertEqual(len(self.ts.data_col2.get_relationships()), 1)
+
+    def test_conversion_removes_relationships(self):
+        """ Test that column conversion removes existing relationships. """
+        self.ts.data_col1.add_relationship(self.ts.supp_col)
+
+        self.assertEqual(len(self.ts.data_col1.get_relationships()), 1)
+        self.assertEqual(len(self.ts.supp_col.get_relationships()), 1)
+
+        column = self.ts.data_col1._set_as(SupplementaryColumn, None, self.ts.data_col1.name, self.ts.data_col1._ts,
+                                           self.ts.data_col1.metadata())
+
+        self.assertIsInstance(column, SupplementaryColumn)
+        self.assertEqual(len(self.ts.data_col1.get_relationships()), 0)
+        self.assertEqual(len(self.ts.supp_col.get_relationships()), 0)
+
+    def test_conversion_removes_relationships_and_adds_new_ones(self):
+        """ Test that column conversion removes existing relationships and adds new ones """
+        self.ts.data_col1.add_relationship(self.ts.supp_col)
+
+        self.assertEqual(len(self.ts.data_col1.get_relationships()), 1)
+        self.assertEqual(len(self.ts.supp_col.get_relationships()), 1)
+
+        rels = ["data_col2"]
+        column = self.ts.data_col1._set_as(SupplementaryColumn, rels, self.ts.data_col1.name, self.ts.data_col1._ts,
+                                           self.ts.data_col1.metadata())
+
+        self.assertIsInstance(column, SupplementaryColumn)
+        self.assertEqual(len(self.ts.data_col1.get_relationships()), 1)
+        self.assertEqual(len(self.ts.supp_col.get_relationships()), 0)
+        self.assertEqual(len(self.ts.data_col2.get_relationships()), 1)
+
+
+class TestSetAsSupplementary(BaseTimeSeriesTest):
+    def setUp(self):
+        """Ensure ts is reset before each test."""
+        super().setUpClass()
+
+    def test_data_to_supplementary(self):
+        """ Test that a data column gets converted to a supplementary column. """
+        column = self.ts.data_col1.set_as_supplementary()
+
         self.assertIsInstance(column, SupplementaryColumn)
         self.assertIn(column.name, self.ts.supplementary_columns)
         self.assertNotIn(column.name, self.ts.data_columns)
         self.assertNotIn(column.name, self.ts.flag_columns)
 
-    def test_flag_to_supplementary(self):
-        """ Test that a flag column gets converted to a supplementary column"""
-        column = FlagColumn("flag_col", self.ts, "example_flag_system", {})
 
-        column = column.set_as_supplementary()
+    def test_flag_to_supplementary(self):
+        """ Test that a flag column gets converted to a supplementary column. """
+        column = self.ts.flag_col.set_as_supplementary()
+
         self.assertIsInstance(column, SupplementaryColumn)
         self.assertIn(column.name, self.ts.supplementary_columns)
         self.assertNotIn(column.name, self.ts.flag_columns)
@@ -157,7 +209,7 @@ class TestUnset(BaseTimeSeriesTest):
         self.assertNotIn(column.name, self.ts.flag_columns)
 
     def test_unset_flag_column(self):
-        """ Test that unsetting a supplementary column converts it to a data column"""
+        """ Test that unsetting a flag column converts it to a data column"""
         column = FlagColumn("flag_col", self.ts, "example_flag_system", {})
 
         column = column.unset()
@@ -165,6 +217,20 @@ class TestUnset(BaseTimeSeriesTest):
         self.assertIn(column.name, self.ts.data_columns)
         self.assertNotIn(column.name, self.ts.supplementary_columns)
         self.assertNotIn(column.name, self.ts.flag_columns)
+
+    def test_unset_handles_relationships(self):
+        """ Test that unsetting a column handles relationships with other columns"""
+        column = SupplementaryColumn("supp_col", self.ts)
+        other = DataColumn("data_col1", self.ts)
+        column.add_relationship(other)
+
+        self.assertEqual(len(column.get_relationships()), 1)
+        self.assertEqual(len(other.get_relationships()), 1)
+
+        column.unset()
+
+        self.assertEqual(column.get_relationships(), [])
+        self.assertEqual(other.get_relationships(), [])
 
 
 class TestRemove(BaseTimeSeriesTest):
@@ -392,6 +458,16 @@ class TestPrimaryTimeColumn(BaseTimeSeriesTest):
         with self.assertRaises(NotImplementedError):
             column.unset()
 
+    def test_remove_relationship_not_allowed(self):
+        column = self.ts.time_column
+        with self.assertRaises(NotImplementedError):
+            column.remove_relationship()
+
+    def test_add_relationship_not_allowed(self):
+        column = self.ts.time_column
+        with self.assertRaises(NotImplementedError):
+            column.add_relationship()
+
 
 class TestEq(BaseTimeSeriesTest):
     def test_data_columns_are_equal(self):
@@ -433,3 +509,80 @@ class TestEq(BaseTimeSeriesTest):
         column1 = DataColumn("data_col1", self.ts, self.metadata["data_col1"])
         column2 = SupplementaryColumn("data_col1", self.ts, self.metadata["data_col1"])
         self.assertNotEqual(column1, column2)
+
+
+class TestAddRelationship(BaseTimeSeriesTest):
+    def setUp(self):
+        """Ensure ts is reset before each test."""
+        super().setUpClass()
+
+    def test_add_relationship_by_object(self):
+        """Test that can add a relationship using column object."""
+        self.ts.data_col1.add_relationship(self.ts.supp_col)
+
+        self.assertEqual(len(self.ts.data_col1.get_relationships()), 1)
+        self.assertEqual(len(self.ts.supp_col.get_relationships()), 1)
+
+    def test_add_relationship_by_str(self):
+        """Test that can add a relationship using column string name."""
+        self.ts.data_col1.add_relationship("supp_col")
+
+        self.assertEqual(len(self.ts.data_col1.get_relationships()), 1)
+        self.assertEqual(len(self.ts.supp_col.get_relationships()), 1)
+
+    def test_add_multiple_relationships(self):
+        """Test adding multiple relationships."""
+        self.ts.data_col1.add_relationship(["supp_col", "flag_col"])
+
+        self.assertEqual(len(self.ts.data_col1.get_relationships()), 2)
+        self.assertEqual(len(self.ts.supp_col.get_relationships()), 1)
+        self.assertEqual(len(self.ts.flag_col.get_relationships()), 1)
+
+    def test_add_data_rel_to_data_column_raises_error(self):
+        """ Test that can't set relationship between two data columns"""
+        with self.assertRaises(TypeError):
+            self.ts.data_col1.add_relationship("data_col2")
+
+    def test_add_supp_rel_to_flag_column_raises_error(self):
+        """ Test that can't set relationship between supplementary and flag columns"""
+        with self.assertRaises(TypeError):
+            self.ts.supp_col.add_relationship("flag_col")
+
+    def test_add_flag_rel_to_supp_column_raises_error(self):
+        """ Test that can't set relationship between flag and supplementary columns"""
+        with self.assertRaises(TypeError):
+            self.ts.flag_col.add_relationship("supp_col")
+
+    def test_flag_column_only_allowed_one_relationship(self):
+        self.ts.flag_col.add_relationship("data_col1")
+        with self.assertRaises(ValueError):
+            self.ts.flag_col.add_relationship("data_col2")
+
+class TestRemoveRelationship(BaseTimeSeriesTest):
+    def setUp(self):
+        """Ensure ts is reset before each test."""
+        super().setUpClass()
+
+    def test_remove_relationship_by_object(self):
+        """Test that can remove a relationship using column object, and it removes it from both directions."""
+        self.ts.data_col1.add_relationship("supp_col")
+        self.ts.data_col1.remove_relationship(self.ts.supp_col)
+        self.assertEqual(self.ts.data_col1.get_relationships(), [])
+        self.assertEqual(self.ts.supp_col.get_relationships(), [])
+
+    def test_remove_relationship_by_str(self):
+        """Test that can remove a relationship using column string name, and it removes it from both directions."""
+        self.ts.data_col1.add_relationship("supp_col")
+        self.ts.data_col1.remove_relationship("supp_col")
+        self.assertEqual(self.ts.data_col1.get_relationships(), [])
+        self.assertEqual(self.ts.supp_col.get_relationships(), [])
+
+    def test_remove_relationship_leaves_other_relationships(self):
+        """Test that removing one relationship maintains other relationships."""
+        self.ts.data_col1.add_relationship(["supp_col", "flag_col"])
+        self.ts.data_col1.remove_relationship("supp_col")
+
+        self.assertEqual(len(self.ts.data_col1.get_relationships()), 1)
+        self.assertEqual(self.ts.data_col1.get_relationships()[0].other_column, self.ts.flag_col)
+        self.assertEqual(len(self.ts.supp_col.get_relationships()), 0)
+        self.assertEqual(len(self.ts.flag_col.get_relationships()), 1)
