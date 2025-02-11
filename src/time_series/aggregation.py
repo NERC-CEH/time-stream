@@ -7,11 +7,8 @@ contained within will evolve considerably.
 
 import datetime
 from abc import ABC, abstractmethod
-from collections.abc import (
-    Callable,
-    Optional,
-)
-from typing import override
+from collections.abc import Callable
+from typing import Optional, override
 
 import polars as pl
 

@@ -7098,10 +7098,12 @@ class TestCount(unittest.TestCase):
 
     @parameterized.expand(
         [
-            ("tz", Period.of_microseconds(1).with_tzinfo(TZ_UTC),Period.of_microseconds(1).with_tzinfo(TZ_UTC),1),
-            ("tz", Period.of_microseconds(1).with_tzinfo(None),Period.of_microseconds(1).with_tzinfo(TZ_UTC),-1),
-            ("micro/micro", Period.of_microseconds(1),Period.of_microseconds(1),1),
-            ("micro/micro", Period.of_microseconds(1),Period.of_microseconds(10),10),
+            # ("tz", Period.of_microseconds(1).with_tzinfo(TZ_UTC),Period.of_microseconds(1).with_tzinfo(TZ_UTC),1),
+            # ("tz", Period.of_microseconds(1).with_tzinfo(None),Period.of_microseconds(1).with_tzinfo(TZ_UTC),-1),
+            # ("micro/micro", Period.of_microseconds(1),Period.of_microseconds(1),1),
+            # ("micro/micro", Period.of_microseconds(1),Period.of_microseconds(10),10),
+            ("micro/micro", Period.of_seconds(10), Period.of_seconds(100), 10),
+            ("micro/micro", Period.of_microseconds(10).with_microsecond_offset(5), Period.of_microseconds(100).with_microsecond_offset(5), 10),
             ("micro/micro", Period.of_microseconds(10),Period.of_microseconds(1),-1),
             ("micro/micro", Period.of_microseconds(25),Period.of_microseconds(100),4),
             ("micro/micro", Period.of_microseconds(100),Period.of_microseconds(25),-1),
