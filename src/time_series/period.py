@@ -860,10 +860,15 @@ class Properties:
         For a period of n-microseconds the normalised microsecond_offset
         is microsecond_offset%n
 
-        Example: A one year period with an offset of 13 months is
+        Examples: A one year period with an offset of 13 months is
         normalised to a one year period with an offset of 1 month,
         as the net effect of the offsets is the same regarding how they
         split the timeline into intervals.
+
+        A 10 second period with an offset of 30 seconds is normalised
+        to a 10 second period with no offset.  In terms of how the
+        timeline is split an offset that is a multiple of 10 changes
+        nothing, so the normalised period has no offset.
 
         Returns:
             A Properties object
