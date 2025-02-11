@@ -1347,12 +1347,13 @@ class Properties:
                 mult_q, mult_r = divmod(other.multiplier, self.multiplier)
                 if mult_r != 0:
                     return _COUNT_UNALIGNED
-                if self.microsecond_offset > 0:
+                if self.microsecond_offset == 0:
+                    if other.microsecond_offset > 0:
+                        offset_r = other.microsecond_offset % self.multiplier
+                        if offset_r != 0:
+                            return _COUNT_UNALIGNED
+                elif self.microsecond_offset != other.microsecond_offset:
                     return _COUNT_UNALIGNED
-                if other.microsecond_offset > 0:
-                    offset_r = other.microsecond_offset % self.multiplier
-                    if offset_r != 0:
-                        return _COUNT_UNALIGNED
                 return mult_q
 
             if other.step == _STEP_SECONDS:
@@ -1362,12 +1363,13 @@ class Properties:
                 mult_q, mult_r = divmod(other.multiplier * 1_000_000, self.multiplier)
                 if mult_r != 0:
                     return _COUNT_UNALIGNED
-                if self.microsecond_offset > 0:
+                if self.microsecond_offset == 0:
+                    if other.microsecond_offset > 0:
+                        offset_r = other.microsecond_offset % self.multiplier
+                        if offset_r != 0:
+                            return _COUNT_UNALIGNED
+                elif self.microsecond_offset != other.microsecond_offset:
                     return _COUNT_UNALIGNED
-                if other.microsecond_offset > 0:
-                    offset_r = other.microsecond_offset % self.multiplier
-                    if offset_r != 0:
-                        return _COUNT_UNALIGNED
                 return mult_q
 
             if other.step == _STEP_MONTHS:
