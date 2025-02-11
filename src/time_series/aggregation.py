@@ -152,14 +152,14 @@ class ExpectedCount(AggregationStage):
 
     def with_columns(self) -> list[pl.Expr]:
         time_name = self.aggregator.ts.time_name
-        start_expr: pl.Expr = pl.col(time_name)
-        end_expr: pl.Expr = pl.col(time_name).dt.offset_by(self.aggregator.aggregation_period.pl_interval)
         # For some aggregations the expected count is a constant so just use that if possible.
         # For example, when aggregating 15-minute data over a day, the expected count is always 96.
         count: int = self.aggregator.ts.periodicity.count(self.aggregator.aggregation_period)
         if count > 0:
             return [pl.lit(count).alias(f"expected_count_{time_name}")]
 
+        start_expr: pl.Expr = pl.col(time_name)
+        end_expr: pl.Expr = pl.col(time_name).dt.offset_by(self.aggregator.aggregation_period.pl_interval)
         # If the data we are aggregating is not monthly then each interval we are aggregating has
         # a constant length, so (end - start) / interval will be the expected count.
         delta: Optional[datetime.timedelta] = self.aggregator.ts.periodicity.timedelta
