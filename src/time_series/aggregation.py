@@ -5,11 +5,10 @@ This module is very much a work-in-progress and the classes
 contained within will evolve considerably.
 """
 
+import datetime
 from abc import ABC, abstractmethod
-from collections.abc import (
-    Callable,
-)
-from typing import override
+from collections.abc import Callable
+from typing import Optional, override
 
 import polars as pl
 
@@ -152,22 +151,44 @@ class ExpectedCount(AggregationStage):
         super().__init__(aggregator, "datetime_count")
 
     def with_columns(self) -> list[pl.Expr]:
+        """Return a list of expressions to be included in the final aggregated DataFrame.
+
+        Add column "expected_count_{time_name}", which is the number of values that would be aggregated in each interval
+        if the input timeseries was complete.
+        """
         time_name = self.aggregator.ts.time_name
+        column_name: str = f"expected_count_{time_name}"
+        # For some aggregations the expected count is a constant so just use that if possible.
+        # For example, when aggregating 15-minute data over a day, the expected count is always 96.
+        count: int = self.aggregator.ts.periodicity.count(self.aggregator.aggregation_period)
+        if count > 0:
+            return [pl.lit(count).alias(column_name)]
+
         start_expr: pl.Expr = pl.col(time_name)
         end_expr: pl.Expr = pl.col(time_name).dt.offset_by(self.aggregator.aggregation_period.pl_interval)
-        # NEED TO REPLACE THIS CODE WITH SOMETHING ELSE IF POSSIBLE
-        # The following instantiates a list and then just gets the length.
-        # The list is as long as there are 'resolution' units within the
-        # aggregation period, which can lead to some very long lists
-        # P1S aggregated over P1Y gives a list length of 365*24*60*60
-        # Some aggregation operations are very slow or just crash with
-        # out-of-memory errors.
+        # If the data we are aggregating is not monthly then each interval we are aggregating has
+        # a constant length, so (end - start) / interval will be the expected count.
+        delta: Optional[datetime.timedelta] = self.aggregator.ts.periodicity.timedelta
+        if delta is not None:
+            i_micros: int = delta // datetime.timedelta(microseconds=1)
+            return [((end_expr - start_expr).dt.total_microseconds().floordiv(i_micros)).alias(column_name)]
+
+        # If the data we are aggregating is monthly then there is no simple way to do the calculation,
+        # so use Polars to create a Series of lists of date ranges and just get the length of each list.
+        #
+        # This method will work for the above two cases also, but if periodicity is small
+        # and the aggregation period is large it consumes too much memory and causes performance
+        # problems.
+        #
+        # For example, aggregating 1 microsecond data over a calendar year involves the creation
+        # of arrays of length 1000_000 * 60 * 60 * 24 * 365 which will probably fail with an
+        # out-of-memory error.
         return [
             pl.datetime_ranges(
                 start=start_expr, end=end_expr, interval=self.aggregator.ts.periodicity.pl_interval, closed="right"
             )
             .list.len()
-            .alias(f"expected_count_{time_name}")
+            .alias(column_name)
         ]
 
 
