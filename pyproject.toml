@@ -36,7 +36,7 @@ readme = "README.md"
 license = { text = "NO LICENSE" }
 
 [project.optional-dependencies]
-test = ["pytest", "pytest-cov", "parameterized", "freezegun"]
+test = ["pytest", "pytest-cov", "parameterized", "freezegun", "pytest-benchmark", "pytest-benchmark[histogram]"]
 docs = ["sphinx", "sphinx-copybutton", "sphinx-rtd-theme"]
 lint = ["ruff"]
 dev = ["dritimeseriesprocessor[test,docs,lint]"]
