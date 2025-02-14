@@ -140,7 +140,7 @@ Make sure to also remove the test from the `qc_test_map` in [quality_config.py](
 
 # Making Gaps in the Parquet Data
 
-To test the QC behaviour when there is missing data, and to test the infilling processes, the test data has been duplicated and had sections of data removed. This located at [./parquet-data/cosmos-with-gaps](./parquet-data/cosmos-with-gaps) and is only done for PRECIP_1MIN_2024_LOOPED for now.
+To test the QC behaviour when there is missing data, and to test the infilling processes, the test data has been duplicated and had sections of data removed. This located at [./parquet-data/cosmos-with-gaps](./parquet-data/cosmos-with-gaps) and is only done for LIVE_PRECIP_1MIN for now.
 
 ## Types of Gap Creation
 
