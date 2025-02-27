@@ -52,7 +52,7 @@ include = ["dritimeseriesprocessor*", "databuilder*", "time_series*"]
 "*" = ["*.*"]
 
 [tool.pytest.ini_options]
-addopts = "--cov=dritimeseriesprocessor --cov=databuilder --cov=time_series --cov-report=term-missing"
+addopts = "--cov=dritimeseriesprocessor --cov=databuilder --cov=time_series --cov-report=term-missing --benchmark-skip"
 markers = ["slow: Marks slow tests"]
 
 
