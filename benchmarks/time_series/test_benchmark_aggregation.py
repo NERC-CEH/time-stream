@@ -43,21 +43,15 @@ def generate_data(resolution: Period, length_days: int) -> TimeSeries:
 
 
 class BaseAggregationBenchmark:
-    sub_second_ts: TimeSeries
-    minute_ts: TimeSeries
-    quarter_hour_ts: TimeSeries
-    half_hour_ts: TimeSeries
-    hour_ts: TimeSeries
-    day_ts: TimeSeries
+    ts: TimeSeries
 
-    @staticmethod
-    def run_aggregation(benchmark: BenchmarkFixture,
-                        ts: TimeSeries,
+    def run_aggregation(self,
+                        benchmark: BenchmarkFixture,
                         agg_func: Type[AggregationFunction],
                         target_resolution: Period) -> None:
         @benchmark
         def run():
-            agg_ts = ts.aggregate(target_resolution, agg_func, "data")
+            agg_ts = self.ts.aggregate(target_resolution, agg_func, "data")
             assert agg_ts.resolution == target_resolution
 
 
@@ -71,15 +65,15 @@ class Test40HzAggregationBenchmarks(BaseAggregationBenchmark):
             param(Period.of_days(1), id="40hz-1day"),
     ))
     def test_40Hz_aggregation(self, benchmark, agg_func, target_resolution):
-        self.run_aggregation(benchmark, self.sub_second_ts, agg_func, target_resolution)
+        self.run_aggregation(benchmark, agg_func, target_resolution)
 
     @classmethod
     def setup_class(cls):
-        cls.sub_second_ts = generate_data(Period.of_microseconds(25000), 1)
+        cls.ts = generate_data(Period.of_microseconds(25000), 1)
 
     @classmethod
     def teardown_class(cls):
-        cls.sub_second_ts = None
+        cls.ts = None
 
 @pytest.mark.parametrize("agg_func", AGG_FUNCS)
 class Test1MinuteAggregationBenchmarks(BaseAggregationBenchmark):
@@ -92,15 +86,15 @@ class Test1MinuteAggregationBenchmarks(BaseAggregationBenchmark):
             param(Period.of_years(1), id="1min-1year"),
     ))
     def test_1Minute_aggregation(self, benchmark, agg_func, target_resolution):
-        self.run_aggregation(benchmark, self.minute_ts, agg_func, target_resolution)
+        self.run_aggregation(benchmark, agg_func, target_resolution)
 
     @classmethod
     def setup_class(cls):
-        cls.minute_ts = generate_data(Period.of_minutes(1), 365)
+        cls.ts = generate_data(Period.of_minutes(1), 365)
 
     @classmethod
     def teardown_class(cls):
-        cls.minute_ts = None
+        cls.ts = None
 
 @pytest.mark.parametrize("agg_func", AGG_FUNCS)
 class Test15MinuteAggregationBenchmarks(BaseAggregationBenchmark):
@@ -112,15 +106,15 @@ class Test15MinuteAggregationBenchmarks(BaseAggregationBenchmark):
             param(Period.of_years(1), id="15min-1year"),
     ))
     def test_15min_aggregation(self, benchmark, agg_func, target_resolution):
-        self.run_aggregation(benchmark, self.quarter_hour_ts, agg_func, target_resolution)
+        self.run_aggregation(benchmark, agg_func, target_resolution)
 
     @classmethod
     def setup_class(cls):
-        cls.quarter_hour_ts = generate_data(Period.of_minutes(15), 3650)
+        cls.ts = generate_data(Period.of_minutes(15), 3650)
 
     @classmethod
     def teardown_class(cls):
-        cls.quarter_hour_ts = None
+        cls.ts = None
 
 
 @pytest.mark.parametrize("agg_func", AGG_FUNCS)
@@ -132,15 +126,15 @@ class Test30MinuteAggregationBenchmarks(BaseAggregationBenchmark):
             param(Period.of_years(1), id="30min-1year"),
     ))
     def test_30min_aggregation(self, benchmark, agg_func, target_resolution):
-        self.run_aggregation(benchmark, self.half_hour_ts, agg_func, target_resolution)
+        self.run_aggregation(benchmark, agg_func, target_resolution)
 
     @classmethod
     def setup_class(cls):
-        cls.half_hour_ts = generate_data(Period.of_minutes(30), 3650)
+        cls.ts = generate_data(Period.of_minutes(30), 3650)
 
     @classmethod
     def teardown_class(cls):
-        cls.half_hour_ts = None
+        cls.ts = None
 
 
 @pytest.mark.parametrize("agg_func", AGG_FUNCS)
@@ -151,15 +145,15 @@ class Test1hourAggregationBenchmarks(BaseAggregationBenchmark):
             param(Period.of_years(1), id="1hour-1year"),
     ))
     def test_1hour_aggregation(self, benchmark, agg_func, target_resolution):
-        self.run_aggregation(benchmark, self.hour_ts, agg_func, target_resolution)
+        self.run_aggregation(benchmark, agg_func, target_resolution)
 
     @classmethod
     def setup_class(cls):
-        cls.hour_ts = generate_data(Period.of_hours(1), 3650)
+        cls.ts = generate_data(Period.of_hours(1), 3650)
 
     @classmethod
     def teardown_class(cls):
-        cls.hour_ts = None
+        cls.ts = None
 
 
 @pytest.mark.parametrize("agg_func", AGG_FUNCS)
@@ -169,12 +163,12 @@ class Test1dayAggregationBenchmarks(BaseAggregationBenchmark):
             param(Period.of_years(1), id="1day-1year"),
     ))
     def test_1day_aggregation(self, benchmark, agg_func, target_resolution):
-        self.run_aggregation(benchmark, self.day_ts, agg_func, target_resolution)
+        self.run_aggregation(benchmark, agg_func, target_resolution)
 
     @classmethod
     def setup_class(cls):
-        cls.day_ts = generate_data(Period.of_days(1), 3650)
+        cls.ts = generate_data(Period.of_days(1), 3650)
 
     @classmethod
     def teardown_class(cls):
-        cls.day_ts = None
+        cls.ts = None
