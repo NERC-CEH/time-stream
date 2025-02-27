@@ -643,17 +643,13 @@ class TimeSeries:
             The matching flag column if exactly one match is found, or None if no matching column is found.
         """
         if isinstance(data_column, str):
+            error_msg = f"Column {data_column} not found."
             data_column = self.columns.get(data_column, None)
-
-        if data_column is None:
-            # raise KeyError(f"Column '{data_column}' not found.")
-            # TODO: decide whether to raise error or just return None
-            return None
+            if data_column is None:
+                raise KeyError(error_msg)
 
         if type(data_column) is not DataColumn:
-            # raise TypeError(f"Column '{data_column}' not a data column.")
-            # TODO: decide whether to raise error or just return None
-            return None
+            raise TypeError(f"Column '{data_column.name}' is type {type(data_column)}. Should be a data column.")
 
         return data_column.get_flag_system_column(flag_system)
 
