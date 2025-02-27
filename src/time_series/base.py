@@ -637,7 +637,7 @@ class TimeSeries:
         Args:
             data_column: The data column identifier. This can either be the name of the column or an instance
                             of TimeSeriesColumn.
-            flag_system: The flag system identifier used to filter flag columns.
+            flag_system: The name of the flag system.
 
         Returns:
             The matching flag column if exactly one match is found, or None if no matching column is found.

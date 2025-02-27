@@ -432,7 +432,7 @@ class DataColumn(TimeSeriesColumn):
         """Retrieves the flag column linked to this data column that corresponds to the specified flag system.
 
         Args:
-            flag_system (str): The flag system identifier used to filter flag columns.
+            flag_system: The name of the flag system.
 
         Raises:
             UserWarning: If more than one flag column is found matching the given flag system.
@@ -441,6 +441,7 @@ class DataColumn(TimeSeriesColumn):
             The matching flag column if exactly one match is found, or None if no matching column is found.
         """
         relationships = self.get_relationships()
+        flag_system = self._ts._flag_manager.flag_systems.get(flag_system, None)
         matches = []
         for relationship in relationships:
             if type(relationship.other_column) is FlagColumn and relationship.other_column.flag_system == flag_system:

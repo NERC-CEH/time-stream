@@ -5,7 +5,9 @@ import polars as pl
 from polars.testing import assert_series_equal
 
 from time_series.base import TimeSeries
+from time_series.bitwise import BitwiseMeta
 from time_series.columns import DataColumn, FlagColumn, SupplementaryColumn
+from time_series.relationships import Relationship, RelationshipType, DeletionPolicy
 
 
 class BaseTimeSeriesTest(unittest.TestCase):
@@ -18,6 +20,7 @@ class BaseTimeSeriesTest(unittest.TestCase):
             "data_col2": [4, 5, 6],
             "supp_col": ["a", "b", "c"],
             "flag_col": [0, 0, 0],
+            "flag_col2": [2, 2, 2],
         })
         cls.metadata = {
             "data_col1": {"key1": "1", "key2": "10", "key3": "100"},
@@ -586,3 +589,54 @@ class TestRemoveRelationship(BaseTimeSeriesTest):
         self.assertEqual(self.ts.data_col1.get_relationships()[0].other_column, self.ts.flag_col)
         self.assertEqual(len(self.ts.supp_col.get_relationships()), 0)
         self.assertEqual(len(self.ts.flag_col.get_relationships()), 1)
+
+
+class TestGetFlagSystemColumn(BaseTimeSeriesTest):
+    def setUp(self):
+        """Ensure ts is reset before each test."""
+        super().setUpClass()
+
+        # Add a flag column relationship
+        self.ts.data_col1.add_relationship(["flag_col"])
+
+    def test_no_matches_because_not_a_flag_system(self):
+        """Test that None return when there are no matches because the flag system provided doesn't exist"""
+        flag_system = "Non_Exist"
+        result = self.ts.data_col1.get_flag_system_column(flag_system)
+        # The flag system doesn't exist...
+        self.assertIsNone(self.ts.flag_systems.get(flag_system, None))
+        # So there can be no linked columns...
+        self.assertIsNone(result)
+
+    def test_no_matches_because_no_linked_flag_column(self):
+        """Test that None return when there are no matches because there are no related flag columns using
+        the given flag system
+        """
+        flag_system = "example_flag_system2"
+        result = self.ts.data_col1.get_flag_system_column(flag_system)
+        # The flag system exists...
+        self.assertIsInstance(self.ts.flag_systems.get(flag_system, None), BitwiseMeta)
+        # But there are no linked columns...
+        self.assertIsNone(result)
+
+    def test_valid_match(self):
+        """Test that expected column returned for matching flag system"""
+        flag_system = "example_flag_system"
+        expected = self.ts.flag_col
+        result = self.ts.data_col1.get_flag_system_column(flag_system)
+        self.assertEqual(result, expected)
+
+    def test_error_with_multiple_matches(self):
+        """" Test error raised when more than one matching FlagColumn is present"""
+        flag_system = "example_flag_system"
+
+        # Add a relationship to another column that uses the same flag system
+        self.ts.set_flag_column(flag_system, "flag_col2")
+        relationship = Relationship(self.ts.data_col1,
+                                    self.ts.flag_col2,
+                                    RelationshipType.ONE_TO_MANY,
+                                    DeletionPolicy.CASCADE)
+        self.ts._relationship_manager._add(relationship)
+
+        with self.assertRaises(UserWarning):
+            self.ts.data_col1.get_flag_system_column(flag_system)
