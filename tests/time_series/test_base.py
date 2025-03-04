@@ -1636,6 +1636,7 @@ class TestMetadata(unittest.TestCase):
         result = self.ts.metadata("nonexistent_key", strict=False)
         self.assertEqual(result, expected)
 
+
 class TestSetupMetadata(unittest.TestCase):
     df = pl.DataFrame({
         "time": [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)],
@@ -1665,3 +1666,43 @@ class TestSetupMetadata(unittest.TestCase):
             ts = TimeSeries(self.df, time_name="time")
             ts._setup_metadata(metadata)
         self.assertEqual(ts._metadata, {})
+
+
+class TestGetFlagSystemColumn(unittest.TestCase):
+    def setUp(self):
+        df = pl.DataFrame({
+            "time": [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)],
+            "data_col": [10, 20, 30], "supp_col": ["A", "B", "C"],
+            "flag_col": [1, 2, 3]
+        })
+        flag_systems = {"example_flag_system": {"OK": 1, "WARNING": 2}}
+        self.ts = TimeSeries(df=df,
+                        time_name="time",
+                        supplementary_columns=["supp_col"],
+                        flag_columns={"flag_col": "example_flag_system"},
+                        flag_systems=flag_systems)
+        self.ts.data_col.add_relationship(["flag_col"])
+
+    def test_data_column_not_exist(self):
+        """Test return when the specified data column doesn't exist"""
+        data_column = "data_col_not_exist"
+        flag_system = "example_flag_system"
+        with self.assertRaises(KeyError):
+            self.ts.get_flag_system_column(data_column, flag_system)
+
+    @parameterized.expand([
+        "supp_col", "flag_col"
+    ])
+    def test_data_column_not_a_data_column(self, data_column):
+        """Test return when the specified data column isn't actually a data column"""
+        flag_system = "example_flag_system"
+        with self.assertRaises(TypeError):
+            self.ts.get_flag_system_column(data_column, flag_system)
+
+    def test_get_expected_flag_column(self):
+        """Test expected flag column returned for valid flag system"""
+        data_column = "data_col"
+        flag_system = "example_flag_system"
+        expected = self.ts.flag_col
+        result = self.ts.get_flag_system_column(data_column, flag_system)
+        self.assertEqual(result, expected)

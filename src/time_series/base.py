@@ -629,6 +629,30 @@ class TimeSeries:
         for other_column in other:
             primary.remove_relationship(other_column)
 
+    def get_flag_system_column(
+        self, data_column: Union[str, TimeSeriesColumn], flag_system: str
+    ) -> Optional["TimeSeriesColumn"]:
+        """Retrieves the flag system column corresponding to the given data column and flag system.
+
+        Args:
+            data_column: The data column identifier. This can either be the name of the column or an instance
+                            of TimeSeriesColumn.
+            flag_system: The name of the flag system.
+
+        Returns:
+            The matching flag column if exactly one match is found, or None if no matching column is found.
+        """
+        if isinstance(data_column, str):
+            error_msg = f"Column {data_column} not found."
+            data_column = self.columns.get(data_column, None)
+            if data_column is None:
+                raise KeyError(error_msg)
+
+        if type(data_column) is not DataColumn:
+            raise TypeError(f"Column '{data_column.name}' is type {type(data_column)}. Should be a data column.")
+
+        return data_column.get_flag_system_column(flag_system)
+
     def __getattr__(self, name: str) -> Any:
         """Dynamically handle attribute access for the TimeSeries object.
 

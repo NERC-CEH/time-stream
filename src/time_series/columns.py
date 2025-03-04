@@ -428,6 +428,33 @@ class DataColumn(TimeSeriesColumn):
 
             self._ts._relationship_manager._add(relationship)
 
+    def get_flag_system_column(self, flag_system: str) -> Optional["TimeSeriesColumn"]:
+        """Retrieves the flag column linked to this data column that corresponds to the specified flag system.
+
+        Args:
+            flag_system: The name of the flag system.
+
+        Raises:
+            UserWarning: If more than one flag column is found matching the given flag system.
+
+        Returns:
+            The matching flag column if exactly one match is found, or None if no matching column is found.
+        """
+        relationships = self.get_relationships()
+        flag_system = self._ts._flag_manager.flag_systems.get(flag_system, None)
+        matches = []
+        for relationship in relationships:
+            if type(relationship.other_column) is FlagColumn and relationship.other_column.flag_system == flag_system:
+                matches.append(relationship.other_column)
+
+        if len(matches) > 1:
+            # Should only be one (or no) matches.  Something gone wrong further upstream if this has happened!
+            raise UserWarning(f"More than one column matches found for flag system {flag_system}: {matches}")
+        elif len(matches) == 1:
+            return matches[0]
+        else:
+            return None
+
 
 class SupplementaryColumn(TimeSeriesColumn):
     """Represents supplementary columns (e.g., metadata, extra information)."""
