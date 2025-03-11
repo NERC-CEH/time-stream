@@ -68,7 +68,7 @@ def _create_ts(
 
 
 # Maximum length of a synthetic TimeSeries
-MAX_LENGTH: int = 100_000
+MAX_LENGTH: int = 5_000
 
 
 @dataclass(frozen=True)
