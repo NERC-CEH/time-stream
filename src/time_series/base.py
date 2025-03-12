@@ -230,10 +230,8 @@ class TimeSeries:
 
         self._epoch_check(self.resolution)
 
-        # Compare the original series to the rounded series.  If no match, it is not aligned to the resolution.
-        rounded_times = self._round_time_to_period(self.resolution)
-        aligned = self.df[self.time_name].equals(rounded_times)
-        if not aligned:
+        # Compare the original series to the truncated series.  If no match, it is not aligned to the resolution.
+        if not TimeSeries.check_resolution(self.df[self.time_name], self.resolution):
             raise UserWarning(
                 f'Values in time field: "{self.time_name}" are not aligned to resolution: {self.resolution}'
             )
@@ -273,32 +271,73 @@ class TimeSeries:
 
         self._epoch_check(self.periodicity)
 
-        # Check how many unique values are in the rounded times. It should equal the length of the original time series
-        # if all time values map to a single periodicity
-        rounded_times = self._round_time_to_period(self.periodicity)
-        all_unique = rounded_times.n_unique() == len(self.df[self.time_name])
-        if not all_unique:
+        # Check how many unique values are in the truncated times. It should equal the length of the original
+        # time-series if all time values map to a single periodicity
+        if not TimeSeries.check_periodicity(self.df[self.time_name], self.periodicity):
             raise UserWarning(
                 f'Values in time field: "{self.time_name}" do not conform to periodicity: {self.periodicity}'
             )
 
-    def _round_time_to_period(self, period: Period) -> pl.Series:
-        """Round the time column to the given period.
+    @staticmethod
+    def check_resolution(date_times: pl.Series, resolution: Period) -> bool:
+        """Check that a Series of date/time values conforms to a given resolution period.
 
         Args:
-           period: The period to which the time column should be rounded.
+           date_times: A Series of date/times to be tested.
+           resolution: The resolution period that the date/times are checked against.
 
         Returns:
-           A Polars Series with the rounded time values.
+           True if the Series conforms to the resolution period.
+           False otherwise
+        """
+        return date_times.equals(TimeSeries.truncate_to_period(date_times, resolution))
+
+    @staticmethod
+    def check_periodicity(date_times: pl.Series, periodicity: Period) -> bool:
+        """Check that a Series of date/time values conforms to a given periodicity.
+
+        Args:
+           date_times: A Series of date/times to be tested.
+           resolution: The periodicity period that the date/times are checked against.
+
+        Returns:
+           True if the Series conforms to the periodicity.
+           False otherwise
+        """
+        # Check how many unique values are in the truncated times. It should equal the length of the original
+        # time-series if all time values map to a single periodicity
+        return TimeSeries.truncate_to_period(date_times, periodicity).n_unique() == len(date_times)
+
+    @staticmethod
+    def truncate_to_period(date_times: pl.Series, period: Period) -> pl.Series:
+        """Truncate a Series of date/time values to the given period.
+
+        All the date/time values in the input series are "rounded down" to the specified period.
+
+        Args:
+           date_times: A Series of date/times to be truncated.
+           period: The period to which the date/times should be truncated.
+
+        Examples:
+           For a period of one day (Period.of_days(1)) all the date/time value are rounded
+           down, or truncated, to the start of the day (the hour, minute, second, and microsecond
+           fields are all set to 0).
+
+           For a period of fifteen minutes (Period.of_minutes(15)) all the date/time value are rounded
+           down, or truncated, to the start of a fifteen minute period (the minute field is rounded down
+           to either 0, 15, 30 or 45, and the second, and microsecond fields are set to 0).
+
+        Returns:
+           A Polars Series with the truncated date/time values.
         """
         # Remove any offset from the time series
-        time_series_no_offset = self.df[self.time_name].dt.offset_by("-" + period.pl_offset)
+        time_series_no_offset = date_times.dt.offset_by("-" + period.pl_offset)
 
-        # Round the (non offset) time series to the given resolution interval and add the offset back on
-        rounded_times = time_series_no_offset.dt.truncate(period.pl_interval)
-        rounded_times_with_offset = rounded_times.dt.offset_by(period.pl_offset)
+        # truncate the (non offset) time series to the given resolution interval and add the offset back on
+        truncated_times = time_series_no_offset.dt.truncate(period.pl_interval)
+        truncated_times_with_offset = truncated_times.dt.offset_by(period.pl_offset)
 
-        return rounded_times_with_offset
+        return truncated_times_with_offset
 
     @staticmethod
     def _epoch_check(period: Period) -> None:
