@@ -284,7 +284,7 @@ CASE1_LIST: list[Case1] = [
 # A list that can be supplied to the @parameterized.expand
 # annotation to test all the test cases
 PARAMS_CASE1: list[tuple[str, Case1]] = [
-    (f"{case1.resolution.iso_duration}_{case1.aggregation_period.iso_duration}", case1) for case1 in CASE1_LIST
+    (f"{case1.resolution!s}_{case1.aggregation_period!s}", case1) for case1 in CASE1_LIST
 ]
 
 # The dates within which to create test time-series data
