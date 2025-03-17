@@ -37,7 +37,7 @@ license = { text = "NO LICENSE" }
 
 [project.optional-dependencies]
 test = ["pytest", "pytest-cov", "parameterized", "freezegun", "pytest-benchmark", "pytest-benchmark[histogram]"]
-docs = ["sphinx", "sphinx-copybutton", "sphinx-rtd-theme"]
+docs = ["sphinx", "sphinx-copybutton", "sphinx-rtd-theme", "nbsphinx"]
 lint = ["ruff"]
 dev = ["dritimeseriesprocessor[test,docs,lint]"]
 
