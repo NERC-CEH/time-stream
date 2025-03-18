@@ -5,8 +5,10 @@
 
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
+import os
 
 import time_series
+
 
 project = "Time Series Package"
 copyright = "2025, UKCEH"
@@ -24,8 +26,8 @@ extensions = [
     "sphinx_rtd_theme",
     "sphinx.ext.autosummary",
     "sphinx.ext.mathjax",
-    "nbsphinx",
     "sphinx_copybutton",
+    'jupyter_sphinx',
 ]
 
 # Add any paths that contain templates here, relative to this directory.
@@ -56,9 +58,6 @@ html_css_files = [
     "css/custom.css",
 ]
 
-# -- Options for nbsphinx ----------------------------------------------------
-nbsphinx_execute = "never"  # Don't execute notebooks
-
 # -- Napoleon settings -------------------------------------------------------
 napoleon_google_docstring = True
 napoleon_numpy_docstring = False
@@ -72,3 +71,9 @@ napoleon_use_ivar = False
 napoleon_use_param = True
 napoleon_use_rtype = True
 napoleon_preprocess_types = True
+
+# -- Jupyter-sphinx settings -------------------------------------------------------
+# Add examples path to Python's path
+examples_path = os.path.abspath('../../examples')
+# Make sure jupyter-sphinx uses the same path
+os.environ['PYTHONPATH'] = examples_path + os.pathsep + os.environ.get('PYTHONPATH', '')
