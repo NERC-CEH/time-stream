@@ -85,6 +85,8 @@ class TimeSeries:
         self.sort_time()
         self._validate_resolution()
         self._validate_periodicity()
+        if not self.resolution.is_subperiod_of(self.periodicity):
+            raise UserWarning(f"Resolution {self.resolution} is not a subperiod of periodicity {self.periodicity}")
         self._setup_columns(supplementary_columns, flag_columns, column_metadata)
         self._setup_metadata(metadata)
 
