@@ -7209,6 +7209,129 @@ class TestCount(unittest.TestCase):
         self.assertEqual(count, expected_count)
 
 
+class TestIsSubperiodOf(unittest.TestCase):
+    """Test Period.is_subperiod_of method"""
+
+    @parameterized.expand(
+        [
+            ("tz", Period.of_microseconds(1).with_tzinfo(TZ_UTC),Period.of_microseconds(1).with_tzinfo(TZ_UTC)),
+            ("micro/micro", Period.of_microseconds(1),Period.of_microseconds(1)),
+            ("micro/micro", Period.of_microseconds(1),Period.of_microseconds(10)),
+            ("micro/micro", Period.of_microseconds(25),Period.of_microseconds(100)),
+            ("micro/micro", Period.of_duration("P0.1S"),Period.of_duration("P0.5S")),
+            ("micro/micro", Period.of_duration("P0.1S"),Period.of_duration("P0.5S+0.1S")),
+            ("micro/micro", Period.of_duration("P0.2S+0.01S"),Period.of_duration("P0.4S+0.01S")),
+            ("micro/micro", Period.of_microseconds(10).with_microsecond_offset(5), Period.of_microseconds(100).with_microsecond_offset(5)),
+            ("micro/second", Period.of_microseconds(1_000_000),Period.of_seconds(1)),
+            ("micro/second", Period.of_microseconds(1),Period.of_seconds(1)),
+            ("micro/second", Period.of_microseconds(1234),Period.of_seconds(1234)),
+            ("micro/second", Period.of_duration("P0.1S"),Period.of_duration("P1S+0.1S")),
+            ("micro/second", Period.of_duration("P0.1S"),Period.of_duration("P1S+0.2S")),
+            ("micro/second", Period.of_duration("P0.1S+0.001S"),Period.of_duration("P1S+0.001S")),
+            ("micro/second", Period.of_microseconds(100_000).with_microsecond_offset(5), Period.of_seconds(1).with_microsecond_offset(5)),
+            ("micro/month", Period.of_microseconds(1),Period.of_months(1)),
+            ("micro/month", Period.of_microseconds(1000),Period.of_months(1)),
+            ("micro/month", Period.of_microseconds(86_400),Period.of_months(1)),
+            ("micro/month", Period.of_duration("P0.1S"),Period.of_duration("P1M+0.1S")),
+            ("micro/month", Period.of_duration("P0.1S"),Period.of_duration("P1M+0.2S")),
+            ("second/micro", Period.of_seconds(1),Period.of_microseconds(1_000_000)),
+            ("second/second", Period.of_seconds(1),Period.of_seconds(1)),
+            ("second/second", Period.of_seconds(1),Period.of_seconds(12345)),
+            ("second/second", Period.of_seconds(10), Period.of_seconds(100)),
+            ("second/second", Period.of_duration("P1S"),Period.of_duration("P10S")),
+            ("second/second", Period.of_duration("P1S+0.1S"),Period.of_duration("P10S+0.1S")),
+            ("second/second", Period.of_duration("P1S"),Period.of_duration("P10S+5S")),
+            ("second/second", Period.of_duration("P2S+0.01S"),Period.of_duration("P4S+0.01S")),
+            ("second/second", Period.of_seconds(10).with_microsecond_offset(5), Period.of_seconds(100).with_microsecond_offset(5)),
+            ("second/month", Period.of_seconds(1),Period.of_months(1)),
+            ("second/month", Period.of_seconds(86_400),Period.of_months(1)),
+            ("second/month", Period.of_duration("P1S"),Period.of_duration("P1M+1S")),
+            ("second/month", Period.of_duration("P1S"),Period.of_duration("P1M+2S")),
+            ("second/month", Period.of_duration("P1S"),Period.of_duration("P1M+25S")),
+            ("month/month", Period.of_months(1),Period.of_months(1)),
+            ("month/month", Period.of_months(1),Period.of_months(2)),
+            ("month/month", Period.of_months(1),Period.of_months(3)),
+            ("month/month", Period.of_months(1),Period.of_months(5)),
+            ("month/month", Period.of_months(1),Period.of_months(6)),
+            ("month/month", Period.of_months(1),Period.of_duration("P1Y")),
+            ("month/month", Period.of_months(1),Period.of_duration("P1Y+1M")),
+            ("month/month", Period.of_months(1),Period.of_duration("P1Y+2M")),
+            ("month/month", Period.of_months(1),Period.of_duration("P1Y+3M")),
+            ("month/month", Period.of_months(2),Period.of_duration("P1Y")),
+            ("month/month", Period.of_months(2),Period.of_duration("P1Y+2M")),
+            ("month/month", Period.of_months(2),Period.of_duration("P1Y+4M")),
+            ("month/month", Period.of_duration("P1M+1S"),Period.of_duration("P1Y+1S")),
+            ("month/month", Period.of_duration("P1M"),Period.of_duration("P1Y+1M")),
+            ("month/month", Period.of_duration("P2M"),Period.of_duration("P1Y+2M")),
+            ("month/month", Period.of_duration("P2M"),Period.of_duration("P1Y+4M")),
+            ("month/month", Period.of_duration("P2M+1M"),Period.of_duration("P1Y+1M")),
+            ("month/month", Period.of_duration("P3M+1M"),Period.of_duration("P1Y+1M")),
+            ("month/month", Period.of_duration("P3M+2M"),Period.of_duration("P1Y+2M")),
+            ("month/month", Period.of_duration("P2M+1S"),Period.of_duration("P1Y+1S")),
+            ("month/month", Period.of_duration("P2M+1M1S"),Period.of_duration("P1Y+1M1S")),
+            ("month/month", Period.of_duration("P2M+1S"),Period.of_duration("P1Y+2M1S")),
+        ]
+    )
+    def test_is_subperiod(self, text: Any, inner_period: Period, outer_period: Period) -> None:
+        self.assertTrue(inner_period.is_subperiod_of(outer_period))
+
+
+    @parameterized.expand(
+        [
+            ("tz", Period.of_microseconds(1).with_tzinfo(None),Period.of_microseconds(1).with_tzinfo(TZ_UTC)),
+            ("micro/micro", Period.of_microseconds(10),Period.of_microseconds(1)),
+            ("micro/micro", Period.of_microseconds(100),Period.of_microseconds(25)),
+            ("micro/micro", Period.of_duration("P0.1S+0.001S"),Period.of_duration("P0.5S")),
+            ("micro/micro", Period.of_duration("P0.1S"),Period.of_duration("P0.5S+0.001S")),
+            ("micro/micro", Period.of_duration("P0.4S+0.01S"),Period.of_duration("P0.2S+0.01S")),
+            ("micro/micro", Period.of_microseconds(100).with_microsecond_offset(5), Period.of_microseconds(10).with_microsecond_offset(5)),
+            ("micro/second", Period.of_microseconds(1234),Period.of_seconds(1)),
+            ("micro/second", Period.of_duration("P0.1S+0.001S"),Period.of_seconds(1)),
+            ("micro/second", Period.of_duration("P0.1S"),Period.of_duration("P1S+0.001S")),
+            ("micro/month", Period.of_microseconds(12345),Period.of_months(1)),
+            ("micro/month", Period.of_duration("P0.1S"),Period.of_duration("P1M+0.25S")),
+            ("second/micro", Period.of_seconds(1),Period.of_microseconds(1_000_001)),
+            ("second/micro", Period.of_seconds(1),Period.of_microseconds(100_000)),
+            ("second/micro", Period.of_seconds(1),Period.of_microseconds(1_000)),
+            ("second/micro", Period.of_duration("P1S+0.001S"),Period.of_duration("P0.1S+0.001S")),
+            ("second/second", Period.of_seconds(12345),Period.of_seconds(1)),
+            ("second/second", Period.of_seconds(100), Period.of_seconds(10)),
+            ("second/second", Period.of_duration("P1S"),Period.of_duration("P1S+0.001S")),
+            ("second/second", Period.of_duration("P1S+0.1S"),Period.of_duration("P10S+0.2S")),
+            ("second/second", Period.of_duration("P4S+0.01S"),Period.of_duration("P2S+0.01S")),
+            ("second/second", Period.of_seconds(100).with_microsecond_offset(5), Period.of_seconds(10).with_microsecond_offset(5)),
+            ("second/month", Period.of_seconds(1000),Period.of_months(1)),
+            ("second/month", Period.of_seconds(12345),Period.of_months(1)),
+            ("second/month", Period.of_duration("P1S"),Period.of_duration("P1M+2.5S")),
+            ("month/micro", Period.of_months(1),Period.of_microseconds(1_000_000)),
+            ("month/micro", Period.of_months(1),Period.of_microseconds(1_000_001)),
+            ("month/micro", Period.of_months(1),Period.of_microseconds(100_000)),
+            ("month/micro", Period.of_months(1),Period.of_microseconds(1_000)),
+            ("month/second", Period.of_months(1),Period.of_seconds(1)),
+            ("month/second", Period.of_months(1),Period.of_seconds(1_000)),
+            ("month/second", Period.of_months(1),Period.of_seconds(86_400)),
+            ("month/second", Period.of_months(1),Period.of_seconds(86_400*31)),
+            ("month/month", Period.of_months(2),Period.of_months(1)),
+            ("month/month", Period.of_months(3),Period.of_months(1)),
+            ("month/month", Period.of_months(5),Period.of_months(1)),
+            ("month/month", Period.of_months(6),Period.of_months(1)),
+            ("month/month", Period.of_months(2),Period.of_duration("P1Y+1M")),
+            ("month/month", Period.of_months(2),Period.of_duration("P1Y+3M")),
+            ("month/month", Period.of_duration("P1M"),Period.of_duration("P1Y+1S")),
+            ("month/month", Period.of_duration("P2M"),Period.of_duration("P1Y+1S")),
+            ("month/month", Period.of_duration("P2M"),Period.of_duration("P1Y+1M")),
+            ("month/month", Period.of_duration("P2M"),Period.of_duration("P1Y+3M")),
+            ("month/month", Period.of_duration("P3M+2M"),Period.of_duration("P1Y+1M")),
+            ("month/month", Period.of_duration("P3M+2M"),Period.of_duration("P1Y+3M")),
+            ("month/month", Period.of_duration("P3M+2M"),Period.of_duration("P1Y+4M")),
+            ("month/month", Period.of_duration("P2M+1M1S"),Period.of_duration("P1Y+1S")),
+            ("month/month", Period.of_duration("P2M+1M1S"),Period.of_duration("P1Y+2M1S")),
+        ]
+    )
+    def test_is_not_subperiod(self, text: Any, inner_period: Period, outer_period: Period) -> None:
+        self.assertFalse(inner_period.is_subperiod_of(outer_period))
+
+
 S_YYYY: str = r"\d{4}"
 S_YYYY_MM: str = r"\d{4}-\d{2}"
 S_YYYY_MM_DD: str = r"\d{4}-\d{2}-\d{2}"
