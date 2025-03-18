@@ -6,13 +6,14 @@ contained within will evolve considerably.
 """
 
 import datetime
-from abc import ABC, abstractmethod
+from abc import ABC
 from collections.abc import Callable
 from typing import Optional, override
 
 import polars as pl
 
 from time_series import Period, TimeSeries
+from time_series.aggregation_base import AggregationFunction
 
 # A function that takes a Polars GroupBy as an argument and returns a DataFrame
 GroupByToDataFrame = Callable[[pl.dataframe.group_by.GroupBy], pl.DataFrame]
@@ -259,51 +260,6 @@ class GroupByBasic(AggregationStage):
 
     def aggregation_expressions(self) -> list[pl.Expr]:
         return [self._gb2df(pl.col(self._value_column)).alias(f"{self.name}_{self._value_column}")]
-
-
-class AggregationFunction(ABC):
-    """An aggregation function that can be applied to a field
-    in a TimeSeries.
-
-    A new aggregated TimeSeries can be created from an existing
-    TimeSeries by passing a subclass of AggregationFunction
-    into the TimeSeries.aggregate method.
-
-    Attributes:
-        name: The name of the aggregation function
-    """
-
-    def __init__(self, name: str) -> None:
-        self._name = name
-
-    @property
-    def name(self) -> str:
-        """Return the name of this aggregation function"""
-        return self._name
-
-    @abstractmethod
-    def apply(self, ts: TimeSeries, aggregation_period: Period, column_name: str) -> TimeSeries:
-        """Apply this aggregation function to the supplied
-        TimeSeries column and return a new TimeSeries containing
-        the aggregated data
-
-        Note: This is the first attempt at a mechanism for aggregating
-        time-series data.  The signature of this method is likely to
-        evolve considerably.
-
-        Args:
-            ts: The TimeSeries containing the data to be aggregated
-            aggregation_period: The time period over which to aggregate
-            column_name: The column containing the data to be aggregated
-
-        Returns:
-            A TimeSeries containing the aggregated data
-        """
-        raise NotImplementedError
-
-    @classmethod
-    def create(cls) -> "AggregationFunction":
-        raise NotImplementedError
 
 
 class Mean(AggregationFunction):
