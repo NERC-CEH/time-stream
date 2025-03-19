@@ -269,6 +269,7 @@ class TestRelationshipManagerHandleDeletion(BaseRelationshipTest):
         self.assertEqual([], self.ts._relationship_manager._get_relationships(col_a))
         self.assertEqual([], self.ts._relationship_manager._get_relationships(col_b))
         self.assertNotIn(col_b.name, self.ts.columns)
+        self.assertNotIn(col_b.name, self.ts.df.columns)
 
     def test_multiple_cascade(self):
         """Test deletion handling with CASCADE policy, where the second column also has a CASCADE relationship.
@@ -289,6 +290,8 @@ class TestRelationshipManagerHandleDeletion(BaseRelationshipTest):
         self.assertEqual([], self.ts._relationship_manager._get_relationships(col_c))
         self.assertNotIn(col_b.name, self.ts.columns)
         self.assertNotIn(col_c.name, self.ts.columns)
+        self.assertNotIn(col_b.name, self.ts.df.columns)
+        self.assertNotIn(col_c.name, self.ts.df.columns)
 
     def test_unlink(self):
         """Test deletion handling with UNLINK policy. Deleting colA should unlink the relationship with colB,
