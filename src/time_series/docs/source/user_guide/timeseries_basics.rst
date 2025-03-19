@@ -350,35 +350,91 @@ relationship to each other.
    import examples_timeseries_basics
    ts = examples_timeseries_basics.add_column_relationships()
 
+Relationships can be removed:
 
-.. code-block:: python
-    # Remove a relationship
-    ts.remove_column_relationship("temperature", "temp_sensor_id")
+.. literalinclude:: ../../../examples/examples_timeseries_basics.py
+   :language: python
+   :start-after: [start_block_22]
+   :end-before: [end_block_22]
+   :dedent:
+
+.. jupyter-execute::
+   :hide-code:
+
+   import examples_timeseries_basics
+   ts = examples_timeseries_basics.remove_column_relationships()
+
+The relationship also defines what happens when a column is removed.  For example, if a Data Column is dropped, then
+this will cascade to any linked Flag Columns.  Any linked Supplementary Columns are not dropped, but the relationship
+removed:
+
+.. literalinclude:: ../../../examples/examples_timeseries_basics.py
+   :language: python
+   :start-after: [start_block_23]
+   :end-before: [end_block_23]
+   :dedent:
+
+.. jupyter-execute::
+   :hide-code:
+
+   import examples_timeseries_basics
+   ts = examples_timeseries_basics.drop_column_with_relationships()
 
 Aggregating Data
 --------------
 
-The ``TimeSeries`` class provides powerful aggregation capabilities:
+The ``TimeSeries`` class provides powerful aggregation capabilities.
 
-.. code-block:: python
+Given a year's worth of minute data:
 
-    from time_series.aggregation import Mean, Min, Max
+.. literalinclude:: ../../../examples/examples_timeseries_basics.py
+   :language: python
+   :start-after: [start_block_24]
+   :end-before: [end_block_24]
+   :dedent:
 
-    # Create a monthly aggregation of daily data
-    monthly_period = Period.of_months(1)
+.. jupyter-execute::
+   :hide-code:
 
-    # Calculate monthly mean temperature
-    monthly_mean_temp = ts.aggregate(monthly_period, Mean, "temperature")
+   import examples_timeseries_basics
+   ts = examples_timeseries_basics.aggregation_set_up()
 
-    # Calculate monthly minimum temperature
-    monthly_min_temp = ts.aggregate(monthly_period, Min, "temperature")
+We can aggregate this data to various new resolutions.
 
-    # Calculate monthly maximum temperature
-    monthly_max_temp = ts.aggregate(monthly_period, Max, "temperature")
+This example shows an aggregation to monthly mean temperatures.
+Note that this returns a new TimeSeries object, as the primary time attributes have changed.
 
-    # Use it with other periods
-    weekly_period = Period.of_days(7)
-    weekly_mean_temp = ts.aggregate(weekly_period, Mean, "temperature")
+The returned TimeSeries provides additional context columns:
+
+- Expected count of the number of data points expected if the aggregation period was full
+- Actual count of the number of data points found in the data for the given aggregation period.
+- For Max and Min, the datetime of the Max/Min data point within the given aggregation period.
+
+.. literalinclude:: ../../../examples/examples_timeseries_basics.py
+   :language: python
+   :start-after: [start_block_25]
+   :end-before: [end_block_25]
+   :dedent:
+
+.. jupyter-execute::
+   :hide-code:
+
+   import examples_timeseries_basics
+   ts = examples_timeseries_basics.aggregation_mean_monthly_temperature()
+
+And some more examples:
+
+.. literalinclude:: ../../../examples/examples_timeseries_basics.py
+   :language: python
+   :start-after: [start_block_26]
+   :end-before: [end_block_26]
+   :dedent:
+
+.. jupyter-execute::
+   :hide-code:
+
+   import examples_timeseries_basics
+   ts = examples_timeseries_basics.aggregation_more_examples()
 
 For more details on aggregation, see the dedicated :doc:`aggregation` guide.
 

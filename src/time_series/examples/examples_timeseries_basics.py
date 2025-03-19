@@ -4,7 +4,10 @@ from datetime import datetime, timedelta
 import polars as pl
 
 from time_series import TimeSeries, Period
+from time_series.aggregation import Mean, Min, Max
 # [end_block_1]
+
+import numpy as np
 
 from utils import suppress_output
 
@@ -385,6 +388,7 @@ def update_time_of_df_error():
         print(f"Warning: {w}")
     # [end_block_20]
 
+
 def add_column_relationships():
     with suppress_output():
         ts = create_simple_time_series_with_supp_cols()
@@ -410,8 +414,115 @@ def add_column_relationships():
     # Create a relationship between temperature and its flags (using method on the Column object)
     ts.temperature.add_relationship("temperature_qc_flags")
 
+    print("")
     print("Temperature column relationships: ", ts.temperature.get_relationships())
     print("Battery voltage column relationships: ", ts.battery_voltage.get_relationships())
     # [end_block_21]
 
-add_column_relationships()
+    return ts
+
+
+def remove_column_relationships():
+    with suppress_output():
+        ts = add_column_relationships()
+
+    # [start_block_22]
+    ts.remove_column_relationship("temperature", "battery_voltage")
+    print("Temperature column relationships: ", ts.temperature.get_relationships())
+    # [end_block_22]
+
+
+def drop_column_with_relationships():
+    with suppress_output():
+        ts = add_column_relationships()
+
+    # [start_block_23]
+    ts.df = ts.df.drop("temperature")
+    # Note that temperature and temperature_qc_flags are removed, but battery_voltage remains.
+    print(ts)
+    # [end_block_23]
+
+
+def random_minute_temperature_data(start_date, end_date):
+    np.random.seed(42)
+    # Create a year of minute-resolution timestamps
+    minutes = int((end_date - start_date).total_seconds() / 60)
+    timestamps = [start_date + timedelta(minutes=i) for i in range(minutes)]
+
+    # Base annual temperature pattern (sine wave)
+    days = np.linspace(0, 365, minutes)
+    base_temp = 15 + 10 * np.sin(2 * np.pi * days / 365)  # Mean 15°C, amplitude 10°C
+
+    # Daily fluctuation (sine wave with period of 1 day)
+    hour_in_day = np.array([(t.hour * 60 + t.minute) / (24 * 60) for t in timestamps])
+    daily_fluctuation = 5 * np.sin(2 * np.pi * hour_in_day)  # 5°C daily amplitude
+
+    # Add random noise
+    noise = np.random.normal(0, 0.2, minutes)  # Small random fluctuations
+
+    # Combine all components
+    temperatures = base_temp + daily_fluctuation + noise
+    return temperatures
+
+
+def aggregation_set_up():
+    start_date = datetime(2023, 1, 1)
+    end_date = datetime(2024, 1, 1)
+    minutes = int((end_date - start_date).total_seconds() / 60)
+    timestamps = [start_date + timedelta(minutes=i) for i in range(minutes)]
+
+    temperatures = random_minute_temperature_data(start_date, end_date)
+
+    df = pl.DataFrame({
+        "timestamp": timestamps,
+        "temperature": temperatures,
+    })
+
+    ts = TimeSeries(
+        df=df,
+        time_name="timestamp",
+        resolution=Period.of_minutes(1),
+        periodicity=Period.of_minutes(1)
+    )
+
+    # [start_block_24]
+    # The following TimeSeries has 1-year's worth of 1-minute resolution random temperature data:
+    print(ts)
+    # [end_block_24]
+
+    return ts
+
+
+def aggregation_mean_monthly_temperature():
+    with suppress_output():
+        ts = aggregation_set_up()
+
+    # [start_block_25]
+    # Create a monthly aggregation of the minute data
+    monthly_mean_temp = ts.aggregate(Period.of_months(1), Mean, "temperature")
+
+    print(monthly_mean_temp)
+    # [end_block_25]
+
+
+def aggregation_more_examples():
+    with suppress_output():
+        ts = aggregation_set_up()
+
+    # [start_block_26]
+    # Calculate monthly minimum temperature
+    monthly_min_temp = ts.aggregate(Period.of_months(1), Min, "temperature")
+    print(monthly_min_temp)
+
+    # Calculate monthly maximum temperature
+    monthly_max_temp = ts.aggregate(Period.of_months(1), Max, "temperature")
+    print(monthly_max_temp)
+
+    # Use it with other periods
+    daily_mean_temp = ts.aggregate(Period.of_days(1), Mean, "temperature")
+    print(daily_mean_temp)
+
+    annual_max_temp = ts.aggregate(Period.of_years(1), Max, "temperature")
+    print(annual_max_temp)
+
+    # [end_block_26]
