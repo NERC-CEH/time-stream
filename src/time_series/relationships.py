@@ -119,7 +119,8 @@ class RelationshipManager:
     def _setup_relationships(self) -> None:
         """Initializes relationship storage for each column in the TimeSeries."""
         for column in self._ts.columns.values():
-            self._relationships[column.name] = set()
+            if column.name not in self._relationships:
+                self._relationships[column.name] = set()
 
     def _add(self, relationship: Relationship) -> None:
         """Adds a new relationship.

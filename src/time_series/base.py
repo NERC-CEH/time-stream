@@ -53,10 +53,10 @@ class TimeSeries:
         self._flag_manager = TimeSeriesFlagManager(self, flag_systems)
         self._columns: dict[str, TimeSeriesColumn] = {}
         self._metadata = {}
+        self._relationship_manager = RelationshipManager(self)
         self._df = df
 
         self._setup(supplementary_columns or [], flag_columns or {}, column_metadata or {}, metadata or {})
-        self._relationship_manager = RelationshipManager(self)
 
     def _setup(
         self,
@@ -206,15 +206,15 @@ class TimeSeries:
         datetime in the time series match to.
 
         Some examples:
-        P0.000001S  Allow all datetime values, including microseconds.
-        P1S	        Allow datetimes with a whole number of seconds. Microseconds must be "0".
-        PT1M	    Allow datetimes to be specified to the minute. Seconds and Microseconds must be "0".
-        PT15M	    Allow datetimes to be specified to a multiple of 15 minutes.
-                    Seconds and Microseconds must be "0", and Minutes be one of ("00", "15", "30", "45")
-        P1D	        Allow all dates, but the time must be "00:00:00"
-        P1M	        Allow all years and months, but the day must be "1" and time "00:00:00"
-        P3M	        Quarterly dates; month must be one of ("1", "4", "7", "10"), day must be "1" and time "00:00:00"
-        P1Y+9M9H	Only dates at 09:00 am on the 1st of October are allowed.
+        PT0.000001S  Allow all datetime values, including microseconds.
+        PT1S	     Allow datetimes with a whole number of seconds. Microseconds must be "0".
+        PT1M	     Allow datetimes to be specified to the minute. Seconds and Microseconds must be "0".
+        PT15M	     Allow datetimes to be specified to a multiple of 15 minutes.
+                     Seconds and Microseconds must be "0", and Minutes be one of ("00", "15", "30", "45")
+        P1D	         Allow all dates, but the time must be "00:00:00"
+        P1M	         Allow all years and months, but the day must be "1" and time "00:00:00"
+        P3M	         Quarterly dates; month must be one of ("1", "4", "7", "10"), day must be "1" and time "00:00:00"
+        P1Y+9M9H	 Only dates at 09:00 am on the 1st of October are allowed.
         """
         return self._resolution
 
@@ -244,8 +244,8 @@ class TimeSeries:
         within a given period of time.
 
         Some examples:
-        P0.000001S	Effectively there is no "periodicity".
-        P1S	        At most 1 datetime can occur within any given second.
+        PT0.000001S	Effectively there is no "periodicity".
+        PT1S	    At most 1 datetime can occur within any given second.
         PT1M	    At most 1 datetime can occur within any given minute.
         PT15M	    At most 1 datetime can occur within any 15-minute duration.
                     Each 15-minute durations starts at ("00", "15", "30", "45") minutes past the hour.
@@ -400,6 +400,9 @@ class TimeSeries:
             # Now add the actual column.
             data_col = DataColumn(col_name, self, {})
             self._columns[col_name] = data_col
+
+        # ensure new columns are initialised in the relationship manager
+        self._relationship_manager._setup_relationships()
 
     @property
     def time_column(self) -> Union[PrimaryTimeColumn, None]:
