@@ -310,6 +310,28 @@ class TestRemove(BaseTimeSeriesTest):
         self.assertNotIn(col_b.name, self.ts.df.columns)
         self.assertNotIn(col_c.name, self.ts.df.columns)
 
+    def test_remove_with_downstream_cascade(self):
+        """ Test that removing a column that is linked a column, linked to a column with CASCADE deletion policy removes
+        all columns
+        """
+        col_a = self.ts.data_col1
+        col_b = self.ts.flag_col
+        col_c = self.ts.flag_col2
+
+        relationship1 = Relationship(col_a, col_b, RelationshipType.MANY_TO_MANY, DeletionPolicy.CASCADE)
+        self.ts._relationship_manager._add(relationship1)
+        relationship2 = Relationship(col_b, col_c, RelationshipType.MANY_TO_MANY, DeletionPolicy.CASCADE)
+        self.ts._relationship_manager._add(relationship2)
+
+        col_a.remove()
+
+        self.assertNotIn(col_a.name, self.ts.columns)
+        self.assertNotIn(col_b.name, self.ts.columns)
+        self.assertNotIn(col_c.name, self.ts.columns)
+        self.assertNotIn(col_a.name, self.ts.df.columns)
+        self.assertNotIn(col_b.name, self.ts.df.columns)
+        self.assertNotIn(col_c.name, self.ts.df.columns)
+
 
 class TestAddFlag(BaseTimeSeriesTest):
     def setUp(self):

@@ -283,16 +283,13 @@ class TestRelationshipManagerHandleDeletion(BaseRelationshipTest):
         col_b = self.ts.colB
         col_c = self.ts.colC
 
-        col_a.remove()
         self.ts._relationship_manager._handle_deletion(self.ts.colA)
 
         self.assertEqual([], self.ts._relationship_manager._get_relationships(col_a))
         self.assertEqual([], self.ts._relationship_manager._get_relationships(col_b))
         self.assertEqual([], self.ts._relationship_manager._get_relationships(col_c))
-        self.assertNotIn(col_a.name, self.ts.columns)
         self.assertNotIn(col_b.name, self.ts.columns)
         self.assertNotIn(col_c.name, self.ts.columns)
-        self.assertNotIn(col_a.name, self.ts.df.columns)
         self.assertNotIn(col_b.name, self.ts.df.columns)
         self.assertNotIn(col_c.name, self.ts.df.columns)
 
