@@ -519,3 +519,20 @@ class TestFunctions(unittest.TestCase):
             datetime_fn=_get_datetime_of_max_list,
             value_fn=_get_max_list,
         )
+
+class TestSubPeriodCheck(unittest.TestCase):
+    """Test the "periodicity is a subperiod of aggregation period" check"""
+    df = pl.DataFrame({
+        "time": [datetime(2020, 1, 1)] ,
+        VALUE: [1.0] })
+    ts = TimeSeries(df=df, time_name="time",
+        resolution=Period.of_days(1),
+        periodicity=Period.of_days(1))
+
+    def test_legal(self):
+        # The test is that the following does not raise an error
+        self.ts.aggregate(Period.of_months(1), Min, VALUE)
+
+    def test_illegal(self):
+        with self.assertRaises(UserWarning):
+            self.ts.aggregate(Period.of_hours(1), Min, VALUE)

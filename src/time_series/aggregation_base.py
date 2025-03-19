@@ -93,4 +93,8 @@ def apply_aggregation(
     Returns:
         A TimeSeries containing the aggregated data.
     """
+    if not ts.periodicity.is_subperiod_of(aggregation_period):
+        raise UserWarning(
+            f"Data periodicity {ts.periodicity} is not a subperiod of aggregation period {aggregation_period}"
+        )
     return aggregation_function.create().apply(ts, aggregation_period, column_name)
