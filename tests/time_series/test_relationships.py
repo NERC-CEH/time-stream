@@ -1,6 +1,7 @@
-from datetime import datetime
 import unittest
 import itertools
+from datetime import datetime
+from unittest.mock import patch
 
 from parameterized import parameterized
 import polars as pl
@@ -335,3 +336,47 @@ class TestRelationshipManagerHandleDeletion(BaseRelationshipTest):
 
         with self.assertRaises(UserWarning):
             self.ts._relationship_manager._handle_deletion(self.ts.colB)
+
+
+class TestRelationshipManagerSetupRelationships(BaseRelationshipTest):
+    def setUp(self):
+        self.ts = TimeSeries(df=self.df, time_name="time")
+
+    def test_empty_columns(self):
+        """Test that no relationships are created when TimeSeries has no columns."""
+        ts = TimeSeries(df=pl.DataFrame({
+            "time": [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)],
+        }), time_name="time")
+
+        with patch.object(RelationshipManager, '_setup_relationships'):
+            rm = RelationshipManager(ts)
+            rm._setup_relationships()
+            self.assertEqual(rm._relationships, {})
+
+    def test_single_column(self):
+        """Test that a single column creates one entry with an empty set."""
+        ts = TimeSeries(df=pl.DataFrame({
+            "time": [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)],
+            "colA": [1, 2, 3],
+        }), time_name="time")
+
+        with patch.object(RelationshipManager, '_setup_relationships'):
+            # skip the function on init
+            rm = RelationshipManager(ts)
+
+        rm._setup_relationships()
+        self.assertIn("colA", rm._relationships)
+        self.assertEqual(rm._relationships["colA"], set())
+
+    def test_multiple_columns(self):
+        """Test that multiple columns create one entry each with an empty set."""
+        with patch.object(RelationshipManager, '_setup_relationships'):
+            # skip the function on init
+            rm = RelationshipManager(self.ts)
+        rm._setup_relationships()
+        self.assertIn("colA", rm._relationships)
+        self.assertIn("colB", rm._relationships)
+        self.assertIn("colC", rm._relationships)
+        self.assertEqual(rm._relationships["colA"], set())
+        self.assertEqual(rm._relationships["colB"], set())
+        self.assertEqual(rm._relationships["colC"], set())

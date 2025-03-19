@@ -1228,6 +1228,18 @@ class TestAddNewColumns(unittest.TestCase):
 
         self.assertEqual(original_columns, ts._columns)
 
+    def test_columns_added_to_relationship_manager(self):
+        """Test that new columns are initialised in the relationship manager, with no relationships"""
+        ts = TimeSeries(self.df, time_name="time")
+        new_df = self.df.with_columns(pl.Series("col4", [1.1, 2.2, 3.3]))
+
+        with patch.object(TimeSeriesColumn, "_validate_name", lambda *args, **kwargs: None):
+            ts._add_new_columns(new_df)
+
+        self.assertIn("col4", ts.columns)
+        self.assertIn("col4", ts._relationship_manager._relationships)
+        self.assertEqual(ts._relationship_manager._relationships["col4"], set())
+
 
 class TestSelectColumns(unittest.TestCase):
     times = [datetime(2024, 1, 1, tzinfo=TZ_UTC),
