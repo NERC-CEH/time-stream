@@ -350,10 +350,11 @@ class TimeSeries:
         Args:
             new_df: The new Polars DataFrame to set as the time series data.
         """
+        old_df = self._df.clone()  # A cheap operation that does not copy data, just the schema.
         self._validate_time_column(new_df)
-        self._remove_missing_columns(new_df)
-        self._df = new_df
-        self._add_new_columns(new_df)
+        self._df = new_df  # Set this before removing columns so that recursive removals via relationship manager works.
+        self._remove_missing_columns(old_df, new_df)
+        self._add_new_columns(old_df, new_df)
 
     def _validate_time_column(self, df: pl.DataFrame) -> None:
         """Validate that the DataFrame contains the required time column with unchanged timestamps.
@@ -376,26 +377,28 @@ class TimeSeries:
         if Counter(new_timestamps.to_list()) != Counter(old_timestamps.to_list()):
             raise ValueError("Time column has mutated.")
 
-    def _remove_missing_columns(self, new_df: pl.DataFrame) -> None:
+    def _remove_missing_columns(self, old_df: pl.DataFrame, new_df: pl.DataFrame) -> None:
         """Remove reference to columns that are missing in the new DataFrame.
 
         Args:
-            new_df: The new Polars DataFrame to compare against the current DataFrame.
+            old_df: The old Polars DataFrame to compare against the new DataFrame.
+            new_df: The new Polars DataFrame to compare against the old DataFrame.
         """
-        removed_columns = list(set(self.df.columns) - set(new_df.columns))
+        removed_columns = list(set(old_df.columns) - set(new_df.columns))
         for col_name in removed_columns:
             self._relationship_manager._handle_deletion(self._columns[col_name])
             self._columns.pop(col_name, None)
 
-    def _add_new_columns(self, new_df: pl.DataFrame) -> None:
+    def _add_new_columns(self, old_df: pl.DataFrame, new_df: pl.DataFrame) -> None:
         """Add reference to any new columns that are present in the new DataFrame.
 
         Assumption is all new columns are data columns.
 
         Args:
-            new_df: The new Polars DataFrame to compare against the current DataFrame.
+            old_df: The old Polars DataFrame to compare against the new DataFrame.
+            new_df: The new Polars DataFrame to compare against the old DataFrame.
         """
-        new_columns = list(set(new_df.columns) - set(self.df.columns))
+        new_columns = list(set(new_df.columns) - set(old_df.columns))
         for col_name in new_columns:
             # Add a placeholder for the new column, so that the Column init knows there is a new column expected.
             self._columns[col_name] = None

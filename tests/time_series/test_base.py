@@ -39,7 +39,7 @@ class TestInitSupplementaryColumn(unittest.TestCase):
     @parameterized.expand([
         ("int_int", "new_int_col", 5, pl.Int32),
         ("int_float", "new_float_col", 3, pl.Float64),
-        ("float_int", "new_int_col", 3.4, pl.Int32), # Expect this to convert to 3
+        ("float_int", "new_int_col", 3.4, pl.Int32),  # Expect this to convert to 3
         ("none_float", "new_float_col", None, pl.Float64),
         ("none_string", "new_str_col", None, pl.String),
         ("str_int", "new_int_col", "5", pl.Int32),
@@ -163,7 +163,7 @@ class TestSetSupplementaryColumns(unittest.TestCase):
                                  }
         self.assertEqual(ts.data_columns, expected_data_columns)
         self.assertEqual(ts.supplementary_columns, expected_supp_columns)
-        
+
     def test_multiple_supplementary_column(self):
         """Test that multiple supplementary columns are set correctly."""
         ts = TimeSeries(self.df, time_name="time")
@@ -389,7 +389,8 @@ class TestValidateResolution(unittest.TestCase):
          Period.of_months(6)),
 
         ("3 monthly (quarterly)",
-         [datetime(2024, 1, 1), datetime(2024, 4, 1), datetime(2024, 7, 1), datetime(2024, 10, 1), datetime(2024, 1, 1)],
+         [datetime(2024, 1, 1), datetime(2024, 4, 1), datetime(2024, 7, 1), datetime(2024, 10, 1),
+          datetime(2024, 1, 1)],
          Period.of_months(3)),
 
         ("monthly with mid-month offset",
@@ -532,7 +533,8 @@ class TestValidateResolution(unittest.TestCase):
          Period.of_minutes(1)),
 
         ("every 15 minutes",
-         [datetime(2024, 1, 1, 1, 15), datetime(2024, 1, 1, 1, 30), datetime(2024, 1, 1, 1, 45), datetime(2024, 1, 1, 2)],
+         [datetime(2024, 1, 1, 1, 15), datetime(2024, 1, 1, 1, 30), datetime(2024, 1, 1, 1, 45),
+          datetime(2024, 1, 1, 2)],
          Period.of_minutes(15)),
 
         ("every 60 minutes",
@@ -622,15 +624,18 @@ class TestValidateResolution(unittest.TestCase):
 
     @parameterized.expand([
         ("simple microseconds",
-         [datetime(2024, 1, 1, 1, 1, 1, 1000), datetime(2024, 1, 1, 1, 1, 1, 1001), datetime(2024, 1, 1, 1, 1, 1, 1002)],
+         [datetime(2024, 1, 1, 1, 1, 1, 1000), datetime(2024, 1, 1, 1, 1, 1, 1001),
+          datetime(2024, 1, 1, 1, 1, 1, 1002)],
          Period.of_microseconds(1)),
 
         ("microseconds with gaps",
-         [datetime(2023, 1, 1, 1, 1, 1, 5), datetime(2023, 7, 11, 12, 19, 59, 10), datetime(2024, 1, 1, 1, 1, 13, 9595)],
+         [datetime(2023, 1, 1, 1, 1, 1, 5), datetime(2023, 7, 11, 12, 19, 59, 10),
+          datetime(2024, 1, 1, 1, 1, 13, 9595)],
          Period.of_microseconds(5)),
 
         ("40Hz",
-         [datetime(2023, 1, 1, 1, 1, 1, 0), datetime(2024, 1, 1, 1, 1, 1, 25_000), datetime(2024, 1, 1, 1, 1, 1, 50_000)],
+         [datetime(2023, 1, 1, 1, 1, 1, 0), datetime(2024, 1, 1, 1, 1, 1, 25_000),
+          datetime(2024, 1, 1, 1, 1, 1, 50_000)],
          Period.of_microseconds(25_000)),
 
         ("long term microseconds",
@@ -650,7 +655,8 @@ class TestValidateResolution(unittest.TestCase):
 
     @parameterized.expand([
         ("40Hz",
-         [datetime(2023, 1, 1, 1, 1, 1, 0), datetime(2024, 1, 1, 1, 1, 1, 25_000), datetime(2024, 1, 1, 1, 1, 1, 55_000)],
+         [datetime(2023, 1, 1, 1, 1, 1, 0), datetime(2024, 1, 1, 1, 1, 1, 25_000),
+          datetime(2024, 1, 1, 1, 1, 1, 55_000)],
          Period.of_microseconds(25_000)),
     ])
     def test_validate_microsecond_resolution_error(self, _, times, resolution):
@@ -927,7 +933,7 @@ class TestValidatePeriodicity(unittest.TestCase):
         ("long term microseconds",
          [datetime(1800, 1, 1, 15, 1, 0, 0), datetime(2023, 1, 2, 18, 18, 42, 1), datetime(2024, 1, 10, 23, 55, 5, 10)],
          Period.of_microseconds(1)),
-    ])    
+    ])
     def test_validate_microsecond_periodicity_success(self, _, times, periodicity):
         """ Test that a microsecond based time series that does conform to the given periodicity passes the validation.
         """
@@ -1137,7 +1143,7 @@ class TestRemoveMissingColumns(unittest.TestCase):
         """Test that no columns are removed when all columns are present in the new DataFrame."""
         ts = TimeSeries(self.df, time_name="time", supplementary_columns=["col1"], column_metadata=self.metadata)
 
-        ts._remove_missing_columns(self.df)
+        ts._remove_missing_columns(ts._df, self.df)
         ts._df = self.df
 
         self.assertEqual(list(ts.columns.keys()), ["col1", "col2", "col3"])
@@ -1152,7 +1158,7 @@ class TestRemoveMissingColumns(unittest.TestCase):
         ts = TimeSeries(self.df, time_name="time", supplementary_columns=["col1"], column_metadata=self.metadata)
 
         new_df = self.df.drop("col2")
-        ts._remove_missing_columns(new_df)
+        ts._remove_missing_columns(ts._df, new_df)
         ts._df = new_df
 
         self.assertEqual(list(ts.columns.keys()), ["col1", "col3"])
@@ -1170,7 +1176,7 @@ class TestRemoveMissingColumns(unittest.TestCase):
         ts = TimeSeries(self.df, time_name="time", supplementary_columns=["col1"], column_metadata=self.metadata)
 
         new_df = self.df.drop("col1")
-        ts._remove_missing_columns(new_df)
+        ts._remove_missing_columns(ts._df, new_df)
         ts._df = new_df
 
         self.assertEqual(list(ts.columns.keys()), ["col2", "col3"])
@@ -1188,7 +1194,7 @@ class TestRemoveMissingColumns(unittest.TestCase):
         ts = TimeSeries(self.df, time_name="time", supplementary_columns=["col1"], column_metadata=self.metadata)
 
         new_df = self.df.drop(["col1", "col2"])
-        ts._remove_missing_columns(new_df)
+        ts._remove_missing_columns(ts._df, new_df)
         ts._df = new_df
 
         self.assertEqual(list(ts.columns.keys()), ["col3"])
@@ -1215,7 +1221,7 @@ class TestAddNewColumns(unittest.TestCase):
         new_df = self.df.with_columns(pl.Series("col4", [1.1, 2.2, 3.3]))
 
         with patch.object(TimeSeriesColumn, "_validate_name", lambda *args, **kwargs: None):
-            ts._add_new_columns(new_df)
+            ts._add_new_columns(ts._df, new_df)
 
         self.assertIn("col4", ts.columns)
         self.assertIsInstance(ts.col4, DataColumn)
@@ -1224,7 +1230,7 @@ class TestAddNewColumns(unittest.TestCase):
         """Test that does nothing if there are no new columns."""
         ts = TimeSeries(self.df, time_name="time")
         original_columns = ts._columns.copy()
-        ts._add_new_columns(self.df)
+        ts._add_new_columns(ts._df, self.df)
 
         self.assertEqual(original_columns, ts._columns)
 
@@ -1234,7 +1240,7 @@ class TestAddNewColumns(unittest.TestCase):
         new_df = self.df.with_columns(pl.Series("col4", [1.1, 2.2, 3.3]))
 
         with patch.object(TimeSeriesColumn, "_validate_name", lambda *args, **kwargs: None):
-            ts._add_new_columns(new_df)
+            ts._add_new_columns(ts._df, new_df)
 
         self.assertIn("col4", ts.columns)
         self.assertIn("col4", ts._relationship_manager._relationships)
@@ -1397,7 +1403,7 @@ class TestGetItem(unittest.TestCase):
 class TestSetupColumns(unittest.TestCase):
     df = pl.DataFrame({
         "time": [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)],
-         "data_col": [10, 20, 30], "supp_col": ["A", "B", "C"], "flag_col": [1, 2, 3]
+        "data_col": [10, 20, 30], "supp_col": ["A", "B", "C"], "flag_col": [1, 2, 3]
     })
     flag_systems = {"example_flag_system": {"OK": 1, "WARNING": 2}}
 
@@ -1689,10 +1695,10 @@ class TestGetFlagSystemColumn(unittest.TestCase):
         })
         flag_systems = {"example_flag_system": {"OK": 1, "WARNING": 2}}
         self.ts = TimeSeries(df=df,
-                        time_name="time",
-                        supplementary_columns=["supp_col"],
-                        flag_columns={"flag_col": "example_flag_system"},
-                        flag_systems=flag_systems)
+                             time_name="time",
+                             supplementary_columns=["supp_col"],
+                             flag_columns={"flag_col": "example_flag_system"},
+                             flag_systems=flag_systems)
         self.ts.data_col.add_relationship(["flag_col"])
 
     def test_data_column_not_exist(self):

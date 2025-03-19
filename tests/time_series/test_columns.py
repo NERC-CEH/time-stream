@@ -237,6 +237,10 @@ class TestUnset(BaseTimeSeriesTest):
 
 
 class TestRemove(BaseTimeSeriesTest):
+    def setUp(self):
+        """Ensure ts is reset before each test."""
+        super().setUpClass()
+
     def test_remove_data_column(self):
         """ Test that removing a data column works as expected"""
         column = DataColumn("data_col1", self.ts, self.metadata["data_col1"])
@@ -245,6 +249,7 @@ class TestRemove(BaseTimeSeriesTest):
         self.assertIsNone(column._ts)
         self.assertNotIn(column.name, self.ts.columns)
         self.assertNotIn(column.name, self.ts.data_columns)
+        self.assertNotIn(column.name, self.ts.df.columns)
 
     def test_remove_supplementary_column(self):
         """ Test that removing a supplementary column works as expected"""
@@ -254,6 +259,7 @@ class TestRemove(BaseTimeSeriesTest):
         self.assertIsNone(column._ts)
         self.assertNotIn(column.name, self.ts.columns)
         self.assertNotIn(column.name, self.ts.data_columns)
+        self.assertNotIn(column.name, self.ts.df.columns)
 
     def test_remove_flag_column(self):
         """ Test that removing a flag column works as expected"""
@@ -263,6 +269,47 @@ class TestRemove(BaseTimeSeriesTest):
         self.assertIsNone(column._ts)
         self.assertNotIn(column.name, self.ts.columns)
         self.assertNotIn(column.name, self.ts.data_columns)
+        self.assertNotIn(column.name, self.ts.df.columns)
+
+    def test_remove_with_cascade(self):
+        """ Test that removing a column that is linked to another column with CASCADE deletion policy removes
+        both columns
+        """
+        col_a = self.ts.data_col1
+        col_b = self.ts.flag_col
+
+        relationship = Relationship(col_a, col_b, RelationshipType.ONE_TO_ONE, DeletionPolicy.CASCADE)
+        self.ts._relationship_manager._add(relationship)
+
+        col_a.remove()
+
+        self.assertNotIn(col_a.name, self.ts.columns)
+        self.assertNotIn(col_b.name, self.ts.columns)
+        self.assertNotIn(col_a.name, self.ts.df.columns)
+        self.assertNotIn(col_b.name, self.ts.df.columns)
+
+    def test_remove_with_multiple_cascade(self):
+        """ Test that removing a column that is linked to multiple columns with CASCADE deletion policy removes
+        both columns
+        """
+        col_a = self.ts.data_col1
+        col_b = self.ts.flag_col
+        col_c = self.ts.flag_col2
+
+        relationship1 = Relationship(col_a, col_b, RelationshipType.MANY_TO_MANY, DeletionPolicy.CASCADE)
+        self.ts._relationship_manager._add(relationship1)
+        relationship2 = Relationship(col_a, col_c, RelationshipType.MANY_TO_MANY, DeletionPolicy.CASCADE)
+        self.ts._relationship_manager._add(relationship2)
+
+        col_a.remove()
+
+        self.assertNotIn(col_a.name, self.ts.columns)
+        self.assertNotIn(col_b.name, self.ts.columns)
+        self.assertNotIn(col_c.name, self.ts.columns)
+        self.assertNotIn(col_a.name, self.ts.df.columns)
+        self.assertNotIn(col_b.name, self.ts.df.columns)
+        self.assertNotIn(col_c.name, self.ts.df.columns)
+
 
 class TestAddFlag(BaseTimeSeriesTest):
     def setUp(self):
