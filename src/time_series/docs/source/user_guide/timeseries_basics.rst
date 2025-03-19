@@ -122,53 +122,35 @@ Resolution Validation
 
 The resolution defines how precise the timestamps should be:
 
-.. code-block:: python
+.. literalinclude:: ../../../examples/examples_timeseries_basics.py
+   :language: python
+   :start-after: [start_block_8]
+   :end-before: [end_block_8]
+   :dedent:
 
-    # This will raise a warning because some timestamps might not align
-    # to midnight (00:00:00) as required by daily resolution
-    timestamps = [
-        datetime(2023, 1, 1, 0, 0, 0),   # Aligned to midnight
-        datetime(2023, 1, 2, 0, 0, 0),   # Aligned to midnight
-        datetime(2023, 1, 3, 12, 0, 0),  # Not aligned (noon)
-    ]
+.. jupyter-execute::
+   :hide-code:
 
-    df = pl.DataFrame({"timestamp": timestamps, "value": [1, 2, 3]})
-
-    # This will raise a UserWarning about resolution alignment
-    try:
-        ts = TimeSeries(
-            df=df,
-            time_name="timestamp",
-            resolution=Period.of_days(1)  # Requires timestamps at midnight
-        )
-    except UserWarning as w:
-        print(f"Warning: {w}")
+   import examples_timeseries_basics
+   ts = examples_timeseries_basics.resolution_check_fail()
 
 Periodicity Validation
 ~~~~~~~~~~~~~~~~~~~~~
 
 The periodicity defines how frequently data points should appear:
 
-.. code-block:: python
+.. literalinclude:: ../../../examples/examples_timeseries_basics.py
+   :language: python
+   :start-after: [start_block_9]
+   :end-before: [end_block_9]
+   :dedent:
 
-    # This will raise a warning because we have two points in the same day
-    timestamps = [
-        datetime(2023, 1, 1, 0, 0, 0),
-        datetime(2023, 1, 1, 12, 0, 0),  # Same day as above
-        datetime(2023, 1, 2, 0, 0, 0),
-    ]
+.. jupyter-execute::
+   :hide-code:
 
-    df = pl.DataFrame({"timestamp": timestamps, "value": [1, 2, 3]})
+   import examples_timeseries_basics
+   ts = examples_timeseries_basics.periodicity_check_fail()
 
-    # This will raise a UserWarning about periodicity
-    try:
-        ts = TimeSeries(
-            df=df,
-            time_name="timestamp",
-            periodicity=Period.of_days(1)  # Requires one point per day
-        )
-    except UserWarning as w:
-        print(f"Warning: {w}")
 
 Accessing Data
 -------------
@@ -178,57 +160,71 @@ There are multiple ways to access data from a ``TimeSeries``:
 Accessing the DataFrame
 ~~~~~~~~~~~~~~~~~~~~~
 
-.. code-block:: python
+.. literalinclude:: ../../../examples/examples_timeseries_basics.py
+   :language: python
+   :start-after: [start_block_10]
+   :end-before: [end_block_10]
+   :dedent:
 
-    # Get the full DataFrame
-    df = ts.df
+This gives the underlying Polars DataFrame, with which you can carry out normal Polars functionality:
 
-    # Select specific columns from the DataFrame
-    temp_precip_df = ts.df.select(["timestamp", "temperature", "precipitation"])
-
-    # Filter the DataFrame
-    rainy_days_df = ts.df.filter(pl.col("precipitation") > 0)
+.. literalinclude:: ../../../examples/examples_timeseries_basics.py
+   :language: python
+   :start-after: [start_block_11]
+   :end-before: [end_block_11]
+   :dedent:
 
 Accessing Columns
 ~~~~~~~~~~~~~~~
 
-.. code-block:: python
+The ``TimeSeries`` class gives other ways to access data within the time series, whilst maintaining the core link to
+primary datetime column.
 
-    # Access column as a TimeSeriesColumn object
-    temp_col = ts.temperature
+.. literalinclude:: ../../../examples/examples_timeseries_basics.py
+   :language: python
+   :start-after: [start_block_12]
+   :end-before: [end_block_12]
+   :dedent:
 
-    # Get the underlying data from a column
-    temp_data = ts.temperature.data
+.. jupyter-execute::
+   :hide-code:
 
-    # Access column properties
-    temp_units = ts.temperature.units          # Using metadata
+   import examples_timeseries_basics
+   ts = examples_timeseries_basics.accessing_data()
 
-    # Get column as a TimeSeries
-    temp_ts = ts["temperature"]
 
-    # Select multiple columns as a TimeSeries
-    selected_ts = ts.select(["temperature", "precipitation"])
-    # or
-    selected_ts = ts[["temperature", "precipitation"]]
+Updating a TimeSeries
+--------------------
 
-Accessing Metadata
-~~~~~~~~~~~~~~~~
+You can update the underlying DataFrame (while preserving column settings),
+**as long as the primary datetime column remains unchanged**.
 
-.. code-block:: python
+.. literalinclude:: ../../../examples/examples_timeseries_basics.py
+   :language: python
+   :start-after: [start_block_19]
+   :end-before: [end_block_19]
+   :dedent:
 
-    # Get column metadata
-    temp_metadata = ts.columns["temperature"].metadata()
-    # or
-    temp_metadata = ts.column_metadata("temperature")
+.. jupyter-execute::
+   :hide-code:
 
-    # Get a specific metadata value
-    temp_units = ts.temperature.units
+   import examples_timeseries_basics
+   ts = examples_timeseries_basics.add_new_column_to_df()
 
-    # Get TimeSeries metadata
-    ts_metadata = ts.metadata()
+If an update to the DataFrame results in a change to the primary datetime values, resolution or periodicity, then
+an error will be raised.  A new TimeSeries object should be created.
 
-    # Get a specific TimeSeries metadata value
-    location = ts.location  # Assuming "location" exists in metadata
+.. literalinclude:: ../../../examples/examples_timeseries_basics.py
+   :language: python
+   :start-after: [start_block_20]
+   :end-before: [end_block_20]
+   :dedent:
+
+.. jupyter-execute::
+   :hide-code:
+
+   import examples_timeseries_basics
+   ts = examples_timeseries_basics.update_time_of_df_error()
 
 Working with Columns
 -------------------
@@ -243,97 +239,119 @@ There are four column types:
 1. **Primary Time Column**: The datetime column
 2. **Data Columns**: Regular data columns (default type)
 3. **Supplementary Columns**: Metadata or contextual information
-4. **Flag Columns**: Quality control markers
+4. **Flag Columns**: Flag markers giving specific information about data points
 
 Creating Supplementary Columns
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. code-block:: python
+Supplementary columns can be specified on initialisation of the ``TimeSeries`` object:
 
-    # Add a new supplementary column with station information
-    ts.init_supplementary_column("station_name", "Central Station")
+.. literalinclude:: ../../../examples/examples_timeseries_basics.py
+   :language: python
+   :start-after: [start_block_13]
+   :end-before: [end_block_13]
+   :dedent:
 
-    # Convert an existing column to supplementary
-    ts.set_supplementary_column("precipitation")
+.. jupyter-execute::
+   :hide-code:
 
-    # Access supplementary columns
-    supp_columns = ts.supplementary_columns
+   import examples_timeseries_basics
+   ts = examples_timeseries_basics.create_simple_time_series_with_supp_cols()
+
+Existing data columns can be converted to be a supplementary column:
+
+.. literalinclude:: ../../../examples/examples_timeseries_basics.py
+   :language: python
+   :start-after: [start_block_14]
+   :end-before: [end_block_14]
+   :dedent:
+
+.. jupyter-execute::
+   :hide-code:
+
+   import examples_timeseries_basics
+   ts = examples_timeseries_basics.convert_existing_col_to_supp_col()
+
+Or a completely new column can be initialised as a supplementary column:
+
+.. literalinclude:: ../../../examples/examples_timeseries_basics.py
+   :language: python
+   :start-after: [start_block_15]
+   :end-before: [end_block_15]
+   :dedent:
+
+.. jupyter-execute::
+   :hide-code:
+
+   import examples_timeseries_basics
+   ts = examples_timeseries_basics.add_new_col_as_supp_col()
 
 Creating Flag Columns
 ~~~~~~~~~~~~~~~~~~~
 
-.. code-block:: python
+Flag columns are inherently linked to a **flag system**.  The flag system sets out the meanings of values that
+can be added to the flag column.
 
-    # Create a flag system
-    flag_systems = {"quality": {"GOOD": 1, "SUSPICIOUS": 2, "MISSING": 4}}
+If they already exist, flag columns and their associated flag systems can be specified on initialisation of the
+TimeSeries object:
 
-    # Create a new TimeSeries with the flag system
-    ts = TimeSeries(
-        df=df,
-        time_name="timestamp",
-        flag_systems=flag_systems
-    )
+.. literalinclude:: ../../../examples/examples_timeseries_basics.py
+   :language: python
+   :start-after: [start_block_16]
+   :end-before: [end_block_16]
+   :dedent:
 
-    # Add a flag column for temperature data
-    ts.init_flag_column("quality", "temp_flags")
+.. jupyter-execute::
+   :hide-code:
 
-    # Convert an existing column to a flag column
-    if "existing_flags" in ts.df.columns:
-        ts.set_flag_column("quality", "existing_flags")
+   import examples_timeseries_basics
+   ts = examples_timeseries_basics.create_simple_time_series_with_flag_cols()
 
-    # Add flags to data
-    ts.add_flag("temp_flags", "SUSPICIOUS", pl.col("temperature") > 25)
-    ts.add_flag("temp_flags", "MISSING", pl.col("temperature").is_null())
+Otherwise, flag columns can be initialised dynamically on the TimeSeries object:
 
-    # Remove a flag
-    ts.remove_flag("temp_flags", "SUSPICIOUS", pl.col("temperature") <= 22)
 
-Updating a TimeSeries
---------------------
+.. literalinclude:: ../../../examples/examples_timeseries_basics.py
+   :language: python
+   :start-after: [start_block_17]
+   :end-before: [end_block_17]
+   :dedent:
 
-You can update the underlying DataFrame while preserving column settings:
+Methods are available to add (or remove) flags to a Flag Column:
 
-.. code-block:: python
+.. literalinclude:: ../../../examples/examples_timeseries_basics.py
+   :language: python
+   :start-after: [start_block_18]
+   :end-before: [end_block_18]
+   :dedent:
 
-    # Update the entire DataFrame
-    new_df = ts.df.with_columns(
-        (pl.col("temperature") * 1.8 + 32).alias("temperature_f")
-    )
-    ts.df = new_df
+.. jupyter-execute::
+   :hide-code:
 
-    # The new column will be available as a DataColumn
-    print(ts.temperature_f.data)
-
-    # Filter data
-    ts.df = ts.df.filter(pl.col("precipitation") > 0)
-
-    # Add a calculated column
-    ts.df = ts.df.with_columns(
-        (pl.col("temperature") / 10).alias("temperature_normalized")
-    )
+   import examples_timeseries_basics
+   ts = examples_timeseries_basics.set_and_remove_flags()
 
 Column Relationships
 ------------------
 
-You can define relationships between columns:
+You can define relationships between columns that are linked together in some way. Data columns can be given a
+relationship to both supplementary and flag columns, though supplementary and flag columns cannot be given a
+relationship to each other.
+
+
+.. literalinclude:: ../../../examples/examples_timeseries_basics.py
+   :language: python
+   :start-after: [start_block_21]
+   :end-before: [end_block_21]
+   :dedent:
+
+.. jupyter-execute::
+   :hide-code:
+
+   import examples_timeseries_basics
+   ts = examples_timeseries_basics.add_column_relationships()
+
 
 .. code-block:: python
-
-    # Create a flag column for temperature
-    ts.init_flag_column("quality", "temp_flags")
-
-    # Create a relationship between temperature and its flags
-    ts.add_column_relationship("temperature", "temp_flags")
-
-    # Create supplementary info for temperature
-    ts.init_supplementary_column("temp_sensor_id", "TEMP123")
-
-    # Create a relationship
-    ts.add_column_relationship("temperature", "temp_sensor_id")
-
-    # Get related flag column
-    flag_col = ts.get_flag_system_column("temperature", "quality")
-
     # Remove a relationship
     ts.remove_column_relationship("temperature", "temp_sensor_id")
 
@@ -374,7 +392,6 @@ Best Practices
    - Use flag columns for quality control
 3. **Define relationships** between related columns
 4. **Add metadata** to enhance understanding of your data
-5. **Regularly validate** your time series against expected resolution and periodicity
 
 Next Steps
 ---------
@@ -383,5 +400,5 @@ Now that you understand the basics of the ``TimeSeries`` class, explore:
 
 - :doc:`periods` - Learn more about working with time periods
 - :doc:`aggregation` - Dive deeper into aggregation capabilities
-- :doc:`flagging` - Master the quality control system
+- :doc:`flagging` - Master the flagging control system
 - :doc:`column_relationships` - Understand column relationships in detail
