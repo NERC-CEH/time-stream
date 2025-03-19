@@ -148,6 +148,9 @@ class TimeSeries:
                 data_col = DataColumn(col_name, self, col_metadata)
                 self._columns[col_name] = data_col
 
+        # Add columns to the relationship manager
+        self._relationship_manager._setup_relationships()
+
     def _setup_metadata(self, metadata: dict[str, Any]) -> None:
         """Configure metadata for the Time Series instance.
 
