@@ -524,5 +524,4 @@ def aggregation_more_examples():
 
     annual_max_temp = ts.aggregate(Period.of_years(1), Max, "temperature")
     print(annual_max_temp)
-
     # [end_block_26]
