@@ -530,9 +530,28 @@ class TestSubPeriodCheck(unittest.TestCase):
         periodicity=Period.of_days(1))
 
     def test_legal(self):
-        # The test is that the following does not raise an error
+        # The test is that none of the following raise an error
+        self.ts.aggregate(Period.of_days(1), Min, VALUE)
         self.ts.aggregate(Period.of_months(1), Min, VALUE)
+        self.ts.aggregate(Period.of_months(1).with_day_offset(1), Min, VALUE)
+        self.ts.aggregate(Period.of_months(1).with_day_offset(5), Min, VALUE)
+        self.ts.aggregate(Period.of_years(1), Min, VALUE)
+        self.ts.aggregate(Period.of_years(1).with_day_offset(1), Min, VALUE)
+        self.ts.aggregate(Period.of_years(1).with_month_offset(1), Min, VALUE)
+        self.ts.aggregate(Period.of_years(1).with_month_offset(1).with_day_offset(1), Min, VALUE)
 
     def test_illegal(self):
         with self.assertRaises(UserWarning):
             self.ts.aggregate(Period.of_hours(1), Min, VALUE)
+        with self.assertRaises(UserWarning):
+            self.ts.aggregate(Period.of_days(1).with_microsecond_offset(1), Min, VALUE)
+        with self.assertRaises(UserWarning):
+            self.ts.aggregate(Period.of_days(1).with_second_offset(1), Min, VALUE)
+        with self.assertRaises(UserWarning):
+            self.ts.aggregate(Period.of_months(1).with_minute_offset(10), Min, VALUE)
+        with self.assertRaises(UserWarning):
+            self.ts.aggregate(Period.of_years(1).with_day_offset(1).with_hour_offset(1), Min, VALUE)
+        with self.assertRaises(UserWarning):
+            self.ts.aggregate(Period.of_years(1).with_month_offset(1).with_hour_offset(1), Min, VALUE)
+        with self.assertRaises(UserWarning):
+            self.ts.aggregate(Period.of_years(1).with_month_offset(1).with_day_offset(1).with_hour_offset(1), Min, VALUE)
