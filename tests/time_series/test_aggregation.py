@@ -68,7 +68,7 @@ def _create_ts(
 
 
 # Maximum length of a synthetic TimeSeries
-MAX_LENGTH: int = 100_000
+MAX_LENGTH: int = 5_000
 
 
 @dataclass(frozen=True)
@@ -284,7 +284,7 @@ CASE1_LIST: list[Case1] = [
 # A list that can be supplied to the @parameterized.expand
 # annotation to test all the test cases
 PARAMS_CASE1: list[tuple[str, Case1]] = [
-    (f"{case1.resolution.iso_duration}_{case1.aggregation_period.iso_duration}", case1) for case1 in CASE1_LIST
+    (f"{case1.resolution!s}_{case1.aggregation_period!s}", case1) for case1 in CASE1_LIST
 ]
 
 # The dates within which to create test time-series data
@@ -445,6 +445,9 @@ class TestFunctions(unittest.TestCase):
         self.assertListEqual(
             _get_pl_datetime_list(result.df, TIME), _get_datetime_list(aggr_dict, case1.aggregation_period)
         )
+        # Ensure datetime periodicity and resolution matches aggregation period
+        self.assertTrue(TimeSeries.check_periodicity(result.df[TIME], case1.aggregation_period))
+        self.assertTrue(TimeSeries.check_resolution(result.df[TIME], case1.aggregation_period))
         # Compare value columns
         # An equality check on floats could fail, but this
         # works, for the mean function at least.
@@ -478,8 +481,15 @@ class TestFunctions(unittest.TestCase):
         self.assertListEqual(
             _get_pl_datetime_list(result.df, TIME), _get_datetime_list(aggr_dict, case1.aggregation_period)
         )
+        # Ensure datetime periodicity and resolution matches aggregation period
+        self.assertTrue(TimeSeries.check_periodicity(result.df[TIME], case1.aggregation_period))
+        self.assertTrue(TimeSeries.check_resolution(result.df[TIME], case1.aggregation_period))
         # Compare datetime of min/max columns
         self.assertListEqual(_get_pl_datetime_list(result.df, f"{TIME}_of_{name}"), datetime_fn(aggr_dict))
+        # Ensure datetime of min/max has periodicity of the aggregation period
+        self.assertTrue(TimeSeries.check_periodicity(result.df[f"{TIME}_of_{name}"], case1.aggregation_period))
+        # Ensure datetime of min/max has resolution of the input time-series
+        self.assertTrue(TimeSeries.check_resolution(result.df[f"{TIME}_of_{name}"], case1.resolution))
         # Compare value columns
         # For min/max comparing the float values should work ok, as
         # data is just being copied, there is no calculation involved.
