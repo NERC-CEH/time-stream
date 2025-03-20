@@ -76,7 +76,7 @@ src = ["src", "tests"]
 include = ["src/**.py"]
 line-length = 120
 exclude = [
-    "src/time_series/examples"
+    "src/time_series/examples",
     "src/time_series/docs"
 ]
 
