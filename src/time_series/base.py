@@ -1,17 +1,14 @@
 from collections import Counter
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Dict, Iterable, Iterator, Optional, Sequence, Type, Union
+from typing import Any, Dict, Iterable, Iterator, Optional, Sequence, Type, Union
 
 import polars as pl
 
+from time_series.aggregation_base import AggregationFunction, apply_aggregation
 from time_series.columns import DataColumn, FlagColumn, PrimaryTimeColumn, SupplementaryColumn, TimeSeriesColumn
 from time_series.flag_manager import TimeSeriesFlagManager
 from time_series.period import Period
 from time_series.relationships import RelationshipManager
-
-if TYPE_CHECKING:
-    # Import is for type hinting only.  Make sure there is no runtime import, to avoid recursion.
-    from time_series.aggregation import AggregationFunction
 
 
 class TimeSeries:
@@ -85,6 +82,8 @@ class TimeSeries:
         self.sort_time()
         self._validate_resolution()
         self._validate_periodicity()
+        if not self.resolution.is_subperiod_of(self.periodicity):
+            raise UserWarning(f"Resolution {self.resolution} is not a subperiod of periodicity {self.periodicity}")
         self._setup_columns(supplementary_columns, flag_columns, column_metadata)
         self._setup_metadata(metadata)
 
@@ -585,7 +584,7 @@ class TimeSeries:
         Returns:
             A TimeSeries containing the aggregated data.
         """
-        return aggregation_function.create().apply(self, aggregation_period, column_name)
+        return apply_aggregation(self, aggregation_period, aggregation_function, column_name)
 
     def metadata(self, key: Optional[Sequence[str]] = None, strict: bool = True) -> Dict[str, Any]:
         """Retrieve metadata for all or specific keys.

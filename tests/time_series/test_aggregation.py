@@ -277,8 +277,7 @@ CASE1_LIST: list[Case1] = [
     Case1(resolution=PT0_0001S, periodicity=PT0_0001S, aggregation_period=PT0_001S),
     Case1(resolution=PT0_00001S, periodicity=PT0_00001S, aggregation_period=PT0_0001S),
     Case1(resolution=PT0_000001S, periodicity=PT0_000001S, aggregation_period=PT0_00001S),
-    # The following test case will fail with an out-of-memory error
-    # XX Case1(resolution=PT0_000001S, periodicity=PT0_000001S, aggregation_period=P1D),
+    Case1(resolution=PT0_000001S, periodicity=PT0_000001S, aggregation_period=P1D),
 ]
 
 # A list that can be supplied to the @parameterized.expand
@@ -529,3 +528,39 @@ class TestFunctions(unittest.TestCase):
             datetime_fn=_get_datetime_of_max_list,
             value_fn=_get_max_list,
         )
+
+class TestSubPeriodCheck(unittest.TestCase):
+    """Test the "periodicity is a subperiod of aggregation period" check"""
+    df = pl.DataFrame({
+        "time": [datetime(2020, 1, 1)] ,
+        VALUE: [1.0] })
+    ts = TimeSeries(df=df, time_name="time",
+        resolution=Period.of_days(1),
+        periodicity=Period.of_days(1))
+
+    def test_legal(self):
+        # The test is that none of the following raise an error
+        self.ts.aggregate(Period.of_days(1), Min, VALUE)
+        self.ts.aggregate(Period.of_months(1), Min, VALUE)
+        self.ts.aggregate(Period.of_months(1).with_day_offset(1), Min, VALUE)
+        self.ts.aggregate(Period.of_months(1).with_day_offset(5), Min, VALUE)
+        self.ts.aggregate(Period.of_years(1), Min, VALUE)
+        self.ts.aggregate(Period.of_years(1).with_day_offset(1), Min, VALUE)
+        self.ts.aggregate(Period.of_years(1).with_month_offset(1), Min, VALUE)
+        self.ts.aggregate(Period.of_years(1).with_month_offset(1).with_day_offset(1), Min, VALUE)
+
+    def test_illegal(self):
+        with self.assertRaises(UserWarning):
+            self.ts.aggregate(Period.of_hours(1), Min, VALUE)
+        with self.assertRaises(UserWarning):
+            self.ts.aggregate(Period.of_days(1).with_microsecond_offset(1), Min, VALUE)
+        with self.assertRaises(UserWarning):
+            self.ts.aggregate(Period.of_days(1).with_second_offset(1), Min, VALUE)
+        with self.assertRaises(UserWarning):
+            self.ts.aggregate(Period.of_months(1).with_minute_offset(10), Min, VALUE)
+        with self.assertRaises(UserWarning):
+            self.ts.aggregate(Period.of_years(1).with_day_offset(1).with_hour_offset(1), Min, VALUE)
+        with self.assertRaises(UserWarning):
+            self.ts.aggregate(Period.of_years(1).with_month_offset(1).with_hour_offset(1), Min, VALUE)
+        with self.assertRaises(UserWarning):
+            self.ts.aggregate(Period.of_years(1).with_month_offset(1).with_day_offset(1).with_hour_offset(1), Min, VALUE)

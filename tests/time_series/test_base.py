@@ -2031,19 +2031,19 @@ class TestTimeSeriesEquality(unittest.TestCase):
     def setUp(self):
         """Set up multiple TimeSeries objects for testing."""
         self.df_original = pl.DataFrame({
-            "time": [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)],
+            "time": [datetime(2024, 1, 1), datetime(2024, 2, 1), datetime(2024, 3, 1)],
             "value": [10, 20, 30]
         })
         self.df_same = pl.DataFrame({
-            "time": [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)],
+            "time": [datetime(2024, 1, 1), datetime(2024, 2, 1), datetime(2024, 3, 1)],
             "value": [10, 20, 30]
         })
         self.df_different_values = pl.DataFrame({
-            "time": [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)],
+            "time": [datetime(2024, 1, 1), datetime(2024, 2, 1), datetime(2024, 3, 1)],
             "value": [100, 200, 300]
         })
         self.df_different_times = pl.DataFrame({
-            "time": [datetime(2020, 1, 1), datetime(2020, 1, 2), datetime(2020, 1, 3)],
+            "time": [datetime(2020, 1, 1), datetime(2020, 2, 1), datetime(2020, 3, 1)],
             "value": [10, 20, 30]
         })
 
@@ -2091,7 +2091,7 @@ class TestTimeSeriesEquality(unittest.TestCase):
         """Test that TimeSeries objects with different periodicity are not equal."""
         ts_different_periodicity = TimeSeries(
             df=self.df_original, time_name="time", resolution=Period.of_days(1),
-            periodicity=Period.of_seconds(1), flag_systems=self.flag_systems_1
+            periodicity=Period.of_months(1), flag_systems=self.flag_systems_1
         )
         self.assertNotEqual(self.ts_original, ts_different_periodicity)
 
@@ -2281,3 +2281,20 @@ class TestGetFlagSystemColumn(unittest.TestCase):
         expected = self.ts.flag_col
         result = self.ts.get_flag_system_column(data_column, flag_system)
         self.assertEqual(result, expected)
+
+
+class TestSubPeriodCheck(unittest.TestCase):
+    """Test the "resolution is a subperiod of periodicity" check"""
+    df = pl.DataFrame({ "time": [datetime(2020, 1, 1)] })
+
+    def test_legal(self):
+        # The test is that the following does not raise an error
+        TimeSeries(df=self.df, time_name="time",
+            resolution=Period.of_seconds(1),
+            periodicity=Period.of_seconds(10))
+
+    def test_illegal(self):
+        with self.assertRaises(UserWarning):
+            TimeSeries(df=self.df, time_name="time",
+                resolution=Period.of_seconds(10),
+                periodicity=Period.of_seconds(1))

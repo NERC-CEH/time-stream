@@ -2452,6 +2452,9 @@ class Period(ABC):
             # There are 12 months in a year.
             assert p1m.count( p1y ) == 12
 
+        See also:
+            The is_subperiod_of() method.
+
         Returns:
              -1: This period is not aligned with "other".
               0: This period is aligned with "other" but the count is
@@ -2460,6 +2463,58 @@ class Period(ABC):
                  "other" contains exactly n intervals of this period.
         """
         return self._properties.count(other._properties)
+
+    def is_subperiod_of(self, other: "Period") -> bool:
+        """Return True if this period is a "subperiod" of other,
+        otherwise return False.
+
+        Period "self" is a subperiod of Period "other" if all the intervals
+        of "self" are wholy contained within an interval of "other", for all
+        intervals of "self" and "other".
+
+        A Period is always a subperiod of itself.
+
+        Periods in different timezones can never be subperiods of each other.
+
+        Examples:
+            p1h = Period.of_hours( 1 )
+            # The intervals of p1h start at time "hh:00:00" for all hours in the timeline.
+            p1d = Period.of_days( 1 )
+            # The intervals of p1d start at time "00:00:00" for all days in the timeline.
+            # A day is cleanly split into 24 hours for all days in the timeline, so
+            # p1h is a subperiod of p1d.
+            assert p1h.is_subperiod_of( p1d )
+
+            p1h_1m = Period.of_hours( 1 ).with_minute_offset( 1 )
+            # The intervals of p1h_1m start at time "hh:01:00" for all hours in the timeline.
+            # A day is not cleanly split into hour periods with each starting at 1 minute past
+            # the hour, so p1h_1m is not a subperiod of p1d.
+            # More generally: two unaligned Periods can never be subperiods of each other.
+            assert not p1h_1m.is_subperiod_of( p1d )
+
+            p1d_1m = Period.of_days( 1 ).with_minute_offset( 1 )
+            # The intervals of p1d_1m start at time "00:01:00" for all days in the timeline.
+            # An "offset" day is cleanly split by similarly offset hours, so
+            # p1h_1m is a subperiod of p1d_1m.
+            assert p1h_1m.is_subperiod_of( p1d_1m )
+
+            p1s = Period.of_seconds( 1 )
+            # A "larger" Period cannot be a subperiod of a "smaller" Period.
+            assert not p1h.is_subperiod_of( p1s )
+
+            p1m = Period.of_months( 1 )
+            # A month is cleanly split by days, even though the number of days varies
+            # for each month, so p1d is a subperiod of p1m.
+            assert p1d.is_subperiod_of( p1m )
+
+        See also:
+            The count() method.
+
+        Returns:
+            True: This period is a subperiod of "other".
+            False: This period is not a subperiod of "other".
+        """
+        return self.count(other) >= 0
 
     def __str__(self) -> str:
         return self._properties.__str__()
