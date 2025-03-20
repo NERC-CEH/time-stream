@@ -64,6 +64,8 @@ omit = [
     "src/time_series/example.py",
     "src/time_series/period.py",
     "src/time_series/time_series_base.py",
+    "src/time_series/examples",
+    "src/time_series/docs",
 ]
 
 filterwarnings = [
