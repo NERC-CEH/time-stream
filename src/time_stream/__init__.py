@@ -8,13 +8,16 @@ except Exception:
 
 __all__ = ["TimeSeries", "Period"]  # noqa
 
-def __getattr__(name):
+
+def __getattr__(name: str) -> None:
     if name == "TimeSeries":
         from time_stream.base import TimeSeries
+
         return TimeSeries
 
     if name == "Period":
         from time_stream.period import Period
+
         return Period
 
     raise AttributeError(f"module {__name__} has no attribute {name}")

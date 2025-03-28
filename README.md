@@ -86,9 +86,9 @@ Run below to setup the pre-commit hooks.
 ```
 git config --local core.hooksPath .githooks/
 ```
-
-
-
+This will set this repo up to use the git hooks in the `.githooks/` directory. 
+The hook runs `ruff format --check` and `ruff check` to prevent commits that are not formatted correctly or have errors. 
+The hook intentionally does not alter the files, but informs the user which command to run.
 
 ## Installing time-stream
 
