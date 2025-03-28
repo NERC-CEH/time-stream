@@ -20,9 +20,11 @@ jobs:
       coverage_threshold: 90
 
   build-docs:
+    needs: [test-python]
     uses: NERC-CEH/dri-cicd/.github/workflows/build-docs.yml@main
 
   deploy-docs:
+    needs: [build-docs]
     uses: NERC-CEH/dri-cicd/.github/workflows/deploy-docs.yml@main
     with:
       pages_artifact_name: pages-artifact
