@@ -37,7 +37,7 @@ license = { text = "NO LICENSE" }
 
 [project.optional-dependencies]
 test = ["pytest", "pytest-cov", "parameterized", "freezegun", "pytest-benchmark", "pytest-benchmark[histogram]"]
-docs = ["sphinx", "sphinx-copybutton", "sphinx-rtd-theme"]
+docs = ["sphinx", "sphinx-copybutton", "sphinx-rtd-theme", "nbsphinx"]
 lint = ["ruff"]
 dev = ["dritimeseriesprocessor[test,docs,lint]"]
 
@@ -64,6 +64,8 @@ omit = [
     "src/time_series/example.py",
     "src/time_series/period.py",
     "src/time_series/time_series_base.py",
+    "src/time_series/examples/*",
+    "src/time_series/docs/*",
 ]
 
 filterwarnings = [
@@ -75,6 +77,10 @@ filterwarnings = [
 src = ["src", "tests"]
 include = ["src/**.py"]
 line-length = 120
+exclude = [
+    "src/time_series/examples",
+    "src/time_series/docs"
+]
 
 [tool.ruff.lint]
 select = [
