@@ -21,3 +21,8 @@ jobs:
 
   build-docs:
     uses: NERC-CEH/dri-cicd/.github/workflows/build-docs.yml@main
+
+  deploy-docs:
+    uses: NERC-CEH/dri-cicd/.github/workflows/deploy-docs.yml@main
+    with:
+      pages_artifact_name: pages-artifact
