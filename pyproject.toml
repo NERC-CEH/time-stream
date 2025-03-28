@@ -6,22 +6,14 @@ requires = ["setuptools >= 61.0", "autosemver"]
 requires-python = ">=3.12"
 dependencies = [
     "autosemver",
-    "boto3>=1.34.138",
-    "boto3-stubs[s3]",
     "config>=0.5.1",
-    "httpx",
-    "moto>=5.0.10",
     "polars>=1.1.0",
     "pyarrow>=17.0.0",
     "pydantic>=2.8.2",
     "isodate",
-    "duckdb>=1.1.2",
-    "pandas",
-    "tenacity",
-    "prometheus-client",
     "setuptools"
 ]
-name = "dritimeseriesprocessor"
+name = "time-stream"
 dynamic = ["version"]
 authors = [
     { name = "Dom Ginger", email = "domgin@ceh.ac.uk" },
@@ -30,8 +22,9 @@ authors = [
     { name = "Rod Scott", email = "rjsc@ceh.ac.uk" },
     { name = "Simon Stanley", email = "simsta@ceh.ac.uk" },
     { name = "Richard Smith", email = "ricsmi@ceh.ac.uk" },
+    { name = "Jonathan Cooper", email = "jcoop@ceh.ac.uk" },
 ]
-description = "Timeseries processor service for FDRI."
+description = "Time-Stream: Time Series Toolkit for Rapid Environmental Analysis and Monitoring"
 readme = "README.md"
 license = { text = "NO LICENSE" }
 
@@ -39,33 +32,30 @@ license = { text = "NO LICENSE" }
 test = ["pytest", "pytest-cov", "parameterized", "freezegun", "pytest-benchmark", "pytest-benchmark[histogram]"]
 docs = ["sphinx", "sphinx-copybutton", "sphinx-rtd-theme", "nbsphinx"]
 lint = ["ruff"]
-dev = ["dritimeseriesprocessor[test,docs,lint]"]
+dev = ["time_stream[test,docs,lint]"]
 
 [tool.setuptools.dynamic]
-version = { attr = "dritimeseriesprocessor.__version__" }
+version = { attr = "time_stream.__version__" }
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["dritimeseriesprocessor*", "databuilder*", "time_series*"]
+include = ["time_stream*"]
 
 [tool.setuptools.package-data]
 "*" = ["*.*"]
 
 [tool.pytest.ini_options]
-addopts = "--cov=dritimeseriesprocessor --cov=databuilder --cov=time_series --cov-report=term-missing --benchmark-skip"
+addopts = "--cov=time_stream --cov-report=term-missing --benchmark-skip"
 markers = ["slow: Marks slow tests"]
 
 
 [tool.coverage.run]
 omit = [
     "*__init__.py",
-    "src/dritimeseriesprocessor/__main__.py",
-    "src/dritimeseriesprocessor/metrics_exporter.py",
-    "src/time_series/example.py",
-    "src/time_series/period.py",
-    "src/time_series/time_series_base.py",
-    "src/time_series/examples/*",
-    "src/time_series/docs/*",
+    "src/time_stream/__main__.py",
+    "src/time_stream/period.py",
+    "src/time_stream/examples/*",
+    "src/time_stream/docs/*",
 ]
 
 filterwarnings = [
@@ -78,8 +68,8 @@ src = ["src", "tests"]
 include = ["src/**.py"]
 line-length = 120
 exclude = [
-    "src/time_series/examples",
-    "src/time_series/docs"
+    "src/time_stream/examples",
+    "src/time_stream/docs"
 ]
 
 [tool.ruff.lint]

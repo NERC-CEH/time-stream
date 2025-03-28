@@ -58,17 +58,17 @@ Until the live sensor data is available, the `end_date` parameter is hardcoded w
 
 Get the last two days data from hardcoded end dates (as above)
 ```commandline
-python -m dritimeseriesprocessor P2D
+python -m time-stream P2D
 ```
 
 Get the last two days data from 2024-03-05
 ```commandline
-python -m dritimeseriesprocessor P2D --end_date=2024-03-05
+python -m time-stream P2D --end_date=2024-03-05
 ```
 
 Get the last two days data from 2024-03-05 for ALCI and BUNNY sites
 ```commandline
-python -m dritimeseriesprocessor P2D --end_date=2024-03-05 --sites=alic1,bunny
+python -m time-stream P2D --end_date=2024-03-05 --sites=alic1,bunny
 ```
 
 ## Linting
@@ -126,9 +126,9 @@ In this scheme, any combination of failed tests will always have a unique identi
 
 ### Adding a New Test
 
-Test definitions are stored in [\_\_metadata\_\_.config_quality_control.py](./src/dritimeseriesprocessor__metadata__.config_quality_control.py) in a variable called `qc_tests`. To add a new test, simply continue the dictionary of tests, copy the previous entry, and increment the ID by 1. If the last `id` is `1 << 5`, the next one should be `1 << 6`.
+Test definitions are stored in [\_\_metadata\_\_.config_quality_control.py](./src/time-stream__metadata__.config_quality_control.py) in a variable called `qc_tests`. To add a new test, simply continue the dictionary of tests, copy the previous entry, and increment the ID by 1. If the last `id` is `1 << 5`, the next one should be `1 << 6`.
 
-Make sure to also add the test to the `qc_test_map` in [quality_config.py](./src/dritimeseriesprocessor/quality_control.py)
+Make sure to also add the test to the `qc_test_map` in [quality_config.py](./src/time-stream/quality_control.py)
 
 ### Deprecating a Test
 
@@ -136,7 +136,7 @@ Do nothing! When a test is deprecated, that ID is "retired" and cannot be reused
 
 If you want to create a new test with a clashing name, you can add a "_DEPRECATED" suffix to the deprecated test name.
 
-Make sure to also remove the test from the `qc_test_map` in [quality_config.py](./src/dritimeseriesprocessor/quality_control.py)
+Make sure to also remove the test from the `qc_test_map` in [quality_config.py](./src/time-stream/quality_control.py)
 
 # Making Gaps in the Parquet Data
 
