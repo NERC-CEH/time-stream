@@ -11,7 +11,8 @@ dependencies = [
     "pyarrow>=17.0.0",
     "pydantic>=2.8.2",
     "isodate",
-    "setuptools"
+    "setuptools",
+    "numpy"
 ]
 name = "time-stream"
 dynamic = ["version"]
@@ -30,7 +31,7 @@ license = { text = "NO LICENSE" }
 
 [project.optional-dependencies]
 test = ["pytest", "pytest-cov", "parameterized", "freezegun", "pytest-benchmark", "pytest-benchmark[histogram]"]
-docs = ["sphinx", "sphinx-copybutton", "sphinx-rtd-theme", "nbsphinx"]
+docs = ["sphinx", "sphinx-copybutton", "sphinx-rtd-theme", "nbsphinx", "jupyter_sphinx"]
 lint = ["ruff"]
 dev = ["time_stream[test,docs,lint]"]
 

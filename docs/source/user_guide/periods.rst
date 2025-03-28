@@ -30,7 +30,7 @@ Basic Factory Methods
 
 The ``Period`` class provides various factory methods:
 
-.. literalinclude:: ../../../examples/examples_periods.py
+.. literalinclude:: ../src/time_stream/examples/examples_periods.py
    :language: python
    :start-after: [start_block_1]
    :end-before: [end_block_1]
@@ -41,7 +41,7 @@ From ISO 8601 Duration Strings
 
 You can create periods from ISO 8601 duration strings:
 
-.. literalinclude:: ../../../examples/examples_periods.py
+.. literalinclude:: ../src/time_stream/examples/examples_periods.py
    :language: python
    :start-after: [start_block_2]
    :end-before: [end_block_2]
@@ -52,7 +52,7 @@ From timedelta Objects
 
 Convert Python timedelta objects to Periods (for intervals of time on the scale of days and below):
 
-.. literalinclude:: ../../../examples/examples_periods.py
+.. literalinclude:: ../src/time_stream/examples/examples_periods.py
    :language: python
    :start-after: [start_block_3]
    :end-before: [end_block_3]
@@ -65,7 +65,7 @@ Offsets allow you to create custom Periods that start at a point in time offset 
 a UK "Water year" starts on 9am October 1st.  This would be defined with a 10 month and 9 hour offset to a 1 year
 period. Some more examples below:
 
-.. literalinclude:: ../../../examples/examples_periods.py
+.. literalinclude:: ../src/time_stream/examples/examples_periods.py
    :language: python
    :start-after: [start_block_4]
    :end-before: [end_block_4]

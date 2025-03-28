@@ -7,13 +7,13 @@
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 import os
 
-import time_series
+import time_stream
 
 
-project = "Time Series Package"
+project = "Time-Stream"
 copyright = "2025, UKCEH"
 author = "UKCEH"
-release = time_series.__version__
+release = time_stream.__version__
 version = release
 
 # -- General configuration ---------------------------------------------------
@@ -74,6 +74,6 @@ napoleon_preprocess_types = True
 
 # -- Jupyter-sphinx settings -------------------------------------------------------
 # Add examples path to Python's path
-examples_path = os.path.abspath('../../examples')
+examples_path = os.path.abspath('../../src/time_stream/examples')
 # Make sure jupyter-sphinx uses the same path
 os.environ['PYTHONPATH'] = examples_path + os.pathsep + os.environ.get('PYTHONPATH', '')

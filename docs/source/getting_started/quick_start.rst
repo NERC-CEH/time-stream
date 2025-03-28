@@ -8,7 +8,7 @@ Creating a Time Series
 
 First, import the necessary modules:
 
-.. literalinclude:: ../../../examples/examples_quick_start.py
+.. literalinclude:: ../src/time_stream/examples/examples_quick_start.py
    :language: python
    :start-after: [start_block_1]
    :end-before: [end_block_1]
@@ -16,7 +16,7 @@ First, import the necessary modules:
 
 Create a simple dataframe with a datetime column and a value column:
 
-.. literalinclude:: ../../../examples/examples_quick_start.py
+.. literalinclude:: ../src/time_stream/examples/examples_quick_start.py
    :language: python
    :start-after: [start_block_2]
    :end-before: [end_block_2]
@@ -24,7 +24,7 @@ Create a simple dataframe with a datetime column and a value column:
 
 And create a Time Series object:
 
-.. literalinclude:: ../../../examples/examples_quick_start.py
+.. literalinclude:: ../src/time_stream/examples/examples_quick_start.py
    :language: python
    :start-after: [start_block_3]
    :end-before: [end_block_3]
@@ -44,7 +44,7 @@ Aggregating Data
 
 Aggregating time series data is straightforward:
 
-.. literalinclude:: ../../../examples/examples_quick_start.py
+.. literalinclude:: ../src/time_stream/examples/examples_quick_start.py
    :language: python
    :start-after: [start_block_4]
    :end-before: [end_block_4]
@@ -64,7 +64,7 @@ One example usage of this is to provide information about what quality control h
 
 Create a "flagging system" as dictionary and provide it to the Time Series initialisation:
 
-.. literalinclude:: ../../../examples/examples_quick_start.py
+.. literalinclude:: ../src/time_stream/examples/examples_quick_start.py
    :language: python
    :start-after: [start_block_5]
    :end-before: [end_block_5]
@@ -79,7 +79,7 @@ Create a "flagging system" as dictionary and provide it to the Time Series initi
 
 Now we can use this flagging system to add information to our data points:
 
-.. literalinclude:: ../../../examples/examples_quick_start.py
+.. literalinclude:: ../src/time_stream/examples/examples_quick_start.py
    :language: python
    :start-after: [start_block_6]
    :end-before: [end_block_6]
