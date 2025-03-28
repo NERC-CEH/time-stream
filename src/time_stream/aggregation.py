@@ -12,8 +12,8 @@ from typing import Optional, override
 
 import polars as pl
 
-from time_series import Period, TimeSeries
-from time_series.aggregation_base import AggregationFunction
+from time_stream import Period, TimeSeries
+from time_stream.aggregation_base import AggregationFunction
 
 # A function that takes a Polars GroupBy as an argument and returns a DataFrame
 GroupByToDataFrame = Callable[[pl.dataframe.group_by.GroupBy], pl.DataFrame]

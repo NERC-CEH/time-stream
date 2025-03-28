@@ -5,10 +5,10 @@ from parameterized import parameterized
 import polars as pl
 from polars.testing import assert_series_equal
 
-from time_series import TimeSeries
-from time_series.bitwise import BitwiseFlag
-from time_series.columns import FlagColumn
-from time_series.flag_manager import TimeSeriesFlagManager
+from time_stream import TimeSeries
+from time_stream.bitwise import BitwiseFlag
+from time_stream.columns import FlagColumn
+from time_stream.flag_manager import TimeSeriesFlagManager
 
 
 class BaseFlagManagerTest(unittest.TestCase):

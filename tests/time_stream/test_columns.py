@@ -4,10 +4,10 @@ from datetime import datetime
 import polars as pl
 from polars.testing import assert_series_equal
 
-from time_series.base import TimeSeries
-from time_series.bitwise import BitwiseMeta
-from time_series.columns import DataColumn, FlagColumn, SupplementaryColumn
-from time_series.relationships import Relationship, RelationshipType, DeletionPolicy
+from time_stream.base import TimeSeries
+from time_stream.bitwise import BitwiseMeta
+from time_stream.columns import DataColumn, FlagColumn, SupplementaryColumn
+from time_stream.relationships import Relationship, RelationshipType, DeletionPolicy
 
 
 class BaseTimeSeriesTest(unittest.TestCase):

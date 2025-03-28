@@ -6,9 +6,9 @@ import polars as pl
 from parameterized import parameterized
 from polars.testing import assert_series_equal, assert_frame_equal
 
-from time_series.base import TimeSeries
-from time_series.period import Period
-from time_series.columns import DataColumn, FlagColumn, PrimaryTimeColumn, SupplementaryColumn, TimeSeriesColumn
+from time_stream.base import TimeSeries
+from time_stream.period import Period
+from time_stream.columns import DataColumn, FlagColumn, PrimaryTimeColumn, SupplementaryColumn, TimeSeriesColumn
 
 TZ_UTC = timezone.utc
 

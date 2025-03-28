@@ -16,9 +16,9 @@ from typing import Any, Iterable, Optional
 import polars as pl
 from parameterized import parameterized
 
-from time_series.period import Period
-from time_series.base import TimeSeries
-from time_series.aggregation import AggregationFunction, Max, Mean, Min
+from time_stream.period import Period
+from time_stream.base import TimeSeries
+from time_stream.aggregation import AggregationFunction, Max, Mean, Min
 
 TIME: str = "datetime"
 VALUE: str = "value"

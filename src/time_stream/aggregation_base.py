@@ -24,7 +24,7 @@ from typing import TYPE_CHECKING, Type
 
 if TYPE_CHECKING:
     # Import is for type hinting only.  Make sure there is no runtime import, to avoid recursion.
-    from time_series import Period, TimeSeries
+    from time_stream import Period, TimeSeries
 
 
 class AggregationFunction(ABC):

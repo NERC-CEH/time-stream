@@ -6,8 +6,8 @@ from unittest.mock import patch
 from parameterized import parameterized
 import polars as pl
 
-from time_series import TimeSeries
-from time_series.relationships import Relationship, RelationshipManager, RelationshipType, DeletionPolicy
+from time_stream import TimeSeries
+from time_stream.relationships import Relationship, RelationshipManager, RelationshipType, DeletionPolicy
 
 
 class BaseRelationshipTest(unittest.TestCase):

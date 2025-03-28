@@ -3,8 +3,8 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     # Import is for type hinting only.  Make sure there is no runtime import, to avoid recursion.
-    from time_series import TimeSeries
-    from time_series.columns import TimeSeriesColumn
+    from time_stream import TimeSeries
+    from time_stream.columns import TimeSeriesColumn
 
 
 class RelationshipType(Enum):

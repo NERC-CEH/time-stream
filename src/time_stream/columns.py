@@ -4,11 +4,11 @@ from typing import TYPE_CHECKING, Any, Dict, Optional, Sequence, Type, Union
 
 import polars as pl
 
-from time_series.relationships import DeletionPolicy, Relationship, RelationshipType
+from time_stream.relationships import DeletionPolicy, Relationship, RelationshipType
 
 if TYPE_CHECKING:
     # Import is for type hinting only.  Make sure there is no runtime import, to avoid recursion.
-    from time_series import TimeSeries
+    from time_stream import TimeSeries
 
 
 class TimeSeriesColumn(ABC):

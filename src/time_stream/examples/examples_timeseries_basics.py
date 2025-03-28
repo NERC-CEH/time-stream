@@ -3,8 +3,8 @@ from datetime import datetime, timedelta
 
 import polars as pl
 
-from time_series import TimeSeries, Period
-from time_series.aggregation import Mean, Min, Max
+from time_stream import TimeSeries, Period
+from time_stream.aggregation import Mean, Min, Max
 # [end_block_1]
 
 import numpy as np

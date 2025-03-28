@@ -1,6 +1,6 @@
 import unittest
 
-from time_series.bitwise import BitwiseFlag
+from time_stream.bitwise import BitwiseFlag
 
 
 class Flags(BitwiseFlag):

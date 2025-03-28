@@ -7,8 +7,8 @@ import polars as pl
 from pytest import param
 from pytest_benchmark.fixture import BenchmarkFixture
 
-from time_series import TimeSeries, Period
-from time_series.aggregation import AggregationFunction, Max, Mean, Min
+from time_stream import TimeSeries, Period
+from time_stream.aggregation import AggregationFunction, Max, Mean, Min
 
 
 AGG_FUNCS = (Max, Mean, Min)

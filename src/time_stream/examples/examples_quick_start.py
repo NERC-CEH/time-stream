@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 
 import polars as pl
 
-from time_series import TimeSeries, Period
+from time_stream import TimeSeries, Period
 # [end_block_1]
 from utils import suppress_output
 
@@ -48,7 +48,7 @@ def aggregate_data():
         ts = create_timeseries()
 
     # [start_block_4]
-    from time_series.aggregation import Mean
+    from time_stream.aggregation import Mean
 
     # Aggregate temperature data by month
     monthly_period = Period.of_months(1)

@@ -23,8 +23,8 @@ from unittest.mock import patch, Mock
 from parameterized import parameterized
 import re
 
-import time_series.period as p
-from time_series.period import Period
+import time_stream.period as p
+from time_stream.period import Period
 
 
 TZ_UTC = datetime.timezone.utc
@@ -1494,7 +1494,7 @@ class TestWithOffsetPeriodFields(unittest.TestCase):
             ),
         ]
     )
-    @patch("time_series.period.PeriodFields")
+    @patch("time_stream.period.PeriodFields")
     def test_with_offset_period_fields(self, name, months_seconds, expected, mock_period_fields):
         """Test Properties.with_offset_period_fields method with various PeriodFields inputs."""
         mock_months_seconds = Mock()
@@ -1552,7 +1552,7 @@ class TestWithOffsetMonthsSeconds(unittest.TestCase):
             ),
         ]
     )
-    @patch("time_series.period.MonthsSeconds")
+    @patch("time_stream.period.MonthsSeconds")
     def test_with_offset_months_seconds(self, name, months_seconds, expected, mock_months_seconds):
         """Test Properties.with_offset_months_seconds method with various MonthsSeconds inputs."""
         mock_months_seconds = Mock()

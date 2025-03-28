@@ -4,11 +4,11 @@ from typing import Any, Dict, Iterable, Iterator, Optional, Sequence, Type, Unio
 
 import polars as pl
 
-from time_series.aggregation_base import AggregationFunction, apply_aggregation
-from time_series.columns import DataColumn, FlagColumn, PrimaryTimeColumn, SupplementaryColumn, TimeSeriesColumn
-from time_series.flag_manager import TimeSeriesFlagManager
-from time_series.period import Period
-from time_series.relationships import RelationshipManager
+from time_stream.aggregation_base import AggregationFunction, apply_aggregation
+from time_stream.columns import DataColumn, FlagColumn, PrimaryTimeColumn, SupplementaryColumn, TimeSeriesColumn
+from time_stream.flag_manager import TimeSeriesFlagManager
+from time_stream.period import Period
+from time_stream.relationships import RelationshipManager
 
 
 class TimeSeries:

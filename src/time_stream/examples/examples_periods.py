@@ -1,9 +1,9 @@
-from time_series import Period
+from time_stream import Period
 
 
 def simple_factory_methods():
     # [start_block_1]
-    from time_series import Period
+    from time_stream import Period
 
     # Create periods using specific methods
     one_year = Period.of_years(1)

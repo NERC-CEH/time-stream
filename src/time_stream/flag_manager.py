@@ -3,11 +3,11 @@ from typing import TYPE_CHECKING, Sequence, Type, Union
 
 import polars as pl
 
-from time_series.bitwise import BitwiseFlag
-from time_series.columns import FlagColumn
+from time_stream.bitwise import BitwiseFlag
+from time_stream.columns import FlagColumn
 
 if TYPE_CHECKING:
-    from time_series.base import TimeSeries
+    from time_stream.base import TimeSeries
 
 
 class TimeSeriesFlagManager:
