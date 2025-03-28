@@ -18,28 +18,7 @@ jobs:
     with:
       coverage_threshold: 90
 
-  prepare-docs:
-    needs: [test-python]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Ensure `src/` is in the correct location
-        run: |
-            ls -l  # Debugging: Check what's in the repo
-            mkdir -p src  # Ensure directory exists
-            cp -r ../src .  # Copy src/ to repo-root, keeping relative paths correct
-            ls -l  # Debugging: Verify src/ is correctly placed
-
-      - name: Upload prepared docs as artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: docs-source
-          path: .  # Uploads the entire repository with `src/` in the correct place
-
   build-docs:
-    needs: [prepare-docs]
     uses: NERC-CEH/dri-cicd/.github/workflows/build-docs.yml@main
     with:
       pages_artifact_name: pages-artifact
