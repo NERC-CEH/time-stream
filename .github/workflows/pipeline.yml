@@ -20,8 +20,20 @@ jobs:
       coverage_threshold: 90
 
   build-docs:
-    needs: [test-python]
-    uses: NERC-CEH/dri-cicd/.github/workflows/build-docs.yml@main
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Copy source code for Sphinx
+        run: |
+          ls -l  # Debugging: Check what's in the repo
+          mkdir -p src  # Ensure directory exists
+          cp -r ../src .  # Copy src/ to repo-root, keeping relative paths correct
+          ls -l  # Debugging: Verify src/ is correctly placed
+
+      - name: Run build-docs workflow
+        uses: NERC-CEH/dri-cicd/.github/workflows/build-docs.yml@main
 
   deploy-docs:
     needs: [build-docs]
