@@ -92,29 +92,45 @@ The hook intentionally does not alter the files, but informs the user which comm
 
 ## Installing time-stream
 
-Whilst time-stream is under active development, to use time-stream within your project it is recommended to clone the 
-time-stream repository to a location next to your project's repository. Then, you can install time-series using pip's
-"development mode". 
+Whilst time-stream is under active development, to use time-stream within your project you can do one of two things:
 
-When you install a package in editable mode, pip creates a special link to the package's source directory 
-instead of copying files to your Python's site-packages directory. Any changes to the source code are immediately 
-available to any project using the package.
+1. Clone the time-stream repository to a location next to your project's repository. Then, you can install time-series using pip's
+"development mode" using a relative path.
+    
+    When you install a package in editable mode, pip creates a special link to the package's source directory 
+    instead of copying files to your Python's site-packages directory. Any changes to the source code are immediately 
+    available to any project using the package.
+    
+    **Using pip directly**
+    ```commandline
+    pip install -e /path/to/time-stream
+    ```
+    
+    **In your project's pyproject.toml**
+    ```commandline
+    [project]
+    dependencies = [
+        "time-stream @ file:///path/to/time-stream"
+    ]
+    ```
+    
+    Now when changes have been made to time-stream, you can just do a `git pull` in your cloned directory to get the 
+    changes, and they will be automatically available in your package. 
 
-#### Using pip directly
-```commandline
-pip install -e /path/to/time-stream
-```
+2. Use the time-stream git url in your pip install
 
-#### In your project's pyproject.toml
-```commandline
-[project]
-dependencies = [
-    "time-stream @ file:///path/to/time-stream"
-]
-```
-
-Now when changes have been made to time-stream, you can just do a `git pull` in your cloned directory to get the 
-changes, and they will be automatically available in your package. 
+    **Using pip directly**
+    ```commandline
+    pip install -e "time-stream @ git+https://github.com/NERC-CEH/time-stream.git"
+    ```
+    
+    **In your project's pyproject.toml**
+    ```commandline
+    [project]
+    dependencies = [
+        "time-stream @ git+https://github.com/NERC-CEH/time-stream.git"
+    ]
+    ```
 
 ## Documentation
 
