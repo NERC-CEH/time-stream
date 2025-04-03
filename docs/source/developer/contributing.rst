@@ -78,7 +78,7 @@ To include specific sections from a file, add marker comments to your code:
 .. code-block:: python
 
     # example.py
-    import time_series
+    import time_stream
 
     def example_function():
         # [start_block_1]
@@ -98,7 +98,7 @@ Then in your RST file:
 
 .. code-block:: rst
 
-    .. literalinclude:: ../../../src/time_series/examples/example.py
+    .. literalinclude:: ../../../src/time_stream/examples/example.py
        :language: python
        :start-after: [start_block_1]
        :end-before: [end_block_1]
@@ -145,7 +145,7 @@ Review the build output for warnings and errors.
 Example Documentation Workflow
 ^^^^^^^^^^^^^^^^^^^^^^^
 
-1. **Write example code**: Create a Python file in ``src/time_series/examples``
+1. **Write example code**: Create a Python file in ``src/time_stream/examples``
 2. **Test the example**: Ensure it works correctly
 3. **Add marker comments**: Add ``[start_block_X]`` and ``[end_block_X]`` markers
 4. **Create documentation**: Write an RST file referencing the example
