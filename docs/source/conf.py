@@ -58,6 +58,10 @@ html_css_files = [
     "css/custom.css",
 ]
 
+html_context = {
+    "license": "GNU GPL v3.0",
+}
+
 # -- Napoleon settings -------------------------------------------------------
 napoleon_google_docstring = True
 napoleon_numpy_docstring = False
