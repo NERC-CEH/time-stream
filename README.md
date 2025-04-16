@@ -1,3 +1,8 @@
+![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)
+![Language](https://img.shields.io/github/languages/top/NERC-CEH/time-stream)
+[![tests badge](https://github.com/NERC-CEH/time-stream/actions/workflows/pipeline.yml/badge.svg)](https://github.com/NERC-CEH/time-stream/actions)
+[![Docs](https://img.shields.io/badge/docs-%F0%9F%93%9A%20online-blue)](https://nerc-ceh.github.io/time-stream)
+
 # Time-Stream
 **Time** **S**eries **T**oolkit for **R**apid **E**nvironmental **A**nalysis and **M**onitoring: A Python library 
 for handling and analysing timeseries data with a focus on maintaining the integrity of the temporal properties of the 
@@ -12,6 +17,10 @@ with special attention to:
 - Smart temporal aggregation
 - Provision of a flexible flagging system
 - Column relationships for organising complex timeseries datasets
+
+## License
+
+This project is licensed under the [GNU General Public License v3.0](LICENSE).
 
 ## Contributing
 

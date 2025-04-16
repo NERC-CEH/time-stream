@@ -80,3 +80,17 @@ Indices and tables
 * :ref:`genindex`
 * :ref:`modindex`
 * :ref:`search`
+
+License
+=======
+
+This project is licensed under the GNU General Public License v3.0 (GPLv3).
+
+You may obtain a copy of the license at:
+
+https://www.gnu.org/licenses/gpl-3.0.en.html
+
+This software is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU General Public License for more details.
