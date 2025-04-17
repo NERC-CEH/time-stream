@@ -18,8 +18,8 @@ class TimeSeries:
         self,
         df: pl.DataFrame,
         time_name: str,
-        resolution: Optional[Period] = None,
-        periodicity: Optional[Period] = None,
+        resolution: Optional[Period | str] = None,
+        periodicity: Optional[Period | str] = None,
         time_zone: Optional[str] = None,
         supplementary_columns: Optional[list] = None,
         flag_systems: Optional[Union[Dict[str, dict], Dict[str, Type[Enum]]]] = None,
@@ -230,6 +230,10 @@ class TimeSeries:
             # Default to a resolution that accepts all datetimes
             self._resolution = Period.of_microseconds(1)
 
+        # Validate and convert to Period object
+        if isinstance(self._resolution, str):
+            self._resolution = Period.of_iso_duration(self._resolution)
+    
         self._epoch_check(self.resolution)
 
         # Compare the original series to the truncated series.  If no match, it is not aligned to the resolution.
@@ -270,6 +274,10 @@ class TimeSeries:
         if self.periodicity is None:
             # Default to a periodicity that accepts all datetimes
             self._periodicity = Period.of_microseconds(1)
+
+        # Convert to Period object
+        if isinstance(self._periodicity, str):
+            self._periodicity = Period.of_iso_duration(self._periodicity)
 
         self._epoch_check(self.periodicity)
 
