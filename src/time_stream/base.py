@@ -233,7 +233,7 @@ class TimeSeries:
         # Validate and convert to Period object
         if isinstance(self._resolution, str):
             self._resolution = Period.of_iso_duration(self._resolution)
-    
+
         self._epoch_check(self.resolution)
 
         # Compare the original series to the truncated series.  If no match, it is not aligned to the resolution.

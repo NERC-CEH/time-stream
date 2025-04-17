@@ -68,7 +68,7 @@ class TimeSeriesFlagManager:
         """
         if name in self._flag_systems:
             raise KeyError(f"Flag system '{name}' already exists.")
-        if isinstance(flag_system, enum.EnumMeta):
+        if isinstance(flag_system, enum.EnumType):
             self._flag_systems[name] = flag_system
         elif isinstance(flag_system, dict):
             self._flag_systems[name] = BitwiseFlag(name, flag_system)
