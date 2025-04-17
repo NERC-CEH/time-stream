@@ -891,6 +891,10 @@ class TestValidateResolution(unittest.TestCase):
         ("simple yearly",
          [datetime(2020, 1, 1), datetime(2021, 1, 1), datetime(2022, 1, 1)],
          Period.of_years(1)),
+    
+        ("simple yearly string",
+         [datetime(2020, 1, 1), datetime(2021, 1, 1), datetime(2022, 1, 1)],
+         "P1Y"),
 
         ("yearly with gaps",
          [datetime(1950, 1, 1), datetime(2021, 1, 1), datetime(2022, 1, 1)],
@@ -916,6 +920,10 @@ class TestValidateResolution(unittest.TestCase):
          [datetime(2020, 1, 1), datetime(2021, 6, 1), datetime(2022, 1, 1)],
          Period.of_years(1)),
 
+        ("simple yearly string error",
+         [datetime(2020, 1, 1), datetime(2021, 6, 1), datetime(2022, 1, 1)],
+         "P1Y"),
+
         ("water years error",
          [datetime(2006, 10, 1, 10), datetime(2007, 10, 1, 9), datetime(2008, 10, 1, 9)],
          Period.of_years(1).with_month_offset(9).with_hour_offset(9)),
@@ -932,6 +940,10 @@ class TestValidateResolution(unittest.TestCase):
         ("simple monthly",
          [datetime(2024, 1, 1), datetime(2024, 2, 1), datetime(2024, 3, 1)],
          Period.of_months(1)),
+
+        ("simple monthly string",
+         [datetime(2024, 1, 1), datetime(2024, 2, 1), datetime(2024, 3, 1)],
+         "P1M"),
 
         ("monthly with gaps",
          [datetime(2023, 1, 1), datetime(2023, 2, 1), datetime(2024, 1, 1)],
@@ -966,9 +978,13 @@ class TestValidateResolution(unittest.TestCase):
             ts._validate_resolution()
 
     @parameterized.expand([
-        ("simple monthly",
+        ("simple monthly error",
          [datetime(2024, 1, 1), datetime(2024, 2, 15), datetime(2024, 3, 1)],
          Period.of_months(1)),
+
+        ("simple monthly string error",
+         [datetime(2024, 1, 1), datetime(2024, 2, 15), datetime(2024, 3, 1)],
+         "P1M"),
 
         ("water months error",
          [datetime(2024, 1, 1, 9, 20), datetime(2024, 2, 1, 9), datetime(2024, 3, 1, 9)],
@@ -986,6 +1002,10 @@ class TestValidateResolution(unittest.TestCase):
         ("simple daily",
          [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)],
          Period.of_days(1)),
+
+        ("simple daily",
+         [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)],
+         "P1D"),
 
         ("daily with gaps",
          [datetime(2023, 1, 1), datetime(2023, 1, 2), datetime(2024, 1, 10)],
@@ -1015,6 +1035,10 @@ class TestValidateResolution(unittest.TestCase):
          [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3, 0, 0, 0, 1)],
          Period.of_days(1)),
 
+        ("simple daily string error",
+         [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3, 0, 0, 0, 1)],
+         "P1D"),
+
         ("water days error",
          [datetime(2024, 1, 1, 9), datetime(2024, 1, 2, 9), datetime(2024, 1, 3, 19)],
          Period.of_days(1).with_hour_offset(9)),
@@ -1031,6 +1055,10 @@ class TestValidateResolution(unittest.TestCase):
         ("simple hourly",
          [datetime(2024, 1, 1, 1), datetime(2024, 1, 1, 2), datetime(2024, 1, 1, 3)],
          Period.of_hours(1)),
+
+        ("simple hourly string",
+         [datetime(2024, 1, 1, 1), datetime(2024, 1, 1, 2), datetime(2024, 1, 1, 3)],
+         "PT1H"),
 
         ("hourly with gaps",
          [datetime(2023, 1, 1, 6), datetime(2023, 6, 8, 19), datetime(2024, 3, 10, 4)],
@@ -1064,11 +1092,15 @@ class TestValidateResolution(unittest.TestCase):
             ts._validate_resolution()
 
     @parameterized.expand([
-        ("simple hourly",
+        ("simple hourly error",
          [datetime(2024, 1, 1, 1), datetime(2024, 1, 1, 2, 15), datetime(2024, 1, 1, 3)],
          Period.of_hours(1)),
 
-        ("hourly with minute offset",
+        ("simple hourly string error",
+         [datetime(2024, 1, 1, 1), datetime(2024, 1, 1, 2, 15), datetime(2024, 1, 1, 3)],
+         "PT1H"),
+
+        ("hourly with minute offset error",
          [datetime(2024, 1, 1, 1, 30), datetime(2024, 1, 1, 2, 30), datetime(2024, 1, 1, 3, 31)],
          Period.of_hours(1).with_minute_offset(30)),
     ])
@@ -1084,6 +1116,10 @@ class TestValidateResolution(unittest.TestCase):
         ("simple minute",
          [datetime(2024, 1, 1, 1, 1), datetime(2024, 1, 1, 1, 2), datetime(2024, 1, 1, 1, 3)],
          Period.of_minutes(1)),
+
+        ("simple minute string",
+         [datetime(2024, 1, 1, 1, 1), datetime(2024, 1, 1, 1, 2), datetime(2024, 1, 1, 1, 3)],
+         "PT1M"),
 
         ("minutes with gaps",
          [datetime(2023, 1, 1, 1, 1), datetime(2023, 12, 1, 19, 5), datetime(2024, 2, 25, 12, 52)],
@@ -1114,11 +1150,15 @@ class TestValidateResolution(unittest.TestCase):
             ts._validate_resolution()
 
     @parameterized.expand([
-        ("simple minute",
+        ("simple minute error",
          [datetime(2024, 1, 1, 1, 1), datetime(2024, 1, 1, 1, 2), datetime(2024, 1, 1, 1, 3, 59)],
          Period.of_minutes(1)),
 
-        ("5 minutes with second offset",
+        ("simple minute string error",
+         [datetime(2024, 1, 1, 1, 1), datetime(2024, 1, 1, 1, 2), datetime(2024, 1, 1, 1, 3, 59)],
+         "PT1M"),
+
+        ("5 minutes with second offset error",
          [datetime(2024, 1, 1, 1, 31, 30), datetime(2024, 1, 1, 1, 35, 30), datetime(2024, 1, 1, 1, 40, 30)],
          Period.of_minutes(5).with_second_offset(30)),
     ])
@@ -1134,6 +1174,10 @@ class TestValidateResolution(unittest.TestCase):
         ("simple seconds",
          [datetime(2024, 1, 1, 1, 1, 1), datetime(2024, 1, 1, 1, 1, 2), datetime(2024, 1, 1, 1, 1, 3)],
          Period.of_seconds(1)),
+
+        ("simple seconds string",
+         [datetime(2024, 1, 1, 1, 1, 1), datetime(2024, 1, 1, 1, 1, 2), datetime(2024, 1, 1, 1, 1, 3)],
+         "PT1S"),
 
         ("seconds with gaps",
          [datetime(1823, 1, 1, 1, 1, 1), datetime(2023, 7, 11, 12, 19, 59), datetime(2024, 1, 1, 1, 1, 13)],
@@ -1163,11 +1207,15 @@ class TestValidateResolution(unittest.TestCase):
             ts._validate_resolution()
 
     @parameterized.expand([
-        ("simple seconds",
+        ("simple seconds error",
          [datetime(2024, 1, 1, 1, 1, 1), datetime(2024, 1, 1, 1, 1, 2, 9000), datetime(2024, 1, 1, 1, 1, 3)],
          Period.of_seconds(1)),
 
-        ("30 seconds with microsecond offset",
+        ("simple seconds string error",
+         [datetime(2024, 1, 1, 1, 1, 1), datetime(2024, 1, 1, 1, 1, 2, 9000), datetime(2024, 1, 1, 1, 1, 3)],
+         "PT1S"),
+
+        ("30 seconds with microsecond offset error",
          [datetime(2024, 1, 1, 1, 1, 0, 40), datetime(2024, 1, 1, 1, 1, 30, 41), datetime(2024, 1, 1, 1, 2, 30, 40)],
          Period.of_seconds(30).with_microsecond_offset(40)),
     ])
@@ -1184,6 +1232,11 @@ class TestValidateResolution(unittest.TestCase):
          [datetime(2024, 1, 1, 1, 1, 1, 1000), datetime(2024, 1, 1, 1, 1, 1, 1001),
           datetime(2024, 1, 1, 1, 1, 1, 1002)],
          Period.of_microseconds(1)),
+
+        ("simple microseconds string",
+         [datetime(2024, 1, 1, 1, 1, 1, 1000), datetime(2024, 1, 1, 1, 1, 1, 1001),
+          datetime(2024, 1, 1, 1, 1, 1, 1002)],
+         "PT0.000001S"),
 
         ("microseconds with gaps",
          [datetime(2023, 1, 1, 1, 1, 1, 5), datetime(2023, 7, 11, 12, 19, 59, 10),
@@ -1211,7 +1264,7 @@ class TestValidateResolution(unittest.TestCase):
             ts._validate_resolution()
 
     @parameterized.expand([
-        ("40Hz",
+        ("40Hz error",
          [datetime(2023, 1, 1, 1, 1, 1, 0), datetime(2024, 1, 1, 1, 1, 1, 25_000),
           datetime(2024, 1, 1, 1, 1, 1, 55_000)],
          Period.of_microseconds(25_000)),
@@ -1230,6 +1283,10 @@ class TestValidatePeriodicity(unittest.TestCase):
         ("simple yearly",
          [datetime(2020, 1, 1), datetime(2021, 1, 1), datetime(2022, 1, 1)],
          Period.of_years(1)),
+
+        ("simple yearly string",
+         [datetime(2020, 1, 1), datetime(2021, 1, 1), datetime(2022, 1, 1)],
+         "P1Y"),
 
         ("days within yearly",
          [datetime(2021, 1, 1), datetime(2022, 10, 5), datetime(2023, 2, 17)],
@@ -1255,11 +1312,15 @@ class TestValidatePeriodicity(unittest.TestCase):
             ts._validate_periodicity()
 
     @parameterized.expand([
-        ("simple yearly",
+        ("simple yearly error",
          [datetime(2020, 1, 1), datetime(2020, 1, 2), datetime(2022, 1, 1)],
          Period.of_years(1)),
 
-        ("simple water year",
+        ("simple yearly string error",
+         [datetime(2020, 1, 1), datetime(2020, 1, 2), datetime(2022, 1, 1)],
+         "P1Y"),
+
+        ("simple water year error",
          [datetime(2005, 1, 1), datetime(2005, 5, 1), datetime(2006, 12, 1), datetime(2007, 10, 10)],
          Period.of_years(1).with_month_offset(9).with_hour_offset(9)),
     ])
@@ -1275,6 +1336,10 @@ class TestValidatePeriodicity(unittest.TestCase):
         ("simple monthly",
          [datetime(2024, 1, 1), datetime(2024, 2, 15), datetime(2024, 3, 31)],
          Period.of_months(1)),
+
+        ("simple monthly string",
+         [datetime(2024, 1, 1), datetime(2024, 2, 15), datetime(2024, 3, 31)],
+         "P1M"),
 
         ("long term monthly",
          [datetime(1200, 1, 1), datetime(2023, 1, 1), datetime(2024, 1, 1)],
@@ -1304,11 +1369,15 @@ class TestValidatePeriodicity(unittest.TestCase):
             ts._validate_periodicity()
 
     @parameterized.expand([
-        ("simple monthly",
+        ("simple monthly error",
          [datetime(2024, 1, 1), datetime(2024, 1, 31), datetime(2024, 2, 1)],
          Period.of_months(1)),
 
-        ("simple water months",
+        ("simple monthly string error",
+         [datetime(2024, 1, 1), datetime(2024, 1, 31), datetime(2024, 2, 1)],
+         "P1M"),
+
+        ("simple water months error",
          [datetime(2024, 1, 1, 10), datetime(2024, 2, 1, 8, 59), datetime(2024, 5, 1, 10, 15)],
          Period.of_months(1).with_hour_offset(9)),
     ])
@@ -1324,6 +1393,10 @@ class TestValidatePeriodicity(unittest.TestCase):
         ("simple daily",
          [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)],
          Period.of_days(1)),
+
+        ("simple daily error",
+         [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)],
+         "P1D"),
 
         ("long term daily",
          [datetime(1800, 1, 1, 15), datetime(2023, 1, 2, 19), datetime(2024, 1, 10, 1)],
@@ -1349,11 +1422,15 @@ class TestValidatePeriodicity(unittest.TestCase):
             ts._validate_periodicity()
 
     @parameterized.expand([
-        ("simple daily",
+        ("simple daily error",
          [datetime(2024, 1, 1), datetime(2024, 1, 1, 23, 59), datetime(2024, 1, 3)],
          Period.of_days(1)),
 
-        ("simple water days",
+        ("simple daily string error",
+         [datetime(2024, 1, 1), datetime(2024, 1, 1, 23, 59), datetime(2024, 1, 3)],
+         "P1D"),
+
+        ("simple water days error",
          [datetime(2024, 1, 1, 9), datetime(2024, 1, 2, 8, 59, 59), datetime(2024, 1, 3, 9)],
          Period.of_days(1).with_hour_offset(9)),
     ])
@@ -1369,6 +1446,10 @@ class TestValidatePeriodicity(unittest.TestCase):
         ("simple hourly",
          [datetime(2024, 1, 1, 1, 15), datetime(2024, 1, 1, 2, 59), datetime(2024, 1, 1, 3, 1)],
          Period.of_hours(1)),
+
+        ("simple hourly string",
+         [datetime(2024, 1, 1, 1, 15), datetime(2024, 1, 1, 2, 59), datetime(2024, 1, 1, 3, 1)],
+         "PT1H"),
 
         ("every 12 hours",
          [datetime(2024, 1, 1, 4, 30), datetime(2024, 1, 1, 12, 5), datetime(2024, 1, 2), datetime(2024, 1, 2, 23, 59)],
@@ -1390,9 +1471,13 @@ class TestValidatePeriodicity(unittest.TestCase):
             ts._validate_periodicity()
 
     @parameterized.expand([
-        ("simple hourly",
+        ("simple hourly error",
          [datetime(2024, 1, 1, 1, 15), datetime(2024, 1, 1, 1, 16), datetime(2024, 1, 1, 3, 1)],
          Period.of_hours(1)),
+
+        ("simple hourly string error",
+         [datetime(2024, 1, 1, 1, 15), datetime(2024, 1, 1, 1, 16), datetime(2024, 1, 1, 3, 1)],
+         "PT1H"),
     ])
     def test_validate_hour_periodicity_error(self, _, times, periodicity):
         """ Test that an hour based time series that doesn't conform to the given periodicity raises an error.
@@ -1406,6 +1491,10 @@ class TestValidatePeriodicity(unittest.TestCase):
         ("simple minute",
          [datetime(2024, 1, 1, 1, 1), datetime(2024, 1, 1, 1, 2), datetime(2024, 1, 1, 1, 3)],
          Period.of_minutes(1)),
+
+        ("simple minute string",
+         [datetime(2024, 1, 1, 1, 1), datetime(2024, 1, 1, 1, 2), datetime(2024, 1, 1, 1, 3)],
+         "PT1M"),
 
         ("every 15 minutes",
          [datetime(2024, 1, 1, 1, 15), datetime(2024, 1, 1, 1, 35), datetime(2024, 1, 1, 1, 59)],
@@ -1427,9 +1516,13 @@ class TestValidatePeriodicity(unittest.TestCase):
             ts._validate_periodicity()
 
     @parameterized.expand([
-        ("simple minute",
+        ("simple minute error",
          [datetime(2024, 1, 1, 1, 1), datetime(2024, 1, 1, 1, 2), datetime(2024, 1, 1, 1, 2, 1)],
          Period.of_minutes(1)),
+
+        ("simple minute string error",
+         [datetime(2024, 1, 1, 1, 1), datetime(2024, 1, 1, 1, 2), datetime(2024, 1, 1, 1, 2, 1)],
+         "PT1M")
     ])
     def test_validate_minute_periodicity_error(self, _, times, periodicity):
         """ Test that a minute based time series that doesn't conform to the given periodicity raises an error.
@@ -1443,6 +1536,10 @@ class TestValidatePeriodicity(unittest.TestCase):
         ("simple seconds",
          [datetime(2024, 1, 1, 1, 1, 1, 1500), datetime(2024, 1, 1, 1, 1, 2), datetime(2024, 1, 1, 1, 1, 3, 40000)],
          Period.of_seconds(1)),
+
+        ("simple seconds string",
+         [datetime(2024, 1, 1, 1, 1, 1, 1500), datetime(2024, 1, 1, 1, 1, 2), datetime(2024, 1, 1, 1, 1, 3, 40000)],
+         "PT1S"),
 
         ("every 5 seconds",
          [datetime(2024, 1, 1, 1, 1, 0), datetime(2024, 1, 1, 1, 1, 7), datetime(2024, 1, 1, 1, 1, 14)],
@@ -1464,9 +1561,13 @@ class TestValidatePeriodicity(unittest.TestCase):
             ts._validate_periodicity()
 
     @parameterized.expand([
-        ("simple seconds",
+        ("simple seconds error",
          [datetime(2024, 1, 1, 1, 1, 1, 1500), datetime(2024, 1, 1, 1, 1, 1, 15001), datetime(2024, 1, 1, 1, 1, 3)],
          Period.of_seconds(1)),
+
+        ("simple seconds string error",
+         [datetime(2024, 1, 1, 1, 1, 1, 1500), datetime(2024, 1, 1, 1, 1, 1, 15001), datetime(2024, 1, 1, 1, 1, 3)],
+         "PT1S")
     ])
     def test_validate_second_periodicity_error(self, _, times, periodicity):
         """ Test that a second based time series that doesn't conform to the given periodicity raises an error.
@@ -1481,6 +1582,11 @@ class TestValidatePeriodicity(unittest.TestCase):
          [datetime(2024, 1, 1, 1, 1, 1, 1000), datetime(2024, 1, 1, 1, 1, 1, 1001),
           datetime(2024, 1, 1, 1, 1, 1, 1002)],
          Period.of_microseconds(1)),
+
+        ("simple microseconds string",
+         [datetime(2024, 1, 1, 1, 1, 1, 1000), datetime(2024, 1, 1, 1, 1, 1, 1001),
+          datetime(2024, 1, 1, 1, 1, 1, 1002)],
+         "PT0.000001S"),
 
         ("40Hz",
          [datetime(2023, 1, 1, 1, 1, 1, 12_521), datetime(2024, 1, 1, 1, 1, 1, 49_999),
@@ -1499,7 +1605,7 @@ class TestValidatePeriodicity(unittest.TestCase):
             ts._validate_periodicity()
 
     @parameterized.expand([
-        ("40Hz",
+        ("40Hz error",
          [datetime(2023, 1, 1, 1, 1, 1, 25_001), datetime(2023, 1, 1, 1, 1, 1, 49_999),
           datetime(2024, 1, 1, 1, 1, 1, 50_000)],
          Period.of_microseconds(25_000)),
