@@ -11,6 +11,7 @@ class BitwiseMeta(EnumType):
 
 class BitwiseFlag(int, Flag, metaclass=BitwiseMeta):
     """A flag enumeration that allows efficient flagging using bitwise operations."""
+
     def __init_subclass__(cls, **kwargs):
         """Validate enum member values on class definition."""
         super().__init_subclass__(**kwargs)
