@@ -11,21 +11,13 @@ class BitwiseMeta(EnumType):
 
 class BitwiseFlag(int, Flag, metaclass=BitwiseMeta):
     """A flag enumeration that allows efficient flagging using bitwise operations."""
-
-    def __new__(cls, value: int) -> Union[int, Flag]:
-        """Creates a new BitwiseFlag instance.
-
-        Args:
-            value: The integer representation of the flag.
-
-        Raises:
-            ValueError: If the value is not a positive power of two or is not unique.
-        """
-        cls._check_type(value)
-        cls._check_bitwise(value)
-        cls._check_unique(value)
-
-        return super().__new__(cls, value)
+    def __init_subclass__(cls, **kwargs):
+        """Validate enum member values on class definition."""
+        super().__init_subclass__(**kwargs)
+        for name, member in cls.__members__.items():
+            cls._check_type(member.value)
+            cls._check_bitwise(member.value)
+            cls._check_unique(member.value)
 
     @staticmethod
     def _check_type(value: int) -> None:
@@ -66,7 +58,8 @@ class BitwiseFlag(int, Flag, metaclass=BitwiseMeta):
         Raises:
             ValueError: If the flag value is already defined in the enumeration.
         """
-        if value in cls:
+        all_values = [i.value for _, i in cls.__members__.items()]
+        if all_values.count(value) > 1:
             raise ValueError(f"Flag is not unique: {value}")
 
     @classmethod
@@ -92,7 +85,7 @@ class BitwiseFlag(int, Flag, metaclass=BitwiseMeta):
         if isinstance(flag, str):
             return cls.__getitem__(flag)
         elif isinstance(flag, int):
-            if flag not in cls:
+            if flag not in cls.__members__.values():
                 raise KeyError(f"Flag value {flag} is not a valid singular flag.")
             return cls(flag)
         else:
