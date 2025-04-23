@@ -907,6 +907,10 @@ class TestValidateResolution(unittest.TestCase):
         ("water years",
          [datetime(2006, 10, 1, 9), datetime(2007, 10, 1, 9), datetime(2008, 10, 1, 9)],
          Period.of_years(1).with_month_offset(9).with_hour_offset(9)),
+
+        ("water years string",
+         [datetime(2006, 10, 1, 9), datetime(2007, 10, 1, 9), datetime(2008, 10, 1, 9)],
+         "P1Y+9MT9H"),
     ])
     def test_validate_year_resolution_success(self, _, times, resolution):
         """ Test that a year based time series that does conform to the given resolution passes the validation.
@@ -927,6 +931,10 @@ class TestValidateResolution(unittest.TestCase):
         ("water years error",
          [datetime(2006, 10, 1, 10), datetime(2007, 10, 1, 9), datetime(2008, 10, 1, 9)],
          Period.of_years(1).with_month_offset(9).with_hour_offset(9)),
+
+        ("water years string error",
+         [datetime(2006, 10, 1, 10), datetime(2007, 10, 1, 9), datetime(2008, 10, 1, 9)],
+         "P1Y+9MT9H"),
     ])
     def test_validate_year_resolution_error(self, _, times, resolution):
         """ Test that a year based time series that doesn't conform to the given resolution raises an error.
@@ -969,6 +977,10 @@ class TestValidateResolution(unittest.TestCase):
         ("water months",
          [datetime(2024, 1, 1, 9), datetime(2024, 2, 1, 9), datetime(2024, 3, 1, 9)],
          Period.of_months(1).with_hour_offset(9)),
+
+        ("water months string",
+         [datetime(2024, 1, 1, 9), datetime(2024, 2, 1, 9), datetime(2024, 3, 1, 9)],
+         "P1M+T9H")
     ])
     def test_validate_month_resolution_success(self, _, times, resolution):
         """ Test that a month based time series that does conform to the given resolution passes the validation.
@@ -989,6 +1001,10 @@ class TestValidateResolution(unittest.TestCase):
         ("water months error",
          [datetime(2024, 1, 1, 9, 20), datetime(2024, 2, 1, 9), datetime(2024, 3, 1, 9)],
          Period.of_months(1).with_hour_offset(9)),
+
+        ("water months string error",
+         [datetime(2024, 1, 1, 9, 20), datetime(2024, 2, 1, 9), datetime(2024, 3, 1, 9)],
+         "P1M+T9H")
     ])
     def test_validate_month_resolution_error(self, _, times, resolution):
         """ Test that a month based time series that doesn't conform to the given resolution raises an error.
@@ -1019,6 +1035,10 @@ class TestValidateResolution(unittest.TestCase):
          [datetime(2024, 1, 1, 9), datetime(2024, 1, 2, 9), datetime(2024, 1, 3, 9)],
          Period.of_days(1).with_hour_offset(9)),
 
+        ("water days string",
+         [datetime(2024, 1, 1, 9), datetime(2024, 1, 2, 9), datetime(2024, 1, 3, 9)],
+         "P1D+T9H"),
+
         ("daily across leap year feb",
          [datetime(2024, 2, 28), datetime(2024, 2, 29), datetime(2024, 3, 1)],
          Period.of_days(1)),
@@ -1042,6 +1062,10 @@ class TestValidateResolution(unittest.TestCase):
         ("water days error",
          [datetime(2024, 1, 1, 9), datetime(2024, 1, 2, 9), datetime(2024, 1, 3, 19)],
          Period.of_days(1).with_hour_offset(9)),
+
+        ("water days string error",
+         [datetime(2024, 1, 1, 9), datetime(2024, 1, 2, 9), datetime(2024, 1, 3, 19)],
+         "P1D+T9H"),
     ])
     def test_validate_day_resolution_error(self, _, times, resolution):
         """ Test that a day based time series that doesn't conform to the given resolution raises an error.
@@ -1080,6 +1104,10 @@ class TestValidateResolution(unittest.TestCase):
          [datetime(2024, 1, 1, 1, 30), datetime(2024, 1, 1, 2, 30), datetime(2024, 1, 1, 3, 30)],
          Period.of_hours(1).with_minute_offset(30)),
 
+        ("hourly with minute offset string",
+         [datetime(2024, 1, 1, 1, 30), datetime(2024, 1, 1, 2, 30), datetime(2024, 1, 1, 3, 30)],
+         "PT1H+T30M"),
+
         ("hourly across leap year feb",
          [datetime(2024, 2, 29, 23), datetime(2024, 3, 1), datetime(2024, 3, 1, 1)],
          Period.of_hours(1)),
@@ -1103,6 +1131,10 @@ class TestValidateResolution(unittest.TestCase):
         ("hourly with minute offset error",
          [datetime(2024, 1, 1, 1, 30), datetime(2024, 1, 1, 2, 30), datetime(2024, 1, 1, 3, 31)],
          Period.of_hours(1).with_minute_offset(30)),
+
+        ("hourly with minute offset string error",
+         [datetime(2024, 1, 1, 1, 30), datetime(2024, 1, 1, 2, 30), datetime(2024, 1, 1, 3, 31)],
+         "PT1H+T30M"),
     ])
     def test_validate_hour_resolution_error(self, _, times, resolution):
         """ Test that an hour based time series that doesn't conform to the given resolution raises an error.
@@ -1141,6 +1173,10 @@ class TestValidateResolution(unittest.TestCase):
         ("5 minutes with second offset",
          [datetime(2024, 1, 1, 1, 30, 30), datetime(2024, 1, 1, 1, 35, 30), datetime(2024, 1, 1, 1, 40, 30)],
          Period.of_minutes(5).with_second_offset(30)),
+
+        ("5 minutes with second offset string",
+         [datetime(2024, 1, 1, 1, 30, 30), datetime(2024, 1, 1, 1, 35, 30), datetime(2024, 1, 1, 1, 40, 30)],
+         "PT5M+T30S")
     ])
     def test_validate_minute_resolution_success(self, _, times, resolution):
         """ Test that a minute based time series that does conform to the given resolution passes the validation.
@@ -1161,6 +1197,10 @@ class TestValidateResolution(unittest.TestCase):
         ("5 minutes with second offset error",
          [datetime(2024, 1, 1, 1, 31, 30), datetime(2024, 1, 1, 1, 35, 30), datetime(2024, 1, 1, 1, 40, 30)],
          Period.of_minutes(5).with_second_offset(30)),
+
+        ("5 minutes with second offset string error",
+         [datetime(2024, 1, 1, 1, 31, 30), datetime(2024, 1, 1, 1, 35, 30), datetime(2024, 1, 1, 1, 40, 30)],
+         "PT5M+T30S")
     ])
     def test_validate_minute_resolution_error(self, _, times, resolution):
         """ Test that a minute based time series that doesn't conform to the given resolution raises an error.
@@ -1198,6 +1238,10 @@ class TestValidateResolution(unittest.TestCase):
         ("30 seconds with microsecond offset",
          [datetime(2024, 1, 1, 1, 1, 0, 40), datetime(2024, 1, 1, 1, 1, 30, 40), datetime(2024, 1, 1, 1, 2, 30, 40)],
          Period.of_seconds(30).with_microsecond_offset(40)),
+
+        ("30 seconds with microsecond offset string",
+         [datetime(2024, 1, 1, 1, 1, 0, 40), datetime(2024, 1, 1, 1, 1, 30, 40), datetime(2024, 1, 1, 1, 2, 30, 40)],
+         "PT30S+T0.00004S")
     ])
     def test_validate_second_resolution_success(self, _, times, resolution):
         """ Test that a second based time series that does conform to the given resolution passes the validation.
@@ -1218,6 +1262,10 @@ class TestValidateResolution(unittest.TestCase):
         ("30 seconds with microsecond offset error",
          [datetime(2024, 1, 1, 1, 1, 0, 40), datetime(2024, 1, 1, 1, 1, 30, 41), datetime(2024, 1, 1, 1, 2, 30, 40)],
          Period.of_seconds(30).with_microsecond_offset(40)),
+
+        ("30 seconds with microsecond offset string error",
+         [datetime(2024, 1, 1, 1, 1, 0, 40), datetime(2024, 1, 1, 1, 1, 30, 41), datetime(2024, 1, 1, 1, 2, 30, 40)],
+         "PT30S+T0.00004S")
     ])
     def test_validate_second_resolution_error(self, _, times, resolution):
         """ Test that a second based time series that doesn't conform to the given resolution raises an error.
@@ -1300,6 +1348,10 @@ class TestValidatePeriodicity(unittest.TestCase):
          [datetime(2005, 1, 1), datetime(2006, 5, 1), datetime(2006, 12, 1), datetime(2007, 10, 10)],
          Period.of_years(1).with_month_offset(9).with_hour_offset(9)),
 
+        ("simple water year string",
+         [datetime(2005, 1, 1), datetime(2006, 5, 1), datetime(2006, 12, 1), datetime(2007, 10, 10)],
+         "P1Y+9MT9H"),
+
         ("water year before/after Oct 1 9am",
          [datetime(2006, 10, 1, 8, 59), datetime(2006, 10, 1, 9)],
          Period.of_years(1).with_month_offset(9).with_hour_offset(9)),
@@ -1323,6 +1375,10 @@ class TestValidatePeriodicity(unittest.TestCase):
         ("simple water year error",
          [datetime(2005, 1, 1), datetime(2005, 5, 1), datetime(2006, 12, 1), datetime(2007, 10, 10)],
          Period.of_years(1).with_month_offset(9).with_hour_offset(9)),
+
+        ("simple water year string error",
+         [datetime(2005, 1, 1), datetime(2005, 5, 1), datetime(2006, 12, 1), datetime(2007, 10, 10)],
+         "P1Y+9MT9H")
     ])
     def test_validate_year_periodicity_error(self, _, times, periodicity):
         """ Test that a year based time series that doesn't conform to the given periodicity raises an error.
@@ -1357,6 +1413,10 @@ class TestValidatePeriodicity(unittest.TestCase):
          [datetime(2024, 1, 1, 10), datetime(2024, 2, 5), datetime(2024, 5, 1, 10, 15)],
          Period.of_months(1).with_hour_offset(9)),
 
+        ("simple water months string",
+         [datetime(2024, 1, 1, 10), datetime(2024, 2, 5), datetime(2024, 5, 1, 10, 15)],
+         "P1M+T9H"),
+
         ("water months before/after 9am",
          [datetime(2024, 1, 1, 8, 59), datetime(2024, 1, 1, 9)],
          Period.of_months(1).with_hour_offset(9)),
@@ -1380,6 +1440,10 @@ class TestValidatePeriodicity(unittest.TestCase):
         ("simple water months error",
          [datetime(2024, 1, 1, 10), datetime(2024, 2, 1, 8, 59), datetime(2024, 5, 1, 10, 15)],
          Period.of_months(1).with_hour_offset(9)),
+
+        ("simple water months string error",
+         [datetime(2024, 1, 1, 10), datetime(2024, 2, 1, 8, 59), datetime(2024, 5, 1, 10, 15)],
+         "P1M+T9H")
     ])
     def test_validate_month_periodicity_error(self, _, times, periodicity):
         """ Test that a month based time series that doesn't conform to the given periodicity raises an error.
@@ -1405,6 +1469,10 @@ class TestValidatePeriodicity(unittest.TestCase):
         ("simple water days",
          [datetime(2024, 1, 1, 9), datetime(2024, 1, 2, 9), datetime(2024, 1, 3, 9)],
          Period.of_days(1).with_hour_offset(9)),
+
+        ("simple water days string",
+         [datetime(2024, 1, 1, 9), datetime(2024, 1, 2, 9), datetime(2024, 1, 3, 9)],
+         "P1D+T9H"),
 
         ("water days before/after 9am",
          [datetime(2024, 1, 1, 8, 59), datetime(2024, 1, 1, 9)],
@@ -1462,6 +1530,14 @@ class TestValidatePeriodicity(unittest.TestCase):
         ("hourly across leap year feb",
          [datetime(2024, 2, 29, 23, 59), datetime(2024, 3, 1), datetime(2024, 3, 1, 1)],
          Period.of_hours(1)),
+
+        ("hourly with minute offset",
+         [datetime(2024, 1, 1, 1, 30), datetime(2024, 1, 1, 2, 30), datetime(2024, 1, 1, 3, 30)],
+         Period.of_hours(1).with_minute_offset(30)),
+
+        ("hourly with minute offset string",
+         [datetime(2024, 1, 1, 1, 30), datetime(2024, 1, 1, 2, 30), datetime(2024, 1, 1, 3, 30)],
+         "PT1H+T30M")
     ])
     def test_validate_hour_periodicity_success(self, _, times, periodicity):
         """ Test that an hour based time series that does conform to the given periodicity passes the validation.
@@ -1478,6 +1554,14 @@ class TestValidatePeriodicity(unittest.TestCase):
         ("simple hourly string error",
          [datetime(2024, 1, 1, 1, 15), datetime(2024, 1, 1, 1, 16), datetime(2024, 1, 1, 3, 1)],
          "PT1H"),
+
+        ("hourly with minute offset",
+         [datetime(2024, 1, 1, 1, 30), datetime(2024, 1, 1, 2, 30), datetime(2024, 1, 1, 2, 31)],
+         Period.of_hours(1).with_minute_offset(30)),
+
+        ("hourly with minute offset string",
+         [datetime(2024, 1, 1, 1, 30), datetime(2024, 1, 1, 2, 30), datetime(2024, 1, 1, 2, 31)],
+         "PT1H+T30M")
     ])
     def test_validate_hour_periodicity_error(self, _, times, periodicity):
         """ Test that an hour based time series that doesn't conform to the given periodicity raises an error.
@@ -1507,6 +1591,10 @@ class TestValidatePeriodicity(unittest.TestCase):
         ("5 minutes with second offset",
          [datetime(2024, 1, 1, 1, 30, 29), datetime(2024, 1, 1, 1, 30, 31), datetime(2024, 1, 1, 1, 35, 30)],
          Period.of_minutes(5).with_second_offset(30)),
+
+        ("5 minutes with second offset string",
+         [datetime(2024, 1, 1, 1, 30, 29), datetime(2024, 1, 1, 1, 30, 31), datetime(2024, 1, 1, 1, 35, 30)],
+         "PT5M+T30S")
     ])
     def test_validate_minute_periodicity_success(self, _, times, periodicity):
         """ Test that a minute based time series that does conform to the given periodicity passes the validation.
@@ -1522,7 +1610,15 @@ class TestValidatePeriodicity(unittest.TestCase):
 
         ("simple minute string error",
          [datetime(2024, 1, 1, 1, 1), datetime(2024, 1, 1, 1, 2), datetime(2024, 1, 1, 1, 2, 1)],
-         "PT1M")
+         "PT1M"),
+
+        ("5 minutes with second offset error",
+         [datetime(2024, 1, 1, 1, 30, 29), datetime(2024, 1, 1, 1, 30, 31), datetime(2024, 1, 1, 1, 30, 30)],
+         Period.of_minutes(5).with_second_offset(30)),
+
+        ("5 minutes with second offset string error",
+         [datetime(2024, 1, 1, 1, 30, 29), datetime(2024, 1, 1, 1, 30, 31), datetime(2024, 1, 1, 1, 30, 30)],
+         "PT5M+T1S")
     ])
     def test_validate_minute_periodicity_error(self, _, times, periodicity):
         """ Test that a minute based time series that doesn't conform to the given periodicity raises an error.
@@ -1552,6 +1648,10 @@ class TestValidatePeriodicity(unittest.TestCase):
         ("30 seconds with microsecond offset",
          [datetime(2024, 1, 1, 1, 1, 0, 39), datetime(2024, 1, 1, 1, 1, 0, 40), datetime(2024, 1, 1, 1, 1, 30, 100000)],
          Period.of_seconds(30).with_microsecond_offset(40)),
+
+        ("30 seconds with microsecond offset string",
+         [datetime(2024, 1, 1, 1, 1, 0, 39), datetime(2024, 1, 1, 1, 1, 0, 40), datetime(2024, 1, 1, 1, 1, 30, 100000)],
+         "PT30S+T0.00004S"),
     ])
     def test_validate_second_periodicity_success(self, _, times, periodicity):
         """ Test that a second based time series that does conform to the given periodicity passes the validation.
@@ -1567,7 +1667,15 @@ class TestValidatePeriodicity(unittest.TestCase):
 
         ("simple seconds string error",
          [datetime(2024, 1, 1, 1, 1, 1, 1500), datetime(2024, 1, 1, 1, 1, 1, 15001), datetime(2024, 1, 1, 1, 1, 3)],
-         "PT1S")
+         "PT1S"),
+
+        ("30 seconds with microsecond offset error",
+         [datetime(2024, 1, 1, 1, 1, 0, 39), datetime(2024, 1, 1, 1, 1, 30, 40), datetime(2024, 1, 1, 1, 1, 30, 100000)],
+         Period.of_seconds(30).with_microsecond_offset(40)),
+
+        ("30 seconds with microsecond offset string error",
+         [datetime(2024, 1, 1, 1, 1, 0, 39), datetime(2024, 1, 1, 1, 1, 30, 40), datetime(2024, 1, 1, 1, 1, 30, 100000)],
+         "PT30S+T0.00004S")
     ])
     def test_validate_second_periodicity_error(self, _, times, periodicity):
         """ Test that a second based time series that doesn't conform to the given periodicity raises an error.

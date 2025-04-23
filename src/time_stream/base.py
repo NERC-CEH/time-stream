@@ -232,7 +232,7 @@ class TimeSeries:
 
         # Validate and convert to Period object
         if isinstance(self._resolution, str):
-            self._resolution = Period.of_iso_duration(self._resolution)
+            self._resolution = Period.of_duration(self._resolution)
 
         self._epoch_check(self.resolution)
 
@@ -277,7 +277,7 @@ class TimeSeries:
 
         # Convert to Period object
         if isinstance(self._periodicity, str):
-            self._periodicity = Period.of_iso_duration(self._periodicity)
+            self._periodicity = Period.of_duration(self._periodicity)
 
         self._epoch_check(self.periodicity)
 
