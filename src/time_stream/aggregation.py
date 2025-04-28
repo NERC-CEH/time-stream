@@ -8,7 +8,7 @@ contained within will evolve considerably.
 import datetime
 from abc import ABC
 from collections.abc import Callable
-from typing import Optional, override
+from typing import Dict, Optional, Union, override
 
 import polars as pl
 
@@ -45,6 +45,13 @@ class PolarsAggregator:
     def __init__(self, ts: TimeSeries, aggregation_period: Period) -> None:
         self.ts = ts
         self.aggregation_period = aggregation_period
+
+    def _percent():
+
+    def _missing():
+
+    def _available():
+
 
     def aggregate(self, stage_list: list["AggregationStage"]) -> pl.DataFrame:
         """Create a new DataFrame containing aggregated data that is produced by a list of AggregationStages
@@ -90,6 +97,18 @@ class PolarsAggregator:
 
         return df
 
+    def validate_aggregation(self, aggregated_df: pl.DataFrame, missing_criteria) -> pl.DataFrame:
+        """Check the aggregated dataframe is valid with respect to missing values.
+        
+        Args:
+            aggregated_df: The aggregated dataframe
+            missing_criteria: What level of missing data is acceptable
+        
+        Returns:
+            A dataframe containing the aggregated data.
+        """
+        if missing_criteria[0] == "percent":
+            _percent(missing_criteria[1])
 
 class AggregationStage(ABC):
     """An abstract class used to assist with aggregating data
@@ -286,7 +305,7 @@ class Mean(AggregationFunction):
         super().__init__(name)
 
     @override
-    def apply(self, ts: TimeSeries, aggregation_period: Period, column_name: str) -> TimeSeries:
+    def apply(self, ts: TimeSeries, aggregation_period: Period, column_name: str, missing_criteria: Union[None | Dict[str, int]]) -> TimeSeries:
         aggregator: PolarsAggregator = PolarsAggregator(ts, aggregation_period)
         df: pl.DataFrame = aggregator.aggregate(
             [
@@ -295,6 +314,9 @@ class Mean(AggregationFunction):
                 ExpectedCount(aggregator),
             ]
         )
+
+        if missing_criteria:
+            df: pl.DataFrame = aggregator.validate_aggregation(df, missing_criteria)
 
         # Aggregator just returns a dataframe with the selected column in. This might need to change when considering
         #   linked supp/flag columns.  But for now, not sending any lists/dicts for supp or flag columns or flag systems
