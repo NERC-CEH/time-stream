@@ -422,7 +422,7 @@ class Min(AggregationFunction):
         super().__init__(name)
 
     @override
-    def apply(self, ts: TimeSeries, aggregation_period: Period, column_name: str, missing_criteria: Optional[Dict[str, Union[str, int]]] = None) -> TimeSeries:
+    def apply(self, ts: TimeSeries, aggregation_period: Period, column_name: str) -> TimeSeries:
         aggregator: PolarsAggregator = PolarsAggregator(ts, aggregation_period)
         df: pl.DataFrame = aggregator.aggregate(
             [
@@ -478,7 +478,7 @@ class Max(AggregationFunction):
         super().__init__(name)
 
     @override
-    def apply(self, ts: TimeSeries, aggregation_period: Period, column_name: str, missing_criteria: Optional[Dict[str, Union[str, int]]] = None) -> TimeSeries:
+    def apply(self, ts: TimeSeries, aggregation_period: Period, column_name: str) -> TimeSeries:
         aggregator: PolarsAggregator = PolarsAggregator(ts, aggregation_period)
         df: pl.DataFrame = aggregator.aggregate(
             [
