@@ -8,7 +8,7 @@ contained within will evolve considerably.
 import datetime
 from abc import ABC
 from collections.abc import Callable
-from typing import Dict, Optional, Union, override
+from typing import Any, Dict, Optional, Union, override
 
 import polars as pl
 
@@ -45,13 +45,6 @@ class PolarsAggregator:
     def __init__(self, ts: TimeSeries, aggregation_period: Period) -> None:
         self.ts = ts
         self.aggregation_period = aggregation_period
-
-    def _percent():
-
-    def _missing():
-
-    def _available():
-
 
     def aggregate(self, stage_list: list["AggregationStage"]) -> pl.DataFrame:
         """Create a new DataFrame containing aggregated data that is produced by a list of AggregationStages
@@ -97,8 +90,75 @@ class PolarsAggregator:
 
         return df
 
-    def validate_aggregation(self, aggregated_df: pl.DataFrame, missing_criteria) -> pl.DataFrame:
-        """Check the aggregated dataframe is valid with respect to missing values.
+
+class PolarsValidator:
+
+    def __init__(self, ts: TimeSeries) -> None:
+        self.ts = ts
+
+    def _percent(self, column_name: str, limit: int):
+        """"""
+        # Discussion around what we do when missing criteria is not satisfied
+        # Currently add extra boolean column
+        # Do we want to rasie an exception?
+        expression = (pl.col(f"count_{column_name}") / pl.col(f"expected_count_{self.ts.time_name}")) * 100
+        
+        self.ts.df = self.ts.df.with_columns(pl.when(expression > limit).then(True).otherwise(False).alias("valid"))
+
+        return self.ts
+
+
+    def _missing(self, column_name: str, limit: int):
+        """"""
+        # Discussion around what we do when missing criteria is not satisfied
+        # Currently making value null
+        # Do we want to rasie an exception?
+        expression = (pl.col(f"expected_count_{self.ts.time_name}") - pl.col(f"count_{column_name}"))
+        
+        self.ts.df = self.ts.df.with_columns(pl.when(expression < limit).then(True).otherwise(False).alias("valid"))
+
+        return self.ts
+    
+
+    def _available(self, column_name: str, limit: int):
+        """"""
+        # Discussion around what we do when missing criteria is not satisfied
+        # Currently making value null
+        # Do we want to rasie an exception?
+        expression = pl.col(f"count_{column_name}")
+        
+        self.ts.df = self.ts.df.with_columns(pl.when(expression > limit).then(True).otherwise(False).alias("valid"))
+
+        return self.ts
+
+    def validate_missing_aggregation_criteria(self, missing_criteria: Any) -> Dict[str, Union[str | int]]:
+        """Validate user input on how to handle missing data in the aggregation.
+
+        Should be a single item dictionary with one of the following keys:
+
+        missing: Calculate a value only if there are no more than n values missing in the period.
+        available: Calculate a value only if there are at least n input values in the period.
+        percent: Calculate a value only if the data in the period is at least n percent complete.
+        
+        Args:
+            missing_criteria: what level of missing data is acceptable.
+        """
+        if not isinstance(missing_criteria, dict):
+            raise ValueError(f"missing_criteria argument should be a dictionary, not {type(missing_criteria)}")
+
+        if len(missing_criteria) != 1:
+            raise ValueError(f"missing_criteria argument should contain only one key, not {len(missing_criteria)}")
+        
+        user_key = list(missing_criteria.keys())[0]
+        valid_keys = ["missing", "available", "percent"]
+
+        if user_key not in valid_keys:
+            raise KeyError(f"{user_key} should be one of {valid_keys}")
+        
+        return {"method": f"_{user_key}", "limit": missing_criteria[user_key]}
+
+    def validate_aggregation(self, column_name: str, missing_criteria: Dict[str, Union[str | int]]) -> pl.DataFrame:
+        """Check the aggregated dataframe satisfies missing value criteria.
         
         Args:
             aggregated_df: The aggregated dataframe
@@ -107,8 +167,8 @@ class PolarsAggregator:
         Returns:
             A dataframe containing the aggregated data.
         """
-        if missing_criteria[0] == "percent":
-            _percent(missing_criteria[1])
+        return getattr(self, missing_criteria["method"])(column_name, missing_criteria["limit"])
+
 
 class AggregationStage(ABC):
     """An abstract class used to assist with aggregating data
@@ -292,7 +352,7 @@ class Mean(AggregationFunction):
             The arithmetic mean of all values in each aggregation period
         "count_{value_column}"
             The number of values found in each aggregation period
-        count_{time_name}"
+        "expected_count_{time_name}"
             The maximum number of possible values in each aggregation period
 
     """
@@ -305,7 +365,7 @@ class Mean(AggregationFunction):
         super().__init__(name)
 
     @override
-    def apply(self, ts: TimeSeries, aggregation_period: Period, column_name: str, missing_criteria: Union[None | Dict[str, int]]) -> TimeSeries:
+    def apply(self, ts: TimeSeries, aggregation_period: Period, column_name: str) -> TimeSeries:
         aggregator: PolarsAggregator = PolarsAggregator(ts, aggregation_period)
         df: pl.DataFrame = aggregator.aggregate(
             [
@@ -314,9 +374,6 @@ class Mean(AggregationFunction):
                 ExpectedCount(aggregator),
             ]
         )
-
-        if missing_criteria:
-            df: pl.DataFrame = aggregator.validate_aggregation(df, missing_criteria)
 
         # Aggregator just returns a dataframe with the selected column in. This might need to change when considering
         #   linked supp/flag columns.  But for now, not sending any lists/dicts for supp or flag columns or flag systems
@@ -330,6 +387,14 @@ class Mean(AggregationFunction):
             column_metadata={column_name: ts.columns[column_name].metadata()},
         )
 
+    @override
+    def validate(self, ts: TimeSeries, column_name: str, missing_criteria: Dict[str, Union[str, int]] = None) -> TimeSeries:
+        
+        validator: PolarsValidator = PolarsValidator(ts)
+        missing_criteria = validator.validate_missing_aggregation_criteria(missing_criteria)
+        ts: TimeSeries = validator.validate_aggregation(column_name, missing_criteria)
+
+        return ts
 
 class Min(AggregationFunction):
     """A min AggregationFunction
@@ -344,7 +409,7 @@ class Min(AggregationFunction):
             The datetime of the minimum value
         "count_{value_column}"
             The number of values found in each aggregation period
-        count_{time_name}"
+        "expected_count_{time_name}"
             The maximum number of possible values in each aggregation period
 
     """
@@ -357,7 +422,7 @@ class Min(AggregationFunction):
         super().__init__(name)
 
     @override
-    def apply(self, ts: TimeSeries, aggregation_period: Period, column_name: str) -> TimeSeries:
+    def apply(self, ts: TimeSeries, aggregation_period: Period, column_name: str, missing_criteria: Optional[Dict[str, Union[str, int]]] = None) -> TimeSeries:
         aggregator: PolarsAggregator = PolarsAggregator(ts, aggregation_period)
         df: pl.DataFrame = aggregator.aggregate(
             [
@@ -378,6 +443,14 @@ class Min(AggregationFunction):
             column_metadata={column_name: ts.columns[column_name].metadata()},
         )
 
+    @override
+    def validate(self, ts: TimeSeries, column_name: str, missing_criteria: Dict[str, Union[str, int]] = None) -> TimeSeries:
+        
+        validator: PolarsValidator = PolarsValidator(ts)
+        missing_criteria = validator.validate_missing_aggregation_criteria(missing_criteria)
+        ts: TimeSeries = validator.validate_aggregation(column_name, missing_criteria)
+
+        return ts
 
 class Max(AggregationFunction):
     """A max AggregationFunction
@@ -392,7 +465,7 @@ class Max(AggregationFunction):
             The datetime of the maximum value
         "count_{value_column}"
             The number of values found in each aggregation period
-        count_{time_name}"
+        "expected_count_{time_name}"
             The maximum number of possible values in each aggregation period
 
     """
@@ -405,7 +478,7 @@ class Max(AggregationFunction):
         super().__init__(name)
 
     @override
-    def apply(self, ts: TimeSeries, aggregation_period: Period, column_name: str) -> TimeSeries:
+    def apply(self, ts: TimeSeries, aggregation_period: Period, column_name: str, missing_criteria: Optional[Dict[str, Union[str, int]]] = None) -> TimeSeries:
         aggregator: PolarsAggregator = PolarsAggregator(ts, aggregation_period)
         df: pl.DataFrame = aggregator.aggregate(
             [
@@ -425,3 +498,12 @@ class Max(AggregationFunction):
             flag_systems=ts.flag_systems,
             column_metadata={column_name: ts.columns[column_name].metadata()},
         )
+
+    @override
+    def validate(self, ts: TimeSeries, column_name: str, missing_criteria: Dict[str, Union[str, int]] = None) -> TimeSeries:
+        
+        validator: PolarsValidator = PolarsValidator(ts)
+        missing_criteria = validator.validate_missing_aggregation_criteria(missing_criteria)
+        ts: TimeSeries = validator.validate_aggregation(column_name, missing_criteria)
+
+        return ts

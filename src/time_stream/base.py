@@ -572,38 +572,11 @@ class TimeSeries:
         for col in col_name:
             self.columns[col].set_as_supplementary()
 
-    def _validate_missing_aggregation_criteria(self, missing_criteria: Any) -> Tuple[str, int]:
-        """Validate user input on how to handle missing data in the aggregation.
-
-        Should be a single item dictionary with one of the following keys:
-
-        missing: Calculate a value only if there are no more than n values missing in the period.
-        available: Calculate a value only if there are at least n input values in the period.
-        percent: Calculate a value only if the data in the period is at least n percent complete.
-        
-        Args:
-            missing_criteria: what level of missing data is acceptable.
-        """
-        if not isinstance(missing_criteria, dict):
-            raise ValueError(f"missing_criteria argument should be a dictionary, not {type(missing_criteria)}")
-
-        if len(missing_criteria) != 1:
-            raise ValueError(f"missing_criteria argument should contain only one key, not {len(missing_criteria)}")
-        
-        user_key = missing_criteria.keys()[0]
-        valid_keys = ["missing", "available", "percent"]
-
-        if user_key not in valid_keys:
-            raise KeyError(f"{user_key} should be one of {valid_keys}")
-        
-        return (user_key, missing_criteria[user_key])
-
-
     def aggregate(
         self, aggregation_period: Period, aggregation_function: Type["AggregationFunction"], column_name: str, missing_criteria: Optional[Dict[str, int]] = None
     ) -> "TimeSeries":
-        """Apply an aggregation function to a column in this TimeSeries and return a new derived TimeSeries containing
-        the aggregated data.
+        """Apply an aggregation function to a column in this TimeSeries, check the aggregation satisfies user requirements
+        and return a new derived TimeSeries containing the aggregated data.
 
         The AggregationFunction class provides static methods that return aggregation function objects that can be used
         with this method.
@@ -620,8 +593,6 @@ class TimeSeries:
         Returns:
             A TimeSeries containing the aggregated data.
         """
-        if missing_criteria:
-            missing_criteria = self._validate_missing_aggregation_criteria(missing_criteria)
         return apply_aggregation(self, aggregation_period, aggregation_function, column_name, missing_criteria)
 
     def metadata(self, key: Optional[Sequence[str]] = None, strict: bool = True) -> Dict[str, Any]:

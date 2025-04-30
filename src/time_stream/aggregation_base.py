@@ -20,7 +20,7 @@ this module.
 """
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Dict, Optional, Type
+from typing import TYPE_CHECKING, Dict, Optional, Type, Union
 
 if TYPE_CHECKING:
     # Import is for type hinting only.  Make sure there is no runtime import, to avoid recursion.
@@ -48,7 +48,7 @@ class AggregationFunction(ABC):
         return self._name
 
     @abstractmethod
-    def apply(self, ts: "TimeSeries", aggregation_period: "Period", column_name: str, missing_criteria: Optional[Dict[str, int]] = None) -> "TimeSeries":
+    def apply(self, ts: "TimeSeries", aggregation_period: "Period", column_name: str) -> "TimeSeries":
         """Apply this aggregation function to the supplied
         TimeSeries column and return a new TimeSeries containing
         the aggregated data
@@ -60,6 +60,23 @@ class AggregationFunction(ABC):
         Args:
             ts: The TimeSeries containing the data to be aggregated
             aggregation_period: The time period over which to aggregate
+            column_name: The column containing the data to be aggregated
+
+        Returns:
+            A TimeSeries containing the aggregated data
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def validate(self, ts: "TimeSeries", column_name: str, missing_criteria: Optional[Dict[str, int]] = None) -> "TimeSeries":
+        """Validate the aggregated data satisfies the requested missing data criteria
+
+        Note: This is the first attempt at a mechanism for aggregating
+        time-series data.  The signature of this method is likely to
+        evolve considerably.
+
+        Args:
+            ts: The TimeSeries containing the aggregated data
             column_name: The column containing the data to be aggregated
             missing_criteria: What level of missing data is acceptable. Ignores missing values by default.
 
@@ -75,10 +92,10 @@ class AggregationFunction(ABC):
 
 # The TimeSeries.aggregate method calls this function with self and all it's arguments
 def apply_aggregation(
-    ts: "TimeSeries", aggregation_period: "Period", aggregation_function: Type[AggregationFunction], column_name: str, missing_criteria: Optional[Dict[str, int]] = None
+    ts: "TimeSeries", aggregation_period: "Period", aggregation_function: Type[AggregationFunction], column_name: str, missing_criteria: Optional[Dict[str, Union[str, int]]] = None
 ) -> "TimeSeries":
-    """Apply an aggregation function to a column in a TimeSeries and return a new derived TimeSeries containing
-    the aggregated data.
+    """Apply an aggregation function to a column in this TimeSeries, check the aggregation satisfies user requirements
+    and return a new derived TimeSeries containing the aggregated data.
 
     The AggregationFunction class provides static methods that return aggregation function objects that can be used
     with this function.
@@ -99,4 +116,11 @@ def apply_aggregation(
         raise UserWarning(
             f"Data periodicity {ts.periodicity} is not a subperiod of aggregation period {aggregation_period}"
         )
-    return aggregation_function.create().apply(ts, aggregation_period, column_name, missing_criteria)
+    agg = aggregation_function.create()
+    aggregated_ts = agg.apply(ts, aggregation_period, column_name)
+
+    if missing_criteria:
+        aggregated_ts = agg.validate(aggregated_ts, column_name, missing_criteria)
+
+    return aggregated_ts
+

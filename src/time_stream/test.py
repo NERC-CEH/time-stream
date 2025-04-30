@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 import polars as pl
 
 from time_stream import TimeSeries, Period
-from time_stream.aggregation import Mean
+from time_stream.aggregation import Mean, Min, Max
 
 dates = [datetime(2023, 1, 1) + timedelta(days=i) for i in range(31)]
 values = [10, 12, 15, 14, 13, 17, 19, 21, 18, 17,
@@ -21,4 +21,4 @@ ts = TimeSeries(
     periodicity="PT30M"
 )
 
-ts.aggregate("PT30M", Mean, "temperature", {"percent": 30})
+ts.aggregate(Period.of_months(1), Min, "temperature", {"available": 30})
