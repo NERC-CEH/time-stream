@@ -92,46 +92,81 @@ class PolarsAggregator:
 
 
 class PolarsValidator:
+    """A class used to assist with validating aggregated data.
+
+    The user defines the criteria for how to handle missing data when aggregating
+
+    Attributes:
+        ts: The TimeSeries being aggregated
+    """
 
     def __init__(self, ts: TimeSeries) -> None:
         self.ts = ts
 
-    def _percent(self, column_name: str, limit: int):
-        """"""
+    def _percent(self, column_name: str, limit: int) -> TimeSeries:
+        """Check whether the percent of non-missing data satisfies user criteria.
+
+        Aggregation is valid if the percent of non-missing data is greater than the limit.
+
+        Args:
+            column_name: Name of the aggregated column
+            limit: the lowest percent of required non-missing data
+
+        Returns:
+            A TimeSeries object
+        """
         # Discussion around what we do when missing criteria is not satisfied
         # Currently add extra boolean column
-        # Do we want to rasie an exception?
+        # Do we want to raise an exception?
         expression = (pl.col(f"count_{column_name}") / pl.col(f"expected_count_{self.ts.time_name}")) * 100
-        
+
         self.ts.df = self.ts.df.with_columns(pl.when(expression > limit).then(True).otherwise(False).alias("valid"))
 
         return self.ts
 
+    def _missing(self, column_name: str, limit: int) -> TimeSeries:
+        """Check whether the count of missing data satisfies user criteria.
 
-    def _missing(self, column_name: str, limit: int):
-        """"""
+        Aggregation is valid if the count of missing data is less than the limit.
+
+        Args:
+            column_name: Name of the aggregated column
+            limit: the highest count of missing data
+
+        Returns:
+            A TimeSeries object
+        """
         # Discussion around what we do when missing criteria is not satisfied
         # Currently making value null
-        # Do we want to rasie an exception?
-        expression = (pl.col(f"expected_count_{self.ts.time_name}") - pl.col(f"count_{column_name}"))
-        
+        # Do we want to raise an exception?
+        expression = pl.col(f"expected_count_{self.ts.time_name}") - pl.col(f"count_{column_name}")
+
         self.ts.df = self.ts.df.with_columns(pl.when(expression < limit).then(True).otherwise(False).alias("valid"))
 
         return self.ts
-    
 
-    def _available(self, column_name: str, limit: int):
-        """"""
+    def _available(self, column_name: str, limit: int) -> TimeSeries:
+        """Check whether the count of non-missing data satisfies user criteria.
+
+        Aggregation is valid if the count of non-missing data is greater than the limit.
+
+        Args:
+            column_name: Name of the aggregated column
+            limit: the lowest count of non-missing data
+
+        Returns:
+            A TimeSeries object
+        """
         # Discussion around what we do when missing criteria is not satisfied
         # Currently making value null
-        # Do we want to rasie an exception?
+        # Do we want to raise an exception?
         expression = pl.col(f"count_{column_name}")
-        
+
         self.ts.df = self.ts.df.with_columns(pl.when(expression > limit).then(True).otherwise(False).alias("valid"))
 
         return self.ts
 
-    def validate_missing_aggregation_criteria(self, missing_criteria: Any) -> Dict[str, Union[str | int]]:
+    def _validate_missing_aggregation_criteria(self, missing_criteria: Any) -> Dict[str, Union[str | int]]:
         """Validate user input on how to handle missing data in the aggregation.
 
         Should be a single item dictionary with one of the following keys:
@@ -139,34 +174,38 @@ class PolarsValidator:
         missing: Calculate a value only if there are no more than n values missing in the period.
         available: Calculate a value only if there are at least n input values in the period.
         percent: Calculate a value only if the data in the period is at least n percent complete.
-        
+
         Args:
             missing_criteria: what level of missing data is acceptable.
+
+        Returns:
+            modified dictionary of missing criteria.
         """
         if not isinstance(missing_criteria, dict):
             raise ValueError(f"missing_criteria argument should be a dictionary, not {type(missing_criteria)}")
 
         if len(missing_criteria) != 1:
             raise ValueError(f"missing_criteria argument should contain only one key, not {len(missing_criteria)}")
-        
+
         user_key = list(missing_criteria.keys())[0]
         valid_keys = ["missing", "available", "percent"]
 
         if user_key not in valid_keys:
             raise KeyError(f"{user_key} should be one of {valid_keys}")
-        
+
         return {"method": f"_{user_key}", "limit": missing_criteria[user_key]}
 
     def validate_aggregation(self, column_name: str, missing_criteria: Dict[str, Union[str | int]]) -> pl.DataFrame:
         """Check the aggregated dataframe satisfies missing value criteria.
-        
+
         Args:
             aggregated_df: The aggregated dataframe
             missing_criteria: What level of missing data is acceptable
-        
+
         Returns:
             A dataframe containing the aggregated data.
         """
+        missing_criteria = self._validate_missing_aggregation_criteria(missing_criteria)
         return getattr(self, missing_criteria["method"])(column_name, missing_criteria["limit"])
 
 
@@ -388,13 +427,14 @@ class Mean(AggregationFunction):
         )
 
     @override
-    def validate(self, ts: TimeSeries, column_name: str, missing_criteria: Dict[str, Union[str, int]] = None) -> TimeSeries:
-        
+    def validate(
+        self, ts: TimeSeries, column_name: str, missing_criteria: Dict[str, Union[str, int]] = None
+    ) -> TimeSeries:
         validator: PolarsValidator = PolarsValidator(ts)
-        missing_criteria = validator.validate_missing_aggregation_criteria(missing_criteria)
         ts: TimeSeries = validator.validate_aggregation(column_name, missing_criteria)
 
         return ts
+
 
 class Min(AggregationFunction):
     """A min AggregationFunction
@@ -444,13 +484,14 @@ class Min(AggregationFunction):
         )
 
     @override
-    def validate(self, ts: TimeSeries, column_name: str, missing_criteria: Dict[str, Union[str, int]] = None) -> TimeSeries:
-        
+    def validate(
+        self, ts: TimeSeries, column_name: str, missing_criteria: Dict[str, Union[str, int]] = None
+    ) -> TimeSeries:
         validator: PolarsValidator = PolarsValidator(ts)
-        missing_criteria = validator.validate_missing_aggregation_criteria(missing_criteria)
         ts: TimeSeries = validator.validate_aggregation(column_name, missing_criteria)
 
         return ts
+
 
 class Max(AggregationFunction):
     """A max AggregationFunction
@@ -500,10 +541,10 @@ class Max(AggregationFunction):
         )
 
     @override
-    def validate(self, ts: TimeSeries, column_name: str, missing_criteria: Dict[str, Union[str, int]] = None) -> TimeSeries:
-        
+    def validate(
+        self, ts: TimeSeries, column_name: str, missing_criteria: Dict[str, Union[str, int]] = None
+    ) -> TimeSeries:
         validator: PolarsValidator = PolarsValidator(ts)
-        missing_criteria = validator.validate_missing_aggregation_criteria(missing_criteria)
         ts: TimeSeries = validator.validate_aggregation(column_name, missing_criteria)
 
         return ts

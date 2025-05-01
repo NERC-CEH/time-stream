@@ -1,6 +1,6 @@
 from collections import Counter
 from enum import Enum
-from typing import Any, Dict, Iterable, Iterator, Optional, Sequence, Tuple, Type, Union
+from typing import Any, Dict, Iterable, Iterator, Optional, Sequence, Type, Union
 
 import polars as pl
 
@@ -573,10 +573,14 @@ class TimeSeries:
             self.columns[col].set_as_supplementary()
 
     def aggregate(
-        self, aggregation_period: Period, aggregation_function: Type["AggregationFunction"], column_name: str, missing_criteria: Optional[Dict[str, int]] = None
+        self,
+        aggregation_period: Period,
+        aggregation_function: Type["AggregationFunction"],
+        column_name: str,
+        missing_criteria: Optional[Dict[str, int]] = None,
     ) -> "TimeSeries":
-        """Apply an aggregation function to a column in this TimeSeries, check the aggregation satisfies user requirements
-        and return a new derived TimeSeries containing the aggregated data.
+        """Apply an aggregation function to a column in this TimeSeries, check the aggregation satisfies user
+        requirements and return a new derived TimeSeries containing the aggregated data.
 
         The AggregationFunction class provides static methods that return aggregation function objects that can be used
         with this method.

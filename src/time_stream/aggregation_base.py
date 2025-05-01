@@ -68,7 +68,9 @@ class AggregationFunction(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def validate(self, ts: "TimeSeries", column_name: str, missing_criteria: Optional[Dict[str, int]] = None) -> "TimeSeries":
+    def validate(
+        self, ts: "TimeSeries", column_name: str, missing_criteria: Optional[Dict[str, int]] = None
+    ) -> "TimeSeries":
         """Validate the aggregated data satisfies the requested missing data criteria
 
         Note: This is the first attempt at a mechanism for aggregating
@@ -92,7 +94,11 @@ class AggregationFunction(ABC):
 
 # The TimeSeries.aggregate method calls this function with self and all it's arguments
 def apply_aggregation(
-    ts: "TimeSeries", aggregation_period: "Period", aggregation_function: Type[AggregationFunction], column_name: str, missing_criteria: Optional[Dict[str, Union[str, int]]] = None
+    ts: "TimeSeries",
+    aggregation_period: "Period",
+    aggregation_function: Type[AggregationFunction],
+    column_name: str,
+    missing_criteria: Optional[Dict[str, Union[str, int]]] = None,
 ) -> "TimeSeries":
     """Apply an aggregation function to a column in this TimeSeries, check the aggregation satisfies user requirements
     and return a new derived TimeSeries containing the aggregated data.
@@ -123,4 +129,3 @@ def apply_aggregation(
         aggregated_ts = agg.validate(aggregated_ts, column_name, missing_criteria)
 
     return aggregated_ts
-
