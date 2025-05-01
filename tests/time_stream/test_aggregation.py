@@ -18,7 +18,7 @@ from parameterized import parameterized
 
 from time_stream.period import Period
 from time_stream.base import TimeSeries
-from time_stream.aggregation import AggregationFunction, Max, Mean, Min
+from time_stream.aggregation import AggregationFunction, Max, Mean, Min, PolarsValidator
 
 TIME: str = "datetime"
 VALUE: str = "value"
@@ -564,3 +564,71 @@ class TestSubPeriodCheck(unittest.TestCase):
             self.ts.aggregate(Period.of_years(1).with_month_offset(1).with_hour_offset(1), Min, VALUE)
         with self.assertRaises(UserWarning):
             self.ts.aggregate(Period.of_years(1).with_month_offset(1).with_day_offset(1).with_hour_offset(1), Min, VALUE)
+
+
+class TestPolarsValidator(unittest.TestCase):
+    """Test the PolarsValidator class methods"""
+
+    def setUp(self):
+        """Set up test aggregated TimeSeries object"""
+
+        data = {"timestamp": [datetime(2024, 1, 1, 0, 0, 0)],
+                "min_temperature": [-3.4],
+                "count_temperature": [50],
+                "expected_count_timestamp": [100]}
+
+        schema = {"timestamp": pl.Datetime, "min_temperature": pl.Float64,
+                  "count_temperature": pl.Int32, "expected_count_timestamp": pl.Int32}
+
+        df = pl.DataFrame(data, schema)
+
+        self.ts = TimeSeries(time_name="timestamp", resolution=P1M, periodicity=P1M, df=df)
+    
+    @parameterized.expand(
+        [
+            ({"percent": 25}, True),
+            ({"percent": 75}, False),
+            ({"missing": 25}, False),
+            ({"missing": 75}, True),
+            ({"available": 25}, True),
+            ({"available": 75}, False)
+        ]
+    )
+    def test_validate_aggregation(self, missing_criteria, validity):
+        """Test the validate_aggregation function"""
+
+        validator: PolarsValidator = PolarsValidator(self.ts)
+        result = validator.validate_aggregation("temperature", missing_criteria)
+
+        self.assertEqual(result.df['valid'][0], validity)
+
+
+    @parameterized.expand(
+        [
+            ({"percent": 25}, {"method": "_percent", "limit": 25}),
+            ({"missing": 25}, {"method": "_missing", "limit": 25}),
+            ({"available": 75}, {"method": "_available", "limit": 75})
+        ]
+    )
+    def test_validate_missing_aggregation_criteria_no_error(self, missing_criteria, expected):
+        """Test the validate_missing_aggregation_criteria method with valid criteria."""
+
+        validator: PolarsValidator = PolarsValidator(self.ts)
+        result = validator._validate_missing_aggregation_criteria(missing_criteria)
+
+        assert result == expected
+
+
+    @parameterized.expand(
+        [
+            (("percent", 25), ValueError),
+            ({"missing": 25, "available": 45}, ValueError),
+            ({"wrong_key": 75}, KeyError)
+        ]
+    )
+    def test_validate_missing_aggregation_criteria_error(self, missing_criteria, expected):
+        """Test the validate_missing_aggregation_criteria method with non-valid criteria."""
+
+        validator: PolarsValidator = PolarsValidator(self.ts)
+        with self.assertRaises(expected):
+            validator._validate_missing_aggregation_criteria(missing_criteria)
