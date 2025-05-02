@@ -56,6 +56,17 @@ Aggregating time series data is straightforward:
    import examples_quick_start
    ts = examples_quick_start.aggregate_data()
 
+By default, this will aggregate the data regardless of how many missing data points there are in the period.
+For example, if we have two 1 minute data points on a given day, doing a mean aggregation would return the
+mean of those 2 values, even though we'd expect 1440 values for a full day.
+
+You can specify criteria for a valid aggregation using the ``missing_criteria`` argument.
+
+- ``{"missing": 30}`` Aggregate only if there are no more than 30 values missing in the period.
+- ``{"available": 30}`` Aggregate only if there are at least 30 input values in the period.
+- ``{"percent": 30}`` Aggregate only if the data in the period is at least 30 percent complete.
+
+
 Adding Flags for Quality Control
 -------------------------------
 
