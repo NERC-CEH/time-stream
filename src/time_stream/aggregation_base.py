@@ -20,7 +20,7 @@ this module.
 """
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Type
+from typing import TYPE_CHECKING, Type, Union
 
 if TYPE_CHECKING:
     # Import is for type hinting only.  Make sure there is no runtime import, to avoid recursion.
@@ -74,7 +74,7 @@ class AggregationFunction(ABC):
 
 # The TimeSeries.aggregate method calls this function with self and all it's arguments
 def apply_aggregation(
-    ts: "TimeSeries", aggregation_period: "Period", aggregation_function: Type[AggregationFunction], column_name: str
+    ts: "TimeSeries", aggregation_period: "Period", aggregation_function: Union[str | Type[AggregationFunction]], column_name: str
 ) -> "TimeSeries":
     """Apply an aggregation function to a column in a TimeSeries and return a new derived TimeSeries containing
     the aggregated data.
@@ -97,4 +97,14 @@ def apply_aggregation(
         raise UserWarning(
             f"Data periodicity {ts.periodicity} is not a subperiod of aggregation period {aggregation_period}"
         )
+    
+    if isinstance(aggregation_function, str):
+        aggregation_function = aggregation_function.lower()
+        aggregation_methods = {cls.__name__.lower(): cls for cls in AggregationFunction.__subclasses__()}
+
+        if aggregation_function not in aggregation_methods.keys():
+            raise KeyError(f"{aggregation_function} is an invalid aggregation function.")
+
+        aggregation_function = aggregation_methods[f"{aggregation_function}"]
+        
     return aggregation_function.create().apply(ts, aggregation_period, column_name)

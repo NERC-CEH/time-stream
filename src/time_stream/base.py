@@ -573,7 +573,10 @@ class TimeSeries:
             self.columns[col].set_as_supplementary()
 
     def aggregate(
-        self, aggregation_period: Period, aggregation_function: Union[str | Type["AggregationFunction"]], column_name: str
+        self,
+        aggregation_period: Period,
+        aggregation_function: Union[str | Type["AggregationFunction"]],
+        column_name: str,
     ) -> "TimeSeries":
         """Apply an aggregation function to a column in this TimeSeries and return a new derived TimeSeries containing
         the aggregated data.
@@ -592,14 +595,6 @@ class TimeSeries:
         Returns:
             A TimeSeries containing the aggregated data.
         """
-        if isinstance(aggregation_function, str):
-            aggregation_methods = {cls.__name__.lower(): cls for cls in AggregationFunction.__subclasses__()}
-
-            try:
-                aggregation_function = aggregation_methods[f"{aggregation_function.lower()}"]
-            except:
-                raise KeyError(f"{aggregation_function} is an invalid aggregation function.")
-
         return apply_aggregation(self, aggregation_period, aggregation_function, column_name)
 
     def metadata(self, key: Optional[Sequence[str]] = None, strict: bool = True) -> Dict[str, Any]:
