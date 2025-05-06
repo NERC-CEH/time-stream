@@ -130,7 +130,7 @@ Whilst time-stream is under active development, to use time-stream within your p
 
     **Using pip directly**
     ```commandline
-    pip install -e "time-stream @ git+https://github.com/NERC-CEH/time-stream.git"
+    pip install "time-stream @ git+https://github.com/NERC-CEH/time-stream.git"
     ```
     
     **In your project's pyproject.toml**
