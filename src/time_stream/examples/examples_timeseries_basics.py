@@ -498,8 +498,13 @@ def aggregation_mean_monthly_temperature():
         ts = aggregation_set_up()
 
     # [start_block_25]
-    # Create a monthly aggregation of the minute data
+    # Import the required aggregation function
+    from time_stream.aggregation import Mean
+
+    # Create a monthly aggregation of the minute data, either by importing the aggregation function
+    # or by using a string
     monthly_mean_temp = ts.aggregate(Period.of_months(1), Mean, "temperature")
+    monthly_mean_temp = ts.aggregate(Period.of_months(1), "mean", "temperature")
 
     print(monthly_mean_temp)
     # [end_block_25]
@@ -515,7 +520,7 @@ def aggregation_more_examples():
     print(monthly_min_temp)
 
     # Calculate monthly maximum temperature
-    monthly_max_temp = ts.aggregate(Period.of_months(1), Max, "temperature")
+    monthly_max_temp = ts.aggregate(Period.of_months(1), "Max", "temperature")
     print(monthly_max_temp)
 
     # Use it with other periods
