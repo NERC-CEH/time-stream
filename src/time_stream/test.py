@@ -44,7 +44,7 @@ df = pl.DataFrame({"timestamp": dates, "temperature": values})
 
 ts = TimeSeries(df=df, time_name="timestamp", resolution="PT30M", periodicity="PT30M")
 
-# ts_new = ts.aggregate(Period.of_months(1), Mean, "temperature", {"percent": 32})
-ts_new = ts.aggregate(Period.of_months(1), Mean, "temperature")
+ts_new = ts.aggregate(Period.of_months(1), Mean, "temperature", {"missing": 32})
+# ts_new = ts.aggregate(Period.of_months(1), Mean, "temperature")
 
 print(ts_new.df)

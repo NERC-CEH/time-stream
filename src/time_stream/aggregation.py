@@ -360,13 +360,14 @@ class ValidAggregation(AggregationStage):
 
     Attributes:
         value_column: The name of the value column
+        missing_criteria: What level of missing data is acceptable
     """
 
     def __init__(
         self,
         aggregator: PolarsAggregator,
         value_column: str,
-        missing_criteria: Optional[Dict[str, Union[str, int]]] = None,
+        missing_criteria: Union[None | Dict[str, Union[str, int]]],
     ) -> None:
         super().__init__(aggregator, "valid_boolean")
         self._value_column = value_column
@@ -410,7 +411,7 @@ class Mean(AggregationFunction):
         ts: TimeSeries,
         aggregation_period: Period,
         column_name: str,
-        missing_criteria: Optional[Dict[str, Union[str, int]]] = None,
+        missing_criteria: Union[None | Dict[str, Union[str, int]]],
     ) -> TimeSeries:
         aggregator: PolarsAggregator = PolarsAggregator(ts, aggregation_period)
         df: pl.DataFrame = aggregator.aggregate(
@@ -466,7 +467,7 @@ class Min(AggregationFunction):
         ts: TimeSeries,
         aggregation_period: Period,
         column_name: str,
-        missing_criteria: Optional[Dict[str, Union[str, int]]] = None,
+        missing_criteria: Union[None | Dict[str, Union[str, int]]],
     ) -> TimeSeries:
         aggregator: PolarsAggregator = PolarsAggregator(ts, aggregation_period)
         df: pl.DataFrame = aggregator.aggregate(
@@ -521,7 +522,7 @@ class Max(AggregationFunction):
         ts: TimeSeries,
         aggregation_period: Period,
         column_name: str,
-        missing_criteria: Optional[Dict[str, Union[str, int]]] = None,
+        missing_criteria: Union[None | Dict[str, Union[str, int]]],
     ) -> TimeSeries:
         aggregator: PolarsAggregator = PolarsAggregator(ts, aggregation_period)
         df: pl.DataFrame = aggregator.aggregate(
