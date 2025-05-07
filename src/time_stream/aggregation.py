@@ -46,64 +46,7 @@ class PolarsAggregator:
         self.ts = ts
         self.aggregation_period = aggregation_period
 
-    def aggregate(self, stage_list: list["AggregationStage"]) -> pl.DataFrame:
-        """Create a new DataFrame containing aggregated data that is produced by a list of AggregationStages
-
-        The general Polars method used for aggregating data is:
-
-            output_dataframe = ( input_dataframe
-                .group_by_dynamic( various stuff goes here )
-                .agg( ... )
-                .unnest( ... )
-                .with_columns( ... )
-            )
-
-        The AggregationStages are used to fill in the "..." parts.
-
-        Args:
-            stage_list: A list of AggregationStage objects
-
-        Returns:
-            A DataFrame containing the aggregated data
-        """
-        aggregation_expression_list: list[pl.Expr] = []
-        unnest_list: list[str] = []
-        with_column_list: list[pl.Expr] = []
-        for aggregation_stage in stage_list:
-            aggregation_expression_list.extend(aggregation_stage.aggregation_expressions())
-            unnest_list.extend(aggregation_stage.unnest())
-            with_column_list.extend(aggregation_stage.with_columns())
-
-        group_by_dynamic = self.ts.df.group_by_dynamic(
-            index_column=self.ts.time_name,
-            every=self.aggregation_period.pl_interval,
-            offset=self.aggregation_period.pl_offset,
-            closed="left",
-        )
-
-        df = group_by_dynamic.agg(aggregation_expression_list)
-
-        if unnest_list:
-            df = df.unnest(*unnest_list)
-        if with_column_list:
-            df = df.with_columns(*with_column_list)
-
-        return df
-
-
-class PolarsValidator:
-    """A class used to assist with validating aggregated data.
-
-    The user defines the criteria for how to handle missing data when aggregating
-
-    Attributes:
-        ts: The TimeSeries being aggregated
-    """
-
-    def __init__(self, ts: TimeSeries) -> None:
-        self.ts = ts
-
-    def _percent(self, column_name: str, limit: int) -> TimeSeries:
+    def _percent(self, column_name: str, limit: Union[int, float]) -> pl.Expr:
         """Check whether the percent of non-missing data satisfies user criteria.
 
         Aggregation is valid if the percent of non-missing data is greater than the limit.
@@ -113,18 +56,13 @@ class PolarsValidator:
             limit: the lowest percent of required non-missing data
 
         Returns:
-            A TimeSeries object
+            A polars expression
         """
-        # Discussion around what we do when missing criteria is not satisfied
-        # Currently add extra boolean column
-        # Do we want to raise an exception?
         expression = (pl.col(f"count_{column_name}") / pl.col(f"expected_count_{self.ts.time_name}")) * 100
 
-        self.ts.df = self.ts.df.with_columns(pl.when(expression > limit).then(True).otherwise(False).alias("valid"))
+        return pl.when(expression > limit).then(True).otherwise(False).alias("valid")
 
-        return self.ts
-
-    def _missing(self, column_name: str, limit: int) -> TimeSeries:
+    def _missing(self, column_name: str, limit: int) -> pl.Expr:
         """Check whether the count of missing data satisfies user criteria.
 
         Aggregation is valid if the count of missing data is less than the limit.
@@ -134,18 +72,13 @@ class PolarsValidator:
             limit: the highest count of missing data
 
         Returns:
-            A TimeSeries object
+            A polars expression
         """
-        # Discussion around what we do when missing criteria is not satisfied
-        # Currently making value null
-        # Do we want to raise an exception?
         expression = pl.col(f"expected_count_{self.ts.time_name}") - pl.col(f"count_{column_name}")
 
-        self.ts.df = self.ts.df.with_columns(pl.when(expression < limit).then(True).otherwise(False).alias("valid"))
+        return pl.when(expression < limit).then(True).otherwise(False).alias("valid")
 
-        return self.ts
-
-    def _available(self, column_name: str, limit: int) -> TimeSeries:
+    def _available(self, column_name: str, limit: int) -> pl.Expr:
         """Check whether the count of non-missing data satisfies user criteria.
 
         Aggregation is valid if the count of non-missing data is greater than the limit.
@@ -155,16 +88,11 @@ class PolarsValidator:
             limit: the lowest count of non-missing data
 
         Returns:
-            A TimeSeries object
+            A polars expression
         """
-        # Discussion around what we do when missing criteria is not satisfied
-        # Currently making value null
-        # Do we want to raise an exception?
         expression = pl.col(f"count_{column_name}")
 
-        self.ts.df = self.ts.df.with_columns(pl.when(expression > limit).then(True).otherwise(False).alias("valid"))
-
-        return self.ts
+        return pl.when(expression > limit).then(True).otherwise(False).alias("valid")
 
     def _validate_missing_aggregation_criteria(self, missing_criteria: Any) -> Dict[str, Union[str | int]]:
         """Validate user input on how to handle missing data in the aggregation.
@@ -207,6 +135,51 @@ class PolarsValidator:
         """
         missing_criteria = self._validate_missing_aggregation_criteria(missing_criteria)
         return getattr(self, missing_criteria["method"])(column_name, missing_criteria["limit"])
+
+    def aggregate(self, stage_list: list["AggregationStage"]) -> pl.DataFrame:
+        """Create a new DataFrame containing aggregated data that is produced by a list of AggregationStages
+
+        The general Polars method used for aggregating data is:
+
+            output_dataframe = ( input_dataframe
+                .group_by_dynamic( various stuff goes here )
+                .agg( ... )
+                .unnest( ... )
+                .with_columns( ... )
+            )
+
+        The AggregationStages are used to fill in the "..." parts.
+
+        Args:
+            stage_list: A list of AggregationStage objects
+
+        Returns:
+            A DataFrame containing the aggregated data
+        """
+        aggregation_expression_list: list[pl.Expr] = []
+        unnest_list: list[str] = []
+        with_column_list: list[pl.Expr] = []
+        for aggregation_stage in stage_list:
+            aggregation_expression_list.extend(aggregation_stage.aggregation_expressions())
+            unnest_list.extend(aggregation_stage.unnest())
+            with_column_list.extend(aggregation_stage.with_columns())
+
+        group_by_dynamic = self.ts.df.group_by_dynamic(
+            index_column=self.ts.time_name,
+            every=self.aggregation_period.pl_interval,
+            offset=self.aggregation_period.pl_offset,
+            closed="left",
+        )
+
+        df = group_by_dynamic.agg(aggregation_expression_list)
+
+        if unnest_list:
+            df = df.unnest(*unnest_list)
+        if with_column_list:
+            for with_column in with_column_list:
+                df = df.with_columns(with_column)
+
+        return df
 
 
 class AggregationStage(ABC):
@@ -380,6 +353,34 @@ class GroupByBasic(AggregationStage):
         return [self._gb2df(pl.col(self._value_column)).alias(f"{self.name}_{self._value_column}")]
 
 
+class ValidAggregation(AggregationStage):
+    """An AggregationStage
+
+    Creates a "valid" column containing a boolean of whether the aggregation meets the missing criteria.
+
+    Attributes:
+        value_column: The name of the value column
+    """
+
+    def __init__(
+        self,
+        aggregator: PolarsAggregator,
+        value_column: str,
+        missing_criteria: Optional[Dict[str, Union[str, int]]] = None,
+    ) -> None:
+        super().__init__(aggregator, "valid_boolean")
+        self._value_column = value_column
+        self._missing_criteria = missing_criteria
+
+    def with_columns(self) -> list[None | pl.Expr]:
+        """Return "valid" column to be included in the final dataframe if missing criteria is defined."""
+        expression = []
+        if self._missing_criteria is not None:
+            expression.append(self.aggregator.validate_aggregation(self._value_column, self._missing_criteria))
+
+        return expression
+
+
 class Mean(AggregationFunction):
     """A mean AggregationFunction
 
@@ -404,13 +405,20 @@ class Mean(AggregationFunction):
         super().__init__(name)
 
     @override
-    def apply(self, ts: TimeSeries, aggregation_period: Period, column_name: str) -> TimeSeries:
+    def apply(
+        self,
+        ts: TimeSeries,
+        aggregation_period: Period,
+        column_name: str,
+        missing_criteria: Optional[Dict[str, Union[str, int]]] = None,
+    ) -> TimeSeries:
         aggregator: PolarsAggregator = PolarsAggregator(ts, aggregation_period)
         df: pl.DataFrame = aggregator.aggregate(
             [
                 GroupByBasic(aggregator, "mean", _group_by_mean, column_name),
                 ActualValueCount(aggregator, column_name),
                 ExpectedCount(aggregator),
+                ValidAggregation(aggregator, column_name, missing_criteria),
             ]
         )
 
@@ -425,15 +433,6 @@ class Mean(AggregationFunction):
             flag_systems=ts.flag_systems,
             column_metadata={column_name: ts.columns[column_name].metadata()},
         )
-
-    @override
-    def validate(
-        self, ts: TimeSeries, column_name: str, missing_criteria: Dict[str, Union[str, int]] = None
-    ) -> TimeSeries:
-        validator: PolarsValidator = PolarsValidator(ts)
-        ts: TimeSeries = validator.validate_aggregation(column_name, missing_criteria)
-
-        return ts
 
 
 class Min(AggregationFunction):
@@ -462,13 +461,20 @@ class Min(AggregationFunction):
         super().__init__(name)
 
     @override
-    def apply(self, ts: TimeSeries, aggregation_period: Period, column_name: str) -> TimeSeries:
+    def apply(
+        self,
+        ts: TimeSeries,
+        aggregation_period: Period,
+        column_name: str,
+        missing_criteria: Optional[Dict[str, Union[str, int]]] = None,
+    ) -> TimeSeries:
         aggregator: PolarsAggregator = PolarsAggregator(ts, aggregation_period)
         df: pl.DataFrame = aggregator.aggregate(
             [
                 GroupByWithDateTime(aggregator, "min", _group_by_first, column_name),
                 ActualValueCount(aggregator, column_name),
                 ExpectedCount(aggregator),
+                ValidAggregation(aggregator, column_name, missing_criteria),
             ]
         )
         # Aggregator just returns a dataframe with the selected column in. This might need to change when considering
@@ -482,15 +488,6 @@ class Min(AggregationFunction):
             flag_systems=ts.flag_systems,
             column_metadata={column_name: ts.columns[column_name].metadata()},
         )
-
-    @override
-    def validate(
-        self, ts: TimeSeries, column_name: str, missing_criteria: Dict[str, Union[str, int]] = None
-    ) -> TimeSeries:
-        validator: PolarsValidator = PolarsValidator(ts)
-        ts: TimeSeries = validator.validate_aggregation(column_name, missing_criteria)
-
-        return ts
 
 
 class Max(AggregationFunction):
@@ -519,13 +516,20 @@ class Max(AggregationFunction):
         super().__init__(name)
 
     @override
-    def apply(self, ts: TimeSeries, aggregation_period: Period, column_name: str) -> TimeSeries:
+    def apply(
+        self,
+        ts: TimeSeries,
+        aggregation_period: Period,
+        column_name: str,
+        missing_criteria: Optional[Dict[str, Union[str, int]]] = None,
+    ) -> TimeSeries:
         aggregator: PolarsAggregator = PolarsAggregator(ts, aggregation_period)
         df: pl.DataFrame = aggregator.aggregate(
             [
                 GroupByWithDateTime(aggregator, "max", _group_by_last, column_name),
                 ActualValueCount(aggregator, column_name),
                 ExpectedCount(aggregator),
+                ValidAggregation(aggregator, column_name, missing_criteria),
             ]
         )
         # Aggregator just returns a dataframe with the selected column in. This might need to change when considering
@@ -539,12 +543,3 @@ class Max(AggregationFunction):
             flag_systems=ts.flag_systems,
             column_metadata={column_name: ts.columns[column_name].metadata()},
         )
-
-    @override
-    def validate(
-        self, ts: TimeSeries, column_name: str, missing_criteria: Dict[str, Union[str, int]] = None
-    ) -> TimeSeries:
-        validator: PolarsValidator = PolarsValidator(ts)
-        ts: TimeSeries = validator.validate_aggregation(column_name, missing_criteria)
-
-        return ts

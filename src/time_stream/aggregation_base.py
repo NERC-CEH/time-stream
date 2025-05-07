@@ -48,7 +48,13 @@ class AggregationFunction(ABC):
         return self._name
 
     @abstractmethod
-    def apply(self, ts: "TimeSeries", aggregation_period: "Period", column_name: str) -> "TimeSeries":
+    def apply(
+        self,
+        ts: "TimeSeries",
+        aggregation_period: "Period",
+        column_name: str,
+        missing_criteria: Optional[Dict[str, Union[str, int]]] = None,
+    ) -> "TimeSeries":
         """Apply this aggregation function to the supplied
         TimeSeries column and return a new TimeSeries containing
         the aggregated data
@@ -61,26 +67,7 @@ class AggregationFunction(ABC):
             ts: The TimeSeries containing the data to be aggregated
             aggregation_period: The time period over which to aggregate
             column_name: The column containing the data to be aggregated
-
-        Returns:
-            A TimeSeries containing the aggregated data
-        """
-        raise NotImplementedError
-
-    @abstractmethod
-    def validate(
-        self, ts: "TimeSeries", column_name: str, missing_criteria: Optional[Dict[str, int]] = None
-    ) -> "TimeSeries":
-        """Validate the aggregated data satisfies the requested missing data criteria
-
-        Note: This is the first attempt at a mechanism for aggregating
-        time-series data.  The signature of this method is likely to
-        evolve considerably.
-
-        Args:
-            ts: The TimeSeries containing the aggregated data
-            column_name: The column containing the data to be aggregated
-            missing_criteria: What level of missing data is acceptable. Ignores missing values by default.
+            missing_criteria: What level of missing data is acceptable. Ignores missing values by default
 
         Returns:
             A TimeSeries containing the aggregated data
@@ -122,10 +109,4 @@ def apply_aggregation(
         raise UserWarning(
             f"Data periodicity {ts.periodicity} is not a subperiod of aggregation period {aggregation_period}"
         )
-    agg = aggregation_function.create()
-    aggregated_ts = agg.apply(ts, aggregation_period, column_name)
-
-    if missing_criteria:
-        aggregated_ts = agg.validate(aggregated_ts, column_name, missing_criteria)
-
-    return aggregated_ts
+    return aggregation_function.create().apply(ts, aggregation_period, column_name, missing_criteria)
