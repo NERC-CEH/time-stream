@@ -8,12 +8,20 @@ contained within will evolve considerably.
 import datetime
 from abc import ABC
 from collections.abc import Callable
+from enum import Enum
 from typing import Any, Dict, Optional, Union, override
 
 import polars as pl
 
 from time_stream import Period, TimeSeries
 from time_stream.aggregation_base import AggregationFunction
+
+
+class MissingCriteriaOptions(Enum):
+    missing = "missing"
+    available = "available"
+    percent = "percent"
+
 
 # A function that takes a Polars GroupBy as an argument and returns a DataFrame
 GroupByToDataFrame = Callable[[pl.dataframe.group_by.GroupBy], pl.DataFrame]
@@ -115,13 +123,16 @@ class PolarsAggregator:
         if len(missing_criteria) != 1:
             raise ValueError(f"missing_criteria argument should contain only one key, not {len(missing_criteria)}")
 
-        user_key = list(missing_criteria.keys())[0]
-        valid_keys = ["missing", "available", "percent"]
+        supplied_key = list(missing_criteria.keys())[0]
 
-        if user_key not in valid_keys:
-            raise KeyError(f"{user_key} should be one of {valid_keys}")
+        if supplied_key not in MissingCriteriaOptions:
+            raise KeyError(
+                f"missing_criteria option should be one of"
+                f"{[options.value for options in list(MissingCriteriaOptions)]} "
+                f"not '{supplied_key}'"
+            )
 
-        return {"method": f"_{user_key}", "limit": missing_criteria[user_key]}
+        return {"method": f"_{supplied_key}", "limit": missing_criteria[supplied_key]}
 
     def validate_aggregation(self, column_name: str, missing_criteria: Dict[str, Union[str | int]]) -> pl.DataFrame:
         """Check the aggregated dataframe satisfies missing value criteria.
