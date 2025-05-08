@@ -86,6 +86,7 @@ The package provides a flexible framework for aggregating time series data:
 - Aggregate data over various time periods (daily, monthly, etc.)
 - Apply different aggregation functions (mean, min, max, etc.)
 - Track data availability with count fields
+- Validate aggregation using criteria for data availability
 - Preserve relationships between columns during aggregation
 
 Flagging System

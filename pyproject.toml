@@ -31,7 +31,7 @@ license = { text = "NO LICENSE" }
 
 [project.optional-dependencies]
 test = ["pytest", "pytest-cov", "parameterized", "freezegun", "pytest-benchmark", "pytest-benchmark[histogram]"]
-docs = ["sphinx", "sphinx-copybutton", "sphinx-rtd-theme", "nbsphinx", "jupyter_sphinx"]
+docs = ["sphinx", "sphinx-copybutton", "sphinx-rtd-theme", "nbsphinx", "jupyter_sphinx", "snowballstemmer<3"]
 lint = ["ruff"]
 dev = ["time_stream[test,docs,lint]"]
 
