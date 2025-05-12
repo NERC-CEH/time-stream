@@ -18,7 +18,7 @@ from parameterized import parameterized
 
 from time_stream.period import Period
 from time_stream.base import TimeSeries
-from time_stream.aggregation import AggregationFunction, Max, Mean, Min, PolarsAggregator
+from time_stream.aggregation import AggregationFunction, Max, Mean, Min, PolarsAggregator, ValidAggregation
 
 TIME: str = "datetime"
 VALUE: str = "value"
@@ -607,7 +607,8 @@ class TestMissingCriteria(unittest.TestCase):
     def test_validate_missing_aggregation_criteria_no_error(self, missing_criteria, expected):
         """Test the validate_missing_aggregation_criteria method with valid criteria."""
 
-        validator: PolarsAggregator = PolarsAggregator(self.ts, Period.of_months(1))
+        aggregator: PolarsAggregator = PolarsAggregator(self.ts, Period.of_months(1))
+        validator: ValidAggregation = ValidAggregation(aggregator, "test_column", missing_criteria)
         result = validator._validate_missing_aggregation_criteria(missing_criteria)
 
         assert result == expected
@@ -623,6 +624,7 @@ class TestMissingCriteria(unittest.TestCase):
     def test_validate_missing_aggregation_criteria_error(self, missing_criteria, expected):
         """Test the validate_missing_aggregation_criteria method with non-valid criteria."""
 
-        validator: PolarsAggregator = PolarsAggregator(self.ts, Period.of_months(1))
+        aggregator: PolarsAggregator = PolarsAggregator(self.ts, Period.of_months(1))
+        validator: ValidAggregation = ValidAggregation(aggregator, "test_column", missing_criteria)
         with self.assertRaises(expected):
             validator._validate_missing_aggregation_criteria(missing_criteria)

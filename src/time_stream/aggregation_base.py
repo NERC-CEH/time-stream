@@ -85,7 +85,7 @@ def apply_aggregation(
     aggregation_period: "Period",
     aggregation_function: Type[AggregationFunction],
     column_name: str,
-    missing_criteria: Union[None | Dict[str, Union[str, int]]],
+    missing_criteria: Union[None, Dict[str, Union[str, int]]],
 ) -> "TimeSeries":
     """Apply an aggregation function to a column in this TimeSeries, check the aggregation satisfies user requirements
     and return a new derived TimeSeries containing the aggregated data.
