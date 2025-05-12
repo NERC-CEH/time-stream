@@ -76,7 +76,7 @@ class AggregationFunction(ABC):
 def apply_aggregation(
     ts: "TimeSeries",
     aggregation_period: "Period",
-    aggregation_function: Union[str | Type[AggregationFunction]],
+    aggregation_function: Union[str, Type[AggregationFunction]],
     column_name: str,
 ) -> "TimeSeries":
     """Apply an aggregation function to a column in a TimeSeries and return a new derived TimeSeries containing
@@ -108,6 +108,6 @@ def apply_aggregation(
         if aggregation_function not in aggregation_methods.keys():
             raise KeyError(f"{aggregation_function} is an invalid aggregation function.")
 
-        aggregation_function = aggregation_methods[f"{aggregation_function}"]
+        aggregation_function = aggregation_methods[aggregation_function]
 
     return aggregation_function.create().apply(ts, aggregation_period, column_name)

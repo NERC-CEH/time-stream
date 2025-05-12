@@ -575,14 +575,20 @@ class TestAggregationFunctionTypeConversion(unittest.TestCase):
         resolution=Period.of_days(1),
         periodicity=Period.of_days(1))
 
-    def test_legal(self):
+    @parameterized.expand(
+        [
+            [Min],
+            ["Min"],
+            [Max],
+            ["Max"],
+            [Mean],
+            "Mean"
+        ]
+    )
+    def test_legal(self, aggregation_function):
         # The test is that none of the following raise an error
-        self.ts.aggregate(Period.of_days(1), Min, VALUE)
-        self.ts.aggregate(Period.of_days(1), "Min", VALUE)
-        self.ts.aggregate(Period.of_days(1), Max, VALUE)
-        self.ts.aggregate(Period.of_days(1), "Max", VALUE)
-        self.ts.aggregate(Period.of_days(1), Mean, VALUE)
-        self.ts.aggregate(Period.of_days(1), "Mean", VALUE)
+        self.ts.aggregate(Period.of_days(1), aggregation_function, VALUE)
+
 
     def test_illegal(self):
         with self.assertRaises(KeyError):
