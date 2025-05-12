@@ -276,6 +276,8 @@ class ValidAggregation(AggregationStage):
 
     Creates a "valid" column containing a boolean of whether the aggregation meets the missing criteria.
 
+    Set to true by default if no missing_criteria options.
+
     Attributes:
         value_column: The name of the value column
         missing_criteria: What level of missing data is acceptable
@@ -386,10 +388,12 @@ class ValidAggregation(AggregationStage):
         return getattr(self, missing_criteria["method"])(column_name, missing_criteria["limit"])
 
     def with_columns(self) -> list[None | pl.Expr]:
-        """Return "valid" column to be included in the final dataframe if missing criteria is defined."""
+        """Return "valid" column to be included in the final dataframe."""
         expression = []
         if self._missing_criteria is not None:
             expression.append(self.validate_aggregation(self._value_column, self._missing_criteria))
+        else:
+            expression.append(pl.lit(True).alias("valid"))
 
         return expression
 
@@ -407,9 +411,6 @@ class Mean(AggregationFunction):
             The number of values found in each aggregation period
         "expected_count_{time_name}"
             The maximum number of possible values in each aggregation period
-
-        and one optional column
-
         "valid"
             Weather the aggregation is valid against the specified missing_criteria
 
@@ -428,7 +429,7 @@ class Mean(AggregationFunction):
         ts: TimeSeries,
         aggregation_period: Period,
         column_name: str,
-        missing_criteria: Union[None, Dict[str, Union[str, int]]],
+        missing_criteria: Optional[Dict[str, Union[str, int]]] = None,
     ) -> TimeSeries:
         aggregator: PolarsAggregator = PolarsAggregator(ts, aggregation_period)
         df: pl.DataFrame = aggregator.aggregate(
@@ -468,9 +469,6 @@ class Min(AggregationFunction):
             The number of values found in each aggregation period
         "expected_count_{time_name}"
             The maximum number of possible values in each aggregation period
-
-        and one optional column
-
         "valid"
             Weather the aggregation is valid against the specified missing_criteria
 
@@ -489,7 +487,7 @@ class Min(AggregationFunction):
         ts: TimeSeries,
         aggregation_period: Period,
         column_name: str,
-        missing_criteria: Union[None, Dict[str, Union[str, int]]],
+        missing_criteria: Optional[Dict[str, Union[str, int]]] = None,
     ) -> TimeSeries:
         aggregator: PolarsAggregator = PolarsAggregator(ts, aggregation_period)
         df: pl.DataFrame = aggregator.aggregate(
@@ -528,9 +526,6 @@ class Max(AggregationFunction):
             The number of values found in each aggregation period
         "expected_count_{time_name}"
             The maximum number of possible values in each aggregation period
-
-        and one optional column
-
         "valid"
             Weather the aggregation is valid against the specified missing_criteria
 
@@ -549,7 +544,7 @@ class Max(AggregationFunction):
         ts: TimeSeries,
         aggregation_period: Period,
         column_name: str,
-        missing_criteria: Union[None, Dict[str, Union[str, int]]],
+        missing_criteria: Optional[Dict[str, Union[str, int]]] = None,
     ) -> TimeSeries:
         aggregator: PolarsAggregator = PolarsAggregator(ts, aggregation_period)
         df: pl.DataFrame = aggregator.aggregate(

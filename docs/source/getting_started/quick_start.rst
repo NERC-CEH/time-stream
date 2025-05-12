@@ -66,6 +66,7 @@ You can specify criteria for a valid aggregation using the ``missing_criteria`` 
 - ``{"available": 30}`` Aggregate only if there are at least 30 input values in the period.
 - ``{"percent": 30}`` Aggregate only if the data in the period is at least 30 percent complete (accepts integers or floats).
 
+If no ``missing_criteria`` are specified, the ``valid`` column will be set to ``True``.
 
 Adding Flags for Quality Control
 -------------------------------

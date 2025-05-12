@@ -432,7 +432,9 @@ You can specify criteria for a valid aggregation using the ``missing_criteria`` 
 - ``{"missing": 30}`` Aggregate only if there are no more than 30 values missing in the period.
 - ``{"available": 30}`` Aggregate only if there are at least 30 input values in the period.
 - ``{"percent": 30}`` Aggregate only if the data in the period is at least 30 percent complete (accepts integers or floats).
-   
+
+If no ``missing_criteria`` are specified, the ``valid`` column will be set to ``True``.
+
 Some more aggregation examples:
 
 .. literalinclude:: ../../../src/time_stream/examples/examples_timeseries_basics.py

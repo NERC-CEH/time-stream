@@ -586,7 +586,8 @@ class TestMissingCriteria(unittest.TestCase):
             ({"missing": 1400}, False),
             ({"missing": 1500}, True),
             ({"available": 25}, True),
-            ({"available": 35}, False)
+            ({"available": 35}, False),
+            (None, True)
         ]
     )
     def test_valid_missing_criteria(self, missing_criteria, validity):
