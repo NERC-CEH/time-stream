@@ -378,7 +378,7 @@ class ValidAggregation(AggregationStage):
         """Check the aggregated dataframe satisfies missing value criteria.
 
         Args:
-            aggregated_df: The aggregated dataframe
+            column_name: Name of the column to aggregate
             missing_criteria: What level of missing data is acceptable
 
         Returns:
