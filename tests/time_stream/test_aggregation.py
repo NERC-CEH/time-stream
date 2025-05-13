@@ -629,3 +629,32 @@ class TestMissingCriteria(unittest.TestCase):
         validator: ValidAggregation = ValidAggregation(aggregator, "test_column", missing_criteria)
         with self.assertRaises(expected):
             validator._validate_missing_aggregation_criteria(missing_criteria)
+
+
+class TestAggregationFunctionTypeConversion(unittest.TestCase):
+    """Test that the aggregation function argument can be string or type AggregationFunction"""
+    df = pl.DataFrame({
+        "time": [datetime(2020, 1, 1)] ,
+        VALUE: [1.0] })
+    ts = TimeSeries(df=df, time_name="time",
+        resolution=Period.of_days(1),
+        periodicity=Period.of_days(1))
+
+    @parameterized.expand(
+        [
+            [Min],
+            ["Min"],
+            [Max],
+            ["Max"],
+            [Mean],
+            "Mean"
+        ]
+    )
+    def test_legal(self, aggregation_function):
+        # The test is that none of the following raise an error
+        self.ts.aggregate(Period.of_days(1), aggregation_function, VALUE)
+
+
+    def test_illegal(self):
+        with self.assertRaises(KeyError):
+            self.ts.aggregate(Period.of_days(1), "IncorrectFunction", VALUE)

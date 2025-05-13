@@ -83,7 +83,7 @@ class AggregationFunction(ABC):
 def apply_aggregation(
     ts: "TimeSeries",
     aggregation_period: "Period",
-    aggregation_function: Type[AggregationFunction],
+    aggregation_function: Union[str, Type[AggregationFunction]],
     column_name: str,
     missing_criteria: Union[None, Dict[str, Union[str, int]]],
 ) -> "TimeSeries":
@@ -109,4 +109,14 @@ def apply_aggregation(
         raise UserWarning(
             f"Data periodicity {ts.periodicity} is not a subperiod of aggregation period {aggregation_period}"
         )
+
+    if isinstance(aggregation_function, str):
+        aggregation_function = aggregation_function.lower()
+        aggregation_methods = {cls.__name__.lower(): cls for cls in AggregationFunction.__subclasses__()}
+
+        if aggregation_function not in aggregation_methods.keys():
+            raise KeyError(f"{aggregation_function} is an invalid aggregation function.")
+
+        aggregation_function = aggregation_methods[aggregation_function]
+
     return aggregation_function.create().apply(ts, aggregation_period, column_name, missing_criteria)

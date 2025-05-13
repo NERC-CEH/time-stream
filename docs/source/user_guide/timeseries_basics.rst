@@ -401,8 +401,8 @@ Given a year's worth of minute data:
 
 We can aggregate this data to various new resolutions.
 
-This example shows an aggregation to monthly mean temperatures.
-Note that this returns a new TimeSeries object, as the primary time attributes have changed.
+This example shows an aggregation to monthly mean temperatures. The aggregation function can also be specified by a string (
+upper or lower case). Note that this returns a new TimeSeries object, as the primary time attributes have changed.
 
 The returned TimeSeries provides additional context columns:
 

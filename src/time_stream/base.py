@@ -575,7 +575,7 @@ class TimeSeries:
     def aggregate(
         self,
         aggregation_period: Period,
-        aggregation_function: Type["AggregationFunction"],
+        aggregation_function: Union[str, Type["AggregationFunction"]],
         column_name: str,
         missing_criteria: Optional[Dict[str, int]] = None,
     ) -> "TimeSeries":
