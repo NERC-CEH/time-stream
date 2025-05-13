@@ -577,9 +577,10 @@ class TimeSeries:
         aggregation_period: Period,
         aggregation_function: Union[str, Type["AggregationFunction"]],
         column_name: str,
+        missing_criteria: Optional[Dict[str, int]] = None,
     ) -> "TimeSeries":
-        """Apply an aggregation function to a column in this TimeSeries and return a new derived TimeSeries containing
-        the aggregated data.
+        """Apply an aggregation function to a column in this TimeSeries, check the aggregation satisfies user
+        requirements and return a new derived TimeSeries containing the aggregated data.
 
         The AggregationFunction class provides static methods that return aggregation function objects that can be used
         with this method.
@@ -591,11 +592,12 @@ class TimeSeries:
             aggregation_period: The period over which to aggregate the data
             aggregation_function: The aggregation function to apply
             column_name: The column containing the data to be aggregated
+            missing_criteria: How the aggregation handles missing data
 
         Returns:
             A TimeSeries containing the aggregated data.
         """
-        return apply_aggregation(self, aggregation_period, aggregation_function, column_name)
+        return apply_aggregation(self, aggregation_period, aggregation_function, column_name, missing_criteria)
 
     def metadata(self, key: Optional[Sequence[str]] = None, strict: bool = True) -> Dict[str, Any]:
         """Retrieve metadata for all or specific keys.

@@ -8,12 +8,20 @@ contained within will evolve considerably.
 import datetime
 from abc import ABC
 from collections.abc import Callable
-from typing import Optional, override
+from enum import Enum
+from typing import Any, Dict, Optional, Union, override
 
 import polars as pl
 
 from time_stream import Period, TimeSeries
 from time_stream.aggregation_base import AggregationFunction
+
+
+class MissingCriteriaOptions(Enum):
+    MISSING = "missing"
+    AVAILABLE = "available"
+    PERCENT = "percent"
+
 
 # A function that takes a Polars GroupBy as an argument and returns a DataFrame
 GroupByToDataFrame = Callable[[pl.dataframe.group_by.GroupBy], pl.DataFrame]
@@ -86,7 +94,8 @@ class PolarsAggregator:
         if unnest_list:
             df = df.unnest(*unnest_list)
         if with_column_list:
-            df = df.with_columns(*with_column_list)
+            for with_column in with_column_list:
+                df = df.with_columns(with_column)
 
         return df
 
@@ -262,6 +271,133 @@ class GroupByBasic(AggregationStage):
         return [self._gb2df(pl.col(self._value_column)).alias(f"{self.name}_{self._value_column}")]
 
 
+class ValidAggregation(AggregationStage):
+    """An AggregationStage
+
+    Creates a "valid" column containing a boolean of whether the aggregation meets the missing criteria.
+
+    Set to true by default if no missing_criteria options.
+
+    Attributes:
+        value_column: The name of the value column
+        missing_criteria: What level of missing data is acceptable
+    """
+
+    def __init__(
+        self,
+        aggregator: PolarsAggregator,
+        value_column: str,
+        missing_criteria: Union[None, Dict[str, Union[str, int]]],
+    ) -> None:
+        super().__init__(aggregator, "valid_boolean")
+        self._value_column = value_column
+        self._missing_criteria = missing_criteria
+        self.ts = aggregator.ts
+
+    def _percent(self, column_name: str, limit: Union[int, float]) -> pl.Expr:
+        """Check whether the percent of non-missing data satisfies user criteria.
+
+        Aggregation is valid if the percent of non-missing data is greater than the limit.
+
+        Args:
+            column_name: Name of the aggregated column
+            limit: the lowest percent of required non-missing data
+
+        Returns:
+            A polars expression
+        """
+        expression = (pl.col(f"count_{column_name}") / pl.col(f"expected_count_{self.ts.time_name}")) * 100
+
+        return pl.when(expression > limit).then(True).otherwise(False).alias("valid")
+
+    def _missing(self, column_name: str, limit: int) -> pl.Expr:
+        """Check whether the count of missing data satisfies user criteria.
+
+        Aggregation is valid if the count of missing data is less than the limit.
+
+        Args:
+            column_name: Name of the aggregated column
+            limit: the highest count of missing data
+
+        Returns:
+            A polars expression
+        """
+        expression = pl.col(f"expected_count_{self.ts.time_name}") - pl.col(f"count_{column_name}")
+
+        return pl.when(expression < limit).then(True).otherwise(False).alias("valid")
+
+    def _available(self, column_name: str, limit: int) -> pl.Expr:
+        """Check whether the count of non-missing data satisfies user criteria.
+
+        Aggregation is valid if the count of non-missing data is greater than the limit.
+
+        Args:
+            column_name: Name of the aggregated column
+            limit: the lowest count of non-missing data
+
+        Returns:
+            A polars expression
+        """
+        expression = pl.col(f"count_{column_name}")
+
+        return pl.when(expression > limit).then(True).otherwise(False).alias("valid")
+
+    def _validate_missing_aggregation_criteria(self, missing_criteria: Any) -> Dict[str, Union[str | int]]:
+        """Validate user input on how to handle missing data in the aggregation.
+
+        Should be a single item dictionary with one of the following keys:
+
+        missing: Calculate a value only if there are no more than n values missing in the period.
+        available: Calculate a value only if there are at least n input values in the period.
+        percent: Calculate a value only if the data in the period is at least n percent complete.
+
+        Args:
+            missing_criteria: what level of missing data is acceptable.
+
+        Returns:
+            modified dictionary of missing criteria.
+        """
+        if not isinstance(missing_criteria, dict):
+            raise ValueError(f"missing_criteria argument should be a dictionary, not {type(missing_criteria)}")
+
+        if len(missing_criteria) != 1:
+            raise ValueError(f"missing_criteria argument should contain only one key, not {len(missing_criteria)}")
+
+        supplied_key = list(missing_criteria.keys())[0]
+
+        if supplied_key not in MissingCriteriaOptions:
+            raise KeyError(
+                f"missing_criteria option should be one of"
+                f"{[options.value for options in list(MissingCriteriaOptions)]} "
+                f"not '{supplied_key}'"
+            )
+
+        return {"method": f"_{supplied_key}", "limit": missing_criteria[supplied_key]}
+
+    def validate_aggregation(self, column_name: str, missing_criteria: Dict[str, Union[str | int]]) -> pl.DataFrame:
+        """Check the aggregated dataframe satisfies missing value criteria.
+
+        Args:
+            column_name: Name of the column to aggregate
+            missing_criteria: What level of missing data is acceptable
+
+        Returns:
+            A dataframe containing the aggregated data.
+        """
+        missing_criteria = self._validate_missing_aggregation_criteria(missing_criteria)
+        return getattr(self, missing_criteria["method"])(column_name, missing_criteria["limit"])
+
+    def with_columns(self) -> list[None | pl.Expr]:
+        """Return "valid" column to be included in the final dataframe."""
+        expression = []
+        if self._missing_criteria is not None:
+            expression.append(self.validate_aggregation(self._value_column, self._missing_criteria))
+        else:
+            expression.append(pl.lit(True).alias("valid"))
+
+        return expression
+
+
 class Mean(AggregationFunction):
     """A mean AggregationFunction
 
@@ -273,8 +409,10 @@ class Mean(AggregationFunction):
             The arithmetic mean of all values in each aggregation period
         "count_{value_column}"
             The number of values found in each aggregation period
-        count_{time_name}"
+        "expected_count_{time_name}"
             The maximum number of possible values in each aggregation period
+        "valid"
+            Weather the aggregation is valid against the specified missing_criteria
 
     """
 
@@ -286,13 +424,20 @@ class Mean(AggregationFunction):
         super().__init__(name)
 
     @override
-    def apply(self, ts: TimeSeries, aggregation_period: Period, column_name: str) -> TimeSeries:
+    def apply(
+        self,
+        ts: TimeSeries,
+        aggregation_period: Period,
+        column_name: str,
+        missing_criteria: Optional[Dict[str, Union[str, int]]] = None,
+    ) -> TimeSeries:
         aggregator: PolarsAggregator = PolarsAggregator(ts, aggregation_period)
         df: pl.DataFrame = aggregator.aggregate(
             [
                 GroupByBasic(aggregator, "mean", _group_by_mean, column_name),
                 ActualValueCount(aggregator, column_name),
                 ExpectedCount(aggregator),
+                ValidAggregation(aggregator, column_name, missing_criteria),
             ]
         )
 
@@ -322,8 +467,10 @@ class Min(AggregationFunction):
             The datetime of the minimum value
         "count_{value_column}"
             The number of values found in each aggregation period
-        count_{time_name}"
+        "expected_count_{time_name}"
             The maximum number of possible values in each aggregation period
+        "valid"
+            Weather the aggregation is valid against the specified missing_criteria
 
     """
 
@@ -335,13 +482,20 @@ class Min(AggregationFunction):
         super().__init__(name)
 
     @override
-    def apply(self, ts: TimeSeries, aggregation_period: Period, column_name: str) -> TimeSeries:
+    def apply(
+        self,
+        ts: TimeSeries,
+        aggregation_period: Period,
+        column_name: str,
+        missing_criteria: Optional[Dict[str, Union[str, int]]] = None,
+    ) -> TimeSeries:
         aggregator: PolarsAggregator = PolarsAggregator(ts, aggregation_period)
         df: pl.DataFrame = aggregator.aggregate(
             [
                 GroupByWithDateTime(aggregator, "min", _group_by_first, column_name),
                 ActualValueCount(aggregator, column_name),
                 ExpectedCount(aggregator),
+                ValidAggregation(aggregator, column_name, missing_criteria),
             ]
         )
         # Aggregator just returns a dataframe with the selected column in. This might need to change when considering
@@ -370,8 +524,10 @@ class Max(AggregationFunction):
             The datetime of the maximum value
         "count_{value_column}"
             The number of values found in each aggregation period
-        count_{time_name}"
+        "expected_count_{time_name}"
             The maximum number of possible values in each aggregation period
+        "valid"
+            Weather the aggregation is valid against the specified missing_criteria
 
     """
 
@@ -383,13 +539,20 @@ class Max(AggregationFunction):
         super().__init__(name)
 
     @override
-    def apply(self, ts: TimeSeries, aggregation_period: Period, column_name: str) -> TimeSeries:
+    def apply(
+        self,
+        ts: TimeSeries,
+        aggregation_period: Period,
+        column_name: str,
+        missing_criteria: Optional[Dict[str, Union[str, int]]] = None,
+    ) -> TimeSeries:
         aggregator: PolarsAggregator = PolarsAggregator(ts, aggregation_period)
         df: pl.DataFrame = aggregator.aggregate(
             [
                 GroupByWithDateTime(aggregator, "max", _group_by_last, column_name),
                 ActualValueCount(aggregator, column_name),
                 ExpectedCount(aggregator),
+                ValidAggregation(aggregator, column_name, missing_criteria),
             ]
         )
         # Aggregator just returns a dataframe with the selected column in. This might need to change when considering

@@ -20,7 +20,7 @@ this module.
 """
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Type, Union
+from typing import TYPE_CHECKING, Dict, Optional, Type, Union
 
 if TYPE_CHECKING:
     # Import is for type hinting only.  Make sure there is no runtime import, to avoid recursion.
@@ -48,7 +48,13 @@ class AggregationFunction(ABC):
         return self._name
 
     @abstractmethod
-    def apply(self, ts: "TimeSeries", aggregation_period: "Period", column_name: str) -> "TimeSeries":
+    def apply(
+        self,
+        ts: "TimeSeries",
+        aggregation_period: "Period",
+        column_name: str,
+        missing_criteria: Optional[Dict[str, Union[str, int]]] = None,
+    ) -> "TimeSeries":
         """Apply this aggregation function to the supplied
         TimeSeries column and return a new TimeSeries containing
         the aggregated data
@@ -61,6 +67,7 @@ class AggregationFunction(ABC):
             ts: The TimeSeries containing the data to be aggregated
             aggregation_period: The time period over which to aggregate
             column_name: The column containing the data to be aggregated
+            missing_criteria: What level of missing data is acceptable. Ignores missing values by default
 
         Returns:
             A TimeSeries containing the aggregated data
@@ -78,9 +85,10 @@ def apply_aggregation(
     aggregation_period: "Period",
     aggregation_function: Union[str, Type[AggregationFunction]],
     column_name: str,
+    missing_criteria: Union[None, Dict[str, Union[str, int]]],
 ) -> "TimeSeries":
-    """Apply an aggregation function to a column in a TimeSeries and return a new derived TimeSeries containing
-    the aggregated data.
+    """Apply an aggregation function to a column in this TimeSeries, check the aggregation satisfies user requirements
+    and return a new derived TimeSeries containing the aggregated data.
 
     The AggregationFunction class provides static methods that return aggregation function objects that can be used
     with this function.
@@ -92,6 +100,7 @@ def apply_aggregation(
         aggregation_period: The period over which to aggregate the data
         aggregation_function: The aggregation function to apply
         column_name: The column containing the data to be aggregated
+        missing_criteria: What level of missing data is acceptable. Ignores missing values by default.
 
     Returns:
         A TimeSeries containing the aggregated data.
@@ -110,4 +119,4 @@ def apply_aggregation(
 
         aggregation_function = aggregation_methods[aggregation_function]
 
-    return aggregation_function.create().apply(ts, aggregation_period, column_name)
+    return aggregation_function.create().apply(ts, aggregation_period, column_name, missing_criteria)

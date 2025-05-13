@@ -10,7 +10,7 @@ from collections.abc import (
 from dataclasses import (
     dataclass,
 )
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Iterable, Optional
 
 import polars as pl
@@ -18,7 +18,7 @@ from parameterized import parameterized
 
 from time_stream.period import Period
 from time_stream.base import TimeSeries
-from time_stream.aggregation import AggregationFunction, Max, Mean, Min
+from time_stream.aggregation import AggregationFunction, Max, Mean, Min, PolarsAggregator, ValidAggregation
 
 TIME: str = "datetime"
 VALUE: str = "value"
@@ -421,7 +421,7 @@ def _get_expected_count_list(
 
 class TestFunctions(unittest.TestCase):
     """Test the min, mean, and max functions over a range of
-    input time-series and aggregation periods
+    input time-series, aggregation periods and missing criteria options
     """
 
     def _test_basic(
@@ -564,6 +564,71 @@ class TestSubPeriodCheck(unittest.TestCase):
             self.ts.aggregate(Period.of_years(1).with_month_offset(1).with_hour_offset(1), Min, VALUE)
         with self.assertRaises(UserWarning):
             self.ts.aggregate(Period.of_years(1).with_month_offset(1).with_day_offset(1).with_hour_offset(1), Min, VALUE)
+
+
+class TestMissingCriteria(unittest.TestCase):
+    """Test the missing criteria functionality"""
+
+    def setUp(self):
+        """Set up test aggregated TimeSeries object"""
+
+        dates = [datetime(2023, 1, 1) + timedelta(days=i) for i in range(31)]
+        values = [10,12,15,14,13,17,19,21,18,17,5,9,0,1,5,11,12,10,21,16,10,11,8,6,14,17,12,10,10,8,5]
+
+        df = pl.DataFrame({"timestamp": dates, "temperature": values})
+
+        self.ts = TimeSeries(df=df, time_name="timestamp", resolution="PT30M", periodicity="PT30M")
+    
+    @parameterized.expand(
+        [
+            ({"percent": 1.9}, True),
+            ({"percent": 2.1}, False),
+            ({"missing": 1400}, False),
+            ({"missing": 1500}, True),
+            ({"available": 25}, True),
+            ({"available": 35}, False),
+            (None, True)
+        ]
+    )
+    def test_valid_missing_criteria(self, missing_criteria, validity):
+        """Test an aggregation function with valid missing criteria argument"""
+
+        result = self.ts.aggregate(P1M, Mean, "temperature", missing_criteria)
+
+        self.assertEqual(result.df['valid'][0], validity)
+
+
+    @parameterized.expand(
+        [
+            ({"percent": 25}, {"method": "_percent", "limit": 25}),
+            ({"missing": 25}, {"method": "_missing", "limit": 25}),
+            ({"available": 75}, {"method": "_available", "limit": 75})
+        ]
+    )
+    def test_validate_missing_aggregation_criteria_no_error(self, missing_criteria, expected):
+        """Test the validate_missing_aggregation_criteria method with valid criteria."""
+
+        aggregator: PolarsAggregator = PolarsAggregator(self.ts, Period.of_months(1))
+        validator: ValidAggregation = ValidAggregation(aggregator, "test_column", missing_criteria)
+        result = validator._validate_missing_aggregation_criteria(missing_criteria)
+
+        assert result == expected
+
+
+    @parameterized.expand(
+        [
+            (("percent", 25), ValueError),
+            ({"missing": 25, "available": 45}, ValueError),
+            ({"wrong_key": 75}, KeyError)
+        ]
+    )
+    def test_validate_missing_aggregation_criteria_error(self, missing_criteria, expected):
+        """Test the validate_missing_aggregation_criteria method with non-valid criteria."""
+
+        aggregator: PolarsAggregator = PolarsAggregator(self.ts, Period.of_months(1))
+        validator: ValidAggregation = ValidAggregation(aggregator, "test_column", missing_criteria)
+        with self.assertRaises(expected):
+            validator._validate_missing_aggregation_criteria(missing_criteria)
 
 
 class TestAggregationFunctionTypeConversion(unittest.TestCase):
