@@ -9,6 +9,7 @@ from time_stream.columns import DataColumn, FlagColumn, PrimaryTimeColumn, Suppl
 from time_stream.flag_manager import TimeSeriesFlagManager
 from time_stream.period import Period
 from time_stream.relationships import RelationshipManager
+from time_stream.enums import DuplicateOption
 
 
 class TimeSeries:
@@ -26,6 +27,7 @@ class TimeSeries:
         flag_columns: Optional[Dict[str, str]] = None,
         metadata: Optional[Dict[str, Any]] = None,
         column_metadata: Optional[Dict[str, Dict[str, Any]]] = None,
+        on_duplicate: Optional[Union[DuplicateOption, str]] = DuplicateOption.ERROR
     ) -> None:
         """Initialise a TimeSeries instance.
 
@@ -41,11 +43,13 @@ class TimeSeries:
                           Mapping of {column name: flag system name}.
             metadata: Metadata relevant to the overall time series, e.g. network, site ID, license, etc.
             column_metadata: The metadata of the variables within the time series.
+            on_duplicate: What to do if duplicate rows are found in the data. Defaults to ERROR.
         """
         self._time_name = time_name
         self._resolution = resolution
         self._periodicity = periodicity
         self._time_zone = time_zone
+        self._on_duplicate = DuplicateOption(on_duplicate)
 
         self._flag_manager = TimeSeriesFlagManager(self, flag_systems)
         self._columns: dict[str, TimeSeriesColumn] = {}
@@ -80,12 +84,16 @@ class TimeSeries:
         """
         self._set_time_zone()
         self.sort_time()
+
+        # Doing this first as we need info on columns before doing certain things in the validation steps below
+        self._setup_columns(supplementary_columns, flag_columns, column_metadata)
+        self._setup_metadata(metadata)
+
+        self._handle_duplicates()
         self._validate_resolution()
         self._validate_periodicity()
         if not self.resolution.is_subperiod_of(self.periodicity):
             raise UserWarning(f"Resolution {self.resolution} is not a subperiod of periodicity {self.periodicity}")
-        self._setup_columns(supplementary_columns, flag_columns, column_metadata)
-        self._setup_metadata(metadata)
 
     def _setup_columns(
         self,
@@ -202,6 +210,37 @@ class TimeSeries:
         """Sort the TimeSeries DataFrame by the time column."""
         self.df = self.df.sort(self.time_name)
 
+    def _handle_duplicates(self) -> None:
+        """ Handle duplicate values in the time column based on a specified strategy
+
+        Current options:
+        - "error": Raise an error if duplicate rows are found.
+        - "keep_first": Keep the first row of any duplicate groups.
+        - "keep_last": Keep the last row of any duplicate groups.
+        - "drop": Drop all duplicate rows.
+        - "merge": Merge duplicate rows using "coalesce" (the first non-null value for each column takes precedence).
+        """
+        duplicate_mask = self.df[self.time_name].is_duplicated()
+        duplicated_times = self.df.filter(duplicate_mask)[self.time_name].unique().to_list()
+
+        if duplicated_times:
+            if self._on_duplicate == DuplicateOption.ERROR:
+                raise ValueError(f"Duplicate time values found: {duplicated_times}")
+
+            if self._on_duplicate == DuplicateOption.KEEP_FIRST:
+                self.df = self.df.unique(subset=self.time_name, keep="first")
+
+            if self._on_duplicate == DuplicateOption.KEEP_LAST:
+                self.df = self.df.unique(subset=self.time_name, keep="last")
+
+            if self._on_duplicate == DuplicateOption.MERGE:
+                self.df = self.df.group_by(self.time_name).agg([
+                    pl.coalesce(col).alias(col) for col in self.columns
+                ])
+
+            if self._on_duplicate == DuplicateOption.DROP:
+                self.df = self.df.filter(~duplicate_mask)
+
     @property
     def resolution(self) -> Period:
         """Resolution defines how "precise" the datetimes are, i.e. to what precision of time unit should each
@@ -242,6 +281,20 @@ class TimeSeries:
                 f'Values in time field: "{self.time_name}" are not aligned to resolution: {self.resolution}'
             )
 
+    @staticmethod
+    def check_resolution(date_times: pl.Series, resolution: Period) -> bool:
+        """Check that a Series of date/time values conforms to a given resolution period.
+
+        Args:
+           date_times: A Series of date/times to be tested.
+           resolution: The resolution period that the date/times are checked against.
+
+        Returns:
+           True if the Series conforms to the resolution period.
+           False otherwise
+        """
+        return date_times.equals(TimeSeries.truncate_to_period(date_times, resolution))
+
     @property
     def periodicity(self) -> Period:
         """Periodicity defines the allowed "frequency" of the datetimes, i.e. how many datetimes entries are allowed
@@ -275,7 +328,7 @@ class TimeSeries:
             # Default to a periodicity that accepts all datetimes
             self._periodicity = Period.of_microseconds(1)
 
-        # Convert to Period object
+        # Convert to a Period object
         if isinstance(self._periodicity, str):
             self._periodicity = Period.of_duration(self._periodicity)
 
@@ -289,26 +342,12 @@ class TimeSeries:
             )
 
     @staticmethod
-    def check_resolution(date_times: pl.Series, resolution: Period) -> bool:
-        """Check that a Series of date/time values conforms to a given resolution period.
-
-        Args:
-           date_times: A Series of date/times to be tested.
-           resolution: The resolution period that the date/times are checked against.
-
-        Returns:
-           True if the Series conforms to the resolution period.
-           False otherwise
-        """
-        return date_times.equals(TimeSeries.truncate_to_period(date_times, resolution))
-
-    @staticmethod
     def check_periodicity(date_times: pl.Series, periodicity: Period) -> bool:
         """Check that a Series of date/time values conforms to a given periodicity.
 
         Args:
            date_times: A Series of date/times to be tested.
-           resolution: The periodicity period that the date/times are checked against.
+           periodicity: The periodicity period that the date/times are checked against.
 
         Returns:
            True if the Series conforms to the periodicity.
