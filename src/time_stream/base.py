@@ -6,10 +6,10 @@ import polars as pl
 
 from time_stream.aggregation_base import AggregationFunction, apply_aggregation
 from time_stream.columns import DataColumn, FlagColumn, PrimaryTimeColumn, SupplementaryColumn, TimeSeriesColumn
+from time_stream.enums import DuplicateOption
 from time_stream.flag_manager import TimeSeriesFlagManager
 from time_stream.period import Period
 from time_stream.relationships import RelationshipManager
-from time_stream.enums import DuplicateOption
 
 
 class TimeSeries:
@@ -27,7 +27,7 @@ class TimeSeries:
         flag_columns: Optional[Dict[str, str]] = None,
         metadata: Optional[Dict[str, Any]] = None,
         column_metadata: Optional[Dict[str, Dict[str, Any]]] = None,
-        on_duplicate: Optional[Union[DuplicateOption, str]] = DuplicateOption.ERROR
+        on_duplicate: Optional[Union[DuplicateOption, str]] = DuplicateOption.ERROR,
     ) -> None:
         """Initialise a TimeSeries instance.
 
@@ -83,7 +83,6 @@ class TimeSeries:
             metadata: The user defined metadata for this time series instance.
         """
         self._set_time_zone()
-        self.sort_time()
 
         # Doing this first as we need info on columns before doing certain things in the validation steps below
         self._setup_columns(supplementary_columns, flag_columns, column_metadata)
@@ -94,6 +93,8 @@ class TimeSeries:
         self._validate_periodicity()
         if not self.resolution.is_subperiod_of(self.periodicity):
             raise UserWarning(f"Resolution {self.resolution} is not a subperiod of periodicity {self.periodicity}")
+
+        self.sort_time()
 
     def _setup_columns(
         self,
@@ -211,7 +212,7 @@ class TimeSeries:
         self.df = self.df.sort(self.time_name)
 
     def _handle_duplicates(self) -> None:
-        """ Handle duplicate values in the time column based on a specified strategy
+        """Handle duplicate values in the time column based on a specified strategy
 
         Current options:
         - "error": Raise an error if duplicate rows are found.
@@ -223,23 +224,28 @@ class TimeSeries:
         duplicate_mask = self.df[self.time_name].is_duplicated()
         duplicated_times = self.df.filter(duplicate_mask)[self.time_name].unique().to_list()
 
+        # NOTE: Set _df directly, otherwise the df setter will complain that the time column is mutated.
+        #       In this instance, we are happy with this as we know we are mutating the time values.
         if duplicated_times:
             if self._on_duplicate == DuplicateOption.ERROR:
                 raise ValueError(f"Duplicate time values found: {duplicated_times}")
 
             if self._on_duplicate == DuplicateOption.KEEP_FIRST:
-                self.df = self.df.unique(subset=self.time_name, keep="first")
+                self._df = self._df.unique(subset=self.time_name, keep="first")
 
             if self._on_duplicate == DuplicateOption.KEEP_LAST:
-                self.df = self.df.unique(subset=self.time_name, keep="last")
+                self._df = self._df.unique(subset=self.time_name, keep="last")
 
             if self._on_duplicate == DuplicateOption.MERGE:
-                self.df = self.df.group_by(self.time_name).agg([
-                    pl.coalesce(col).alias(col) for col in self.columns
-                ])
+                self._df = self._df.group_by(self.time_name).agg(
+                    [pl.col(col).drop_nulls().first().alias(col) for col in self.columns]
+                )
 
             if self._on_duplicate == DuplicateOption.DROP:
-                self.df = self.df.filter(~duplicate_mask)
+                self._df = self._df.filter(~duplicate_mask)
+
+            # Polars aggregate methods can change the order of rows due to how it optimises the functionality.
+            self.sort_time()
 
     @property
     def resolution(self) -> Period:
