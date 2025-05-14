@@ -7,6 +7,7 @@ from parameterized import parameterized
 from polars.testing import assert_series_equal, assert_frame_equal
 
 from time_stream.base import TimeSeries
+from time_stream.enums import DuplicateOption
 from time_stream.period import Period
 from time_stream.columns import DataColumn, FlagColumn, PrimaryTimeColumn, SupplementaryColumn, TimeSeriesColumn
 
@@ -2548,7 +2549,6 @@ class TestHandleDuplicates(unittest.TestCase):
         with self.assertRaises(ValueError):
             ts._handle_duplicates()
 
-
     def test_keep_first(self):
         """ Test that the keep first strategy works as expected
         """
@@ -2662,3 +2662,13 @@ class TestHandleDuplicates(unittest.TestCase):
         })
 
         assert_frame_equal(ts.df, expected)
+
+    def test_enum_parameter(self):
+        """ Test that passing an enum rather than a string works as expected
+        """
+        with patch.object(TimeSeries, '_setup'):
+            # Omit the setup method so we have control over what we're testing
+            ts = TimeSeries(df=self.df, time_name="time", on_duplicate=DuplicateOption.ERROR)
+
+        with self.assertRaises(ValueError):
+            ts._handle_duplicates()
