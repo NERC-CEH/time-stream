@@ -577,7 +577,7 @@ class TimeSeries:
         aggregation_period: Period,
         aggregation_function: Union[str, Type["AggregationFunction"]],
         column_name: str,
-        missing_criteria: Optional[Dict[str, int]] = None,
+        missing_criteria: Optional[Dict[str, float | int]] = None,
     ) -> "TimeSeries":
         """Apply an aggregation function to a column in this TimeSeries, check the aggregation satisfies user
         requirements and return a new derived TimeSeries containing the aggregated data.
