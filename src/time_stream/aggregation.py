@@ -9,7 +9,7 @@ import datetime
 from abc import ABC
 from collections.abc import Callable
 from enum import Enum
-from typing import Any, Dict, Optional, Union, override
+from typing import Any, Dict, Mapping, Optional, Union, override
 
 import polars as pl
 
@@ -342,7 +342,7 @@ class ValidAggregation(AggregationStage):
 
         return pl.when(expression > limit).then(True).otherwise(False).alias("valid")
 
-    def _validate_missing_aggregation_criteria(self, missing_criteria: Any) -> Dict[str, Union[str | int]]:
+    def _validate_missing_aggregation_criteria(self, missing_criteria: Any) -> Mapping[str, Union[str | int]]:
         """Validate user input on how to handle missing data in the aggregation.
 
         Should be a single item dictionary with one of the following keys:
@@ -374,7 +374,7 @@ class ValidAggregation(AggregationStage):
 
         return {"method": f"_{supplied_key}", "limit": missing_criteria[supplied_key]}
 
-    def validate_aggregation(self, column_name: str, missing_criteria: Dict[str, Union[str | int]]) -> pl.DataFrame:
+    def validate_aggregation(self, column_name: str, missing_criteria: Mapping[str, Union[str | int]]) -> pl.DataFrame:
         """Check the aggregated dataframe satisfies missing value criteria.
 
         Args:
@@ -429,7 +429,7 @@ class Mean(AggregationFunction):
         ts: TimeSeries,
         aggregation_period: Period,
         column_name: str,
-        missing_criteria: Optional[Dict[str, Union[str, int]]] = None,
+        missing_criteria: Optional[Mapping[str, Union[str, int]]] = None,
     ) -> TimeSeries:
         aggregator: PolarsAggregator = PolarsAggregator(ts, aggregation_period)
         df: pl.DataFrame = aggregator.aggregate(
@@ -487,7 +487,7 @@ class Min(AggregationFunction):
         ts: TimeSeries,
         aggregation_period: Period,
         column_name: str,
-        missing_criteria: Optional[Dict[str, Union[str, int]]] = None,
+        missing_criteria: Optional[Mapping[str, Union[str, int]]] = None,
     ) -> TimeSeries:
         aggregator: PolarsAggregator = PolarsAggregator(ts, aggregation_period)
         df: pl.DataFrame = aggregator.aggregate(
@@ -544,7 +544,7 @@ class Max(AggregationFunction):
         ts: TimeSeries,
         aggregation_period: Period,
         column_name: str,
-        missing_criteria: Optional[Dict[str, Union[str, int]]] = None,
+        missing_criteria: Optional[Mapping[str, Union[str, int]]] = None,
     ) -> TimeSeries:
         aggregator: PolarsAggregator = PolarsAggregator(ts, aggregation_period)
         df: pl.DataFrame = aggregator.aggregate(
