@@ -160,10 +160,10 @@ def resolution_check_fail():
 
 def periodicity_check_fail():
     # [start_block_9]
-    # This will raise a warning because we have two points in the same day
+    # This will raise a warning because we have two points within the same day
     timestamps = [
         datetime(2023, 1, 1, 0, 0, 0),
-        datetime(2023, 1, 1, 0, 0, 0),  # Same day as above
+        datetime(2023, 1, 1, 12, 0, 0),  # Same day as above
         datetime(2023, 1, 2, 0, 0, 0),
     ]
 
@@ -530,3 +530,113 @@ def aggregation_more_examples():
     annual_max_temp = ts.aggregate(Period.of_years(1), Max, "temperature")
     print(annual_max_temp)
     # [end_block_26]
+
+
+def create_df_with_duplicate_rows():
+    # [start_block_27]
+    # Create sample data
+    dates = [
+        datetime(2023, 1, 1),
+        datetime(2023, 1, 1),
+        datetime(2023, 2, 1),
+        datetime(2023, 3, 1),
+        datetime(2023, 4, 1),
+        datetime(2023, 5, 1),
+        datetime(2023, 6, 1),
+        datetime(2023, 6, 1),
+        datetime(2023, 6, 1),
+        datetime(2023, 7, 1),
+    ]
+    temperatures = [20, None, 19, 26, 24, 26, 28, 30, None, 29]
+    precipitation = [None, 0, 5, 10, 2, 0, None, 3, 4, 0]
+
+    df = pl.DataFrame({
+        "timestamp": dates,
+        "temperature": temperatures,
+        "precipitation": precipitation
+    })
+
+    print(df)
+    # [end_block_27]
+    return df
+
+
+def aggregation_duplicate_row_example_error():
+    with suppress_output():
+        df = create_df_with_duplicate_rows()
+
+    # [start_block_28]
+    # Raises an error if duplicate timestamps exist. This is the default if `on_duplicate` is not specified.
+    try:
+        ts = TimeSeries(
+            df=df,
+            time_name="timestamp",
+            on_duplicates="error"
+        )
+    except ValueError as w:
+        print(f"Warning: {w}")
+    # [end_block_28]
+
+
+def aggregation_duplicate_row_example_keep_first():
+    with suppress_output():
+        df = create_df_with_duplicate_rows()
+
+    # [start_block_29]
+    # Keeps the first row found in groups of duplicate rows
+    ts = TimeSeries(
+        df=df,
+        time_name="timestamp",
+        on_duplicates="keep_first"
+    )
+
+    print(ts)
+    # [end_block_29]
+
+
+def aggregation_duplicate_row_example_keep_last():
+    with suppress_output():
+        df = create_df_with_duplicate_rows()
+
+    # [start_block_30]
+    # Keeps the last row found in groups of duplicate rows
+    ts = TimeSeries(
+        df=df,
+        time_name="timestamp",
+        on_duplicates="keep_last"
+    )
+
+    print(ts)
+    # [end_block_30]
+
+
+def aggregation_duplicate_row_example_drop():
+    with suppress_output():
+        df = create_df_with_duplicate_rows()
+
+    # [start_block_31]
+    # Drops all duplicate rows
+    ts = TimeSeries(
+        df=df,
+        time_name="timestamp",
+        on_duplicates="drop"
+    )
+
+    print(ts)
+    # [end_block_31]
+
+
+def aggregation_duplicate_row_example_merge():
+    with suppress_output():
+        df = create_df_with_duplicate_rows()
+
+    # [start_block_32]
+    # Merges groups of duplicate rows
+    ts = TimeSeries(
+        df=df,
+        time_name="timestamp",
+        on_duplicates="merge"
+    )
+
+    print(ts)
+    # [end_block_32]
