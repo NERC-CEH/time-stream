@@ -2540,11 +2540,11 @@ class TestHandleDuplicates(unittest.TestCase):
         })
 
     def test_error(self):
-        """ Test that the keep first strategy works as expected
+        """ Test that the error strategy works as expected
         """
         with patch.object(TimeSeries, '_setup'):
             # Omit the setup method so we have control over what we're testing
-            ts = TimeSeries(df=self.df, time_name="time", on_duplicate="error")
+            ts = TimeSeries(df=self.df, time_name="time", on_duplicates="error")
 
         with self.assertRaises(ValueError):
             ts._handle_duplicates()
@@ -2554,7 +2554,7 @@ class TestHandleDuplicates(unittest.TestCase):
         """
         with patch.object(TimeSeries, '_setup'):
             # Omit the setup method so we have control over what we're testing
-            ts = TimeSeries(df=self.df, time_name="time", on_duplicate="keep_first")
+            ts = TimeSeries(df=self.df, time_name="time", on_duplicates="keep_first")
 
         ts._handle_duplicates()
 
@@ -2583,7 +2583,7 @@ class TestHandleDuplicates(unittest.TestCase):
         """
         with patch.object(TimeSeries, '_setup'):
             # Omit the setup method so we have control over what we're testing
-            ts = TimeSeries(df=self.df, time_name="time", on_duplicate="keep_last")
+            ts = TimeSeries(df=self.df, time_name="time", on_duplicates="keep_last")
 
         ts._handle_duplicates()
 
@@ -2612,7 +2612,7 @@ class TestHandleDuplicates(unittest.TestCase):
         """
         with patch.object(TimeSeries, '_setup'):
             # Omit the setup method so we have control over what we're testing
-            ts = TimeSeries(df=self.df, time_name="time", on_duplicate="drop")
+            ts = TimeSeries(df=self.df, time_name="time", on_duplicates="drop")
 
         ts._handle_duplicates()
 
@@ -2639,7 +2639,7 @@ class TestHandleDuplicates(unittest.TestCase):
         """
         with patch.object(TimeSeries, '_setup'):
             # Omit the setup method so we have control over what we're testing
-            ts = TimeSeries(df=self.df, time_name="time", on_duplicate="merge")
+            ts = TimeSeries(df=self.df, time_name="time", on_duplicates="merge")
         ts._setup_columns()  # Need to run this setup for this test as we need the column details to be available
         ts._handle_duplicates()
 
@@ -2668,7 +2668,7 @@ class TestHandleDuplicates(unittest.TestCase):
         """
         with patch.object(TimeSeries, '_setup'):
             # Omit the setup method so we have control over what we're testing
-            ts = TimeSeries(df=self.df, time_name="time", on_duplicate=DuplicateOption.ERROR)
+            ts = TimeSeries(df=self.df, time_name="time", on_duplicates=DuplicateOption.ERROR)
 
         with self.assertRaises(ValueError):
             ts._handle_duplicates()

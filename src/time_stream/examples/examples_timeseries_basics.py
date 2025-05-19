@@ -571,7 +571,7 @@ def aggregation_duplicate_row_example_error():
         ts = TimeSeries(
             df=df,
             time_name="timestamp",
-            on_duplicate="error"
+            on_duplicates="error"
         )
     except ValueError as w:
         print(f"Warning: {w}")
@@ -587,7 +587,7 @@ def aggregation_duplicate_row_example_keep_first():
     ts = TimeSeries(
         df=df,
         time_name="timestamp",
-        on_duplicate="keep_first"
+        on_duplicates="keep_first"
     )
 
     print(ts)
@@ -603,7 +603,7 @@ def aggregation_duplicate_row_example_keep_last():
     ts = TimeSeries(
         df=df,
         time_name="timestamp",
-        on_duplicate="keep_last"
+        on_duplicates="keep_last"
     )
 
     print(ts)
@@ -619,7 +619,7 @@ def aggregation_duplicate_row_example_drop():
     ts = TimeSeries(
         df=df,
         time_name="timestamp",
-        on_duplicate="drop"
+        on_duplicates="drop"
     )
 
     print(ts)
@@ -635,7 +635,7 @@ def aggregation_duplicate_row_example_merge():
     ts = TimeSeries(
         df=df,
         time_name="timestamp",
-        on_duplicate="merge"
+        on_duplicates="merge"
     )
 
     print(ts)

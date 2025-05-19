@@ -27,7 +27,7 @@ class TimeSeries:
         flag_columns: Optional[Dict[str, str]] = None,
         metadata: Optional[Dict[str, Any]] = None,
         column_metadata: Optional[Dict[str, Dict[str, Any]]] = None,
-        on_duplicate: Optional[Union[DuplicateOption, str]] = DuplicateOption.ERROR,
+        on_duplicates: Optional[Union[DuplicateOption, str]] = DuplicateOption.ERROR,
     ) -> None:
         """Initialise a TimeSeries instance.
 
@@ -43,13 +43,13 @@ class TimeSeries:
                           Mapping of {column name: flag system name}.
             metadata: Metadata relevant to the overall time series, e.g. network, site ID, license, etc.
             column_metadata: The metadata of the variables within the time series.
-            on_duplicate: What to do if duplicate rows are found in the data. Defaults to ERROR.
+            on_duplicates: What to do if duplicate rows are found in the data. Defaults to ERROR.
         """
         self._time_name = time_name
         self._resolution = resolution
         self._periodicity = periodicity
         self._time_zone = time_zone
-        self._on_duplicate = DuplicateOption(on_duplicate)
+        self._on_duplicates = DuplicateOption(on_duplicates)
 
         self._flag_manager = TimeSeriesFlagManager(self, flag_systems)
         self._columns: dict[str, TimeSeriesColumn] = {}
@@ -227,21 +227,21 @@ class TimeSeries:
         # NOTE: Set _df directly, otherwise the df setter will complain that the time column is mutated.
         #       In this instance, we are happy with this as we know we are mutating the time values.
         if duplicated_times:
-            if self._on_duplicate == DuplicateOption.ERROR:
+            if self._on_duplicates == DuplicateOption.ERROR:
                 raise ValueError(f"Duplicate time values found: {duplicated_times}")
 
-            if self._on_duplicate == DuplicateOption.KEEP_FIRST:
+            if self._on_duplicates == DuplicateOption.KEEP_FIRST:
                 self._df = self._df.unique(subset=self.time_name, keep="first")
 
-            if self._on_duplicate == DuplicateOption.KEEP_LAST:
+            if self._on_duplicates == DuplicateOption.KEEP_LAST:
                 self._df = self._df.unique(subset=self.time_name, keep="last")
 
-            if self._on_duplicate == DuplicateOption.MERGE:
+            if self._on_duplicates == DuplicateOption.MERGE:
                 self._df = self._df.group_by(self.time_name).agg(
                     [pl.col(col).drop_nulls().first().alias(col) for col in self.columns]
                 )
 
-            if self._on_duplicate == DuplicateOption.DROP:
+            if self._on_duplicates == DuplicateOption.DROP:
                 self._df = self._df.filter(~duplicate_mask)
 
             # Polars aggregate methods can change the order of rows due to how it optimises the functionality.

@@ -8,20 +8,13 @@ contained within will evolve considerably.
 import datetime
 from abc import ABC
 from collections.abc import Callable
-from enum import Enum
 from typing import Any, Dict, Optional, Union, override
 
 import polars as pl
 
 from time_stream import Period, TimeSeries
 from time_stream.aggregation_base import AggregationFunction
-
-
-class MissingCriteriaOptions(Enum):
-    MISSING = "missing"
-    AVAILABLE = "available"
-    PERCENT = "percent"
-
+from time_stream.enums import MissingCriteriaOptions
 
 # A function that takes a Polars GroupBy as an argument and returns a DataFrame
 GroupByToDataFrame = Callable[[pl.dataframe.group_by.GroupBy], pl.DataFrame]
