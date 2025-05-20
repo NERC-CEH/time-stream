@@ -8,7 +8,6 @@ contained within will evolve considerably.
 import datetime
 from abc import ABC
 from collections.abc import Callable
-from enum import Enum
 from typing import Any, Dict, Mapping, Optional, Union, override
 
 import polars as pl
