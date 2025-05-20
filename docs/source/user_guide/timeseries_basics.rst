@@ -254,6 +254,43 @@ approach that preserves the first non-null value for each column.
    import examples_timeseries_basics
    ts = examples_timeseries_basics.aggregation_duplicate_row_example_merge()
 
+Missing Rows
+------------
+The ``TimeSeries`` class provides functionality to automatically pad missing time points within a time series,
+ensuring complete temporal coverage without gaps. Consider daily data with some missing days:
+
+.. literalinclude:: ../../../src/time_stream/examples/examples_timeseries_basics.py
+   :language: python
+   :start-after: [start_block_33]
+   :end-before: [end_block_33]
+   :dedent:
+
+.. jupyter-execute::
+   :hide-code:
+
+   import examples_timeseries_basics
+   ts = examples_timeseries_basics.create_df_with_missing_rows()
+
+The padding is controlled by the pad parameter during ``TimeSeries`` initialisation:
+
+.. literalinclude:: ../../../src/time_stream/examples/examples_timeseries_basics.py
+   :language: python
+   :start-after: [start_block_34]
+   :end-before: [end_block_34]
+   :dedent:
+
+.. jupyter-execute::
+   :hide-code:
+
+   import examples_timeseries_basics
+   ts = examples_timeseries_basics.pad_timeseries()
+
+.. warning::
+    It is very important to set the ``periodicity`` and ``resolution`` parameters if you want to pad your data.
+    Otherwise, the padding process will use the default periods of 1 microsecond, and try to pad your entire dataset
+    with microsecond data, which will almost definitely result in a memory error!
+
+
 Accessing Data
 -------------
 

@@ -640,3 +640,44 @@ def aggregation_duplicate_row_example_merge():
 
     print(ts)
     # [end_block_32]
+
+def create_df_with_missing_rows():
+    # [start_block_33]
+    # Create sample data with gaps
+    dates = [
+        datetime(2023, 1, 1),
+        datetime(2023, 1, 3),
+        datetime(2023, 1, 4),
+        datetime(2023, 1, 5),
+        datetime(2023, 1, 7),
+    ]
+    temperatures = [20, 19, 26, 24, 26]
+    precipitation = [0, 5, 10, 2, 0]
+
+    df = pl.DataFrame({
+        "timestamp": dates,
+        "temperature": temperatures,
+        "precipitation": precipitation
+    })
+
+    print(df)
+    # [end_block_33]
+    return df
+
+
+def pad_timeseries():
+    with suppress_output():
+        df = create_df_with_missing_rows()
+
+    # [start_block_34]
+    # Merges groups of duplicate rows
+    ts = TimeSeries(
+        df=df,
+        time_name="timestamp",
+        resolution=Period.of_days(1),
+        periodicity=Period.of_days(1),
+        pad=True  # Enable padding
+    )
+
+    print(ts)
+    # [end_block_34]
