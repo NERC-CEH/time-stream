@@ -7,6 +7,7 @@ from parameterized import parameterized
 from polars.testing import assert_series_equal, assert_frame_equal
 
 from time_stream.base import TimeSeries
+from time_stream.enums import DuplicateOption
 from time_stream.period import Period
 from time_stream.columns import DataColumn, FlagColumn, PrimaryTimeColumn, SupplementaryColumn, TimeSeriesColumn
 
@@ -2512,3 +2513,162 @@ class TestSubPeriodCheck(unittest.TestCase):
             TimeSeries(df=self.df, time_name="time",
                 resolution=Period.of_seconds(10),
                 periodicity=Period.of_seconds(1))
+
+
+class TestHandleDuplicates(unittest.TestCase):
+    def setUp(self):
+        # A dataframe with some duplicate times
+        self.df = pl.DataFrame({
+            "time": [
+                datetime(2024, 1, 1),
+                datetime(2024, 1, 1),
+                datetime(2024, 1, 2),
+                datetime(2024, 1, 3),
+                datetime(2024, 1, 4),
+                datetime(2024, 1, 5),
+                datetime(2024, 1, 6),
+                datetime(2024, 1, 7),
+                datetime(2024, 1, 8),
+                datetime(2024, 1, 8),
+                datetime(2024, 1, 8),
+                datetime(2024, 1, 9),
+                datetime(2024, 1, 10)
+            ],
+            "colA": [1, None, 2, 3, 4, 5, 6, 7, None, 8, 8, 9, 10],
+            "colB": [None, 1, 2, 3, 4, 5, 6, 7, 9, None, 9, 9, 10],
+            "colC": [None, 2, 2, 3, 4, 5, 6, 7, 8, 9, None, 9, 10],
+        })
+
+    def test_error(self):
+        """ Test that the error strategy works as expected
+        """
+        with patch.object(TimeSeries, '_setup'):
+            # Omit the setup method so we have control over what we're testing
+            ts = TimeSeries(df=self.df, time_name="time", on_duplicates="error")
+
+        with self.assertRaises(ValueError):
+            ts._handle_duplicates()
+
+    def test_keep_first(self):
+        """ Test that the keep first strategy works as expected
+        """
+        with patch.object(TimeSeries, '_setup'):
+            # Omit the setup method so we have control over what we're testing
+            ts = TimeSeries(df=self.df, time_name="time", on_duplicates="keep_first")
+
+        ts._handle_duplicates()
+
+        expected = pl.DataFrame({
+            "time": [
+                datetime(2024, 1, 1),
+                datetime(2024, 1, 2),
+                datetime(2024, 1, 3),
+                datetime(2024, 1, 4),
+                datetime(2024, 1, 5),
+                datetime(2024, 1, 6),
+                datetime(2024, 1, 7),
+                datetime(2024, 1, 8),
+                datetime(2024, 1, 9),
+                datetime(2024, 1, 10)
+            ],
+            "colA": [1, 2, 3, 4, 5, 6, 7, None, 9, 10],
+            "colB": [None, 2, 3, 4, 5, 6, 7, 9, 9, 10],
+            "colC": [None, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+        })
+
+        assert_frame_equal(ts.df, expected)
+
+    def test_keep_last(self):
+        """ Test that the keep last strategy works as expected
+        """
+        with patch.object(TimeSeries, '_setup'):
+            # Omit the setup method so we have control over what we're testing
+            ts = TimeSeries(df=self.df, time_name="time", on_duplicates="keep_last")
+
+        ts._handle_duplicates()
+
+        expected = pl.DataFrame({
+            "time": [
+                datetime(2024, 1, 1),
+                datetime(2024, 1, 2),
+                datetime(2024, 1, 3),
+                datetime(2024, 1, 4),
+                datetime(2024, 1, 5),
+                datetime(2024, 1, 6),
+                datetime(2024, 1, 7),
+                datetime(2024, 1, 8),
+                datetime(2024, 1, 9),
+                datetime(2024, 1, 10)
+            ],
+            "colA": [None, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+            "colB": [1, 2, 3, 4, 5, 6, 7, 9, 9, 10],
+            "colC": [2, 2, 3, 4, 5, 6, 7, None, 9, 10],
+        })
+
+        assert_frame_equal(ts.df, expected)
+
+    def test_drop(self):
+        """ Test that the drop strategy works as expected
+        """
+        with patch.object(TimeSeries, '_setup'):
+            # Omit the setup method so we have control over what we're testing
+            ts = TimeSeries(df=self.df, time_name="time", on_duplicates="drop")
+
+        ts._handle_duplicates()
+
+        expected = pl.DataFrame({
+            "time": [
+                datetime(2024, 1, 2),
+                datetime(2024, 1, 3),
+                datetime(2024, 1, 4),
+                datetime(2024, 1, 5),
+                datetime(2024, 1, 6),
+                datetime(2024, 1, 7),
+                datetime(2024, 1, 9),
+                datetime(2024, 1, 10)
+            ],
+            "colA": [2, 3, 4, 5, 6, 7, 9, 10],
+            "colB": [2, 3, 4, 5, 6, 7, 9, 10],
+            "colC": [2, 3, 4, 5, 6, 7, 9, 10],
+        })
+
+        assert_frame_equal(ts.df, expected)
+
+    def test_merge(self):
+        """ Test that the merge strategy works as expected
+        """
+        with patch.object(TimeSeries, '_setup'):
+            # Omit the setup method so we have control over what we're testing
+            ts = TimeSeries(df=self.df, time_name="time", on_duplicates="merge")
+        ts._setup_columns()  # Need to run this setup for this test as we need the column details to be available
+        ts._handle_duplicates()
+
+        expected = pl.DataFrame({
+            "time": [
+                datetime(2024, 1, 1),
+                datetime(2024, 1, 2),
+                datetime(2024, 1, 3),
+                datetime(2024, 1, 4),
+                datetime(2024, 1, 5),
+                datetime(2024, 1, 6),
+                datetime(2024, 1, 7),
+                datetime(2024, 1, 8),
+                datetime(2024, 1, 9),
+                datetime(2024, 1, 10)
+            ],
+            "colA": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+            "colB": [1, 2, 3, 4, 5, 6, 7, 9, 9, 10],
+            "colC": [2, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+        })
+
+        assert_frame_equal(ts.df, expected)
+
+    def test_enum_parameter(self):
+        """ Test that passing an enum rather than a string works as expected
+        """
+        with patch.object(TimeSeries, '_setup'):
+            # Omit the setup method so we have control over what we're testing
+            ts = TimeSeries(df=self.df, time_name="time", on_duplicates=DuplicateOption.ERROR)
+
+        with self.assertRaises(ValueError):
+            ts._handle_duplicates()

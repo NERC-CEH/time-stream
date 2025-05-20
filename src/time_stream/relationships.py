@@ -1,40 +1,11 @@
-from enum import Enum
 from typing import TYPE_CHECKING
+
+from time_stream.enums import DeletionPolicy, RelationshipType
 
 if TYPE_CHECKING:
     # Import is for type hinting only.  Make sure there is no runtime import, to avoid recursion.
     from time_stream import TimeSeries
     from time_stream.columns import TimeSeriesColumn
-
-
-class RelationshipType(Enum):
-    """Enum representing the type of relationship between columns.
-
-    Attributes:
-        ONE_TO_ONE: A one-to-one relationship
-        ONE_TO_MANY: A one-to-many relationship (e.g., one data column can be linked to many flag columns).
-        MANY_TO_ONE: A many-to-one relationship (e.g., many flag columns can be linked to one data column).
-        MANY_TO_MANY: A many-to-many relationship (e.g., multiple supplementary columns to multiple data columns).
-    """
-
-    ONE_TO_ONE = "one_to_one"
-    ONE_TO_MANY = "one_to_many"
-    MANY_TO_ONE = "many_to_one"
-    MANY_TO_MANY = "many_to_many"
-
-
-class DeletionPolicy(Enum):
-    """Enum representing the policy when a related column is deleted.
-
-    Attributes:
-        CASCADE: Deletes the related column when the main column is removed.
-        UNLINK: Unlinks the relationship but keeps the related column.
-        RESTRICT: Prevents deletion if there are active relationships.
-    """
-
-    CASCADE = "cascade"
-    UNLINK = "unlink"
-    RESTRICT = "restrict"
 
 
 class Relationship:

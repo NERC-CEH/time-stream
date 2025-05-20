@@ -151,6 +151,108 @@ The periodicity defines how frequently data points should appear:
    import examples_timeseries_basics
    ts = examples_timeseries_basics.periodicity_check_fail()
 
+Duplicate Detection
+~~~~~~~~~~~~~~~~~~~
+
+The ``TimeSeries`` automatically checks for rows with duplicates in the specified time column. You have control over
+what the model should do when it detects rows with duplicate time values.  Consider this DataFrame with duplicate
+time values:
+
+.. literalinclude:: ../../../src/time_stream/examples/examples_timeseries_basics.py
+   :language: python
+   :start-after: [start_block_27]
+   :end-before: [end_block_27]
+   :dedent:
+
+.. jupyter-execute::
+   :hide-code:
+
+   import examples_timeseries_basics
+   ts = examples_timeseries_basics.create_df_with_duplicate_rows()
+
+The following strategies are available to use with the ``on_duplicate`` argument:
+
+1. Error Strategy (Default): ``on_duplicate="error"``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Raises an error when duplicate rows are found. This is the default behavior to ensure data integrity.
+
+.. literalinclude:: ../../../src/time_stream/examples/examples_timeseries_basics.py
+   :language: python
+   :start-after: [start_block_28]
+   :end-before: [end_block_28]
+   :dedent:
+
+.. jupyter-execute::
+   :hide-code:
+
+   import examples_timeseries_basics
+   ts = examples_timeseries_basics.aggregation_duplicate_row_example_error()
+
+2. Keep First Strategy: ``on_duplicate="keep_first"``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+For a given group of rows with the same time value, keeps only the first row and discards the others.
+
+.. literalinclude:: ../../../src/time_stream/examples/examples_timeseries_basics.py
+   :language: python
+   :start-after: [start_block_29]
+   :end-before: [end_block_29]
+   :dedent:
+
+.. jupyter-execute::
+   :hide-code:
+
+   import examples_timeseries_basics
+   ts = examples_timeseries_basics.aggregation_duplicate_row_example_keep_first()
+
+3. Keep Last Strategy: ``on_duplicate="keep_last"``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+For a given group of rows with the same time value, keeps only the last row and discards the others.
+
+.. literalinclude:: ../../../src/time_stream/examples/examples_timeseries_basics.py
+   :language: python
+   :start-after: [start_block_30]
+   :end-before: [end_block_30]
+   :dedent:
+
+.. jupyter-execute::
+   :hide-code:
+
+   import examples_timeseries_basics
+   ts = examples_timeseries_basics.aggregation_duplicate_row_example_keep_last()
+
+4. Drop Strategy: ``on_duplicate="drop"``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Removes all rows that have duplicate timestamps. This strategy is appropriate when you are unsure of the integrity of
+duplicate rows and only want unique, unambiguous data.
+
+.. literalinclude:: ../../../src/time_stream/examples/examples_timeseries_basics.py
+   :language: python
+   :start-after: [start_block_31]
+   :end-before: [end_block_31]
+   :dedent:
+
+.. jupyter-execute::
+   :hide-code:
+
+   import examples_timeseries_basics
+   ts = examples_timeseries_basics.aggregation_duplicate_row_example_drop()
+
+5. Merge Strategy: ``on_duplicate="merge"``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+For a given group of rows with the same time value, performs a merge of all rows. This combines values with a top-down
+approach that preserves the first non-null value for each column.
+
+.. literalinclude:: ../../../src/time_stream/examples/examples_timeseries_basics.py
+   :language: python
+   :start-after: [start_block_32]
+   :end-before: [end_block_32]
+   :dedent:
+
+.. jupyter-execute::
+   :hide-code:
+
+   import examples_timeseries_basics
+   ts = examples_timeseries_basics.aggregation_duplicate_row_example_merge()
 
 Accessing Data
 -------------
