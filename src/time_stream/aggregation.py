@@ -335,7 +335,7 @@ class ValidAggregation(AggregationStage):
 
         return pl.when(expression > limit).then(True).otherwise(False).alias("valid")
 
-    def _validate_missing_aggregation_criteria(self, missing_criteria: Any) -> Mapping[str, Union[str | int]]:
+    def _validate_missing_aggregation_criteria(self, missing_criteria: Any) -> Dict[str, Union[str | int]]:
         """Validate user input on how to handle missing data in the aggregation.
 
         Should be a single item dictionary with one of the following keys:
