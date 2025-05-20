@@ -368,7 +368,7 @@ class ValidAggregation(AggregationStage):
         return {"method": f"_{supplied_key}", "limit": missing_criteria[supplied_key]}
 
     def validate_aggregation(
-        self, column_name: str, missing_criteria: Mapping[str, Union[str | int | float]]
+        self, column_name: str, missing_criteria: Mapping[str, Union[int | float]]
     ) -> pl.DataFrame:
         """Check the aggregated dataframe satisfies missing value criteria.
 
