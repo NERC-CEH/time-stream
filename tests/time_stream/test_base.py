@@ -2672,3 +2672,198 @@ class TestHandleDuplicates(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             ts._handle_duplicates()
+
+
+class TestPadTime(unittest.TestCase):
+    simple_test_cases = (
+        (
+            "microsecond_data",
+            pl.datetime_range(datetime(2025, 1, 1), datetime(2025, 1, 1, 0, 0, 1), interval="20us", eager=True),
+            Period.of_microseconds(20),
+            Period.of_microseconds(20),
+        ),
+        (
+            "second_data",
+            pl.datetime_range(datetime(2025, 1, 1), datetime(2025, 1, 2), interval="1s", eager=True),
+            Period.of_seconds(1),
+            Period.of_seconds(1),
+        ),
+        (
+            "minute_data",
+            pl.datetime_range(datetime(2025, 1, 1), datetime(2025, 2, 1), interval="1m", eager=True),
+            Period.of_minutes(1),
+            Period.of_minutes(1),
+        ),
+        (
+            "daily_data",
+            pl.datetime_range(datetime(2025, 1, 1), datetime(2030, 1, 1), interval="1d", eager=True),
+            Period.of_days(1),
+            Period.of_days(1),
+        ),
+        (
+            "monthly_data",
+            pl.datetime_range(datetime(2025, 1, 1), datetime(2035, 1, 1), interval="1mo", eager=True),
+            Period.of_months(1),
+            Period.of_months(1),
+        ),
+        (
+            "yearly_data",
+            pl.datetime_range(datetime(2025, 1, 1), datetime(2125, 1, 1), interval="1y", eager=True),
+            Period.of_years(1),
+            Period.of_years(1),
+        ),
+    )
+
+    @parameterized.expand(simple_test_cases)
+    def test_simple_cases(self, _, time_stamps, resolution, periodicity):
+        """ Test that the padding of missing time values works for simple periodicity and resolution cases
+        """
+        df = pl.DataFrame({"time": time_stamps})
+        # Remove some rows - but not the first or last!        
+        df_to_pad = pl.concat([
+            df.head(1),
+            df.slice(1, df.height - 2).sample(len(df) - 10, with_replacement=False),
+            df.tail(1)
+        ])
+
+        with patch.object(TimeSeries, '_setup'):
+            # Omit the setup method so we have control over what we're testing
+            ts = TimeSeries(df=df_to_pad, time_name="time", resolution=resolution, periodicity=periodicity, pad=True)
+
+        ts._pad_time()
+        pl.testing.assert_frame_equal(ts.df, df)
+
+    @parameterized.expand(simple_test_cases)
+    def test_simple_cases_no_pad(self, _, time_stamps, resolution, periodicity):
+        """ Test that the data with missing time values is maintained if pad = False
+        """
+        df = pl.DataFrame({"time": time_stamps})
+        # Remove some rows - but not the first or last!
+        df_to_pad = pl.concat([
+            df.head(1),
+            df.slice(1, df.height - 2).sample(len(df) - 10, with_replacement=False),
+            df.tail(1)
+        ])
+
+        with patch.object(TimeSeries, '_setup'):
+            # Omit the setup method so we have control over what we're testing
+            ts = TimeSeries(df=df_to_pad, time_name="time", resolution=resolution, periodicity=periodicity, pad=False)
+
+        ts._pad_time()
+        pl.testing.assert_frame_equal(ts.df, df_to_pad)
+
+    @parameterized.expand(simple_test_cases)
+    def test_no_missing_simple_cases(self, _, time_stamps, resolution, periodicity):
+        """ Test that the padding of missing time values works for simple periodicity and resolution cases
+        when there are no missing rows (shouldn't alter the time series)
+        """
+        df = pl.DataFrame({"time": time_stamps})
+
+        with patch.object(TimeSeries, '_setup'):
+            # Omit the setup method so we have control over what we're testing
+            ts = TimeSeries(df=df, time_name="time", resolution=resolution, periodicity=periodicity, pad=True)
+
+        ts._pad_time()
+        pl.testing.assert_frame_equal(ts.df, df)
+
+    @parameterized.expand(simple_test_cases)
+    def test_no_missing_simple_cases_no_pad(self, _, time_stamps, resolution, periodicity):
+        """ Test that data is maintained when no missing rows and pad = False
+        """
+        df = pl.DataFrame({"time": time_stamps})
+
+        with patch.object(TimeSeries, '_setup'):
+            # Omit the setup method so we have control over what we're testing
+            ts = TimeSeries(df=df, time_name="time", resolution=resolution, periodicity=periodicity, pad=False)
+
+        ts._pad_time()
+        pl.testing.assert_frame_equal(ts.df, df)
+
+    complex_test_cases = (
+        (
+            "annual_periodicity_15minute_resolution",
+            [
+                datetime(2020, 5, 1, 17, 15, 0),
+                datetime(2022, 1, 30, 2, 45, 0),
+                datetime(2024, 9, 1, 10, 30, 0),
+                datetime(2025, 12, 4, 14, 20, 0),
+            ],
+            [
+                datetime(2020, 5, 1, 17, 15, 0),
+                datetime(2021, 1, 1, 0, 0, 0),
+                datetime(2022, 1, 30, 2, 45, 0),
+                datetime(2023, 1, 1, 0, 0, 0),
+                datetime(2024, 9, 1, 10, 30, 0),
+                datetime(2025, 12, 4, 14, 20, 0),
+            ],
+            Period.of_minutes(15),
+            Period.of_years(1),
+        ),
+        (
+            "annual_periodicity_15minute_resolution_with_simple_offset",
+            [
+                datetime(2020, 5, 1, 17, 15, 30),
+                datetime(2022, 1, 30, 2, 45, 30),
+                datetime(2024, 9, 1, 10, 30, 30),
+                datetime(2025, 12, 4, 14, 20, 30),
+            ],
+            [
+                datetime(2020, 5, 1, 17, 15, 30),
+                datetime(2021, 1, 1, 0, 0, 30),
+                datetime(2022, 1, 30, 2, 45, 30),
+                datetime(2023, 1, 1, 0, 0, 30),
+                datetime(2024, 9, 1, 10, 30, 30),
+                datetime(2025, 12, 4, 14, 20, 30),
+            ],
+            Period.of_minutes(15).with_second_offset(30),
+            Period.of_years(1).with_second_offset(30),
+        ),
+
+        (
+            "water_year_periodicity_15minute_resolution",
+            [
+                datetime(2020, 5, 1, 17, 15, 0),
+                datetime(2022, 1, 30, 2, 45, 0),
+                datetime(2024, 9, 1, 10, 30, 0),
+                datetime(2025, 12, 4, 14, 20, 0),
+            ],
+            [
+                datetime(2020, 5, 1, 17, 15, 0),
+                datetime(2020, 10, 1, 9, 0, 0),
+                datetime(2022, 1, 30, 2, 45, 0),
+                datetime(2022, 10, 1, 9, 0, 0),
+                datetime(2024, 9, 1, 10, 30, 0),
+                datetime(2024, 10, 1, 9, 0, 0),
+                datetime(2025, 12, 4, 14, 20, 0),
+            ],
+            Period.of_minutes(15),
+            Period.of_years(1).with_month_offset(9).with_hour_offset(9),
+        ),
+    )
+
+    @parameterized.expand(complex_test_cases)
+    def test_complex_cases(self, _, time_stamps, expected, resolution, periodicity):
+        """ Test that the padding of missing time values works for more complex periodicity and resolution cases
+        """
+        df = pl.DataFrame({"time": time_stamps})
+        df_expected = pl.DataFrame({"time": expected})
+        with patch.object(TimeSeries, '_setup'):
+            # Omit the setup method so we have control over what we're testing
+            ts = TimeSeries(df=df, time_name="time", resolution=resolution, periodicity=periodicity, pad=True)
+
+        ts._pad_time()
+        pl.testing.assert_frame_equal(ts.df, df_expected)
+
+    @parameterized.expand(complex_test_cases)
+    def test_no_missing_complex_cases(self, _, __, expected, resolution, periodicity):
+        """ Test that the padding of missing time values works for simple periodicity and resolution cases
+        when there are no missing rows (shouldn't alter the time series)
+        """
+        df = pl.DataFrame({"time": expected})
+        with patch.object(TimeSeries, '_setup'):
+            # Omit the setup method so we have control over what we're testing
+            ts = TimeSeries(df=df, time_name="time", resolution=resolution, periodicity=periodicity, pad=True)
+
+        ts._pad_time()
+        pl.testing.assert_frame_equal(ts.df, df)
+

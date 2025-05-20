@@ -28,6 +28,7 @@ class TimeSeries:
         metadata: Optional[Dict[str, Any]] = None,
         column_metadata: Optional[Dict[str, Dict[str, Any]]] = None,
         on_duplicates: Optional[Union[DuplicateOption, str]] = DuplicateOption.ERROR,
+        pad: Optional[bool] = False,
     ) -> None:
         """Initialise a TimeSeries instance.
 
@@ -44,12 +45,14 @@ class TimeSeries:
             metadata: Metadata relevant to the overall time series, e.g. network, site ID, license, etc.
             column_metadata: The metadata of the variables within the time series.
             on_duplicates: What to do if duplicate rows are found in the data. Defaults to ERROR.
+            pad: Whether to pad missing timestamps in the time series with missing values. Defaults to False.
         """
         self._time_name = time_name
         self._resolution = resolution
         self._periodicity = periodicity
         self._time_zone = time_zone
         self._on_duplicates = DuplicateOption(on_duplicates)
+        self._pad = pad
 
         self._flag_manager = TimeSeriesFlagManager(self, flag_systems)
         self._columns: dict[str, TimeSeriesColumn] = {}
@@ -94,6 +97,7 @@ class TimeSeries:
         if not self.resolution.is_subperiod_of(self.periodicity):
             raise UserWarning(f"Resolution {self.resolution} is not a subperiod of periodicity {self.periodicity}")
 
+        self._pad_time()
         self.sort_time()
 
     def _setup_columns(
@@ -210,6 +214,47 @@ class TimeSeries:
     def sort_time(self) -> None:
         """Sort the TimeSeries DataFrame by the time column."""
         self.df = self.df.sort(self.time_name)
+
+    def _pad_time(self) -> None:
+        """Pad the time series with missing datetime rows, filling in NULLs for missing values.
+
+        This method ensures a complete time series by adding rows for any missing timestamps within the range of
+        the original DataFrame's time column. The process:
+
+        1. Truncates existing timestamps to align with the start of their periodicity interval
+        2. Finds the minimum and maximum timestamps in the dataset
+        3. Generates a complete series of timestamps at the correct periodicity between min and max
+        4. Identifies which expected timestamps are missing from the actual data
+        5. Creates a DataFrame with these missing timestamps
+        6. Joins this with the original data to create a complete time series
+
+        The resulting padded DataFrame maintains all original data and column types, with NULL values populated
+        for all non-time columns in the added rows.
+        """
+        if not self._pad:
+            return
+
+        # Extract the existing datetimes, truncated to the start of their periodicity period
+        existing_datetimes = self.truncate_to_period(self.df[self.time_name], self.periodicity)
+
+        # Get the min and max datetime from the existing datetimes
+        min_datetime = existing_datetimes.min()
+        max_datetime = existing_datetimes.max()
+
+        # Generate a series of the datetimes we would expect with a full time series between the start and end date
+        expected_datetimes = pl.datetime_range(
+            min_datetime, max_datetime, interval=self.periodicity.pl_interval, eager=True
+        )
+
+        # Find any missing datetimes between expected and existing
+        missing_datetimes = expected_datetimes.filter(~expected_datetimes.is_in(existing_datetimes))
+        missing_df = pl.DataFrame({self.time_name: missing_datetimes})
+
+        # Perform a join to create a complete time series
+        padded_df = missing_df.join(self.df, on=self.time_name, how="full", coalesce=True)
+
+        self._df = padded_df
+        self.sort_time()
 
     def _handle_duplicates(self) -> None:
         """Handle duplicate values in the time column based on a specified strategy
