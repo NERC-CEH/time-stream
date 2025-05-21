@@ -661,7 +661,7 @@ class TestMissingCriteria(unittest.TestCase):
     def test_validate_missing_aggregation_criteria_no_error(self, missing_criteria, expected):
         """Test the validate_missing_aggregation_criteria method with valid criteria."""
 
-        aggregator: PolarsAggregator = PolarsAggregator(self.ts, Period.of_months(1))
+        aggregator: PolarsAggregator = PolarsAggregator(self.ts, Period.of_months(1), "test_column")
         validator: ValidAggregation = ValidAggregation(aggregator, "test_column", missing_criteria)
         result = validator._validate_missing_aggregation_criteria(missing_criteria)
 
@@ -678,7 +678,7 @@ class TestMissingCriteria(unittest.TestCase):
     def test_validate_missing_aggregation_criteria_error(self, missing_criteria, expected):
         """Test the validate_missing_aggregation_criteria method with non-valid criteria."""
 
-        aggregator: PolarsAggregator = PolarsAggregator(self.ts, Period.of_months(1))
+        aggregator: PolarsAggregator = PolarsAggregator(self.ts, Period.of_months(1), "test_column")
         validator: ValidAggregation = ValidAggregation(aggregator, "test_column", missing_criteria)
         with self.assertRaises(expected):
             validator._validate_missing_aggregation_criteria(missing_criteria)
