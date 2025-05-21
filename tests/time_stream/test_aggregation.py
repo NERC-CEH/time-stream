@@ -529,6 +529,59 @@ class TestFunctions(unittest.TestCase):
             value_fn=_get_max_list,
         )
 
+    def test_with_missing_filled_with_null(self):
+        """ Test that the aggregation result and "actual" counts don't take into account rows that have been
+        filled in with the TimeSeries "pad" option
+        """
+        timestamps = [
+            datetime(2020, 1, 1), datetime(2020, 1, 2), datetime(2020, 1, 3), # missing 4th,
+            datetime(2020, 1, 5), datetime(2020, 1, 6), datetime(2020, 1, 7), datetime(2020, 1, 8),
+            datetime(2020, 1, 9), datetime(2020, 1, 10), datetime(2020, 1, 11), # missing 12th,
+            datetime(2020, 1, 13), datetime(2020, 1, 14), datetime(2020, 1, 15), datetime(2020, 1, 16),
+            datetime(2020, 1, 17), datetime(2020, 1, 18), # missing 19th, # missing 20th,
+            datetime(2020, 1, 21), datetime(2020, 1, 22), datetime(2020, 1, 23), datetime(2020, 1, 24),
+            datetime(2020, 1, 25), # missing 26th, # missing 27th, # missing 28th,
+            datetime(2020, 1, 29), datetime(2020, 1, 30), datetime(2020, 1, 31)
+        ]
+        values = [
+            1, 2, 3, # missing 4
+            5, 6, 7, 8,
+            9, 10, 11, # missing 12,
+            13, 14, 15, 16,
+            17, 18, # missing 19, # missing 20,
+            21, 22, 23, 24,
+            25, # missing 26, # missing 27, # missing 28,
+            29, 30, 31
+        ]
+        df = pl.DataFrame({"timestamp": timestamps, "values": values})
+        ts = TimeSeries(
+            df=df,
+            time_name="timestamp",
+            resolution=Period.of_days(1),
+            periodicity=Period.of_days(1),
+            pad=True  # Ensure pad is True for this test
+        )
+
+        expected_df = pl.DataFrame({
+            "timestamp": [datetime(2020, 1, 1)],
+            "mean_values": [15],
+            "count_values": [24],
+            "expected_count_timestamp": [31],
+            "valid": [True],
+        })
+
+        expected_ts = TimeSeries(
+            df=expected_df,
+            time_name="timestamp",
+            resolution=Period.of_months(1),
+            periodicity=Period.of_months(1)
+        )
+
+        result = ts.aggregate(Period.of_months(1), "mean", "values")
+
+        self.assertEqual(result, expected_ts)
+
+
 class TestSubPeriodCheck(unittest.TestCase):
     """Test the "periodicity is a subperiod of aggregation period" check"""
     df = pl.DataFrame({
