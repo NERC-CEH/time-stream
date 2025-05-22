@@ -20,7 +20,7 @@ this module.
 """
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Dict, Optional, Type, Union
+from typing import TYPE_CHECKING, Mapping, Optional, Type, Union
 
 if TYPE_CHECKING:
     # Import is for type hinting only.  Make sure there is no runtime import, to avoid recursion.
@@ -53,7 +53,7 @@ class AggregationFunction(ABC):
         ts: "TimeSeries",
         aggregation_period: "Period",
         column_name: str,
-        missing_criteria: Optional[Dict[str, Union[str, int]]] = None,
+        missing_criteria: Optional[Mapping[str, Union[str, int, float]]] = None,
     ) -> "TimeSeries":
         """Apply this aggregation function to the supplied
         TimeSeries column and return a new TimeSeries containing
@@ -85,7 +85,7 @@ def apply_aggregation(
     aggregation_period: "Period",
     aggregation_function: Union[str, Type[AggregationFunction]],
     column_name: str,
-    missing_criteria: Union[None, Dict[str, Union[str, int]]],
+    missing_criteria: Union[None, Mapping[str, Union[float, int]]],
 ) -> "TimeSeries":
     """Apply an aggregation function to a column in this TimeSeries, check the aggregation satisfies user requirements
     and return a new derived TimeSeries containing the aggregated data.
