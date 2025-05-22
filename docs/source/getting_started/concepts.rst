@@ -13,6 +13,7 @@ Key features of the ``TimeSeries`` class include:
 
 - Management of temporal data with validation of resolution and periodicity
 - Flexible options for dealing with rows with duplicate time values
+- Option to "pad" with null data for any missing timestamps, ensuring a continuous time series is available
 - Column classification (data, supplementary, flag)
 - Relationship management between columns
 - Aggregation functionality

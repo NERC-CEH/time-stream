@@ -41,11 +41,13 @@ class PolarsAggregator:
     Attributes:
         ts: The TimeSeries being aggregated
         aggregation_period: The Period we are aggregating over
+        column_name: The column we are aggregating
     """
 
-    def __init__(self, ts: TimeSeries, aggregation_period: Period) -> None:
+    def __init__(self, ts: TimeSeries, aggregation_period: Period, column_name: str) -> None:
         self.ts = ts
         self.aggregation_period = aggregation_period
+        self.column_name = column_name
 
     def aggregate(self, stage_list: list["AggregationStage"]) -> pl.DataFrame:
         """Create a new DataFrame containing aggregated data that is produced by a list of AggregationStages
@@ -67,6 +69,9 @@ class PolarsAggregator:
         Returns:
             A DataFrame containing the aggregated data
         """
+        # Removing NULL rows from the DataFrame for the specified value column
+        df = self.ts.df.drop_nulls(subset=[self.column_name])
+
         aggregation_expression_list: list[pl.Expr] = []
         unnest_list: list[str] = []
         with_column_list: list[pl.Expr] = []
@@ -75,7 +80,7 @@ class PolarsAggregator:
             unnest_list.extend(aggregation_stage.unnest())
             with_column_list.extend(aggregation_stage.with_columns())
 
-        group_by_dynamic = self.ts.df.group_by_dynamic(
+        group_by_dynamic = df.group_by_dynamic(
             index_column=self.ts.time_name,
             every=self.aggregation_period.pl_interval,
             offset=self.aggregation_period.pl_offset,
@@ -426,7 +431,7 @@ class Mean(AggregationFunction):
         column_name: str,
         missing_criteria: Optional[Mapping[str, Union[float, int]]] = None,
     ) -> TimeSeries:
-        aggregator: PolarsAggregator = PolarsAggregator(ts, aggregation_period)
+        aggregator: PolarsAggregator = PolarsAggregator(ts, aggregation_period, column_name)
         df: pl.DataFrame = aggregator.aggregate(
             [
                 GroupByBasic(aggregator, "mean", _group_by_mean, column_name),
@@ -446,6 +451,7 @@ class Mean(AggregationFunction):
             time_zone=ts.time_zone,
             flag_systems=ts.flag_systems,
             column_metadata={column_name: ts.columns[column_name].metadata()},
+            pad=ts._pad,
         )
 
 
@@ -484,7 +490,7 @@ class Min(AggregationFunction):
         column_name: str,
         missing_criteria: Optional[Mapping[str, Union[float, int]]] = None,
     ) -> TimeSeries:
-        aggregator: PolarsAggregator = PolarsAggregator(ts, aggregation_period)
+        aggregator: PolarsAggregator = PolarsAggregator(ts, aggregation_period, column_name)
         df: pl.DataFrame = aggregator.aggregate(
             [
                 GroupByWithDateTime(aggregator, "min", _group_by_first, column_name),
@@ -503,6 +509,7 @@ class Min(AggregationFunction):
             time_zone=ts.time_zone,
             flag_systems=ts.flag_systems,
             column_metadata={column_name: ts.columns[column_name].metadata()},
+            pad=ts._pad,
         )
 
 
@@ -541,7 +548,7 @@ class Max(AggregationFunction):
         column_name: str,
         missing_criteria: Optional[Mapping[str, Union[float, int]]] = None,
     ) -> TimeSeries:
-        aggregator: PolarsAggregator = PolarsAggregator(ts, aggregation_period)
+        aggregator: PolarsAggregator = PolarsAggregator(ts, aggregation_period, column_name)
         df: pl.DataFrame = aggregator.aggregate(
             [
                 GroupByWithDateTime(aggregator, "max", _group_by_last, column_name),
@@ -560,4 +567,5 @@ class Max(AggregationFunction):
             time_zone=ts.time_zone,
             flag_systems=ts.flag_systems,
             column_metadata={column_name: ts.columns[column_name].metadata()},
+            pad=ts._pad,
         )

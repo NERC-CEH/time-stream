@@ -254,6 +254,75 @@ approach that preserves the first non-null value for each column.
    import examples_timeseries_basics
    ts = examples_timeseries_basics.aggregation_duplicate_row_example_merge()
 
+Missing Rows
+------------
+The ``TimeSeries`` class provides functionality to automatically pad missing time points within a time series,
+ensuring complete temporal coverage without gaps. Consider daily data with some missing days:
+
+.. literalinclude:: ../../../src/time_stream/examples/examples_timeseries_basics.py
+   :language: python
+   :start-after: [start_block_33]
+   :end-before: [end_block_33]
+   :dedent:
+
+.. jupyter-execute::
+   :hide-code:
+
+   import examples_timeseries_basics
+   ts = examples_timeseries_basics.create_df_with_missing_rows()
+
+The padding is controlled by the pad parameter during ``TimeSeries`` initialisation:
+
+.. literalinclude:: ../../../src/time_stream/examples/examples_timeseries_basics.py
+   :language: python
+   :start-after: [start_block_34]
+   :end-before: [end_block_34]
+   :dedent:
+
+.. jupyter-execute::
+   :hide-code:
+
+   import examples_timeseries_basics
+   ts = examples_timeseries_basics.pad_timeseries()
+
+The padding functionality respects the resolution and periodicity of your data. The above example was simple, with
+missing daily data being filled in the datetime of the missing days. It gets more complex when you are dealing with
+time series that may have different resolution to periodicities. For example, consider a time series that is the
+"annual maximum of 15-minute river flow data in a given UK water-year". The resolution would be 15-minutes,
+however the periodicity would be ``P1Y+9MT9H``, because a water-year starts at 9am on the 1st October:
+
+.. literalinclude:: ../../../src/time_stream/examples/examples_timeseries_basics.py
+   :language: python
+   :start-after: [start_block_35]
+   :end-before: [end_block_35]
+   :dedent:
+
+.. jupyter-execute::
+   :hide-code:
+
+   import examples_timeseries_basics
+   ts = examples_timeseries_basics.create_df_with_missing_rows_water_year()
+
+The padding takes this resolution and periodicity into account, and sets missing rows to the **start** of the period:
+
+.. literalinclude:: ../../../src/time_stream/examples/examples_timeseries_basics.py
+   :language: python
+   :start-after: [start_block_36]
+   :end-before: [end_block_36]
+   :dedent:
+
+.. jupyter-execute::
+   :hide-code:
+
+   import examples_timeseries_basics
+   ts = examples_timeseries_basics.pad_timeseries_water_year()
+
+.. warning::
+    It is very important to set the ``periodicity`` and ``resolution`` parameters if you want to pad your data.
+    Otherwise, the padding process will use the default periods of 1 microsecond, and try to pad your entire dataset
+    with microsecond data, which will almost definitely result in a memory error!
+
+
 Accessing Data
 -------------
 
