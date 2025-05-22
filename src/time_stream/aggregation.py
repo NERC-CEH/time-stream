@@ -67,6 +67,11 @@ class PolarsAggregator:
         Returns:
             A DataFrame containing the aggregated data
         """
+        # Check aggregation period
+        if not self.aggregation_period.is_epoch_agnostic():
+            # E.g. 5 hours, 7 days, 9 months, etc.
+            raise NotImplementedError("Aggregation not available for non-epoch agnostic periodicity")
+
         aggregation_expression_list: list[pl.Expr] = []
         unnest_list: list[str] = []
         with_column_list: list[pl.Expr] = []

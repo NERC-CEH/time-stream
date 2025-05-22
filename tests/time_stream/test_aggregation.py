@@ -529,6 +529,31 @@ class TestFunctions(unittest.TestCase):
             value_fn=_get_max_list,
         )
 
+    @parameterized.expand(
+        [
+            Period.of_hours(5),
+            Period.of_days(7),
+            Period.of_months(9),
+        ]
+    )
+    def test_with_non_epoch_agnostic_periods(self, aggregation_period):
+        """ Test that the aggregation fails to run if the aggregation period is not an epoch-agnostic period
+        """
+        df = pl.DataFrame({
+            "timestamp": [datetime(2023, 1, 1, 1, min) for min in range(1, 11)],
+            "values": (range(10))
+        })
+
+        ts = TimeSeries(
+            df=df,
+            time_name="timestamp",
+            resolution=Period.of_minutes(1),
+            periodicity=Period.of_minutes(1),
+        )
+
+        with self.assertRaises(NotImplementedError):
+            ts.aggregate(aggregation_period, "mean", "values")
+
 class TestSubPeriodCheck(unittest.TestCase):
     """Test the "periodicity is a subperiod of aggregation period" check"""
     df = pl.DataFrame({
