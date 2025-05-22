@@ -670,7 +670,6 @@ def pad_timeseries():
         df = create_df_with_missing_rows()
 
     # [start_block_34]
-    # Merges groups of duplicate rows
     ts = TimeSeries(
         df=df,
         time_name="timestamp",
@@ -681,3 +680,41 @@ def pad_timeseries():
 
     print(ts)
     # [end_block_34]
+
+
+def create_df_with_missing_rows_water_year():
+    # [start_block_35]
+    # Create sample water-year data with gaps
+    dates = [
+        datetime(2023, 5, 16, 10, 15, 0),  # Water year 2022-2023
+        datetime(2023, 10, 3, 19, 30, 0),  # Water year 2023-2024
+        # Missing water year 2024-2025
+        datetime(2025, 11, 30, 0, 0, 0), # Water year 2025-2026
+    ]
+    max_flow = [20, 25, 30]
+
+    df = pl.DataFrame({
+        "timestamp": dates,
+        "max_flow": max_flow,
+    })
+
+    print(df)
+    # [end_block_35]
+    return df
+
+
+def pad_timeseries_water_year():
+    with suppress_output():
+        df = create_df_with_missing_rows_water_year()
+
+    # [start_block_36]
+    ts = TimeSeries(
+        df=df,
+        time_name="timestamp",
+        resolution=Period.of_minutes(15),
+        periodicity=Period.of_years(1).with_month_offset(9).with_hour_offset(9),
+        pad=True  # Enable padding
+    )
+
+    print(ts)
+    # [end_block_36]
