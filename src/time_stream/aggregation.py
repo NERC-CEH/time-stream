@@ -69,6 +69,11 @@ class PolarsAggregator:
         Returns:
             A DataFrame containing the aggregated data
         """
+        # Check aggregation period
+        if not self.aggregation_period.is_epoch_agnostic():
+            # E.g. 5 hours, 7 days, 9 months, etc.
+            raise NotImplementedError("Aggregation not available for non-epoch agnostic periodicity")
+
         # Removing NULL rows from the DataFrame for the specified value column
         df = self.ts.df.drop_nulls(subset=[self.column_name])
 
