@@ -449,6 +449,7 @@ class Mean(AggregationFunction):
             time_zone=ts.time_zone,
             flag_systems=ts.flag_systems,
             column_metadata={column_name: ts.columns[column_name].metadata()},
+            pad=ts._pad,
         )
 
 
@@ -506,6 +507,7 @@ class Min(AggregationFunction):
             time_zone=ts.time_zone,
             flag_systems=ts.flag_systems,
             column_metadata={column_name: ts.columns[column_name].metadata()},
+            pad=ts._pad,
         )
 
 
@@ -563,4 +565,5 @@ class Max(AggregationFunction):
             time_zone=ts.time_zone,
             flag_systems=ts.flag_systems,
             column_metadata={column_name: ts.columns[column_name].metadata()},
+            pad=ts._pad,
         )

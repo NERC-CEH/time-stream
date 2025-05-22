@@ -74,10 +74,13 @@ class TimeSeries:
 
         This method:
         - Sets the time zone of the time column.
-        - Sorts the DataFrame by the time column.
-        - Validates the time resolution.
-        - Validates the periodicity of the time column.
         - Initializes supplementary and flag columns.
+        - Initializes metadata.
+        - Handles any potentially duplicated rows (based on a user option)
+        - Validates the resolution of the time column.
+        - Validates the periodicity of the time column.
+        - Handles padding of missing time rows (based on a user option)
+        - Sorts the DataFrame by the time column.
 
         Args:
             supplementary_columns: A list of column names that are considered supplementary.
