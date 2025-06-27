@@ -12,7 +12,7 @@ from time_stream.period import Period
 from time_stream.relationships import RelationshipManager
 
 
-class TimeSeries:
+class TimeSeries:  # noqa: PLW1641 ignore hash warning
     """A class representing a time series data model, with data held in a Polars DataFrame."""
 
     def __init__(

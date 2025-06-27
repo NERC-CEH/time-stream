@@ -28,12 +28,12 @@ def __getattr__(name: str) -> Any:
     #   dependencies being loaded at startup and also gives us control over what to expose from the package.
 
     if name == "TimeSeries":
-        from time_stream.base import TimeSeries
+        from time_stream.base import TimeSeries  # noqa: PLC0415
 
         return TimeSeries
 
     if name == "Period":
-        from time_stream.period import Period
+        from time_stream.period import Period  # noqa: PLC0415
 
         return Period
 
