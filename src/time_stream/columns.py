@@ -11,7 +11,7 @@ if TYPE_CHECKING:
     from time_stream import TimeSeries
 
 
-class TimeSeriesColumn(ABC):
+class TimeSeriesColumn(ABC):  # noqa: PLW1641 ignore hash warning
     """Base class for all column types in a TimeSeries."""
 
     def __init__(self, name: str, ts: "TimeSeries", metadata: Optional[Dict[str, Any]] = None) -> None:
