@@ -42,7 +42,6 @@ def _create_ts(
     value_list: list[float],
     resolution: Period,
     periodicity: Period,
-    time_zone: Optional[str],
 ) -> TimeSeries:
     """Create a TimeSeries
 
@@ -51,7 +50,6 @@ def _create_ts(
         value_list: A list of floats
         resolution: The resolution of the time-series
         periodicity: The periodicity of the time-series
-        time_zone: The time zone of the time-series
 
     Returns:
         A TimeSeries object
@@ -62,8 +60,7 @@ def _create_ts(
         df=_create_df(datetime_list, value_list),
         time_name=TIME,
         resolution=resolution,
-        periodicity=periodicity,
-        time_zone=time_zone,
+        periodicity=periodicity
     )
 
 
@@ -96,8 +93,7 @@ class TsData:
             datetime_list=self.datetime_list,
             value_list=self.value_list,
             resolution=self.resolution,
-            periodicity=self.periodicity,
-            time_zone=None,
+            periodicity=self.periodicity
         )
 
     def create_aggr_dict(self, aggregation_period: Period) -> dict[int, list[tuple[datetime, float]]]:
