@@ -198,9 +198,10 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         """Set the time zone for the TimeSeries.
 
         If a time zone is provided in class initialisation, this will overwrite any time zone set on the dataframe.
-        If no time zone provided, defaults to either the dataframe time zone, or if this is not set either, then UTC.
+        If no time zone provided, defaults to the time zone found set on the input dataframe.
+        If this is not set either, we do not set a time zone at all. Datetimes in the time column are considered naive.
         """
-        default_time_zone = "UTC"
+        default_time_zone = None
         df_time_zone = self.df.schema[self.time_name].time_zone
 
         if self.time_zone is not None:
@@ -210,8 +211,9 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         else:
             time_zone = default_time_zone
 
-        # Set _df directly, otherwise the df setter considers the time column is mutated due to time zone added
-        self._df = self.df.with_columns(pl.col(self.time_name).dt.replace_time_zone(time_zone))
+        if time_zone:
+            # Set _df directly, otherwise the df setter considers the time column is mutated due to time zone added
+            self._df = self.df.with_columns(pl.col(self.time_name).dt.replace_time_zone(time_zone))
         self._time_zone = time_zone
 
     def sort_time(self) -> None:
@@ -959,6 +961,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
             or self.resolution != other.resolution
             or self.periodicity != other.periodicity
             or self._metadata != other._metadata
+            or self.time_zone != other.time_zone
         ):
             return False
 

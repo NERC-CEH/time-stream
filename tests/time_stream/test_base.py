@@ -1787,8 +1787,8 @@ class TestSetTimeZone(unittest.TestCase):
             ts = TimeSeries(pl.DataFrame({"time": self.times}), time_name="time", time_zone=None)
             ts._set_time_zone()
 
-            self.assertEqual(ts._time_zone, "UTC")
-            self.assertEqual(ts.df.schema["time"].time_zone, "UTC")
+            self.assertEqual(ts._time_zone, None)
+            self.assertEqual(ts.df.schema["time"].time_zone, None)
 
     def test_time_zone_provided_but_df_has_different_tz(self):
         """Test that the time zone is changed if the provided time zone is different to that of the df
