@@ -27,8 +27,6 @@ At the core of the ``TimeSeries`` object is the management of the "time" aspect 
 include:
 
 - Uniqueness of time values - there cannot be duplicate datetime values in the time series
-- The TimeSeries object is time zone aware - if time zone is not inherent in the data, then a default time zone of UTC
-  is set
 - A time series has properties of resolution and periodicity:
 
 Resolution

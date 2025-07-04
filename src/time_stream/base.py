@@ -21,7 +21,6 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         time_name: str,
         resolution: Optional[Period | str] = None,
         periodicity: Optional[Period | str] = None,
-        time_zone: Optional[str] = None,
         supplementary_columns: Optional[list] = None,
         flag_systems: Optional[Union[Dict[str, dict], Dict[str, Type[Enum]]]] = None,
         flag_columns: Optional[Dict[str, str]] = None,
@@ -37,7 +36,6 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
             time_name: The name of the time column in the DataFrame.
             resolution: The resolution of the time series.
             periodicity: The periodicity of the time series.
-            time_zone: The time zone of the time series.
             supplementary_columns: Columns within the dataframe that are considered supplementary.
             flag_systems: A dictionary defining the flagging systems that can be used for flag columns.
             flag_columns: Columns within the dataframe that are considered flag columns.
@@ -50,7 +48,6 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         self._time_name = time_name
         self._resolution = resolution
         self._periodicity = periodicity
-        self._time_zone = time_zone
         self._on_duplicates = DuplicateOption(on_duplicates)
         self._pad = pad
 
@@ -73,7 +70,6 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         Performs the initial setup for the TimeSeries instance.
 
         This method:
-        - Sets the time zone of the time column.
         - Initializes supplementary and flag columns.
         - Initializes metadata.
         - Handles any potentially duplicated rows (based on a user option)
@@ -88,8 +84,6 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
             column_metadata: A dictionary containing metadata for columns in the DataFrame.
             metadata: The user defined metadata for this time series instance.
         """
-        self._set_time_zone()
-
         # Doing this first as we need info on columns before doing certain things in the validation steps below
         self._setup_columns(supplementary_columns, flag_columns, column_metadata)
         self._setup_metadata(metadata)
@@ -188,31 +182,6 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
     def time_name(self) -> str:
         """The name of the primary datetime column in the underlying TimeSeries DataFrame."""
         return self._time_name
-
-    @property
-    def time_zone(self) -> str:
-        """The time zone of the primary datetime column in the underlying TimeSeries DataFrame."""
-        return self._time_zone
-
-    def _set_time_zone(self) -> None:
-        """Set the time zone for the TimeSeries.
-
-        If a time zone is provided in class initialisation, this will overwrite any time zone set on the dataframe.
-        If no time zone provided, defaults to either the dataframe time zone, or if this is not set either, then UTC.
-        """
-        default_time_zone = "UTC"
-        df_time_zone = self.df.schema[self.time_name].time_zone
-
-        if self.time_zone is not None:
-            time_zone = self.time_zone
-        elif self.time_zone is None and df_time_zone is not None:
-            time_zone = df_time_zone
-        else:
-            time_zone = default_time_zone
-
-        # Set _df directly, otherwise the df setter considers the time column is mutated due to time zone added
-        self._df = self.df.with_columns(pl.col(self.time_name).dt.replace_time_zone(time_zone))
-        self._time_zone = time_zone
 
     def sort_time(self) -> None:
         """Sort the TimeSeries DataFrame by the time column."""
@@ -611,7 +580,6 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
             time_name=self.time_name,
             resolution=self.resolution,
             periodicity=self.periodicity,
-            time_zone=self.time_zone,
             supplementary_columns=new_supplementary_columns,
             flag_columns=new_flag_columns,
             flag_systems=new_flag_systems,
@@ -916,7 +884,6 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
             f"time_name={self.time_name}, "
             f"resolution={self.resolution}, "
             f"periodicity={self.periodicity}, "
-            f"time_zone={self.time_zone}, "
             f"data_columns={list(self.data_columns.keys())}, "
             f"supplementary_columns={list(self.supplementary_columns.keys())}, "
             f"flag_columns={list(self.flag_columns.keys())}, "
