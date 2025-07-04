@@ -294,7 +294,7 @@ def _create_ts_data(resolution: Period, periodicity: Period) -> TsData:
 
 def _get_pl_datetime_list(df: pl.DataFrame, column_name: str) -> list[datetime]:
     """Get a list of datetimes from a Series in a DataFrame"""
-    return [dt.replace(tzinfo=None) for dt in df[column_name]]
+    return [dt for dt in df[column_name]]
 
 
 def _get_pl_float_list(df: pl.DataFrame, column_name: str) -> list[float]:
@@ -326,7 +326,7 @@ def _get_datetime_of_min_list(aggr_dict: dict[int, list[tuple[datetime, float]]]
 
     def _get_min_datetime(values: list[tuple[datetime, float]]) -> datetime:
         sorted_list: list[tuple[datetime, float]] = sorted(values, key=_sort_by_min_value)
-        return sorted_list[0][0].replace(tzinfo=None)
+        return sorted_list[0][0]
 
     return [_get_min_datetime(value) for value in aggr_dict.values()]
 
@@ -341,7 +341,7 @@ def _get_datetime_of_max_list(aggr_dict: dict[int, list[tuple[datetime, float]]]
 
     def _get_max_datetime(values: list[tuple[datetime, float]]) -> datetime:
         sorted_list: list[tuple[datetime, float]] = sorted(values, key=_sort_by_max_value)
-        return sorted_list[0][0].replace(tzinfo=None)
+        return sorted_list[0][0]
 
     return [_get_max_datetime(value) for value in aggr_dict.values()]
 
