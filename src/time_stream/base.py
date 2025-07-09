@@ -658,7 +658,10 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         Returns:
             A TimeSeries containing the aggregated data.
         """
-        return apply_aggregation(self, aggregation_period, aggregation_function, column_name, missing_criteria)
+
+        return aggregation_function.apply(self, aggregation_period, column_name, missing_criteria)
+
+        # return apply_aggregation(self, aggregation_period, aggregation_function, column_name, missing_criteria)
 
     def metadata(self, key: Optional[Sequence[str]] = None, strict: bool = True) -> Dict[str, Any]:
         """Retrieve metadata for all or specific keys.
