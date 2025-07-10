@@ -1,15 +1,17 @@
 from collections import Counter
 from enum import Enum
-from typing import Any, Dict, Iterable, Iterator, Mapping, Optional, Sequence, Type, Union
+from typing import TYPE_CHECKING, Any, Dict, Iterable, Iterator, Mapping, Optional, Sequence, Type, Union
 
 import polars as pl
 
-from time_stream.aggregation_base import AggregationFunction, apply_aggregation
 from time_stream.columns import DataColumn, FlagColumn, PrimaryTimeColumn, SupplementaryColumn, TimeSeriesColumn
 from time_stream.enums import DuplicateOption
 from time_stream.flag_manager import TimeSeriesFlagManager
 from time_stream.period import Period
 from time_stream.relationships import RelationshipManager
+
+if TYPE_CHECKING:
+    from time_stream.aggregation import AggregationFunction
 
 
 class TimeSeries:  # noqa: PLW1641 ignore hash warning
@@ -636,18 +638,12 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
     def aggregate(
         self,
         aggregation_period: Period,
-        aggregation_function: Union[str, Type["AggregationFunction"]],
+        aggregation_function: Union[str, Type["AggregationFunction"], "AggregationFunction"],
         column_name: str,
         missing_criteria: Optional[Mapping[str, float | int]] = None,
     ) -> "TimeSeries":
         """Apply an aggregation function to a column in this TimeSeries, check the aggregation satisfies user
         requirements and return a new derived TimeSeries containing the aggregated data.
-
-        The AggregationFunction class provides static methods that return aggregation function objects that can be used
-        with this method.
-
-        NOTE: This is the first attempt at a mechanism for aggregating time-series data.  The signature of this method
-            is likely to evolve considerably.
 
         Args:
             aggregation_period: The period over which to aggregate the data
@@ -658,10 +654,12 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         Returns:
             A TimeSeries containing the aggregated data.
         """
+        # Import at runtime to avoid circular import
+        from time_stream.aggregation import AggregationFunction  # noqa: PLC0415
 
-        return aggregation_function.apply(self, aggregation_period, column_name, missing_criteria)
-
-        # return apply_aggregation(self, aggregation_period, aggregation_function, column_name, missing_criteria)
+        return AggregationFunction.get(aggregation_function).apply(
+            self, aggregation_period, column_name, missing_criteria
+        )
 
     def metadata(self, key: Optional[Sequence[str]] = None, strict: bool = True) -> Dict[str, Any]:
         """Retrieve metadata for all or specific keys.
