@@ -1,11 +1,11 @@
 [build-system]
 requires = ["setuptools >= 61.0", "autosemver"]
-# build-backend = "setuptools.build_meta"
 
 [project]
 requires-python = ">=3.12"
 dependencies = [
     "autosemver",
+    "setuptools < 81",
     "config>=0.5.1",
     "polars>=1.1.0",
     "pyarrow>=17.0.0",
@@ -27,13 +27,17 @@ authors = [
 ]
 description = "Time-Stream: Time Series Toolkit for Rapid Environmental Analysis and Monitoring"
 readme = "README.md"
-license = { text = "NO LICENSE" }
+license = "GPL-3.0-only"
 
-[project.optional-dependencies]
+[dependency-groups]
 test = ["pytest", "pytest-cov", "parameterized", "freezegun", "pytest-benchmark", "pytest-benchmark[histogram]"]
 docs = ["sphinx", "sphinx-copybutton", "sphinx-rtd-theme", "nbsphinx", "jupyter_sphinx", "snowballstemmer<3"]
 lint = ["ruff"]
-dev = ["time_stream[test,docs,lint]"]
+dev = [
+  { include-group = "test"},
+  { include-group = "docs"},
+  { include-group = "lint"},
+]
 
 [tool.setuptools.dynamic]
 version = { attr = "time_stream.__version__" }
