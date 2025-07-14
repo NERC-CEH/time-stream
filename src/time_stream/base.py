@@ -659,9 +659,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         # Import at runtime to avoid circular import
         from time_stream.aggregation import AggregationFunction  # noqa: PLC0415
 
-        return AggregationFunction.get(aggregation_function).apply(
-            self, aggregation_period, columns, missing_criteria
-        )
+        return AggregationFunction.get(aggregation_function).apply(self, aggregation_period, columns, missing_criteria)
 
     def metadata(self, key: Optional[Sequence[str]] = None, strict: bool = True) -> Dict[str, Any]:
         """Retrieve metadata for all or specific keys.

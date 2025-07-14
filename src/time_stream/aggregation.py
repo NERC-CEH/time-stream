@@ -189,9 +189,7 @@ class AggregationFunction(ABC):
         Returns:
             List of `Polars` expressions that can be used to generate actual counts for each column
         """
-        return [
-            pl.col(col).len().alias(f"count_{col}") for col in columns
-        ]
+        return [pl.col(col).len().alias(f"count_{col}") for col in columns]
 
     @staticmethod
     def _expected_count_expr(ts: TimeSeries, period: Period) -> pl.Expr:
@@ -266,7 +264,7 @@ class AggregationFunction(ABC):
             if not 0 <= threshold <= 100:
                 raise ValueError("Percent threshold must be between 0 and 100")
         else:
-            if not type(threshold) is int:
+            if type(threshold) is not int:
                 raise ValueError("Threshold must be an integer")
 
             if threshold < 0:
@@ -301,9 +299,7 @@ class Mean(AggregationFunction):
 
     def expr(self, ts: TimeSeries, columns: List[str]) -> List[pl.Expr]:
         """Return the `Polars` expression for calculating the mean in an aggregation period."""
-        return [
-            pl.col(col).mean().alias(f"mean_{col}") for col in columns
-        ]
+        return [pl.col(col).mean().alias(f"mean_{col}") for col in columns]
 
 
 @register_aggregation
@@ -318,15 +314,17 @@ class Min(AggregationFunction):
         """
         expressions = []
         for col in columns:
-            expressions.extend([
-                pl.col(col).min().alias(f"{self.name}_{col}"),
-                # Define a struct, to be able to extract the datetime on which the min occurred
-                pl.struct([ts.time_name, col])
-                .sort_by(col)
-                .first()
-                .struct.field(ts.time_name)
-                .alias(f"{ts.time_name}_of_{self.name}_{col}")
-            ])
+            expressions.extend(
+                [
+                    pl.col(col).min().alias(f"{self.name}_{col}"),
+                    # Define a struct, to be able to extract the datetime on which the min occurred
+                    pl.struct([ts.time_name, col])
+                    .sort_by(col)
+                    .first()
+                    .struct.field(ts.time_name)
+                    .alias(f"{ts.time_name}_of_{self.name}_{col}"),
+                ]
+            )
         return expressions
 
 
@@ -342,13 +340,15 @@ class Max(AggregationFunction):
         """
         expressions = []
         for col in columns:
-            expressions.extend([
-                pl.col(col).max().alias(f"{self.name}_{col}"),
-                # Define a struct, to be able to extract the datetime on which the max occurred
-                pl.struct([ts.time_name, col])
-                .sort_by(col)
-                .last()
-                .struct.field(ts.time_name)
-                .alias(f"{ts.time_name}_of_{self.name}_{col}")
-            ])
+            expressions.extend(
+                [
+                    pl.col(col).max().alias(f"{self.name}_{col}"),
+                    # Define a struct, to be able to extract the datetime on which the max occurred
+                    pl.struct([ts.time_name, col])
+                    .sort_by(col)
+                    .last()
+                    .struct.field(ts.time_name)
+                    .alias(f"{ts.time_name}_of_{self.name}_{col}"),
+                ]
+            )
         return expressions
