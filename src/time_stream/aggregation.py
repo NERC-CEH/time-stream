@@ -88,15 +88,24 @@ class AggregationFunction(ABC):
     def apply(
         self,
         ts: TimeSeries,
-        period: Period,
+        aggregation_period: Period,
         column: str,
         missing_criteria: Optional[Tuple[str, Union[float, int]]] = None,
     ) -> TimeSeries:
         """Run the aggregation.
 
+        The general `Polars` method used for aggregating data is:
+
+        >>> output_dataframe = input_dataframe
+        >>>     .group_by_dynamic(...)  # Group the time series into groups of values based on the chosen period
+        >>>     .agg(...)               # Apply the chosen aggregation function (e.g., mean, min, max)
+        >>>     .with_columns(...)      # Apply additional logic that requires the results of the aggregation
+
+        This method fills in the various stages using pre-defined `Polars` expressions.
+
         Args:
             ts: The time series to aggregate.
-            period: The period over which to aggregate the data
+            aggregation_period: The period over which to aggregate the data
             column: The column containing the data to be aggregated
             missing_criteria: How the aggregation handles missing data.  Tuple of (criteria name, value).
 
@@ -104,14 +113,17 @@ class AggregationFunction(ABC):
             TimeSeries: The aggregated time series
         """
         # Validate that we can carry out the aggregation
-        self._validate_aggregation_period(ts, period)
+        self._validate_aggregation_period(ts, aggregation_period)
 
         # Remove NULL rows
         df = ts.df.drop_nulls(subset=[column])
 
         # Group by the aggregation period
         grouper = df.group_by_dynamic(
-            index_column=ts.time_name, every=period.pl_interval, offset=period.pl_offset, closed="left"
+            index_column=ts.time_name,
+            every=aggregation_period.pl_interval,
+            offset=aggregation_period.pl_offset,
+            closed="left",
         )
 
         # Build expressions to go in the .agg method
@@ -124,7 +136,7 @@ class AggregationFunction(ABC):
 
         # Build expressions to go in the .with_columns method
         with_columns_expressions = []
-        with_columns_expressions.append(self._expected_count_expr(ts, period))
+        with_columns_expressions.append(self._expected_count_expr(ts, aggregation_period))
         with_columns_expressions.append(self._missing_data_expr(ts, column, missing_criteria))
 
         # Do the with_column methods
@@ -135,8 +147,8 @@ class AggregationFunction(ABC):
         return TimeSeries(
             df=df,
             time_name=ts.time_name,
-            resolution=period,
-            periodicity=period,
+            resolution=aggregation_period,
+            periodicity=aggregation_period,
             metadata=ts._metadata,
             pad=ts._pad,
         )
