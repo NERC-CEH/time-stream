@@ -11,17 +11,13 @@ from time_stream.enums import MissingCriteria
 _AGGREGATION_REGISTRY = {}
 
 
-def register_aggregation(cls: Type["AggregationFunction"]) -> Type["AggregationFunction"]:
+def register_aggregation(cls: Type["AggregationFunction"]) -> None:
     """Decorator to register aggregation classes using their name attribute.
 
     Args:
         cls: The aggregation class to register.
-
-    Returns:
-        The same class, unmodified.
     """
     _AGGREGATION_REGISTRY[cls.name] = cls
-    return cls
 
 
 class AggregationFunction(ABC):
@@ -30,6 +26,7 @@ class AggregationFunction(ABC):
     @property
     @abstractmethod
     def name(self) -> str:
+        """Return the name of the aggregation function."""
         pass
 
     @abstractmethod
@@ -39,8 +36,7 @@ class AggregationFunction(ABC):
 
     @classmethod
     def get(cls, aggregation: Union[str, Type["AggregationFunction"], "AggregationFunction"]) -> "AggregationFunction":
-        """Factory method to get an aggregation function instance from string names, class types,
-        or existing instances.
+        """Factory method to get an aggregation function instance from string names, class types, or existing instances.
 
         Args:
             aggregation: The aggregation specification, which can be:
@@ -84,7 +80,6 @@ class AggregationFunction(ABC):
                 raise TypeError(f"Aggregation class {aggregation.__name__} must inherit from AggregationFunction")
 
         else:
-            # Unknown type
             raise TypeError(
                 f"Aggregation must be a string, AggregationFunction class, or instance. "
                 f"Got {type(aggregation).__name__}"
@@ -97,8 +92,19 @@ class AggregationFunction(ABC):
         column: str,
         missing_criteria: Optional[Tuple[str, Union[float, int]]] = None,
     ) -> TimeSeries:
+        """Run the aggregation.
+
+        Args:
+            ts: The time series to aggregate.
+            period: The period over which to aggregate the data
+            column: The column containing the data to be aggregated
+            missing_criteria: How the aggregation handles missing data.  Tuple of (criteria name, value).
+
+        Returns:
+            TimeSeries: The aggregated time series
+        """
         # Validate that we can carry out the aggregation
-        self._validate(ts, period)
+        self._validate_aggregation_period(ts, period)
 
         # Remove NULL rows
         df = ts.df.drop_nulls(subset=[column])
@@ -135,9 +141,8 @@ class AggregationFunction(ABC):
             pad=ts._pad,
         )
 
-    def _validate(self, ts: TimeSeries, period: Period) -> None:
-        """Run some validation to check that the aggregation period is suitable based on the period of the
-        TimeSeries
+    def _validate_aggregation_period(self, ts: TimeSeries, period: Period) -> None:
+        """Validate that the aggregation period is suitable based on the period of the TimeSeries.
 
         Args:
             ts: The TimeSeries object that the aggregation will be done on
@@ -155,8 +160,7 @@ class AggregationFunction(ABC):
 
     @staticmethod
     def _actual_count_expr(column: str) -> pl.Expr:
-        """A `Polars` expression to generate a count of the actual number of elements in a TimeSeries found in each
-        period
+        """A `Polars` expression to generate the actual count of values in a TimeSeries found in each period.
 
         Args:
             column: The name of the value column to count occurrences of
@@ -168,8 +172,8 @@ class AggregationFunction(ABC):
 
     @staticmethod
     def _expected_count_expr(ts: TimeSeries, period: Period) -> pl.Expr:
-        """A `Polars` expression to generate a count of the expected number of elements in a TimeSeries found in each
-        period if there were no missing values.
+        """A `Polars` expression to generate the expected count of values in a TimeSeries found in each
+        period (if there were no missing values).
 
         Args:
             ts: The TimeSeries object on which to calculate expected counts
@@ -179,7 +183,7 @@ class AggregationFunction(ABC):
             pl.Expr: Polars expression that can be used to generate expected count on a DataFrame
         """
         expected_count_name = f"expected_count_{ts.time_name}"
-        # For some aggregations, the expected count is a constant so just use that if possible.
+        # For some aggregations, the expected count is a constant so use that if possible.
         # For example, when aggregating 15-minute data over a day, the expected count is always 96.
         count = ts.periodicity.count(period)
         if count > 0:
@@ -198,7 +202,7 @@ class AggregationFunction(ABC):
 
         else:
             # 2. If the data we are aggregating is month-based, then there is no simple way to do the calculation,
-            #    so use Polars to create a Series of date ranges lists and just get the length of each list.
+            #    so use Polars to create a Series of date ranges lists and get the length of each list.
             #
             #    Note: This method will work for above use cases also, but if periodicity is small and the aggregation
             #    period is large, it consumes too much memory and causes performance problems. For example, aggregating
@@ -260,17 +264,25 @@ class AggregationFunction(ABC):
 
 @register_aggregation
 class Mean(AggregationFunction):
+    """An aggregation class to calculate the mean (average) of values within each aggregation period."""
+
     name = "mean"
 
     def expr(self, ts: TimeSeries, column: str) -> List[pl.Expr]:
+        """Return the `Polars` expression for calculating the mean in an aggregation period."""
         return [pl.col(column).mean().alias(f"mean_{column}")]
 
 
 @register_aggregation
 class Min(AggregationFunction):
+    """An aggregation class to find the minimum of values within each aggregation period."""
+
     name = "min"
 
     def expr(self, ts: TimeSeries, column: str) -> List[pl.Expr]:
+        """Return the `Polars` expression for calculating the minimum in an aggregation period.
+        This expression also returns a column that holds the datetime that the minimum value occurred on.
+        """
         return [
             pl.col(column).min().alias(f"{self.name}_{column}"),
             # Define a struct, to be able to extract the datetime on which the min occurred
@@ -284,9 +296,14 @@ class Min(AggregationFunction):
 
 @register_aggregation
 class Max(AggregationFunction):
+    """An aggregation class to find the maximum of values within each aggregation period."""
+
     name = "max"
 
     def expr(self, ts: TimeSeries, column: str) -> List[pl.Expr]:
+        """Return the `Polars` expression for calculating the maximum in an aggregation period.
+        This expression also returns a column that holds the datetime that the maximum value occurred on.
+        """
         return [
             pl.col(column).max().alias(f"{self.name}_{column}"),
             # Define a struct, to be able to extract the datetime on which the max occurred
