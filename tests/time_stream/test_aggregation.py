@@ -13,7 +13,7 @@ from time_stream.aggregation import AggregationFunction, Max, Mean, Min
 
 
 def generate_time_series(resolution: Period, periodicity: Period, length: int, missing_data: bool=False) -> TimeSeries:
-    """Helper function to generate a TimeSeries object for test purposes
+    """Helper function to generate a TimeSeries object for test purposes.
 
     Args:
         resolution: Resolution of the time series
