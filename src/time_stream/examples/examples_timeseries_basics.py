@@ -520,7 +520,7 @@ def aggregation_more_examples():
     print(monthly_min_temp)
 
     # Calculate monthly maximum temperature
-    monthly_max_temp = ts.aggregate(Period.of_months(1), "Max", "temperature")
+    monthly_max_temp = ts.aggregate(Period.of_months(1), "max", "temperature")
     print(monthly_max_temp)
 
     # Use it with other periods

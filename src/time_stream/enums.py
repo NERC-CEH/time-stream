@@ -61,3 +61,19 @@ class DeletionPolicy(Enum):
     CASCADE = "cascade"
     UNLINK = "unlink"
     RESTRICT = "restrict"
+
+
+class MissingCriteria(Enum):
+    """Enum representing the missing criteria options available for aggregation
+
+    Attributes:
+        PERCENT: Require X% of data to be present
+        MISSING: Allow at most X missing values
+        AVAILABLE: Require at least X values present
+        NA: Not applicable - no criteria for completeness
+    """
+
+    PERCENT = "percent"
+    MISSING = "missing"
+    AVAILABLE = "available"
+    NA = "na"
