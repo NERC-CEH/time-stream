@@ -1,625 +1,518 @@
-"""
-Unit tests for the aggregation module
-"""
-
-import random
 import unittest
-from collections.abc import (
-    Callable,
-)
-from dataclasses import (
-    dataclass,
-)
-from datetime import datetime, timedelta
-from typing import Any, Iterable, Optional
+from datetime import datetime
+from typing import Dict, List, Union, Type
+from unittest.mock import Mock
 
 import polars as pl
 from parameterized import parameterized
+from polars.testing import assert_frame_equal
 
 from time_stream.period import Period
 from time_stream.base import TimeSeries
 from time_stream.aggregation import AggregationFunction, Max, Mean, Min
 
-TIME: str = "datetime"
-VALUE: str = "value"
 
-
-def _create_df(datetime_list: list[datetime], value_list: list[float]) -> pl.DataFrame:
-    """Create a Polars DataFrame
+def generate_time_series(resolution: Period, periodicity: Period, length: int, missing_data: bool=False) -> TimeSeries:
+    """Helper function to generate a TimeSeries object for test purposes
 
     Args:
-        datetime_list: A list of datetime objects
-        value_list: A list of floats
+        resolution: Resolution of the time series
+        periodicity: Periodicity of the time series
+        length: Length of the time series
+        missing_data: If True, add some missing data to the time series
 
     Returns:
-        A Polars DataFrame with two columns, TIME and VALUE
+        TimeSeries object
     """
-    return pl.DataFrame({TIME: datetime_list, VALUE: value_list})
+    ordinal_from = periodicity.ordinal(datetime(2025, 1, 1))
+    timestamps = [resolution.datetime(ordinal_from + i) for i in range(length)]
 
+    df = pl.DataFrame({
+        "timestamp": timestamps,
+        "value": list(range(length)),
+        "value_plus1": [i + 1 for i in range(length)],
+        "value_times2": [i * 2 for i in range(length)]
+    })
 
-def _create_ts(
-        datetime_list: list[datetime],
-        value_list: list[float],
-        resolution: Period,
-        periodicity: Period,
-) -> TimeSeries:
-    """Create a TimeSeries
+    if missing_data:
+        df = df.remove(pl.col("value") % 7 == 0)
 
-    Args:
-        datetime_list: A list of datetime objects
-        value_list: A list of floats
-        resolution: The resolution of the time-series
-        periodicity: The periodicity of the time-series
-
-    Returns:
-        A TimeSeries object
-    """
-    """Create a TimeSeries
-    """
-    return TimeSeries(
-        df=_create_df(datetime_list, value_list),
-        time_name=TIME,
+    ts = TimeSeries(
+        df=df,
+        time_name="timestamp",
         resolution=resolution,
-        periodicity=periodicity
+        periodicity=periodicity,
     )
+    return ts
 
 
-# Maximum length of a synthetic TimeSeries
-MAX_LENGTH: int = 5_000
+def generate_expected_df(
+        timestamps: List[datetime],
+        aggregator: Type[AggregationFunction],
+        columns: Union[str, List[str]],
+        values: Dict[str, List[Union[float, int]]],
+        expected_counts: List[int],
+        actual_counts: List[int],
+        timestamps_of: List[datetime]=None,
+        valid: Dict[str, List[bool]]=None
+) -> pl.DataFrame:
+    """Helper function to create a dataframe of expected results from an aggregation test.
 
+    Args:
+        timestamps: List of datetime values for the timestamp column
+        aggregator: The aggregation function used in the test
+        columns: The name of the column(s) that have been aggregated
+        values: The aggregated values of the data columns
+        expected_counts: The counts of expected values in each aggregation period, if there were no missing values
+        actual_counts: The actual counts of values found in each aggregation period
+        timestamps_of: For max and min, the datetimes of when the max/min values were found
+        valid: Whether the aggregation value is "valid" based on the missing data criteria
 
-@dataclass(frozen=True)
-class TsData:
-    """Some basic time-series data.
-
-    The datetime_list and value_list properties contain
-    the actual data.
-
-    Attributes:
-        resolution: The resolution of the time-series
-        periodicity: The periodicity of the time-series
-        datetime_list: A list of datetime objects
-        value_list: A list of floats
+    Returns:
+        Expected DataFrame
     """
+    if isinstance(columns, str):
+        columns = [columns]
 
-    resolution: Period
-    periodicity: Period
-    datetime_list: list[datetime]
-    value_list: list[float]
+    df = pl.DataFrame({
+        "timestamp": timestamps,
+        "expected_count_timestamp": expected_counts,
+    })
 
-    def create_ts(self) -> TimeSeries:
-        """Create a TimeSeries from this data"""
-        return _create_ts(
-            datetime_list=self.datetime_list,
-            value_list=self.value_list,
-            resolution=self.resolution,
-            periodicity=self.periodicity
+    for column in columns:
+        df = df.with_columns(
+            pl.Series(f"{aggregator.name}_{column}", values[column]),
+            pl.Series(f"count_{column}", actual_counts),
+            pl.Series(f"valid_{column}", [True] * len(actual_counts))
         )
 
-    def create_aggr_dict(self, aggregation_period: Period) -> dict[int, list[tuple[datetime, float]]]:
-        """Create a dict containing some aggregated data
-
-        The key of the dict is the ordinal of the aggregation
-        period.
-
-        The value of the dict is a list of tuples. Each tuple
-        contains the [datetime, float] values of an element
-        of time-series data
-
-        Args:
-            aggregation_period: The aggregation period
-
-        Returns:
-            A dict containing aggregated data that can be used
-            to check the results of the Polars aggregation
-        """
-        result: dict[int, list[tuple[datetime, float]]] = {}
-        for dt, val in zip(self.datetime_list, self.value_list):
-            aggregation_ordinal = aggregation_period.ordinal(dt)
-            tup = (dt, val)
-            if aggregation_ordinal in result:
-                result[aggregation_ordinal].append(tup)
-            else:
-                result[aggregation_ordinal] = [tup]
-        return result
-
-    @staticmethod
-    def create(
-            resolution: Period, periodicity: Period, in_datetime_from: datetime, in_datetime_to: datetime
-    ) -> "TsData":
-        """Create a TsData object containing synthetic time-series
-        date of the supplied resolution and periodicity and within
-        the supplied datetime range
-
-        Args:
-            resolution: The resolution of the time-series data
-            periodicity: The periodicity of the time-series data
-            in_datetime_from: The start datetime of the time-series
-            in_datetime_to: The end datetime of the time-series
-
-        Returns:
-            A TsData object containing synthetic time-series data
-        """
-        ordinal_from: int = periodicity.ordinal(in_datetime_from)
-        ordinal_to: int = periodicity.ordinal(in_datetime_to)
-
-        periodicity_ordinal_start = ordinal_from
-        periodicity_ordinal_end = min(ordinal_to, periodicity_ordinal_start + MAX_LENGTH)
-
-        datetime_iter: Iterable[datetime]
-        if resolution == periodicity:
-            # if resolution == periodicity just create a sequence of
-            # datetimes between start and end
-            def _gen_datetime_series_flat() -> Iterable[datetime]:
-                for ordinal in range(periodicity_ordinal_start, periodicity_ordinal_end):
-                    yield resolution.datetime(ordinal)
-
-            datetime_iter = _gen_datetime_series_flat()
+        if valid:
+            df = df.with_columns(
+                pl.Series(f"valid_{column}", valid[column])
+            )
         else:
-            # if resolution != periodicity then create one datetime
-            # for each period defined by the periodicity
-            # The datetime will occur at a random position within
-            # the periodicity period
-            def _gen_datetime_series_gappy() -> Iterable[datetime]:
-                for ordinal in range(periodicity_ordinal_start, periodicity_ordinal_end):
-                    p_start = periodicity.datetime(ordinal)
-                    p_end = periodicity.datetime(ordinal + 1)
-                    r_ordinal_start = resolution.ordinal(p_start)
-                    r_ordinal_end = resolution.ordinal(p_end)
-                    r_start = resolution.datetime(r_ordinal_start)
-                    r_end = resolution.datetime(r_ordinal_end)
-                    if r_start < p_start:
-                        r_ordinal_start += 1
-                    if r_end < p_end:
-                        r_ordinal_end += 1
-                    r_ordinal = random.randrange(r_ordinal_start, r_ordinal_end)
-                    yield resolution.datetime(r_ordinal)
+            df = df.with_columns(
+                pl.Series(f"valid_{column}", [True] * len(actual_counts))
+            )
 
-            datetime_iter = _gen_datetime_series_gappy()
+        if timestamps_of:
+            df = df.with_columns(
+                pl.Series(f"timestamp_of_{aggregator.name}_{column}", timestamps_of)
+            )
 
-        datetime_list: list[datetime] = [dt for dt in datetime_iter]
-        # Generate a list of distinct float values sequentially
-        # between 0 and n for each element of the time-series.
-        value_list: list[float] = [
-            float(o - periodicity_ordinal_start) for o in range(periodicity_ordinal_start, periodicity_ordinal_end)
-        ]
-        # Shuffle the resulting list to give the aggregation
-        # functions something a bit less ordered to deal with.
-        random.shuffle(value_list)
-        return TsData(
-            resolution=resolution, periodicity=periodicity, datetime_list=datetime_list, value_list=value_list
-        )
+    return df
 
-
-@dataclass(frozen=True)
-class Case1:
-    """Some test case data
-
-    For each aggregation function being tested a time-series
-    of the given resolution and periodicity is created, which
-    is then aggregated over the given aggregation period.
-
-    The results from Polars are compared against the results
-    of performing the aggregation just using Python
-
-    Attributes:
-        resolution: The resolution of the time-series
-        periodicity: The periodicity of the time-series
-        aggregation_period: The aggregation period
-    """
-
-    resolution: Period
-    periodicity: Period
-    aggregation_period: Period
-
-
-# All the Periods used in the tests
-PT15M = Period.of_minutes(15)
+# Period instances used throughout these tests
 PT1H = Period.of_hours(1)
 P1D = Period.of_days(1)
-W_P1D = P1D.with_hour_offset(9)
+P1D_OFF = P1D.with_hour_offset(9)  # water day
 P1M = Period.of_months(1)
-W_P1M = P1M.with_hour_offset(9)
+P1M_OFF = P1M.with_hour_offset(9)  # water month
 P1Y = Period.of_years(1)
-W_P1Y = P1Y.with_month_offset(9).with_hour_offset(9)
-PT1S = Period.of_seconds(1)
-PT1M = Period.of_minutes(1)
-PT1H = Period.of_hours(1)
-PT0_1S = Period.of_microseconds(100_000)
-PT0_01S = Period.of_microseconds(10_000)
-PT0_001S = Period.of_microseconds(1_000)
-PT0_0001S = Period.of_microseconds(100)
-PT0_00001S = Period.of_microseconds(10)
-PT0_000001S = Period.of_microseconds(1)
+P1Y_OFF = P1Y.with_month_offset(9).with_hour_offset(9)  # water year
 
-# A list of test cases
-CASE1_LIST: list[Case1] = [
-    Case1(resolution=PT15M, periodicity=PT15M, aggregation_period=PT1H),
-    Case1(resolution=PT15M, periodicity=PT15M, aggregation_period=P1D),
-    Case1(resolution=PT15M, periodicity=PT15M, aggregation_period=W_P1D),
-    Case1(resolution=PT15M, periodicity=PT15M, aggregation_period=W_P1M),
-    Case1(resolution=PT15M, periodicity=PT15M, aggregation_period=W_P1Y),
-    Case1(resolution=PT1H, periodicity=PT1H, aggregation_period=W_P1D),
-    Case1(resolution=PT1H, periodicity=PT1H, aggregation_period=W_P1M),
-    Case1(resolution=PT1H, periodicity=PT1H, aggregation_period=W_P1Y),
-    Case1(resolution=W_P1D, periodicity=W_P1D, aggregation_period=W_P1M),
-    Case1(resolution=W_P1D, periodicity=W_P1D, aggregation_period=W_P1Y),
-    Case1(resolution=W_P1M, periodicity=W_P1M, aggregation_period=W_P1Y),
-    Case1(resolution=PT1S, periodicity=PT1S, aggregation_period=PT1M),
-    Case1(resolution=PT1S, periodicity=PT1S, aggregation_period=PT1H),
-    Case1(resolution=PT1S, periodicity=PT1S, aggregation_period=P1D),
-    Case1(resolution=PT1S, periodicity=PT1S, aggregation_period=P1M),
-    Case1(resolution=PT1S, periodicity=PT1S, aggregation_period=P1Y),
-    Case1(resolution=PT1M, periodicity=PT1M, aggregation_period=PT1H),
-    Case1(resolution=PT1M, periodicity=PT1M, aggregation_period=P1D),
-    Case1(resolution=PT1M, periodicity=PT1M, aggregation_period=P1M),
-    Case1(resolution=PT1M, periodicity=PT1M, aggregation_period=P1Y),
-    Case1(resolution=PT1H, periodicity=PT1H, aggregation_period=P1D),
-    Case1(resolution=PT1H, periodicity=PT1H, aggregation_period=P1M),
-    Case1(resolution=PT1H, periodicity=PT1H, aggregation_period=P1Y),
-    Case1(resolution=P1D, periodicity=P1D, aggregation_period=P1M),
-    Case1(resolution=P1D, periodicity=P1D, aggregation_period=P1Y),
-    Case1(resolution=P1M, periodicity=P1M, aggregation_period=P1Y),
-    Case1(resolution=PT1S, periodicity=PT1M, aggregation_period=PT1H),
-    Case1(resolution=PT1M, periodicity=PT1H, aggregation_period=P1D),
-    Case1(resolution=PT1H, periodicity=P1D, aggregation_period=P1M),
-    Case1(resolution=P1D, periodicity=P1M, aggregation_period=P1Y),
-    Case1(resolution=PT15M, periodicity=W_P1D, aggregation_period=W_P1M),
-    Case1(resolution=PT15M, periodicity=W_P1M, aggregation_period=W_P1Y),
-    Case1(resolution=W_P1D, periodicity=W_P1M, aggregation_period=W_P1Y),
-    Case1(resolution=PT0_1S, periodicity=PT0_1S, aggregation_period=PT1S),
-    Case1(resolution=PT0_01S, periodicity=PT0_01S, aggregation_period=PT0_1S),
-    Case1(resolution=PT0_001S, periodicity=PT0_001S, aggregation_period=PT0_01S),
-    Case1(resolution=PT0_0001S, periodicity=PT0_0001S, aggregation_period=PT0_001S),
-    Case1(resolution=PT0_00001S, periodicity=PT0_00001S, aggregation_period=PT0_0001S),
-    Case1(resolution=PT0_000001S, periodicity=PT0_000001S, aggregation_period=PT0_00001S),
-    Case1(resolution=PT0_000001S, periodicity=PT0_000001S, aggregation_period=P1D),
-]
-
-# A list that can be supplied to the @parameterized.expand
-# annotation to test all the test cases
-PARAMS_CASE1: list[tuple[str, Case1]] = [
-    (f"{case1.resolution!s}_{case1.aggregation_period!s}", case1) for case1 in CASE1_LIST
-]
-
-# The dates within which to create test time-series data
-DATETIME_FROM: datetime = datetime(1990, 1, 1)
-DATETIME_TO: datetime = datetime(2020, 1, 1)
+# TimeSeries instances used throughout these tests
+ts_PT1H_2days = generate_time_series(PT1H, PT1H, 48)  # 2 days of 1-hour data
+ts_PT1H_2days_missing = generate_time_series(PT1H, PT1H, 48, missing_data=True)  # 2 days of 1-hour data
+ts_PT1H_2month = generate_time_series(PT1H, PT1H, 1_416)  # 2 months (Jan, Feb 2025) of 1-hour data
+ts_P1M_2years = generate_time_series(P1M, P1M, 24)  # 2 years of month data
+ts_P1D_OFF_2month = generate_time_series(P1D_OFF, P1D_OFF, 59)  # 2 months (Jan, Feb 2025) of 1-day-offset
+ts_P1M_OFF_2years = generate_time_series(P1M_OFF, P1M_OFF, 24)  # 2 years of 1-month-offset data
 
 
-def _create_ts_data(resolution: Period, periodicity: Period) -> TsData:
-    """Create some test time-series data"""
-    return TsData.create(resolution, periodicity, DATETIME_FROM, DATETIME_TO)
+class TestAggregationFunction(unittest.TestCase):
+    """Test the base AggregationFunction class."""
 
+    def setUp(self):
+        """Set up test fixtures."""
+        self.mock_ts = Mock()
+        self.mock_ts.time_name = "timestamp"
 
-def _get_pl_datetime_list(df: pl.DataFrame, column_name: str) -> list[datetime]:
-    """Get a list of datetimes from a Series in a DataFrame"""
-    return [dt for dt in df[column_name]]
+    @parameterized.expand([
+        ("mean", Mean), ("min", Min), ("max", Max)
+    ])
+    def test_get_with_string(self, get_input, expected):
+        """Test AggregationFunction.get() with string input."""
+        agg = AggregationFunction.get(get_input)
+        self.assertIsInstance(agg, expected)
 
+    @parameterized.expand([
+        (Mean, Mean), (Min, Min), (Max, Max)
+    ])
+    def test_get_with_class(self, get_input, expected):
+        """Test AggregationFunction.get() with class input."""
+        agg = AggregationFunction.get(get_input)
+        self.assertIsInstance(agg, expected)
 
-def _get_pl_float_list(df: pl.DataFrame, column_name: str) -> list[float]:
-    """Get a list of floats from a Series in a DataFrame"""
-    return [float(f) for f in df[column_name]]
+    @parameterized.expand([
+        (Mean(), Mean), (Min(), Min), (Max(), Max)
+    ])
+    def test_get_with_instance(self, get_input, expected):
+        """Test AggregationFunction.get() with instance input."""
+        agg = AggregationFunction.get(get_input)
+        self.assertIsInstance(agg, expected)
 
+    @parameterized.expand([
+        "Mean", "MIN", "mAx", "123"
+    ])
+    def test_get_with_invalid_string(self, get_input):
+        """Test AggregationFunction.get() with invalid string."""
+        with self.assertRaises(KeyError):
+            AggregationFunction.get(get_input)
 
-def _get_pl_int_list(df: pl.DataFrame, column_name: str) -> list[int]:
-    """Get a list of ints from a Series in a DataFrame"""
-    return [int(i) for i in df[column_name]]
+    def test_get_with_invalid_class(self):
+        """Test AggregationFunction.get() with invalid class."""
 
+        class InvalidClass:
+            pass
 
-def _get_datetime_list(
-        aggr_dict: dict[int, list[tuple[datetime, float]]], aggregation_period: Period
-) -> list[datetime]:
-    """Get a list of datetimes of the start of each aggregation
-    period from a dict of aggregated data
-    """
-    return [aggregation_period.datetime(key) for key in aggr_dict.keys()]
+        with self.assertRaises(TypeError):
+            AggregationFunction.get(InvalidClass)  # noqa - expecting type warning
 
+    @parameterized.expand([
+        (123,), ([Mean, Max],), ({Min},)
+    ])
+    def test_get_with_invalid_type(self, get_input):
+        """Test AggregationFunction.get() with invalid type."""
+        with self.assertRaises(TypeError):
+            AggregationFunction.get(get_input)
 
-def _get_datetime_of_min_list(aggr_dict: dict[int, list[tuple[datetime, float]]]) -> list[datetime]:
-    """Get a list of datetimes of the minimum value for each
-    period from a dict of aggregated data
-    """
-
-    def _sort_by_min_value(tup: tuple[datetime, float]) -> float:
-        return tup[1]
-
-    def _get_min_datetime(values: list[tuple[datetime, float]]) -> datetime:
-        sorted_list: list[tuple[datetime, float]] = sorted(values, key=_sort_by_min_value)
-        return sorted_list[0][0]
-
-    return [_get_min_datetime(value) for value in aggr_dict.values()]
-
-
-def _get_datetime_of_max_list(aggr_dict: dict[int, list[tuple[datetime, float]]]) -> list[datetime]:
-    """Get a list of datetimes of the maximum value for each
-    period from a dict of aggregated data
-    """
-
-    def _sort_by_max_value(tup: tuple[datetime, float]) -> float:
-        return 0.0 - tup[1]
-
-    def _get_max_datetime(values: list[tuple[datetime, float]]) -> datetime:
-        sorted_list: list[tuple[datetime, float]] = sorted(values, key=_sort_by_max_value)
-        return sorted_list[0][0]
-
-    return [_get_max_datetime(value) for value in aggr_dict.values()]
-
-
-def _get_mean_list(aggr_dict: dict[int, list[tuple[datetime, float]]]) -> list[float]:
-    """Get a list of floats of the means value for each
-    period from a dict of aggregated data
-    """
-
-    def _calc_mean(values: list[tuple[datetime, float]]) -> float:
-        return sum(t[1] for t in values) / len(values)
-
-    return [_calc_mean(value) for value in aggr_dict.values()]
-
-
-def _get_min_list(aggr_dict: dict[int, list[tuple[datetime, float]]]) -> list[float]:
-    """Get a list of floats of the min value for each
-    period from a dict of aggregated data
-    """
-
-    def _calc_min(values: list[tuple[datetime, float]]) -> float:
-        return min(t[1] for t in values)
-
-    return [_calc_min(value) for value in aggr_dict.values()]
-
-
-def _get_max_list(aggr_dict: dict[int, list[tuple[datetime, float]]]) -> list[float]:
-    """Get a list of floats of the max value for each
-    period from a dict of aggregated data
-    """
-
-    def _calc_max(values: list[tuple[datetime, float]]) -> float:
-        return max(t[1] for t in values)
-
-    return [_calc_max(value) for value in aggr_dict.values()]
-
-
-def _get_count_list(aggr_dict: dict[int, list[tuple[datetime, float]]]) -> list[int]:
-    """Get a list of ints containing a count of the number of
-    items in each period from a dict of aggregated data
-    """
-
-    def _calc_count(values: list[tuple[datetime, float]]) -> int:
-        return len(values)
-
-    return [_calc_count(value) for value in aggr_dict.values()]
-
-
-def _get_expected_count_list(
-        aggr_dict: dict[int, list[tuple[datetime, float]]], aggregation_period: Period, periodicity: Period
-) -> list[int]:
-    """Get a list of ints containing a count of the maximum number of
-    items that could appear in each period from a dict of aggregated
-    data
-    """
-
-    def _calc_count(aggregation_ordinal: int) -> int:
-        agg_start = aggregation_period.datetime(aggregation_ordinal)
-        agg_end = aggregation_period.datetime(aggregation_ordinal + 1)
-        prd_ordinal_start = periodicity.ordinal(agg_start)
-        prd_ordinal_end = periodicity.ordinal(agg_end)
-        prd_start = periodicity.datetime(prd_ordinal_start)
-        prd_end = periodicity.datetime(prd_ordinal_end)
-        if prd_start < agg_start:
-            prd_ordinal_start += 1
-        if prd_end < agg_end:
-            prd_ordinal_end += 1
-        prd_span = prd_ordinal_end - prd_ordinal_start
-        return prd_span
-
-    return [_calc_count(key) for key in aggr_dict.keys()]
-
-
-class TestFunctions(unittest.TestCase):
-    """Test the min, mean, and max functions over a range of
-    input time-series, aggregation periods and missing criteria options
-    """
-
-    def _test_basic(
-            self,
-            case1: Case1,
-            name: str,
-            aggregation_function: AggregationFunction,
-            value_fn: Callable[[dict[int, list[tuple[datetime, float]]]], list[float]],
-    ) -> None:
-        """Test a 'basic' aggregation function, which just produces a
-        float for each aggregation period
-        """
-        ts_data = _create_ts_data(case1.resolution, case1.periodicity)
-        ts: TimeSeries = ts_data.create_ts()
-        #       print(f"input: {ts.resolution} {ts.periodicity}" )
-        #       print(ts.df)
-        result = ts.aggregate(case1.aggregation_period, aggregation_function, VALUE)
-        aggr_dict: dict[int, list[tuple[datetime, float]]] = ts_data.create_aggr_dict(case1.aggregation_period)
-        # Compare datetime columns
-        self.assertListEqual(
-            _get_pl_datetime_list(result.df, TIME), _get_datetime_list(aggr_dict, case1.aggregation_period)
-        )
-        # Ensure datetime periodicity and resolution matches aggregation period
-        self.assertTrue(TimeSeries.check_periodicity(result.df[TIME], case1.aggregation_period))
-        self.assertTrue(TimeSeries.check_resolution(result.df[TIME], case1.aggregation_period))
-        # Compare value columns
-        # An equality check on floats could fail, but this
-        # works, for the mean function at least.
-        # Might need a version that takes float underflow/overflow
-        # into account.
-        self.assertListEqual(_get_pl_float_list(result.df, f"{name}_{VALUE}"), value_fn(aggr_dict))
-        # Compare value count columns
-        self.assertListEqual(_get_pl_int_list(result.df, f"count_{VALUE}"), _get_count_list(aggr_dict))
-        # Compare datetime count columns
-        self.assertListEqual(
-            _get_pl_int_list(result.df, f"expected_count_{TIME}"),
-            _get_expected_count_list(aggr_dict, case1.aggregation_period, case1.periodicity),
-        )
-
-    def _test_with_datetime(
-            self,
-            case1: Case1,
-            name: str,
-            aggregation_function: AggregationFunction,
-            datetime_fn: Callable[[dict[int, list[tuple[datetime, float]]]], list[datetime]],
-            value_fn: Callable[[dict[int, list[tuple[datetime, float]]]], list[float]],
-    ) -> None:
-        """Test a 'datetime' aggregation function, which produces a
-        float and a datetime for each aggregation period
-        """
-        ts_data = _create_ts_data(case1.resolution, case1.periodicity)
-        ts: TimeSeries = ts_data.create_ts()
-        result = ts.aggregate(case1.aggregation_period, aggregation_function, VALUE)
-        aggr_dict: dict[int, list[tuple[datetime, float]]] = ts_data.create_aggr_dict(case1.aggregation_period)
-        # Compare datetime columns
-        self.assertListEqual(
-            _get_pl_datetime_list(result.df, TIME), _get_datetime_list(aggr_dict, case1.aggregation_period)
-        )
-        # Ensure datetime periodicity and resolution matches aggregation period
-        self.assertTrue(TimeSeries.check_periodicity(result.df[TIME], case1.aggregation_period))
-        self.assertTrue(TimeSeries.check_resolution(result.df[TIME], case1.aggregation_period))
-        # Compare datetime of min/max columns
-        self.assertListEqual(_get_pl_datetime_list(result.df, f"{TIME}_of_{name}_{VALUE}"), datetime_fn(aggr_dict))
-        # Ensure datetime of min/max has periodicity of the aggregation period
-        self.assertTrue(TimeSeries.check_periodicity(result.df[f"{TIME}_of_{name}_{VALUE}"], case1.aggregation_period))
-        # Ensure datetime of min/max has resolution of the input time-series
-        self.assertTrue(TimeSeries.check_resolution(result.df[f"{TIME}_of_{name}_{VALUE}"], case1.resolution))
-        # Compare value columns
-        # For min/max comparing the float values should work ok, as
-        # data is just being copied, there is no calculation involved.
-        # Might need a version that takes float underflow/overflow
-        # into account.
-        self.assertListEqual(_get_pl_float_list(result.df, f"{name}_{VALUE}"), value_fn(aggr_dict))
-        # Compare value count columns
-        self.assertListEqual(_get_pl_int_list(result.df, f"count_{VALUE}"), _get_count_list(aggr_dict))
-        # Compare datetime count columns
-        self.assertListEqual(
-            _get_pl_int_list(result.df, f"expected_count_{TIME}"),
-            _get_expected_count_list(aggr_dict, case1.aggregation_period, case1.periodicity),
-        )
-
-    @parameterized.expand(PARAMS_CASE1)
-    def test_mean(self, _: Any, case1: Case1) -> None:
-        self._test_basic(
-            case1=case1, name="mean", aggregation_function=Mean, value_fn=_get_mean_list
-        )
-
-    @parameterized.expand(PARAMS_CASE1)
-    def test_min(self, _: Any, case1: Case1) -> None:
-        self._test_with_datetime(
-            case1=case1,
-            name="min",
-            aggregation_function=Min,
-            datetime_fn=_get_datetime_of_min_list,
-            value_fn=_get_min_list,
-        )
-
-    @parameterized.expand(PARAMS_CASE1)
-    def test_max(self, _: Any, case1: Case1) -> None:
-        self._test_with_datetime(
-            case1=case1,
-            name="max",
-            aggregation_function=Max,
-            datetime_fn=_get_datetime_of_max_list,
-            value_fn=_get_max_list,
-        )
-
-    @parameterized.expand(
-        [
-            Period.of_hours(5),
-            Period.of_days(7),
-            Period.of_months(9),
-        ]
-    )
-    def test_with_non_epoch_agnostic_periods(self, aggregation_period):
-        """ Test that the aggregation fails to run if the aggregation period is not an epoch-agnostic period
-        """
-        df = pl.DataFrame({
-            "timestamp": [datetime(2023, 1, 1, 1, min) for min in range(1, 11)],
-            "values": (range(10))
-        })
-
-        ts = TimeSeries(
-            df=df,
-            time_name="timestamp",
-            resolution=Period.of_minutes(1),
-            periodicity=Period.of_minutes(1),
-        )
+    def test_validate_aggregation_period_non_epoch_agnostic(self):
+        """Test validation fails for non-epoch agnostic periods."""
+        period = Mock()
+        period.is_epoch_agnostic.return_value = False
 
         with self.assertRaises(NotImplementedError):
-            ts.aggregate(aggregation_period, "mean", "values")
+            Mean()._validate_aggregation_period(self.mock_ts, period)
 
-    def test_with_missing_filled_with_null(self):
-        """ Test that the aggregation result and "actual" counts don't take into account rows that have been
-        filled in with the TimeSeries "pad" option
-        """
-        timestamps = [
-            datetime(2020, 1, 1), datetime(2020, 1, 2), datetime(2020, 1, 3),  # missing 4th,
-            datetime(2020, 1, 5), datetime(2020, 1, 6), datetime(2020, 1, 7), datetime(2020, 1, 8),
-            datetime(2020, 1, 9), datetime(2020, 1, 10), datetime(2020, 1, 11),  # missing 12th,
-            datetime(2020, 1, 13), datetime(2020, 1, 14), datetime(2020, 1, 15), datetime(2020, 1, 16),
-            datetime(2020, 1, 17), datetime(2020, 1, 18),  # missing 19th, # missing 20th,
-            datetime(2020, 1, 21), datetime(2020, 1, 22), datetime(2020, 1, 23), datetime(2020, 1, 24),
-            datetime(2020, 1, 25),  # missing 26th, # missing 27th, # missing 28th,
-            datetime(2020, 1, 29), datetime(2020, 1, 30), datetime(2020, 1, 31)
-        ]
-        values = [
-            1, 2, 3,  # missing 4
-            5, 6, 7, 8,
-            9, 10, 11,  # missing 12,
-            13, 14, 15, 16,
-            17, 18,  # missing 19, # missing 20,
-            21, 22, 23, 24,
-            25,  # missing 26, # missing 27, # missing 28,
-            29, 30, 31
-        ]
-        df = pl.DataFrame({"timestamp": timestamps, "values": values})
-        ts = TimeSeries(
-            df=df,
-            time_name="timestamp",
-            resolution=Period.of_days(1),
-            periodicity=Period.of_days(1),
-            pad=True  # Ensure pad is True for this test
+    def test_validate_aggregation_period_not_subperiod(self):
+        """Test validation fails when the aggregation period is not a subperiod."""
+        period = Mock()
+        period.is_epoch_agnostic.return_value = True
+        self.mock_ts.periodicity.is_subperiod_of.return_value = False
+
+        with self.assertRaises(UserWarning):
+            Mean()._validate_aggregation_period(self.mock_ts, period)
+
+    @parameterized.expand([
+        ("percent", 50),
+        ("percent", 40.8),
+        ("missing", 5),
+        ("available", 10),
+        ("na", 0),
+    ])
+    def test_missing_data_expr_validation_pass(self, criteria, threshold):
+        """Test missing data expression validation that should pass."""
+        expressions = Mean()._missing_data_expr(self.mock_ts, ["value"], (criteria, threshold))
+        self.assertIsInstance(expressions, list)
+
+    @parameterized.expand([
+        ("percent", 101),
+        ("percent", -1),
+        ("missing", -1),
+        ("available", -1),
+        ("missing", 10.5),
+        ("available", 10.5),
+    ])
+    def test_missing_data_expr_validation_fail(self, criteria, threshold):
+        """Test missing data expression validations that should fail."""
+        with self.assertRaises(ValueError):
+            Mean()._missing_data_expr(self.mock_ts, ["value"], (criteria, threshold))
+
+class TestSimpleAggregations(unittest.TestCase):
+    """Tests for simple aggregation cases, where the input time series has a simple resolution/periodicity and there is
+    no missing data"""
+
+    @parameterized.expand([
+        ("hourly_to_daily_mean", ts_PT1H_2days, Mean, P1D, "value", [datetime(2025, 1, 1), datetime(2025, 1, 2)],
+         [24, 24], {"value": [11.5, 35.5]}, None),
+
+        ("hourly_to_daily_max", ts_PT1H_2days, Max, P1D, "value", [datetime(2025, 1, 1), datetime(2025, 1, 2)],
+         [24, 24], {"value": [23, 47]}, [datetime(2025, 1, 1, 23), datetime(2025, 1, 2, 23)]),
+
+        ("hourly_to_daily_min", ts_PT1H_2days, Min, P1D, "value", [datetime(2025, 1, 1), datetime(2025, 1, 2)],
+         [24, 24], {"value": [0, 24]}, [datetime(2025, 1, 1), datetime(2025, 1, 2)]),
+    ])
+    def test_microsecond_to_microsecond(
+            self, _, input_ts, aggregator, target_period, column, timestamps, counts, values, timestamps_of
+    ):
+        """Test aggregations of microsecond-based (i.e., 1 day or less) resolution data, to another
+        microsecond-based resolution."""
+        expected_df = generate_expected_df(timestamps, aggregator, column, values, counts, counts, timestamps_of)
+        result = aggregator().apply(input_ts, target_period, column)
+        assert_frame_equal(result.df, expected_df, check_dtype=False, check_column_order=False)
+
+    @parameterized.expand([
+        ("hourly_to_monthly_mean", ts_PT1H_2month, Mean, P1M, "value", [datetime(2025, 1, 1), datetime(2025, 2, 1)],
+         [744, 672], {"value": [371.5, 1079.5]}, None),
+
+        ("hourly_to_monthly_max", ts_PT1H_2month, Max, P1M, "value", [datetime(2025, 1, 1), datetime(2025, 2, 1)],
+         [744, 672], {"value": [743, 1415]}, [datetime(2025, 1, 31, 23), datetime(2025, 2, 28, 23)]),
+
+        ("hourly_to_monthly_min", ts_PT1H_2month, Min, P1M, "value", [datetime(2025, 1, 1), datetime(2025, 2, 1)],
+         [744, 672], {"value": [0, 744]}, [datetime(2025, 1, 1), datetime(2025, 2, 1)]),
+    ])
+    def test_microsecond_to_month(
+            self, _, input_ts, aggregator, target_period, column, timestamps, counts, values, timestamps_of
+    ):
+        """Test aggregations of microsecond-based (i.e., 1-day or less) resolution data, to a month-based resolution."""
+        expected_df = generate_expected_df(timestamps, aggregator, column, values, counts, counts, timestamps_of)
+        result = aggregator().apply(input_ts, target_period, column)
+        assert_frame_equal(result.df, expected_df, check_dtype=False, check_column_order=False)
+
+    @parameterized.expand([
+        ("monthly_to_yearly_mean", ts_P1M_2years, Mean, P1Y, "value", [datetime(2025, 1, 1), datetime(2026, 1, 1)],
+         [12, 12], {"value": [5.5, 17.5]}, None),
+
+        ("monthly_to_yearly_max", ts_P1M_2years, Max, P1Y, "value", [datetime(2025, 1, 1), datetime(2026, 1, 1)],
+         [12, 12], {"value": [11, 23]}, [datetime(2025, 12, 1), datetime(2026, 12, 1)]),
+
+        ("monthly_to_yearly_min", ts_P1M_2years, Min, P1Y, "value", [datetime(2025, 1, 1), datetime(2026, 1, 1)],
+         [12, 12], {"value": [0, 12]}, [datetime(2025, 1, 1), datetime(2026, 1, 1)]),
+    ])
+    def test_month_to_month(
+            self, _, input_ts, aggregator, target_period, column, timestamps, counts, values, timestamps_of
+    ):
+        """Test aggregations of month-based resolution data, to a month-based resolution."""
+        expected_df = generate_expected_df(timestamps, aggregator, column, values, counts, counts, timestamps_of)
+        result = aggregator().apply(input_ts, target_period, column)
+        assert_frame_equal(result.df, expected_df, check_dtype=False, check_column_order=False)
+
+    @parameterized.expand([
+        ("multi_column_mean", ts_PT1H_2days, Mean, P1D, ["value", "value_plus1", "value_times2"],
+         [datetime(2025, 1, 1), datetime(2025, 1, 2)], [24, 24],
+         {"value": [11.5, 35.5], "value_plus1": [12.5, 36.5], "value_times2": [23, 71]}, None),
+
+        ("multi_column_max", ts_PT1H_2days, Max, P1D, ["value", "value_plus1", "value_times2"],
+         [datetime(2025, 1, 1), datetime(2025, 1, 2)], [24, 24],
+         {"value": [23, 47], "value_plus1": [24, 48], "value_times2": [46, 94]},
+         [datetime(2025, 1, 1, 23), datetime(2025, 1, 2, 23)]),
+
+        ("multi_column_min", ts_PT1H_2days, Min, P1D, ["value", "value_plus1", "value_times2"],
+         [datetime(2025, 1, 1), datetime(2025, 1, 2)], [24, 24],
+         {"value": [0, 24], "value_plus1": [1, 25], "value_times2": [0, 48]},
+         [datetime(2025, 1, 1), datetime(2025, 1, 2)]),
+    ])
+    def test_multi_column(
+            self, _, input_ts, aggregator, target_period, column, timestamps, counts, values, timestamps_of
+    ):
+        expected_df = generate_expected_df(timestamps, aggregator, column, values, counts, counts, timestamps_of)
+        result = aggregator().apply(input_ts, target_period, column)
+        assert_frame_equal(result.df, expected_df, check_dtype=False, check_column_order=False)
+
+
+class TestComplexPeriodicityAggregations(unittest.TestCase):
+    """Tests for more complex aggregation cases, where the input time series and/or target aggregation period
+    has a more complex resolution/periodicity.
+
+    Testing 1 "standard" aggregation (Mean) and 1 "date-based" aggregation (Min).
+    """
+
+    @parameterized.expand([
+        ("hourly_to_day_offset_mean", ts_PT1H_2days, Mean, P1D_OFF, "value",
+         [datetime(2024, 12, 31, 9), datetime(2025, 1, 1, 9), datetime(2025, 1, 2, 9)],
+         [24, 24, 24], [9, 24, 15], {"value": [4., 20.5, 40.]}, None),
+
+        ("hourly_to_day_offset_max", ts_PT1H_2days, Max, P1D_OFF, "value",
+         [datetime(2024, 12, 31, 9), datetime(2025, 1, 1, 9), datetime(2025, 1, 2, 9)],
+         [24, 24, 24], [9, 24, 15], {"value": [8, 32, 47]},
+         [datetime(2025, 1, 1, 8), datetime(2025, 1, 2, 8), datetime(2025, 1, 2, 23)]),
+    ])
+    def test_microsecond_to_microsecond_offset(
+            self, _, input_ts, aggregator, target_period, column, timestamps, expected_counts,
+            actual_counts, values, timestamps_of
+    ):
+        """Test aggregations of microsecond-based (i.e., 1 day or less) resolution data, to another
+        microsecond-based resolution with an offset."""
+        expected_df = generate_expected_df(
+            timestamps, aggregator, column, values, expected_counts, actual_counts, timestamps_of
         )
+        result = aggregator().apply(input_ts, target_period, column)
+        assert_frame_equal(result.df, expected_df, check_dtype=False, check_column_order=False)
 
-        expected_df = pl.DataFrame({
-            "timestamp": [datetime(2020, 1, 1)],
-            "mean_values": [15],
-            "count_values": [24],
-            "expected_count_timestamp": [31],
-            "valid_values": [True],
-        })
+    @parameterized.expand([
+        ("hourly_to_month_offset_mean", ts_PT1H_2month, Mean, P1M_OFF, "value",
+         [datetime(2024, 12, 1, 9), datetime(2025, 1, 1, 9), datetime(2025, 2, 1, 9)],
+         [744, 744, 672], [9, 744, 663], {"value": [4.0, 380.5, 1084.0]}, None),
 
-        expected_ts = TimeSeries(
-            df=expected_df,
-            time_name="timestamp",
-            resolution=Period.of_months(1),
-            periodicity=Period.of_months(1)
+        ("hourly_to_month_offset_max", ts_PT1H_2month, Max, P1M_OFF, "value",
+         [datetime(2024, 12, 1, 9), datetime(2025, 1, 1, 9), datetime(2025, 2, 1, 9)],
+         [744, 744, 672], [9, 744, 663], {"value": [8, 752, 1415]},
+         [datetime(2025, 1, 1, 8), datetime(2025, 2, 1, 8), datetime(2025, 2, 28, 23)]),
+    ])
+    def test_microsecond_to_month_offset(
+            self, _, input_ts, aggregator, target_period, column, timestamps, expected_counts, actual_counts,
+            values, timestamps_of
+    ):
+        """Test aggregations of microsecond-based (i.e., 1-day or less) resolution data, to a month-based resolution
+        with an offset."""
+        expected_df = generate_expected_df(
+            timestamps, aggregator, column, values, expected_counts, actual_counts, timestamps_of
         )
+        result = aggregator().apply(input_ts, target_period, column)
+        assert_frame_equal(result.df, expected_df, check_dtype=False, check_column_order=False)
 
-        result = ts.aggregate(Period.of_months(1), "mean", "values")
+    @parameterized.expand([
+        (ts_P1M_2years, Mean, P1Y_OFF),
+        (ts_P1M_2years, Max, P1Y_OFF),
+    ])
+    def test_month_to_month_offset(self, input_ts, aggregator, target_period):
+        """Test aggregations of month-based resolution data, to a month-based resolution with an offset. This should
+        raise an error as a month-based period cannot be a subperiod of a month-based-with-offset period"""
+        with self.assertRaises(UserWarning):
+            aggregator().apply(input_ts, target_period, "value")
 
-        self.assertEqual(result, expected_ts)
+    @parameterized.expand([
+        ("daily_offset_to_month_offset_mean", ts_P1D_OFF_2month, Mean, P1M_OFF, "value",
+         [datetime(2024, 12, 1, 9), datetime(2025, 1, 1, 9), datetime(2025, 2, 1, 9)],
+         [31, 31, 28], [1, 31, 27], {"value": [0., 16., 45.]}, None),
+
+        ("daily_offset_to_month_offset_max", ts_P1D_OFF_2month, Max, P1M_OFF, "value",
+         [datetime(2024, 12, 1, 9), datetime(2025, 1, 1, 9), datetime(2025, 2, 1, 9)],
+         [31, 31, 28], [1, 31, 27], {"value": [0, 31, 58]},
+         [datetime(2024, 12, 31, 9), datetime(2025, 1, 31, 9), datetime(2025, 2, 27, 9)]),
+    ])
+    def test_microsecond_offset_to_month_offset(
+            self, _, input_ts, aggregator, target_period, column, timestamps, expected_counts, actual_counts,
+            values, timestamps_of
+    ):
+        """Test aggregations of microsecond-based (i.e., 1-day or less) resolution data that has an offset,
+        to a month-based resolution with an offset."""
+        expected_df = generate_expected_df(
+            timestamps, aggregator, column, values, expected_counts, actual_counts, timestamps_of
+        )
+        result = aggregator().apply(input_ts, target_period, column)
+        assert_frame_equal(result.df, expected_df, check_dtype=False, check_column_order=False)
+
+    @parameterized.expand([
+        ("month_offset_to_month_offset_mean", ts_P1M_OFF_2years, Mean, P1Y_OFF, "value",
+         [datetime(2024, 10, 1, 9), datetime(2025, 10, 1, 9), datetime(2026, 10, 1, 9)],
+         [12, 12, 12], [10, 12, 2], {"value": [4.5, 15.5, 22.5]}, None),
+
+        ("month_offset_to_month_offset_max", ts_P1M_OFF_2years, Max, P1Y_OFF, "value",
+         [datetime(2024, 10, 1, 9), datetime(2025, 10, 1, 9), datetime(2026, 10, 1, 9)],
+         [12, 12, 12], [10, 12, 2], {"value": [9, 21, 23]},
+         [datetime(2025, 9, 1, 9), datetime(2026, 9, 1, 9), datetime(2026, 11, 1, 9)]),
+    ])
+    def test_month_offset_to_month_offset(
+            self, _, input_ts, aggregator, target_period, column, timestamps, expected_counts, actual_counts,
+            values, timestamps_of
+    ):
+        """Test aggregations of month-based resolution data that has an offset,
+        to a month-based resolution with an offset."""
+        expected_df = generate_expected_df(
+            timestamps, aggregator, column, values, expected_counts, actual_counts, timestamps_of
+        )
+        result = aggregator().apply(input_ts, target_period, column)
+        assert_frame_equal(result.df, expected_df, check_dtype=False, check_column_order=False)
+
+    @parameterized.expand([
+        (ts_PT1H_2days, Mean, Period.of_hours(5)),
+        (ts_PT1H_2days, Max, Period.of_days(7)),
+        (ts_PT1H_2days, Min, Period.of_months(9)),
+    ])
+    def test_non_epoch_agnostic_fails(self, input_ts, aggregator, target_period):
+        """Test that the aggregation fails to run if the aggregation period is not an epoch-agnostic period"""
+        with self.assertRaises(NotImplementedError):
+            aggregator().apply(input_ts, target_period, "value")
+
+
+class TestMissingCriteriaAggregations(unittest.TestCase):
+    """Tests the missing criteria functionality for aggregations."""
+
+    def setUp(self):
+        self.input_ts = ts_PT1H_2days_missing
+        self.aggregator = Mean
+        self.target_period = P1D
+        self.column = "value"
+        self.timestamps = [datetime(2025, 1, 1), datetime(2025, 1, 2)]
+        self.expected_counts= [24, 24]
+        self.actual_counts = [20, 21]
+        self.values = {"value": [11.7, 35.5714]}
+
+    @parameterized.expand([
+        ("no_missing_criteria", {"value": [True, True]}),
+    ])
+    def test_no_missing_criteria(self, _, valid):
+        """Test aggregation of time series that has missing data but with no criteria for amount that can be
+        missing. Essentially testing that the 'expected' and 'actual' counts of data are correct in the result."""
+        expected_df = generate_expected_df(
+            self.timestamps, self.aggregator, self.column, self.values, self.expected_counts,
+            self.actual_counts, valid=valid
+        )
+        result = self.aggregator().apply(self.input_ts, self.target_period, self.column)
+        assert_frame_equal(result.df, expected_df, check_dtype=False, check_column_order=False, check_exact=False)
+
+    @parameterized.expand([
+        ("percent_80", {"value": [True, True]}, ("percent", 80)),
+        ("percent_83.3", {"value": [False, True]}, ("percent", (20 / 24) * 100)),
+        ("percent_85", {"value": [False, True]}, ("percent", 85)),
+        ("percent_87.5", {"value": [False, False]}, ("percent", (21 / 24) * 100)),
+        ("percent_90", {"value": [False, False]}, ("percent", 90)),
+    ])
+    def test_missing_criteria_percent(self, _, valid, criteria):
+        """Test aggregation of time series that has missing data with a percent-based criteria"""
+        expected_df = generate_expected_df(
+            self.timestamps, self.aggregator, self.column, self.values, self.expected_counts,
+            self.actual_counts, valid=valid
+        )
+        result = self.aggregator().apply(self.input_ts, self.target_period, self.column, criteria)
+        assert_frame_equal(result.df, expected_df, check_dtype=False, check_column_order=False, check_exact=False)
+
+    @parameterized.expand([
+        ("missing_3", {"value": [True, True]}, ("missing", 5)),
+        ("missing_4", {"value": [True, True]}, ("missing", 4)),
+        ("missing_5", {"value": [False, True]}, ("missing", 3)),
+        ("missing_6", {"value": [False, False]}, ("missing", 2)),
+    ])
+    def test_missing_criteria_missing(self, _, valid, criteria):
+        """Test aggregation of time series that has missing data with a missing-based criteria
+        (Allow at most X missing values)."""
+        expected_df = generate_expected_df(
+            self.timestamps, self.aggregator, self.column, self.values, self.expected_counts,
+            self.actual_counts, valid=valid
+        )
+        result = self.aggregator().apply(self.input_ts, self.target_period, self.column, criteria)
+        assert_frame_equal(result.df, expected_df, check_dtype=False, check_column_order=False, check_exact=False)
+
+    @parameterized.expand([
+        ("available_20", {"value": [True, True]}, ("available", 20)),
+        ("available_21", {"value": [False, True]}, ("available", 21)),
+        ("available_22", {"value": [False, False]}, ("available", 22)),
+        ("available_23", {"value": [False, False]}, ("available", 23)),
+    ])
+    def test_missing_criteria_available(self, _, valid, criteria):
+        """Test aggregation of time series that has missing data with an available-based criteria
+        (Require at least X values present)."""
+        expected_df = generate_expected_df(
+            self.timestamps, self.aggregator, self.column, self.values, self.expected_counts,
+            self.actual_counts, valid=valid
+        )
+        result = self.aggregator().apply(self.input_ts, self.target_period, self.column, criteria)
+        assert_frame_equal(result.df, expected_df, check_dtype=False, check_column_order=False, check_exact=False)
+
+
+class TestPaddedAggregations(unittest.TestCase):
+    """Tests that aggregations work as expected with padded time series."""
+
+    def setUp(self):
+        self.timestamps = [
+            datetime(2020, 1, 1), datetime(2020, 1, 2), datetime(2020, 1, 3),  # missing the rest of the month,
+            # missing all of February
+            datetime(2020, 3, 1), datetime(2020, 3, 2), datetime(2020, 3, 3),  # missing the rest of the month,
+        ]
+        self.values = [1, 2, 3, 4, 5, 6]
+        self.df = pl.DataFrame({"timestamp": self.timestamps, "values": self.values})
 
     def test_padded_result(self):
-        """ Test that the aggregation result is padded, if the original time series was padded
+        """ Test that the aggregation result is padded if the original time series was padded
         """
-        timestamps = [
-            datetime(2020, 1, 1), datetime(2020, 1, 2), datetime(2020, 1, 3),  # missing rest of the month,
-            # missing all of February
-            datetime(2020, 3, 1), datetime(2020, 3, 2), datetime(2020, 3, 3),  # missing rest of the month,
-        ]
-        values = [
-            1, 2, 3, 4, 5, 6
-        ]
-        df = pl.DataFrame({"timestamp": timestamps, "values": values})
         ts = TimeSeries(
-            df=df,
+            df=self.df,
             time_name="timestamp",
             resolution=Period.of_days(1),
             periodicity=Period.of_days(1),
-            pad=True  # Ensure pad is True for this test
+            pad=True
         )
 
         expected_df = pl.DataFrame({
@@ -638,21 +531,13 @@ class TestFunctions(unittest.TestCase):
         )
 
         result = ts.aggregate(Period.of_months(1), "mean", "values")
-
         self.assertEqual(result, expected_ts)
 
     def test_not_padded_result(self):
-        """ Test that the aggregation result isn't padded, if the original time series wasn't padded
+        """ Test that the aggregation result isn't padded if the original time series wasn't padded
         """
-        timestamps = [
-            datetime(2020, 1, 1), datetime(2020, 1, 2), datetime(2020, 1, 3),  # missing rest of the month,
-            # missing all of February
-            datetime(2020, 3, 1), datetime(2020, 3, 2), datetime(2020, 3, 3),  # missing rest of the month,
-        ]
-        values = [1, 2, 3, 4, 5, 6]
-        df = pl.DataFrame({"timestamp": timestamps, "values": values})
         ts = TimeSeries(
-            df=df,
+            df=self.df,
             time_name="timestamp",
             resolution=Period.of_days(1),
             periodicity=Period.of_days(1),
@@ -675,115 +560,4 @@ class TestFunctions(unittest.TestCase):
         )
 
         result = ts.aggregate(Period.of_months(1), "mean", "values")
-
         self.assertEqual(result, expected_ts)
-
-
-class TestSubPeriodCheck(unittest.TestCase):
-    """Test the "periodicity is a subperiod of aggregation period" check"""
-    df = pl.DataFrame({
-        "time": [datetime(2020, 1, 1)],
-        VALUE: [1.0]})
-    ts = TimeSeries(df=df, time_name="time",
-                    resolution=Period.of_days(1),
-                    periodicity=Period.of_days(1))
-
-    def test_legal(self):
-        # The test is that none of the following raise an error
-        self.ts.aggregate(Period.of_days(1), Min, VALUE)
-        self.ts.aggregate(Period.of_months(1), Min, VALUE)
-        self.ts.aggregate(Period.of_months(1).with_day_offset(1), Min, VALUE)
-        self.ts.aggregate(Period.of_months(1).with_day_offset(5), Min, VALUE)
-        self.ts.aggregate(Period.of_years(1), Min, VALUE)
-        self.ts.aggregate(Period.of_years(1).with_day_offset(1), Min, VALUE)
-        self.ts.aggregate(Period.of_years(1).with_month_offset(1), Min, VALUE)
-        self.ts.aggregate(Period.of_years(1).with_month_offset(1).with_day_offset(1), Min, VALUE)
-
-    def test_illegal(self):
-        with self.assertRaises(UserWarning):
-            self.ts.aggregate(Period.of_hours(1), Min, VALUE)
-        with self.assertRaises(UserWarning):
-            self.ts.aggregate(Period.of_days(1).with_microsecond_offset(1), Min, VALUE)
-        with self.assertRaises(UserWarning):
-            self.ts.aggregate(Period.of_days(1).with_second_offset(1), Min, VALUE)
-        with self.assertRaises(UserWarning):
-            self.ts.aggregate(Period.of_months(1).with_minute_offset(10), Min, VALUE)
-        with self.assertRaises(UserWarning):
-            self.ts.aggregate(Period.of_years(1).with_day_offset(1).with_hour_offset(1), Min, VALUE)
-        with self.assertRaises(UserWarning):
-            self.ts.aggregate(Period.of_years(1).with_month_offset(1).with_hour_offset(1), Min, VALUE)
-        with self.assertRaises(UserWarning):
-            self.ts.aggregate(Period.of_years(1).with_month_offset(1).with_day_offset(1).with_hour_offset(1), Min,
-                              VALUE)
-
-
-class TestMissingCriteria(unittest.TestCase):
-    """Test the missing criteria functionality"""
-
-    def setUp(self):
-        """Set up test aggregated TimeSeries object"""
-
-        dates = [datetime(2023, 1, 1) + timedelta(days=i) for i in range(31)]
-        values = [10, 12, 15, 14, 13, 17, 19, 21, 18, 17, 5, 9, 0, 1, 5, 11, 12, 10, 21, 16, 10, 11, 8, 6, 14, 17, 12,
-                  10, 10, 8, 5]
-
-        df = pl.DataFrame({"timestamp": dates, "temperature": values})
-
-        self.ts = TimeSeries(df=df, time_name="timestamp", resolution="PT30M", periodicity="PT30M")
-
-    @parameterized.expand(
-        [
-            (("percent", 1.9), True),
-            (("percent", 2.1), False),
-            (("missing", 1400), False),
-            (("missing", 1500), True),
-            (("available", 25), True),
-            (("available", 35), False),
-            (None, True)
-        ]
-    )
-    def test_valid_missing_criteria(self, missing_criteria, validity):
-        """Test an aggregation function with valid missing criteria argument"""
-        result = self.ts.aggregate(P1M, Mean, "temperature", missing_criteria)
-        self.assertEqual(result.df['valid_temperature'][0], validity)
-
-
-    @parameterized.expand(
-        [
-            ({"percent": 25}, ValueError),
-            (("missing", 25, "available", 45), ValueError),
-            (("wrong_key", 75), ValueError)
-        ]
-    )
-    def test_validate_missing_aggregation_criteria_error(self, missing_criteria, expected):
-        """Test the validate_missing_aggregation_criteria method with non-valid criteria."""
-        with self.assertRaises(ValueError):
-            self.ts.aggregate(P1M, Mean, "temperature", missing_criteria)
-
-
-class TestAggregationFunctionTypeConversion(unittest.TestCase):
-    """Test that the aggregation function argument can be string or type AggregationFunction"""
-    df = pl.DataFrame({
-        "time": [datetime(2020, 1, 1)],
-        VALUE: [1.0]})
-    ts = TimeSeries(df=df, time_name="time",
-                    resolution=Period.of_days(1),
-                    periodicity=Period.of_days(1))
-
-    @parameterized.expand(
-        [
-            [Min],
-            ["min"],
-            [Max],
-            ["max"],
-            [Mean],
-            "mean"
-        ]
-    )
-    def test_legal(self, aggregation_function):
-        # The test is that none of the following raise an error
-        self.ts.aggregate(Period.of_days(1), aggregation_function, VALUE)
-
-    def test_illegal(self):
-        with self.assertRaises(KeyError):
-            self.ts.aggregate(Period.of_days(1), "IncorrectFunction", VALUE)
