@@ -561,3 +561,40 @@ class TestPaddedAggregations(unittest.TestCase):
 
         result = ts.aggregate(Period.of_months(1), "mean", "values")
         self.assertEqual(result, expected_ts)
+
+
+class TestAggregationWithMetadata(unittest.TestCase):
+    """Tests that aggregations work as expected with time series that has metadata."""
+    def setUp(self):
+        self.metadata = {
+            "KeyA": 123,
+            "KeyB": "ValueB",
+        }
+
+    def test_with_metadata(self):
+        """ Test that the aggregation result includes metadata from input time series
+        """
+        ts = TimeSeries(
+            df=ts_PT1H_2days.df,
+            time_name="timestamp",
+            resolution=PT1H,
+            periodicity=PT1H,
+            metadata=self.metadata
+        )
+
+        result = Mean().apply(ts, P1D, "value")
+        self.assertEqual(result.metadata(), self.metadata)
+
+
+    def test_with_no_metadata(self):
+        """ Test that the aggregation result metadata is empty if input time series metadata is empty
+        """
+        ts = TimeSeries(
+            df=ts_PT1H_2days.df,
+            time_name="timestamp",
+            resolution=PT1H,
+            periodicity=PT1H
+        )
+
+        result = Mean().apply(ts, P1D, "value")
+        self.assertEqual(result.metadata(), {})
