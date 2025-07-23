@@ -465,7 +465,7 @@ def random_minute_temperature_data(start_date, end_date):
     return temperatures
 
 
-def aggregation_set_up():
+def aggregation_set_up(missing_data=False):
     start_date = datetime(2023, 1, 1)
     end_date = datetime(2024, 1, 1)
     minutes = int((end_date - start_date).total_seconds() / 60)
@@ -477,6 +477,17 @@ def aggregation_set_up():
         "timestamp": timestamps,
         "temperature": temperatures,
     })
+
+    if missing_data:
+        # Remove 50% of January data
+        january_data = df.filter((pl.col("timestamp").dt.month() == 1))
+        january_data = january_data.sample(fraction=0.5)
+
+        # Remove exactly 1440 values (1 day) from February
+        february_data = df.filter((pl.col("timestamp").dt.month() == 2))
+        february_data = february_data.sample(n=1440)
+
+        df = df.join(pl.concat([january_data, february_data]), on="timestamp", how="anti")
 
     ts = TimeSeries(
         df=df,
@@ -501,10 +512,11 @@ def aggregation_mean_monthly_temperature():
     # Import the required aggregation function
     from time_stream.aggregation import Mean
 
-    # Create a monthly aggregation of the minute data, either by importing the aggregation function
-    # or by using a string
-    monthly_mean_temp = ts.aggregate(Period.of_months(1), Mean, "temperature")
-    monthly_mean_temp = ts.aggregate(Period.of_months(1), "mean", "temperature")
+    # Create a monthly aggregation of the minute data, either by importing the aggregation class
+    # or by using a string.  The class can be passed directly, or by setting an instance of the class:
+    monthly_mean_temp = ts.aggregate(Period.of_months(1), Mean, "temperature")   # Direct class
+    monthly_mean_temp = ts.aggregate(Period.of_months(1), Mean(), "temperature") # Class instance
+    monthly_mean_temp = ts.aggregate(Period.of_months(1), "mean", "temperature") # String
 
     print(monthly_mean_temp)
     # [end_block_25]
@@ -520,11 +532,11 @@ def aggregation_more_examples():
     print(monthly_min_temp)
 
     # Calculate monthly maximum temperature
-    monthly_max_temp = ts.aggregate(Period.of_months(1), "Max", "temperature")
+    monthly_max_temp = ts.aggregate(Period.of_months(1), "max", "temperature")
     print(monthly_max_temp)
 
     # Use it with other periods
-    daily_mean_temp = ts.aggregate(Period.of_days(1), Mean, "temperature")
+    daily_mean_temp = ts.aggregate(Period.of_days(1), Mean(), "temperature")
     print(daily_mean_temp)
 
     annual_max_temp = ts.aggregate(Period.of_years(1), Max, "temperature")
@@ -718,3 +730,41 @@ def pad_timeseries_water_year():
 
     print(ts)
     # [end_block_36]
+
+
+def aggregation_missing_criteria_examples():
+    with suppress_output():
+        ts = aggregation_set_up(missing_data=True)
+
+    # [start_block_37]
+    # The input Time Series has 50% of January's data removed, and exactly 1440 values (1 day) from February removed.
+
+    # Use the "missing" missing criteria - Allow at most 1000 missing values
+    missing_ts = ts.aggregate(Period.of_months(1), Mean, "temperature", missing_criteria=("missing", 1_000))
+    print("Missing criteria:", missing_ts)
+
+    # Use the "available" missing criteria - Require at least 40,320 values present (28 days)
+    available_ts = ts.aggregate(Period.of_months(1), Mean, "temperature", missing_criteria=("available", 40_320))
+    print("Available criteria:", available_ts)
+
+    # Use the "percent" missing criteria - Require at least 60% of data to be present
+    percent_ts = ts.aggregate(Period.of_months(1), Mean, "temperature", missing_criteria=("percent", 60))
+    print("Percent criteria:", percent_ts)
+    # [end_block_37]
+
+
+def aggregation_multiple_columns():
+    with suppress_output():
+        ts = aggregation_set_up()
+
+    # [start_block_38]
+    # Add some dummy "precipitation" data to the input Time Series
+    ts.df = ts.df.with_columns(
+        pl.Series("precipitation", range(0, len(ts)))
+    )
+
+    # Aggregate both the temperature and precipitation columns
+    multiple_cols_ts = ts.aggregate(Period.of_months(1), Mean, ["temperature", "precipitation"])
+    print(multiple_cols_ts)
+    # [end_block_38]
+    

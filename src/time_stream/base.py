@@ -1,15 +1,17 @@
 from collections import Counter
 from enum import Enum
-from typing import Any, Dict, Iterable, Iterator, Mapping, Optional, Sequence, Type, Union
+from typing import TYPE_CHECKING, Any, Dict, Iterable, Iterator, List, Optional, Sequence, Tuple, Type, Union
 
 import polars as pl
 
-from time_stream.aggregation_base import AggregationFunction, apply_aggregation
 from time_stream.columns import DataColumn, FlagColumn, PrimaryTimeColumn, SupplementaryColumn, TimeSeriesColumn
 from time_stream.enums import DuplicateOption
 from time_stream.flag_manager import TimeSeriesFlagManager
 from time_stream.period import Period
 from time_stream.relationships import RelationshipManager
+
+if TYPE_CHECKING:
+    from time_stream.aggregation import AggregationFunction
 
 
 class TimeSeries:  # noqa: PLW1641 ignore hash warning
@@ -32,7 +34,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         """Initialise a TimeSeries instance.
 
         Args:
-            df: The Polars DataFrame containing the time series data.
+            df: The `Polars` DataFrame containing the time series data.
             time_name: The name of the time column in the DataFrame.
             resolution: The resolution of the time series.
             periodicity: The periodicity of the time series.
@@ -40,9 +42,9 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
             flag_systems: A dictionary defining the flagging systems that can be used for flag columns.
             flag_columns: Columns within the dataframe that are considered flag columns.
                           Mapping of {column name: flag system name}.
-            metadata: Metadata relevant to the overall time series, e.g. network, site ID, license, etc.
+            metadata: Metadata relevant to the overall time series, e.g., network, site ID, license, etc.
             column_metadata: The metadata of the variables within the time series.
-            on_duplicates: What to do if duplicate rows are found in the data. Defaults to ERROR.
+            on_duplicates: What to do if duplicate rows are found in the data. Default to ERROR.
             pad: Whether to pad missing timestamps in the time series with missing values. Defaults to False.
         """
         self._time_name = time_name
@@ -61,13 +63,12 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
 
     def _setup(
         self,
-        supplementary_columns: list[str],
+        supplementary_columns: List[str],
         flag_columns: dict[str, str],
         column_metadata: dict[str, dict[str, Any]],
         metadata: dict[str, Any],
     ) -> None:
-        """
-        Performs the initial setup for the TimeSeries instance.
+        """Performs the initial setup for the TimeSeries instance.
 
         This method:
         - Initializes supplementary and flag columns.
@@ -99,12 +100,11 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
 
     def _setup_columns(
         self,
-        supplementary_columns: list[str] = None,
+        supplementary_columns: List[str] = None,
         flag_columns: dict[str, str] = None,
         column_metadata: dict[str, dict[str, Any]] = None,
     ) -> None:
-        """
-        Initializes column classifications for the TimeSeries instance.
+        """Initializes column classifications for the TimeSeries instance.
 
         This method:
         - Validates that all specified supplementary columns exist in the DataFrame.
@@ -229,7 +229,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         self.sort_time()
 
     def _handle_duplicates(self) -> None:
-        """Handle duplicate values in the time column based on a specified strategy
+        """Handle duplicate values in the time column based on a specified strategy.
 
         Current options:
         - "error": Raise an error if duplicate rows are found.
@@ -266,13 +266,13 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
 
     @property
     def resolution(self) -> Period:
-        """Resolution defines how "precise" the datetimes are, i.e. to what precision of time unit should each
+        """Resolution defines how "precise" the datetimes are, i.e., to what precision of time unit should each
         datetime in the time series match to.
 
         Some examples:
         PT0.000001S  Allow all datetime values, including microseconds.
-        PT1S	     Allow datetimes with a whole number of seconds. Microseconds must be "0".
-        PT1M	     Allow datetimes to be specified to the minute. Seconds and Microseconds must be "0".
+        PT1S         Allow datetimes with a whole number of seconds. Microseconds must be "0".
+        PT1M         Allow datetimes to be specified to the minute. Seconds and Microseconds must be "0".
         PT15M	     Allow datetimes to be specified to a multiple of 15 minutes.
                      Seconds and Microseconds must be "0", and Minutes be one of ("00", "15", "30", "45")
         P1D	         Allow all dates, but the time must be "00:00:00"
@@ -292,7 +292,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
             # Default to a resolution that accepts all datetimes
             self._resolution = Period.of_microseconds(1)
 
-        # Validate and convert to Period object
+        # Validate and convert to a Period object
         if isinstance(self._resolution, str):
             self._resolution = Period.of_duration(self._resolution)
 
@@ -320,7 +320,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
 
     @property
     def periodicity(self) -> Period:
-        """Periodicity defines the allowed "frequency" of the datetimes, i.e. how many datetimes entries are allowed
+        """Periodicity defines the allowed "frequency" of the datetimes, i.e., how many datetimes entries are allowed
         within a given period of time.
 
         Some examples:
@@ -328,9 +328,9 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         PT1S	    At most 1 datetime can occur within any given second.
         PT1M	    At most 1 datetime can occur within any given minute.
         PT15M	    At most 1 datetime can occur within any 15-minute duration.
-                    Each 15-minute durations starts at ("00", "15", "30", "45") minutes past the hour.
+                    Each 15-minute duration starts at ("00", "15", "30", "45") minutes past the hour.
         P1D	        At most 1 datetime can occur within any given calendar day
-                    (from midnight of first day up to, but not including, midnight of the next day)
+                    (from midnight of the first day up to, but not including, midnight of the next day).
         P1M	        At most 1 datetime can occur within any given calendar month
                     (from midnight on the 1st of the month up to, but not including, midnight on the 1st of the
                     following month).
@@ -358,7 +358,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         self._epoch_check(self.periodicity)
 
         # Check how many unique values are in the truncated times. It should equal the length of the original
-        # time-series if all time values map to a single periodicity
+        # time-series if all time values map to single periodicity
         if not TimeSeries.check_periodicity(self.df[self.time_name], self.periodicity):
             raise UserWarning(
                 f'Values in time field: "{self.time_name}" do not conform to periodicity: {self.periodicity}'
@@ -366,7 +366,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
 
     @staticmethod
     def check_periodicity(date_times: pl.Series, periodicity: Period) -> bool:
-        """Check that a Series of date/time values conforms to a given periodicity.
+        """Check that a Series of date/time values conforms to given periodicity.
 
         Args:
            date_times: A Series of date/times to be tested.
@@ -377,7 +377,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
            False otherwise
         """
         # Check how many unique values are in the truncated times. It should equal the length of the original
-        # time-series if all time values map to a single periodicity
+        # time-series if all time values map to single periodicity
         return TimeSeries.truncate_to_period(date_times, periodicity).n_unique() == len(date_times)
 
     @staticmethod
@@ -391,21 +391,21 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
            period: The period to which the date/times should be truncated.
 
         Examples:
-           For a period of one day (Period.of_days(1)) all the date/time value are rounded
+           For a period of one day (Period.of_days(1)) all the date/time values are rounded
            down, or truncated, to the start of the day (the hour, minute, second, and microsecond
            fields are all set to 0).
 
-           For a period of fifteen minutes (Period.of_minutes(15)) all the date/time value are rounded
-           down, or truncated, to the start of a fifteen minute period (the minute field is rounded down
+           For a period of fifteen minutes (Period.of_minutes(15)) all the date/time values are rounded
+           down, or truncated, to the start of a fifteen-minute period (the minute field is rounded down
            to either 0, 15, 30 or 45, and the second, and microsecond fields are set to 0).
 
         Returns:
-           A Polars Series with the truncated date/time values.
+           A `Polars` Series with the truncated date/time values.
         """
         # Remove any offset from the time series
         time_series_no_offset = date_times.dt.offset_by("-" + period.pl_offset)
 
-        # truncate the (non offset) time series to the given resolution interval and add the offset back on
+        # truncate the (non-offset) time series to the given resolution interval and add the offset back on
         truncated_times = time_series_no_offset.dt.truncate(period.pl_interval)
         truncated_times_with_offset = truncated_times.dt.offset_by(period.pl_offset)
 
@@ -439,7 +439,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
             NotImplementedError: If the period is not epoch-agnostic.
         """
         if not period.is_epoch_agnostic():
-            # E.g. 5 hours, 7 days, 9 months, etc.
+            # E.g., 5 hours, 7 days, 9 months, etc.
             raise NotImplementedError("Not available for non-epoch agnostic periodicity")
 
     @property
@@ -449,7 +449,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
 
     @df.setter
     def df(self, new_df: pl.DataFrame) -> None:
-        """Update the underlying DataFrame while preserving the integrity of primary datetime field, metadata and
+        """Update the underlying DataFrame while preserving the integrity of primary datetime field, metadata, and
         supplementary column settings.
 
         Checks that the time column has not changed, and removes any metadata and or supplementary column
@@ -472,7 +472,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         significant change and should result in a new TimeSeries object.
 
         Args:
-            df: The Polars DataFrame to validate.
+            df: The `Polars` DataFrame to validate.
 
         Raises:
             ValueError: If the time column is missing or if its timestamps differ from the current DataFrame.
@@ -519,38 +519,41 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         self._relationship_manager._setup_relationships()
 
     @property
-    def time_column(self) -> Union[PrimaryTimeColumn, None]:
-        """The primary time column of the TimeSeries."""
+    def time_column(self) -> PrimaryTimeColumn:
+        """Return the primary time column of the TimeSeries."""
         time_column = [col for col in self._columns.values() if isinstance(col, PrimaryTimeColumn)]
         num_cols = len(time_column)
-        if num_cols == 1:
-            return time_column[0]
-        elif num_cols == 0:
+        if num_cols == 0:
             raise ValueError("No primary time column found.")
-        elif num_cols > 1:
+        if num_cols > 1:
             raise ValueError(f"Multiple primary time columns found: {time_column}")
+        return time_column[0]
 
     @property
     def data_columns(self) -> dict[str, TimeSeriesColumn]:
+        """Return the data columns of the TimeSeries."""
         columns = {col.name: col for col in self._columns.values() if type(col) is DataColumn}
         return columns
 
     @property
     def supplementary_columns(self) -> dict[str, TimeSeriesColumn]:
+        """Return the supplementary columns of the TimeSeries."""
         columns = {col.name: col for col in self._columns.values() if type(col) is SupplementaryColumn}
         return columns
 
     @property
     def flag_columns(self) -> dict[str, TimeSeriesColumn]:
+        """Return the flag columns of the TimeSeries."""
         columns = {col.name: col for col in self._columns.values() if type(col) is FlagColumn}
         return columns
 
     @property
     def columns(self) -> dict[str, TimeSeriesColumn]:
+        """Return all the columns of the TimeSeries."""
         columns = {col.name: col for col in self._columns.values() if type(col) is not PrimaryTimeColumn}
         return columns
 
-    def select(self, col_names: list[str]) -> "TimeSeries":
+    def select(self, col_names: List[str]) -> "TimeSeries":
         """Filter TimeSeries instance to include only the specified columns.
 
         Args:
@@ -569,13 +572,13 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         new_df = self.df.select([self.time_name] + col_names)
         new_columns = [self.columns[col] for col in new_df.columns if col in self.columns]
 
-        # Construct new time series object based on updated columns.  Need to build new column mappings etc.
+        # Construct a new time series object based on updated columns.  Need to build new column mappings etc.
         new_supplementary_columns = [col.name for col in new_columns if col.name in self.supplementary_columns]
         new_flag_columns = {col.name: col.flag_system for col in new_columns if col.name in self.flag_columns}
         new_flag_systems = {k: v for k, v in self.flag_systems.items() if k in new_flag_columns.values()}
         new_metadata = {col.name: col.metadata() for col in new_columns}
 
-        ts = TimeSeries(
+        return TimeSeries(
             df=new_df,
             time_name=self.time_name,
             resolution=self.resolution,
@@ -584,9 +587,10 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
             flag_columns=new_flag_columns,
             flag_systems=new_flag_systems,
             column_metadata=new_metadata,
+            metadata=self._metadata,
+            on_duplicates=self._on_duplicates,
+            pad=self._pad,
         )
-
-        return ts
 
     def init_supplementary_column(
         self,
@@ -598,10 +602,10 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
 
         Args:
             col_name: The name of the new supplementary column.
-            data: The data to populate the column. Can be a scalar, an iterable, or None.
-                  If iterable, must have the same length as the current TimeSeries.
+            data: The data to populate the column. It can be a scalar, an iterable, or None.
+                  If iterable, it must have the same length as the current TimeSeries.
                   If None, the column will be filled with `None`.
-            dtype: The data type to use. If set to None (default), the data type is inferred from the values input.
+            dtype: The data type to use. If set to None (default), the data type is inferred from the `values` input.
 
         Raises:
             KeyError: If the column name already exists in the DataFrame.
@@ -621,7 +625,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         supplementary_col = SupplementaryColumn(col_name, self)
         self._columns[col_name] = supplementary_col
 
-    def set_supplementary_column(self, col_name: Union[str, list[str]]) -> None:
+    def set_supplementary_column(self, col_name: Union[str, List[str]]) -> None:
         """Mark the specified existing column(s) as a supplementary column.
 
         Args:
@@ -636,29 +640,26 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
     def aggregate(
         self,
         aggregation_period: Period,
-        aggregation_function: Union[str, Type["AggregationFunction"]],
-        column_name: str,
-        missing_criteria: Optional[Mapping[str, float | int]] = None,
+        aggregation_function: Union[str, Type["AggregationFunction"], "AggregationFunction"],
+        columns: Union[str, List[str]],
+        missing_criteria: Optional[Tuple[str, Union[float, int]]] = None,
     ) -> "TimeSeries":
         """Apply an aggregation function to a column in this TimeSeries, check the aggregation satisfies user
         requirements and return a new derived TimeSeries containing the aggregated data.
 
-        The AggregationFunction class provides static methods that return aggregation function objects that can be used
-        with this method.
-
-        NOTE: This is the first attempt at a mechanism for aggregating time-series data.  The signature of this method
-            is likely to evolve considerably.
-
         Args:
             aggregation_period: The period over which to aggregate the data
             aggregation_function: The aggregation function to apply
-            column_name: The column containing the data to be aggregated
+            columns: The column(s) containing the data to be aggregated
             missing_criteria: How the aggregation handles missing data
 
         Returns:
             A TimeSeries containing the aggregated data.
         """
-        return apply_aggregation(self, aggregation_period, aggregation_function, column_name, missing_criteria)
+        # Import at runtime to avoid circular import
+        from time_stream.aggregation import AggregationFunction  # noqa: PLC0415
+
+        return AggregationFunction.get(aggregation_function).apply(self, aggregation_period, columns, missing_criteria)
 
     def metadata(self, key: Optional[Sequence[str]] = None, strict: bool = True) -> Dict[str, Any]:
         """Retrieve metadata for all or specific keys.
@@ -699,7 +700,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
             A dictionary of the requested metadata.
 
         Raises:
-            KeyError: If the requested key(s) are not found in the metadata of any column.
+            KeyError: If the requested key(s) is not found in the metadata of any column.
         """
         if isinstance(column, str):
             column = [column]
@@ -723,7 +724,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
 
         return result
 
-    def add_column_relationship(self, primary: str, other: Union[str, list[str]]) -> None:
+    def add_column_relationship(self, primary: str, other: Union[str, List[str]]) -> None:
         """Adds a relationship between the primary column and other column(s).
 
         Args:
@@ -736,7 +737,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         primary = self.columns[primary]
         primary.add_relationship(other)
 
-    def remove_column_relationship(self, primary: str, other: Union[str, list[str]]) -> None:
+    def remove_column_relationship(self, primary: str, other: Union[str, List[str]]) -> None:
         """Removes a relationship between the primary column and other column(s).
 
         Args:
@@ -780,7 +781,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         This method provides convenience for accessing data columns or the time column of the DataFrame.
         It supports the following behaviors:
 
-        - If the attribute name matches the time column, it returns the time column as a Polars Series.
+        - If the attribute name matches the time column, it returns the time column as a `Polars` Series.
         - If the attribute name matches a column in the DataFrame (excluding the time column), it selects that column
             and returns a new TimeSeries instance.
         - If the attribute name does not match a column, it assumes this is a Metadata key. Return that.
@@ -790,7 +791,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
 
         Returns:
             If `name` is:
-              - The time column: A Polars Series containing the time data.
+              - The time column: A `Polars` Series containing the time data.
               - A non-time column: The TimeSeries instance with that column selected.
               - Metadata key: The metadata value for that key.
 
@@ -829,7 +830,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         except (KeyError, AttributeError):
             raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
 
-    def __getitem__(self, key: Union[str, list[str], tuple[str]]) -> Union["TimeSeries", PrimaryTimeColumn]:
+    def __getitem__(self, key: Union[str, List[str], tuple[str]]) -> Union["TimeSeries", PrimaryTimeColumn]:
         """Access columns or the time column using indexing syntax.
 
         This method enables convenient access to DataFrame columns or the time column by using indexing. It supports:
@@ -866,7 +867,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         return self.df.shape
 
     def __len__(self) -> int:
-        """Get the number of rows in the time series."""
+        """Return the number of rows in the time series."""
         return self.df.height
 
     def __iter__(self) -> Iterator:
@@ -889,7 +890,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
             f"flag_columns={list(self.flag_columns.keys())}, "
         )
 
-    def __dir__(self) -> list[str]:
+    def __dir__(self) -> List[str]:
         """Return a list of attributes associated with the TimeSeries class.
 
         This method extends the default attributes of the TimeSeries class by including the column names of the
@@ -905,7 +906,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         return sorted(set(custom_attrs))
 
     def __eq__(self, other: object) -> bool:
-        """Checks if two TimeSeries instances are equal.
+        """Check if two TimeSeries instances are equal.
 
         Args:
             other: The object to compare.
