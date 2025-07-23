@@ -14,13 +14,13 @@ permissions:
 jobs:
 
   test-python:
-    uses: NERC-CEH/dri-cicd/.github/workflows/test-python.yml@uv-action
+    uses: NERC-CEH/dri-cicd/.github/workflows/test-python.yml@main
     with:
       use_uv: true
       coverage_threshold: 90
 
   build-docs:
-    uses: NERC-CEH/dri-cicd/.github/workflows/build-docs.yml@uv-action
+    uses: NERC-CEH/dri-cicd/.github/workflows/build-docs.yml@main
     with:
       use_uv: true
       pages_artifact_name: pages-artifact
