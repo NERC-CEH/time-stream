@@ -600,9 +600,9 @@ mean of those 2 values, even though we'd expect 1440 values for a full day.
 
 You can specify criteria for a valid aggregation using the ``missing_criteria`` argument.
 
-- ``{"missing": 30}`` Aggregation is valid if there are no more than 30 values missing in the period.
-- ``{"available": 30}`` Aggregation is valid if there are at least 30 input values in the period.
-- ``{"percent": 30}`` Aggregation is valid if the data in the period is at least 30 percent complete (accepts integers or floats).
+- ``("missing", 30)`` Aggregation is valid if there are no more than 30 values missing in the period.
+- ``("available", 30)`` Aggregation is valid if there are at least 30 input values in the period.
+- ``("percent", 30)`` Aggregation is valid if the data in the period is at least 30 percent complete (accepts integers or floats).
 
 If no ``missing_criteria`` are specified, the ``valid`` column will be set to ``True``.
 

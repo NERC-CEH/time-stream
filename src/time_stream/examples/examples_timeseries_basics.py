@@ -501,10 +501,11 @@ def aggregation_mean_monthly_temperature():
     # Import the required aggregation function
     from time_stream.aggregation import Mean
 
-    # Create a monthly aggregation of the minute data, either by importing the aggregation function
-    # or by using a string
-    monthly_mean_temp = ts.aggregate(Period.of_months(1), Mean, "temperature")
-    monthly_mean_temp = ts.aggregate(Period.of_months(1), "mean", "temperature")
+    # Create a monthly aggregation of the minute data, either by importing the aggregation class
+    # or by using a string.  The class can be passed directly, or by setting an instance of the class:
+    monthly_mean_temp = ts.aggregate(Period.of_months(1), Mean, "temperature")   # Direct class
+    monthly_mean_temp = ts.aggregate(Period.of_months(1), Mean(), "temperature") # Class instance
+    monthly_mean_temp = ts.aggregate(Period.of_months(1), "mean", "temperature") # String
 
     print(monthly_mean_temp)
     # [end_block_25]

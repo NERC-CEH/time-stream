@@ -1,6 +1,6 @@
 from collections import Counter
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Dict, Iterable, Iterator, List, Mapping, Optional, Sequence, Type, Union
+from typing import TYPE_CHECKING, Any, Dict, Iterable, Iterator, List, Optional, Sequence, Tuple, Type, Union
 
 import polars as pl
 
@@ -642,7 +642,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         aggregation_period: Period,
         aggregation_function: Union[str, Type["AggregationFunction"], "AggregationFunction"],
         columns: Union[str, List[str]],
-        missing_criteria: Optional[Mapping[str, float | int]] = None,
+        missing_criteria: Optional[Tuple[str, Union[float, int]]] = None,
     ) -> "TimeSeries":
         """Apply an aggregation function to a column in this TimeSeries, check the aggregation satisfies user
         requirements and return a new derived TimeSeries containing the aggregated data.
