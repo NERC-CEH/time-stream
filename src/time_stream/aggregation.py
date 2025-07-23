@@ -27,6 +27,14 @@ def register_aggregation(cls: Type["AggregationFunction"]) -> Type["AggregationF
 class AggregationFunction(ABC):
     """Base class for aggregation functions."""
 
+    _ts = None
+
+    @property
+    def ts(self) -> TimeSeries:
+        if self._ts is None:
+            raise AttributeError("TimeSeries has not been initialised for this aggregation method.")
+        return self._ts
+
     @property
     @abstractmethod
     def name(self) -> str:
@@ -34,7 +42,7 @@ class AggregationFunction(ABC):
         pass
 
     @abstractmethod
-    def expr(self, ts: TimeSeries, columns: List[str]) -> List[pl.Expr]:
+    def expr(self, columns: List[str]) -> List[pl.Expr]:
         """Return the Polars expressions for this aggregation."""
         pass
 
@@ -119,16 +127,19 @@ class AggregationFunction(ABC):
         # Validate that we can carry out the aggregation
         self._validate_aggregation_period(ts, aggregation_period)
 
+        # Set the timeseries property
+        self._ts = ts
+
         # Handle multiple columns
         if isinstance(columns, str):
             columns = [columns]
 
         # Remove NULL rows
-        df = ts.df.drop_nulls(subset=columns)
+        df = self.ts.df.drop_nulls(subset=columns)
 
         # Group by the aggregation period
         grouper = df.group_by_dynamic(
-            index_column=ts.time_name,
+            index_column=self.ts.time_name,
             every=aggregation_period.pl_interval,
             offset=aggregation_period.pl_offset,
             closed="left",
@@ -136,7 +147,7 @@ class AggregationFunction(ABC):
 
         # Build expressions to go in the .agg method
         agg_expressions = []
-        agg_expressions.extend(self.expr(ts, columns))
+        agg_expressions.extend(self.expr(columns))
         agg_expressions.extend(self._actual_count_expr(columns))
 
         # Do the aggregation function
@@ -145,8 +156,8 @@ class AggregationFunction(ABC):
         # Build expressions to go in the .with_columns method.
         #   Note: Order is important here. Expressions may have dependencies on the results of earlier expressions.
         with_columns_expressions = []
-        with_columns_expressions.append(self._expected_count_expr(ts, aggregation_period))
-        with_columns_expressions.extend(self._missing_data_expr(ts, columns, missing_criteria))
+        with_columns_expressions.append(self._expected_count_expr(self.ts, aggregation_period))
+        with_columns_expressions.extend(self._missing_data_expr(self.ts, columns, missing_criteria))
 
         # Do the with_column methods
         for with_column in with_columns_expressions:
@@ -155,11 +166,11 @@ class AggregationFunction(ABC):
         # Create result TimeSeries
         return TimeSeries(
             df=df,
-            time_name=ts.time_name,
+            time_name=self.ts.time_name,
             resolution=aggregation_period,
             periodicity=aggregation_period,
-            metadata=ts._metadata,
-            pad=ts._pad,
+            metadata=self.ts._metadata,
+            pad=self.ts._pad,
         )
 
     def _validate_aggregation_period(self, ts: TimeSeries, period: Period) -> None:
@@ -297,7 +308,7 @@ class Mean(AggregationFunction):
 
     name = "mean"
 
-    def expr(self, ts: TimeSeries, columns: List[str]) -> List[pl.Expr]:
+    def expr(self, columns: List[str]) -> List[pl.Expr]:
         """Return the `Polars` expression for calculating the mean in an aggregation period."""
         return [pl.col(col).mean().alias(f"mean_{col}") for col in columns]
 
@@ -308,7 +319,7 @@ class Min(AggregationFunction):
 
     name = "min"
 
-    def expr(self, ts: TimeSeries, columns: List[str]) -> List[pl.Expr]:
+    def expr(self, columns: List[str]) -> List[pl.Expr]:
         """Return the `Polars` expression for calculating the minimum in an aggregation period.
         This expression also returns a column that holds the datetime that the minimum value occurred on.
         """
@@ -318,11 +329,11 @@ class Min(AggregationFunction):
                 [
                     pl.col(col).min().alias(f"{self.name}_{col}"),
                     # Define a struct, to be able to extract the datetime on which the min occurred
-                    pl.struct([ts.time_name, col])
+                    pl.struct([self.ts.time_name, col])
                     .sort_by(col)
                     .first()
-                    .struct.field(ts.time_name)
-                    .alias(f"{ts.time_name}_of_{self.name}_{col}"),
+                    .struct.field(self.ts.time_name)
+                    .alias(f"{self.ts.time_name}_of_{self.name}_{col}"),
                 ]
             )
         return expressions
@@ -334,7 +345,7 @@ class Max(AggregationFunction):
 
     name = "max"
 
-    def expr(self, ts: TimeSeries, columns: str) -> List[pl.Expr]:
+    def expr(self, columns: str) -> List[pl.Expr]:
         """Return the `Polars` expression for calculating the maximum in an aggregation period.
         This expression also returns a column that holds the datetime that the maximum value occurred on.
         """
@@ -344,11 +355,11 @@ class Max(AggregationFunction):
                 [
                     pl.col(col).max().alias(f"{self.name}_{col}"),
                     # Define a struct, to be able to extract the datetime on which the max occurred
-                    pl.struct([ts.time_name, col])
+                    pl.struct([self.ts.time_name, col])
                     .sort_by(col)
                     .last()
-                    .struct.field(ts.time_name)
-                    .alias(f"{ts.time_name}_of_{self.name}_{col}"),
+                    .struct.field(self.ts.time_name)
+                    .alias(f"{self.ts.time_name}_of_{self.name}_{col}"),
                 ]
             )
         return expressions
