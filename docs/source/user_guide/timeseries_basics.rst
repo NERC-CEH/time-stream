@@ -580,6 +580,7 @@ The returned TimeSeries provides additional context columns:
 - Expected count of the number of data points expected if the aggregation period was full
 - Actual count of the number of data points found in the data for the given aggregation period.
 - For Max and Min, the datetime of the Max/Min data point within the given aggregation period.
+- A boolean column that indicates where the individual aggregated data point is valid or not (see below).
 
 .. literalinclude:: ../../../src/time_stream/examples/examples_timeseries_basics.py
    :language: python
@@ -594,19 +595,55 @@ The returned TimeSeries provides additional context columns:
    ts = examples_timeseries_basics.aggregation_mean_monthly_temperature()
 
 
-By default, this will aggregate the data regardless of how many missing data points there are in the period.
+Missing criteria
+~~~~~~~~~~~~~~~~~~~
+
+By default, the aggregation method will provide data regardless of how many missing data points there are in the period.
 For example, if we have two 1 minute data points on a given day, doing a mean aggregation would return the
 mean of those 2 values, even though we'd expect 1440 values for a full day.
 
-You can specify criteria for a valid aggregation using the ``missing_criteria`` argument.
+To have more control, you can specify criteria for a valid aggregation using the ``missing_criteria`` argument.
 
 - ``("missing", 30)`` Aggregation is valid if there are no more than 30 values missing in the period.
 - ``("available", 30)`` Aggregation is valid if there are at least 30 input values in the period.
 - ``("percent", 30)`` Aggregation is valid if the data in the period is at least 30 percent complete (accepts integers or floats).
 
+The resulting aggregation TimeSeries will contain a ``valid_<column name>`` column - a boolean series that indicates
+whether the individual aggregated data points are valid or not, based on the missing criteria specified.
 If no ``missing_criteria`` are specified, the ``valid`` column will be set to ``True``.
 
+.. literalinclude:: ../../../src/time_stream/examples/examples_timeseries_basics.py
+   :language: python
+   :start-after: [start_block_37]
+   :end-before: [end_block_37]
+   :dedent:
+
+.. jupyter-execute::
+   :hide-code:
+
+   import examples_timeseries_basics
+   ts = examples_timeseries_basics.aggregation_missing_criteria_examples()
+
+Multiple columns
+~~~~~~~~~~~~~~~~~~~
+The aggregation method can accept multiple columns to aggregate. They will all be aggregated using the same
+method and criteria. The context columns explained above will be generated for each column individually, and be
+clearly labelled in the column name so you are aware which data they refer to.
+
+.. literalinclude:: ../../../src/time_stream/examples/examples_timeseries_basics.py
+   :language: python
+   :start-after: [start_block_38]
+   :end-before: [end_block_38]
+   :dedent:
+
+.. jupyter-execute::
+   :hide-code:
+
+   import examples_timeseries_basics
+   ts = examples_timeseries_basics.aggregation_multiple_columns()
+
 Some more aggregation examples:
+~~~~~~~~~~~~~~~~~~~
 
 .. literalinclude:: ../../../src/time_stream/examples/examples_timeseries_basics.py
    :language: python

@@ -1,8 +1,8 @@
-Welcome to Time Series Documentation
+Welcome to Time Stream Documentation
 ===========================================
 
-A comprehensive package for handling time series data with specialised
-focus on time intervals, aggregation, and data flagging.
+**Time S**\ eries **T**\ oolkit for **R**\ apid **E**\ nvironmental **A**\ nalysis and **M**\ onitoring: A comprehensive package
+for handling series data with specialised focus on time intervals, aggregation, and data flagging.
 
 Key Features
 -----------
