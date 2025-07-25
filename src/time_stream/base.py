@@ -1,4 +1,5 @@
 from collections import Counter
+from datetime import datetime
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Dict, Iterable, Iterator, List, Optional, Sequence, Tuple, Type, Union
 
@@ -12,6 +13,7 @@ from time_stream.relationships import RelationshipManager
 
 if TYPE_CHECKING:
     from time_stream.aggregation import AggregationFunction
+    from time_stream.qc import QCCheck
 
 
 class TimeSeries:  # noqa: PLW1641 ignore hash warning
@@ -659,7 +661,57 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         # Import at runtime to avoid circular import
         from time_stream.aggregation import AggregationFunction  # noqa: PLC0415
 
-        return AggregationFunction.get(aggregation_function).apply(self, aggregation_period, columns, missing_criteria)
+        # Get the aggregation function instance and run the apply method
+        agg_instance = AggregationFunction.get(aggregation_function)
+        return agg_instance.apply(self, aggregation_period, columns, missing_criteria)
+
+    def qc_check(
+        self,
+        check: Union[str, Type["QCCheck"]],
+        check_column: str,
+        flag_column: str,
+        flag_value: Optional[int | str | bool] = True,
+        observation_interval: Optional[Tuple[datetime, Optional[datetime]]] = None,
+        **check_params,
+    ) -> "TimeSeries":
+        """Apply a quality control check to the TimeSeries.
+
+        Args:
+            check: The QC check to apply.
+            check_column: The column to perform the check on.
+            flag_column: The column to flag when check fails.
+            flag_value: The value given to rows that fail the check.
+                        If `flag_column` has been set up as an "official" `time_stream.columns.FlagColumn`, then
+                        `flag_value` must exist in the associated flag system of that `FlagColumn`.
+            observation_interval: Optional time interval to limit the check to.
+            **check_params: Parameters specific to the check type.
+
+        Returns:
+            TimeSeries: Updated TimeSeries with flags applied.
+
+        Examples:
+            >>> # Threshold check
+            >>> ts_flagged = ts.qc_check("comparison", "battery_voltage", "battery_flag",
+            ...                          compare_to=12.0, operator="<")
+            >>>
+            >>> # Range check
+            >>> ts_flagged = ts.qc_check("range", "temperature", "temp_flag",
+             ...                         min_value=-50, max_value=50)
+            >>>
+            >>> # Spike check
+            >>> ts_flagged = ts.qc_check("spike", "wind_speed", "wind_flag",
+            ...                         threshold=5.0)
+            >>>
+            >>> # Value check for error codes
+            >>> ts_flagged = ts.qc_check("comparison", "status_code", "status_flag",
+            ...                         compare_to=[99, -999, "ERROR"])
+        """
+        # Import at runtime to avoid circular import
+        from time_stream.qc import QCCheck  # noqa: PLC0415
+
+        # Get the QC check instance and run the apply method
+        check_instance = QCCheck.get(check, **check_params)
+        return check_instance.apply(self, check_column, flag_column, flag_value, observation_interval)
 
     def metadata(self, key: Optional[Sequence[str]] = None, strict: bool = True) -> Dict[str, Any]:
         """Retrieve metadata for all or specific keys.
