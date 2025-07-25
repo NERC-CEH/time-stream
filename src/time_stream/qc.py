@@ -108,7 +108,7 @@ class QCCheck(ABC):
         check_column: str,
         flag_column: str,
         flag_value: Optional[int | str | bool] = True,
-        observation_interval: Optional[Tuple[datetime, Optional[datetime]]] = None,
+        observation_interval: Optional[datetime | Tuple[datetime, datetime | None]] = None,
     ) -> TimeSeries:
         """Apply the QC check to the TimeSeries.
 
@@ -157,7 +157,7 @@ class QCCheck(ABC):
         return ts
 
     @staticmethod
-    def _get_date_filter(ts: TimeSeries, observation_interval: Tuple[datetime, Optional[datetime]]) -> pl.Expr:
+    def _get_date_filter(ts: TimeSeries, observation_interval: datetime | Tuple[datetime, datetime | None]) -> pl.Expr:
         """Get Polars expression for observation date interval filtering.
 
         Args:
@@ -167,7 +167,12 @@ class QCCheck(ABC):
         Returns:
             pl.Expr: Boolean polars expression for date filtering.
         """
-        start_date, end_date = observation_interval
+        if isinstance(observation_interval, datetime):
+            start_date = observation_interval
+            end_date = None
+        else:
+            start_date, end_date = observation_interval
+
         if end_date is None:
             return pl.col(ts.time_name) >= start_date
         else:

@@ -6,7 +6,6 @@ import polars as pl
 from parameterized import parameterized
 from polars.testing import assert_series_equal
 
-from time_stream.period import Period
 from time_stream.base import TimeSeries
 from time_stream.qc import QCCheck, ComparisonCheck, SpikeCheck, RangeCheck
 
@@ -296,3 +295,39 @@ class TestSpikeCheck(unittest.TestCase):
         expected = pl.Series("flag_col", [False, True, False, False, True, False])
         assert_series_equal(self.ts.df["flag_col"], expected)
 
+class TestCheckWithDateRange(unittest.TestCase):
+    def setUp(self):
+        data = pl.DataFrame({
+            "time": [datetime(2023, 8, d+1) for d in range(10)],
+            "value_a": range(10)
+        })
+        self.ts = TimeSeries(data, "time")
+
+    def test_no_date_range(self):
+        """ Test the check is applied to whole time series if no date range provided
+        """
+        check = ComparisonCheck(1, ">")
+        check.apply(self.ts, "value_a", "flag_col", observation_interval=None)
+        expected = pl.Series("flag_col", [False, False, True, True, True, True, True, True, True, True])
+        assert_series_equal(self.ts.df["flag_col"], expected)
+
+    def test_with_date_range(self):
+        """ Test the check is applied to part of the time series if a date range provided
+        """
+        check = ComparisonCheck(1, ">")
+        check.apply(self.ts, "value_a", "flag_col", observation_interval=(datetime(2023, 8, 1), datetime(2023, 8, 5)))
+        expected = pl.Series("flag_col", [False, False, True, True, True, False, False, False, False, False])
+        assert_series_equal(self.ts.df["flag_col"], expected)
+
+    @parameterized.expand([
+        # Different ways that observation_interval can specify an open-ended end date
+        ("start_date_only", datetime(2023, 8, 8)),
+        ("end_date_none", (datetime(2023, 8, 8), None))
+    ])
+    def test_with_date_range_open(self, _, observation_interval):
+        """ Test the check is applied to part of the time series if a date range provided an open-ended end date
+        """
+        check = ComparisonCheck(1, ">")
+        check.apply(self.ts, "value_a", "flag_col", observation_interval=observation_interval)
+        expected = pl.Series("flag_col", [False, False, False, False, False, False, False, True, True, True])
+        assert_series_equal(self.ts.df["flag_col"], expected)
