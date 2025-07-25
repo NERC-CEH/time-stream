@@ -1,0 +1,121 @@
+Quality control checks
+==================
+
+The quality control (QC) system in the Time Stream library provides a flexible framework for flagging
+potential issues in time series data. It allows users to define and apply QC checks to individual
+columns of a ``TimeSeries`` object, storing the results in flag columns for further inspection or filtering.
+
+Applying a QC Check
+-------------------
+
+To apply a QC check, call the ``TimeSeries.qc_check`` method on a ``TimeSeries`` object. This method allows you to:
+
+- Specify the **check type** (see below for available built-in quality control checks)
+- Choose the **column** to evaluate
+- Assign a **flag column** to store the results
+- Provide a **flag value** to mark failing data
+- Optionally limit the QC check to a **time window**
+
+Built-in Quality Control Checks
+---------------
+Several built-in QC checks are available. Each check encapsulates a validation rule and supports configuration
+through parameters specific to that check:
+
+The examples given below all use this ``TimeSeries`` object:
+
+.. literalinclude:: ../../../src/time_stream/examples/examples_quality_control.py
+   :language: python
+   :start-after: [start_block_1]
+   :end-before: [end_block_1]
+   :dedent:
+
+Comparison Check
+~~~~~~~~~~~~~
+
+Compares values in the ``TimeSeries`` with a constant value using a specified operator.
+
+**Name**: ``"comparison"``
+
+.. autoclass:: time_stream.qc.ComparisonCheck
+
+The ``is_in`` operator is a special case, where you must pass a list of values to the check against. The check then
+flags results based on whether a value in the ``TimeSeries`` is within this list.
+
+Examples
+^^^^^^^^^^^^^
+
+**1. Temperature greater than or equal to 50**
+
+.. literalinclude:: ../../../src/time_stream/examples/examples_quality_control.py
+   :language: python
+   :start-after: [start_block_2]
+   :end-before: [end_block_2]
+   :dedent:
+
+.. jupyter-execute::
+   :hide-code:
+
+   import examples_quality_control
+   ts = examples_quality_control.comparison_qc_1()
+
+**2. Precipitation less than 0**
+
+.. literalinclude:: ../../../src/time_stream/examples/examples_quality_control.py
+   :language: python
+   :start-after: [start_block_3]
+   :end-before: [end_block_3]
+   :dedent:
+
+.. jupyter-execute::
+   :hide-code:
+
+   import examples_quality_control
+   ts = examples_quality_control.comparison_qc_2()
+
+**3. Sensor codes within a list**
+
+.. literalinclude:: ../../../src/time_stream/examples/examples_quality_control.py
+   :language: python
+   :start-after: [start_block_4]
+   :end-before: [end_block_4]
+   :dedent:
+
+.. jupyter-execute::
+   :hide-code:
+
+   import examples_quality_control
+   ts = examples_quality_control.comparison_qc_3()
+
+Range Check
+~~~~~~~~~~~~~
+
+Flags values in the ``TimeSeries`` outside or within a specified value range.
+
+**Name**: ``"range"``
+
+.. autoclass:: time_stream.qc.RangeCheck
+
+Spike Check
+~~~~~~~~~~~~~
+
+Flags sudden jumps between values based on their differences with adjacent values (both previous and next).
+
+**Name**: ``"spike"``
+
+.. autoclass:: time_stream.qc.SpikeCheck
+
+Creating Custom Checks
+----------------------
+
+To register your own QC check:
+
+.. code-block:: python
+
+    from time_stream.qc import QCCheck, register_qc_check
+
+    @register_qc_check
+    class MyCustomCheck(QCCheck):
+        name = "custom"
+
+        def expr(self, check_column):
+            return pl.col(check_column) < 0

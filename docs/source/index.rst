@@ -33,6 +33,7 @@ User Guide
    
    user_guide/timeseries_basics
    user_guide/periods
+   user_guide/quality_control
    user_guide/aggregation
    user_guide/flagging
    user_guide/column_relationships
