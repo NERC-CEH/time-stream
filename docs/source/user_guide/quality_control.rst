@@ -95,6 +95,38 @@ Flags values in the ``TimeSeries`` outside or within a specified value range.
 
 .. autoclass:: time_stream.qc.RangeCheck
 
+Examples
+^^^^^^^^^^^^^
+
+**1. Temperatures outside of min and max range (below -30 and above 50)**
+
+.. literalinclude:: ../../../src/time_stream/examples/examples_quality_control.py
+   :language: python
+   :start-after: [start_block_5]
+   :end-before: [end_block_5]
+   :dedent:
+
+.. jupyter-execute::
+   :hide-code:
+
+   import examples_quality_control
+   ts = examples_quality_control.range_qc_1()
+
+
+**2. Precipitation values between -3 and 1**
+
+.. literalinclude:: ../../../src/time_stream/examples/examples_quality_control.py
+   :language: python
+   :start-after: [start_block_6]
+   :end-before: [end_block_6]
+   :dedent:
+
+.. jupyter-execute::
+   :hide-code:
+
+   import examples_quality_control
+   ts = examples_quality_control.range_qc_2()
+
 Spike Check
 ~~~~~~~~~~~~~
 
@@ -103,6 +135,26 @@ Flags sudden jumps between values based on their differences with adjacent value
 **Name**: ``"spike"``
 
 .. autoclass:: time_stream.qc.SpikeCheck
+
+Examples
+^^^^^^^^^^^^^
+
+**1. Spike check on temperature**
+
+Note that the result doesn't flag the neighbouring high values of 50, 52. The spike test is really for detecting a
+sudden jump with one value between "normal" values.
+
+.. literalinclude:: ../../../src/time_stream/examples/examples_quality_control.py
+   :language: python
+   :start-after: [start_block_7]
+   :end-before: [end_block_7]
+   :dedent:
+
+.. jupyter-execute::
+   :hide-code:
+
+   import examples_quality_control
+   ts = examples_quality_control.spike_qc_1()
 
 Creating Custom Checks
 ----------------------
