@@ -122,8 +122,31 @@ def spike_qc_1():
         "spike",
         check_column="temperature",
         flag_column="temperature_flag",
-        threshold=5.0
+        threshold=10.0
     )
 
     print(ts)
     # [end_block_7]
+
+def observation_interval_example():
+    with suppress_output():
+        ts = create_simple_time_series()
+
+    # Only check data from specific dates
+    start_date = datetime(2023, 1, 5)
+    end_date = datetime(2023, 1, 10)
+
+    # [start_block_8]
+    ts.qc_check(
+        "range",
+        check_column="temperature",
+        flag_column="temperature_flag",
+        min_value=-10,
+        max_value=50,
+        inclusive=False,
+        within=False,
+        observation_interval=(start_date, end_date)
+    )
+
+    print(ts)
+    # [end_block_8]

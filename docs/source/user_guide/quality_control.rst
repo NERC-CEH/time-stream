@@ -139,7 +139,7 @@ Flags sudden jumps between values based on their differences with adjacent value
 Examples
 ^^^^^^^^^^^^^
 
-**1. Spike check on temperature**
+**Spike check on temperature**
 
 Note that the result doesn't flag the neighbouring high values of 50, 52. The spike test is really for detecting a
 sudden jump with one value between "normal" values.
@@ -156,18 +156,18 @@ sudden jump with one value between "normal" values.
    import examples_quality_control
    ts = examples_quality_control.spike_qc_1()
 
-Creating Custom Checks
+Applying QC checks during a specific time range
 ----------------------
+The ``observation_interval`` argument can be used to constrain the QC check to a chunk of your time series.
 
-To register your own QC check:
+.. literalinclude:: ../../../src/time_stream/examples/examples_quality_control.py
+   :language: python
+   :start-after: [start_block_8]
+   :end-before: [end_block_8]
+   :dedent:
 
-.. code-block:: python
+.. jupyter-execute::
+   :hide-code:
 
-    from time_stream.qc import QCCheck, register_qc_check
-
-    @register_qc_check
-    class MyCustomCheck(QCCheck):
-        name = "custom"
-
-        def expr(self, check_column):
-            return pl.col(check_column) < 0
+   import examples_quality_control
+   ts = examples_quality_control.observation_interval_example()
