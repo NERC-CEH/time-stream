@@ -26,14 +26,6 @@ def register_qc_check(cls: Type["QCCheck"]) -> Type["QCCheck"]:
 class QCCheck(ABC):
     """Base class for quality control checks."""
 
-    _ts = None
-
-    @property
-    def ts(self) -> TimeSeries:
-        if self._ts is None:
-            raise AttributeError("TimeSeries has not been initialised for this QC check.")
-        return self._ts
-
     @property
     @abstractmethod
     def name(self) -> str:
@@ -106,27 +98,18 @@ class QCCheck(ABC):
         self,
         ts: TimeSeries,
         check_column: str,
-        flag_column: str,
-        flag_value: Optional[int | str | bool] = True,
         observation_interval: Optional[datetime | Tuple[datetime, datetime | None]] = None,
-    ) -> TimeSeries:
+    ) -> pl.Series:
         """Apply the QC check to the TimeSeries.
 
         Args:
             ts: The TimeSeries to check.
             check_column: The column to perform the check on.
-            flag_column: The column to flag when check fails.
-            flag_value: The value given to rows that fail the check.
-                        If `flag_column` has been set up as an "official" `time_stream.columns.FlagColumn`, then
-                        `flag_value` must exist in the associated flag system of that `FlagColumn`.
             observation_interval: Optional time interval to limit the check to.
 
         Returns:
-            TimeSeries: The TimeSeries with flags applied.
+            pl.Series: Boolean series of the resolved expression on the TimeSeries.
         """
-        # Set the timeseries property
-        self._ts = ts
-
         # Validate column exists
         if check_column not in ts.columns and check_column != ts.time_name:
             raise KeyError(f"Check column '{check_column}' not found in TimeSeries.")
@@ -139,22 +122,12 @@ class QCCheck(ABC):
             date_filter = self._get_date_filter(ts, observation_interval)
             check_expr = check_expr & date_filter
 
-        # Add the results of the check to the flag column
-        if flag_column in ts.flag_columns:
-            # If the flag column exists as an official `FlagColumn`, then use the add_flag method
-            ts.add_flag(flag_column, flag_value, check_expr)
+        # Evaluate and return the result of the QC check
+        #   Naming the series to an empty string so as not to cause confusion.
+        #   Up to user if they want to name it and add on to the TimeSeries dataframe.
+        result = ts.df.select(check_expr).to_series().alias("")
 
-        elif flag_column in ts.columns:
-            # If the flag column exists, set the flag column to the value provided by the user.
-            ts.df = ts.df.with_columns(pl.when(check_expr).then(flag_value).otherwise(pl.col(flag_column)))
-        else:
-            # If the flag column doesn't exist, create the flag column and set to the value provided by the user.
-            otherwise_value = False if flag_value is True else None
-            ts.df = ts.df.with_columns(
-                pl.when(check_expr).then(flag_value).otherwise(otherwise_value).alias(flag_column)
-            )
-
-        return ts
+        return result
 
     @staticmethod
     def _get_date_filter(ts: TimeSeries, observation_interval: datetime | Tuple[datetime, datetime | None]) -> pl.Expr:

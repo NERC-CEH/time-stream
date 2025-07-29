@@ -90,74 +90,74 @@ class TestComparisonCheck(unittest.TestCase):
         """ Test the comparison check function with '>' operator.
         """
         check = ComparisonCheck(10, ">")
-        check.apply(self.ts, "value_a", "flag_col")
-        expected = pl.Series("flag_col", [False, False, True, True])
-        assert_series_equal(self.ts.df["flag_col"], expected)
+        result = check.apply(self.ts, "value_a")
+        expected = pl.Series([False, False, True, True])
+        assert_series_equal(result, expected)
 
     def test_greater_than_or_equal(self):
         """ Test the comparison check function with '>=' operator.
         """
         check = ComparisonCheck(10, ">=")
-        check.apply(self.ts, "value_a", "flag_col")
-        expected = pl.Series("flag_col", [False, True, True, True])
-        assert_series_equal(self.ts.df["flag_col"], expected)
+        result = check.apply(self.ts, "value_a")
+        expected = pl.Series([False, True, True, True])
+        assert_series_equal(result, expected)
 
     def test_less_than(self):
         """ Test the comparison check function with '<' operator.
         """
         check = ComparisonCheck(10, "<")
-        check.apply(self.ts, "value_a", "flag_col")
-        expected = pl.Series("flag_col", [True, False, False, False])
-        assert_series_equal(self.ts.df["flag_col"], expected)
+        result = check.apply(self.ts, "value_a")
+        expected = pl.Series([True, False, False, False])
+        assert_series_equal(result, expected)
 
     def test_less_than_or_equal(self):
         """ Test the comparison check function with '<=' operator.
         """
         check = ComparisonCheck(10, "<=")
-        check.apply(self.ts, "value_a", "flag_col")
-        expected = pl.Series("flag_col", [True, True, False, False])
-        assert_series_equal(self.ts.df["flag_col"], expected)
+        result = check.apply(self.ts, "value_a")
+        expected = pl.Series([True, True, False, False])
+        assert_series_equal(result, expected)
 
     def test_equal(self):
         """ Test the comparison check function with '==' operator.
         """
         check = ComparisonCheck(10, "==")
-        check.apply(self.ts, "value_a", "flag_col")
-        expected = pl.Series("flag_col", [False, True, False, False])
-        assert_series_equal(self.ts.df["flag_col"], expected)
+        result = check.apply(self.ts, "value_a")
+        expected = pl.Series([False, True, False, False])
+        assert_series_equal(result, expected)
 
     def test_not_equal(self):
         """ Test the comparison check function with '!=' operator.
         """
         check = ComparisonCheck(10, "!=")
-        check.apply(self.ts, "value_a", "flag_col")
-        expected = pl.Series("flag_col", [True, False, True, True])
-        assert_series_equal(self.ts.df["flag_col"], expected)
+        result = check.apply(self.ts, "value_a")
+        expected = pl.Series([True, False, True, True])
+        assert_series_equal(result, expected)
 
     def test_flag_na_when_true(self):
         """ Test that setting flag_na to True will mean any NULL values in the check column are treated as failing
         the QC check (so qc flag set in the result).
         """
         check = ComparisonCheck(10, ">", flag_na=True)
-        check.apply(self.ts, "value_c", "flag_col")
-        expected = pl.Series("flag_col", [True, True, True, True])
-        assert_series_equal(self.ts.df["flag_col"], expected)
+        result = check.apply(self.ts, "value_c")
+        expected = pl.Series([True, True, True, True])
+        assert_series_equal(result, expected)
 
     def test_flag_na_when_false(self):
         """ Test that setting flag_na to False will mean that any NULL values in the check column are ignored in
         the QC check (so qc flag not set in the result).
         """
         check = ComparisonCheck(10, ">", flag_na=False)
-        check.apply(self.ts, "value_c", "flag_col")
-        expected = pl.Series("flag_col", [False, True, True, False])
-        assert_series_equal(self.ts.df["flag_col"], expected)
+        result = check.apply(self.ts, "value_c")
+        expected = pl.Series([None, True, True, None])
+        assert_series_equal(result, expected)
 
     def test_invalid_operator(self):
         """ Test that invalid operator raises error
         """
         with self.assertRaises(KeyError):
             check = ComparisonCheck(10, ">>")
-            check.apply(self.ts, "value_a", "flag_col")
+            check.apply(self.ts, "value_a")
 
 
 class TestRangeCheck(unittest.TestCase):
@@ -179,76 +179,76 @@ class TestRangeCheck(unittest.TestCase):
         """ Test that the range check returns expected results when some values outside of range
         """
         check = RangeCheck(0.5, 3.5)
-        check.apply(self.ts, "value_a", "flag_col")
-        expected = pl.Series("flag_col", [True, False, False, False, True, True])
-        assert_series_equal(self.ts.df["flag_col"], expected)
+        result = check.apply(self.ts, "value_a")
+        expected = pl.Series([True, False, False, False, True, True])
+        assert_series_equal(result, expected)
 
     def test_range_check_within(self):
         """ Test that the range check returns expected results with the within parameter set.
         """
         check = RangeCheck(0.5, 3.5, within=True)
-        check.apply(self.ts, "value_a", "flag_col")
-        expected = pl.Series("flag_col", [False, True, True, True, False, False])
-        assert_series_equal(self.ts.df["flag_col"], expected)
+        result = check.apply(self.ts, "value_a")
+        expected = pl.Series([False, True, True, True, False, False])
+        assert_series_equal(result, expected)
 
     def test_range_check_all_within(self):
         """ Test that the range check returns expected results when all values within range
         """
         check = RangeCheck(-1, 10)
-        check.apply(self.ts, "value_a", "flag_col")
-        expected = pl.Series("flag_col", [False, False, False, False, False, False])
-        assert_series_equal(self.ts.df["flag_col"], expected)
+        result = check.apply(self.ts, "value_a")
+        expected = pl.Series([False, False, False, False, False, False])
+        assert_series_equal(result, expected)
 
     def test_range_check_all_outside(self):
         """ Test that the range check returns expected results when all values within range
         """
         check = RangeCheck(90, 100)
-        check.apply(self.ts, "value_a", "flag_col")
-        expected = pl.Series("flag_col", [True, True, True, True, True, True])
-        assert_series_equal(self.ts.df["flag_col"], expected)
+        result = check.apply(self.ts, "value_a")
+        expected = pl.Series([True, True, True, True, True, True])
+        assert_series_equal(result, expected)
 
     def test_range_check_at_boundaries_inclusive(self):
         """ Test that the range check returns expected results when values at boundaries, with the
         inclusive option set to True
         """
         check = RangeCheck(0., 5., inclusive=True)
-        check.apply(self.ts, "value_a", "flag_col")
-        expected = pl.Series("flag_col", [False, False, False, False, False, False])
-        assert_series_equal(self.ts.df["flag_col"], expected)
+        result = check.apply(self.ts, "value_a")
+        expected = pl.Series([False, False, False, False, False, False])
+        assert_series_equal(result, expected)
 
     def test_range_check_at_boundaries_non_inclusive(self):
         """ Test that the range check returns expected results when values at boundaries, with the
         inclusive option set to False.
         """
         check = RangeCheck(0., 5., inclusive=False)
-        check.apply(self.ts, "value_a", "flag_col")
-        expected = pl.Series("flag_col", [True, False, False, False, False, True])
-        assert_series_equal(self.ts.df["flag_col"], expected)
+        result = check.apply(self.ts, "value_a")
+        expected = pl.Series([True, False, False, False, False, True])
+        assert_series_equal(result, expected)
 
     def test_range_check_using_time(self):
         """ Test that the range check accepts time values.
         """
         check = RangeCheck(time(0, 30), time(1, 30))
-        check.apply(self.ts, "time", "flag_col")
-        expected = pl.Series("flag_col", [True, False, False, False, True, True])
-        assert_series_equal(self.ts.df["flag_col"], expected)
+        result = check.apply(self.ts, "time")
+        expected = pl.Series([True, False, False, False, True, True])
+        assert_series_equal(result, expected)
 
     def test_range_check_using_time_within(self):
         """ Test that the range check works with time values, with the within parameter set to True.
         """
         check = RangeCheck(time(0, 30), time(1, 30), within=True)
-        check.apply(self.ts, "time", "flag_col")
-        expected = pl.Series("flag_col", [False, True, True, True, False, False])
-        assert_series_equal(self.ts.df["flag_col"], expected)
+        result = check.apply(self.ts, "time")
+        expected = pl.Series([False, True, True, True, False, False])
+        assert_series_equal(result, expected)
 
     def test_range_check_using_time_non_inclusive(self):
         """ Test that the range check works with time values, with the within parameter set to True,
         and inclusive set to False.
         """
         check = RangeCheck(time(0, 30), time(1, 30), within=True, inclusive=False)
-        check.apply(self.ts, "time", "flag_col")
-        expected = pl.Series("flag_col", [False, False, True, False, False, False])
-        assert_series_equal(self.ts.df["flag_col"], expected)
+        result = check.apply(self.ts, "time")
+        expected = pl.Series([False, False, True, False, False, False])
+        assert_series_equal(result, expected)
 
 
 class TestSpikeCheck(unittest.TestCase):
@@ -272,17 +272,17 @@ class TestSpikeCheck(unittest.TestCase):
         self.ts.df = self.ts.df.with_columns(pl.Series([1., 2., 3., 40., 5., 6.]).alias("value_a"))
 
         check = SpikeCheck(10)
-        check.apply(self.ts, "value_a", "flag_col")
-        expected = pl.Series("flag_col", [False, False, False, True, False, False])
-        assert_series_equal(self.ts.df["flag_col"], expected)
+        result = check.apply(self.ts, "value_a")
+        expected = pl.Series([None, False, False, True, False, None])
+        assert_series_equal(result, expected)
 
     def test_no_spike(self):
         """ Test that no flags are added for data with no spike
         """
         check = SpikeCheck(10)
-        check.apply(self.ts, "value_a", "flag_col")
-        expected = pl.Series("flag_col", [False, False, False, False, False, False])
-        assert_series_equal(self.ts.df["flag_col"], expected)
+        result = check.apply(self.ts, "value_a")
+        expected = pl.Series([None, False, False, False, False, None])
+        assert_series_equal(result, expected)
 
     def test_large_spike(self):
         """ Large spikes can cause the values around the spike to be flagged if method not working correctly.
@@ -291,9 +291,9 @@ class TestSpikeCheck(unittest.TestCase):
         self.ts.df = self.ts.df.with_columns(pl.Series([1., 999., 3., 4., 999999999., 6.]).alias("value_a"))
 
         check = SpikeCheck(10)
-        check.apply(self.ts, "value_a", "flag_col")
-        expected = pl.Series("flag_col", [False, True, False, False, True, False])
-        assert_series_equal(self.ts.df["flag_col"], expected)
+        result = check.apply(self.ts, "value_a")
+        expected = pl.Series([None, True, False, False, True, None])
+        assert_series_equal(result, expected)
 
 class TestCheckWithDateRange(unittest.TestCase):
     def setUp(self):
@@ -307,17 +307,17 @@ class TestCheckWithDateRange(unittest.TestCase):
         """ Test the check is applied to whole time series if no date range provided
         """
         check = ComparisonCheck(1, ">")
-        check.apply(self.ts, "value_a", "flag_col", observation_interval=None)
-        expected = pl.Series("flag_col", [False, False, True, True, True, True, True, True, True, True])
-        assert_series_equal(self.ts.df["flag_col"], expected)
+        result = check.apply(self.ts, "value_a", observation_interval=None)
+        expected = pl.Series([False, False, True, True, True, True, True, True, True, True])
+        assert_series_equal(result, expected)
 
     def test_with_date_range(self):
         """ Test the check is applied to part of the time series if a date range provided
         """
         check = ComparisonCheck(1, ">")
-        check.apply(self.ts, "value_a", "flag_col", observation_interval=(datetime(2023, 8, 1), datetime(2023, 8, 5)))
-        expected = pl.Series("flag_col", [False, False, True, True, True, False, False, False, False, False])
-        assert_series_equal(self.ts.df["flag_col"], expected)
+        result = check.apply(self.ts, "value_a", observation_interval=(datetime(2023, 8, 1), datetime(2023, 8, 5)))
+        expected = pl.Series([False, False, True, True, True, False, False, False, False, False])
+        assert_series_equal(result, expected)
 
     @parameterized.expand([
         # Different ways that observation_interval can specify an open-ended end date
@@ -328,6 +328,6 @@ class TestCheckWithDateRange(unittest.TestCase):
         """ Test the check is applied to part of the time series if a date range provided an open-ended end date
         """
         check = ComparisonCheck(1, ">")
-        check.apply(self.ts, "value_a", "flag_col", observation_interval=observation_interval)
-        expected = pl.Series("flag_col", [False, False, False, False, False, False, False, True, True, True])
-        assert_series_equal(self.ts.df["flag_col"], expected)
+        result = check.apply(self.ts, "value_a", observation_interval=observation_interval)
+        expected = pl.Series([False, False, False, False, False, False, False, True, True, True])
+        assert_series_equal(result, expected)

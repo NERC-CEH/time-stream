@@ -132,6 +132,10 @@ Spike Check
 
 Flags sudden jumps between values based on their differences with adjacent values (both previous and next).
 
+.. note::
+    The first and last values in a time series cannot be assessed by the spike test as it requires neighbouring values.
+    The result for the first and last items will be set to NULL.
+
 **Name**: ``"spike"``
 
 .. autoclass:: time_stream.qc.SpikeCheck
@@ -141,8 +145,9 @@ Examples
 
 **Spike check on temperature**
 
-Note that the result doesn't flag the neighbouring high values of 50, 52. The spike test is really for detecting a
-sudden jump with one value between "normal" values.
+.. note::
+    Note that the result doesn't flag the neighbouring high values of 50, 52. The spike test is really for detecting a
+    sudden jump with one value between "normal" values.
 
 .. literalinclude:: ../../../src/time_stream/examples/examples_quality_control.py
    :language: python

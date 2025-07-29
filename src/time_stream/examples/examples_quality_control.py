@@ -34,12 +34,13 @@ def comparison_qc_1():
         ts = create_simple_time_series()
 
     # [start_block_2]
-    ts.qc_check(
-        "comparison",
-        check_column="temperature",
-        flag_column="temperature_flag",
-        compare_to=50,
-        operator=">="
+    ts.df = ts.df.with_columns(
+        ts.qc_check(
+            "comparison",
+            check_column="temperature",
+            compare_to=50,
+            operator=">="
+        ).alias("qc_result")
     )
 
     print(ts)
@@ -50,12 +51,13 @@ def comparison_qc_2():
         ts = create_simple_time_series()
 
     # [start_block_3]
-    ts.qc_check(
-        "comparison",
-        check_column="precipitation",
-        flag_column="precipitation_flag",
-        compare_to=0,
-        operator="<"
+    ts.df = ts.df.with_columns(
+        ts.qc_check(
+            "comparison",
+            check_column="precipitation",
+            compare_to=0,
+            operator="<"
+        ).alias("qc_result")
     )
 
     print(ts)
@@ -66,12 +68,13 @@ def comparison_qc_3():
         ts = create_simple_time_series()
 
     # [start_block_4]
-    ts.qc_check(
-        "comparison",
-        check_column="sensor_codes",
-        flag_column="sensor_codes_flag",
-        compare_to=[991, 992, 993, 994, 995],
-        operator="is_in"
+    ts.df = ts.df.with_columns(
+        ts.qc_check(
+            "comparison",
+            check_column="sensor_codes",
+            compare_to=[991, 992, 993, 994, 995],
+            operator="is_in"
+        ).alias("qc_result")
     )
 
     print(ts)
@@ -82,14 +85,15 @@ def range_qc_1():
         ts = create_simple_time_series()
 
     # [start_block_5]
-    ts.qc_check(
-        "range",
-        check_column="temperature",
-        flag_column="temperature_flag",
-        min_value=-10,
-        max_value=50,
-        inclusive=False,  # Range is not inclusive of min and max value
-        within=False, # Flag values outside of this range
+    ts.df = ts.df.with_columns(
+        ts.qc_check(
+            "range",
+            check_column="temperature",
+            min_value=-10,
+            max_value=50,
+            inclusive=False,  # Range is not inclusive of min and max value
+            within=False, # Flag values outside of this range
+        ).alias("qc_result")
     )
 
     print(ts)
@@ -100,14 +104,15 @@ def range_qc_2():
         ts = create_simple_time_series()
 
     # [start_block_6]
-    ts.qc_check(
-        "range",
-        check_column="precipitation",
-        flag_column="precipitation_flag",
-        min_value=-3,
-        max_value=1,
-        inclusive=True,  # Range is inclusive of min and max value
-        within=True, # Flag values inside of this range
+    ts.df = ts.df.with_columns(
+        ts.qc_check(
+            "range",
+            check_column="precipitation",
+            min_value=-3,
+            max_value=1,
+            inclusive=True,  # Range is inclusive of min and max value
+            within=True, # Flag values inside of this range
+        ).alias("qc_result")
     )
 
     print(ts)
@@ -118,11 +123,12 @@ def spike_qc_1():
         ts = create_simple_time_series()
 
     # [start_block_7]
-    ts.qc_check(
-        "spike",
-        check_column="temperature",
-        flag_column="temperature_flag",
-        threshold=10.0
+    ts.df = ts.df.with_columns(
+            ts.qc_check(
+            "spike",
+            check_column="temperature",
+            threshold=10.0
+        ).alias("qc_result")
     )
 
     print(ts)
@@ -132,20 +138,21 @@ def observation_interval_example():
     with suppress_output():
         ts = create_simple_time_series()
 
+    # [start_block_8]
     # Only check data from specific dates
     start_date = datetime(2023, 1, 5)
     end_date = datetime(2023, 1, 10)
 
-    # [start_block_8]
-    ts.qc_check(
-        "range",
-        check_column="temperature",
-        flag_column="temperature_flag",
-        min_value=-10,
-        max_value=50,
-        inclusive=False,
-        within=False,
-        observation_interval=(start_date, end_date)
+    ts.df = ts.df.with_columns(
+        ts.qc_check(
+            "range",
+            check_column="temperature",
+            min_value=-10,
+            max_value=50,
+            inclusive=False,
+            within=False,
+            observation_interval=(start_date, end_date)
+        ).alias("qc_result")
     )
 
     print(ts)
