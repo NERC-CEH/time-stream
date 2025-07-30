@@ -10,13 +10,19 @@ from time_stream.base import TimeSeries
 from time_stream.qc import QCCheck, ComparisonCheck, SpikeCheck, RangeCheck
 
 
+class MockQC(QCCheck):
+    name = "Mock"
+
+    def expr(self, check_column):
+        return pl.col(check_column)
+
 class TestQCCheck(unittest.TestCase):
     """Test the base QCCheck class."""
-
     def setUp(self):
         """Set up test fixtures."""
         self.mock_ts = Mock()
         self.mock_ts.time_name = "timestamp"
+        self.mock_ts.df = pl.DataFrame({"timestamp": [datetime(2025, m, 1) for m in range(1, 8)]})
 
     @parameterized.expand([
         ("comparison", {"compare_to": 10, "operator": ">"}, ComparisonCheck),
@@ -25,10 +31,10 @@ class TestQCCheck(unittest.TestCase):
     ])
     def test_get_with_string(self, get_input, input_args, expected):
         """Test QCCheck.get() with string input."""
-        agg = QCCheck.get(get_input, **input_args)
-        self.assertIsInstance(agg, expected)
+        qc = QCCheck.get(get_input, **input_args)
+        self.assertIsInstance(qc, expected)
         for arg, val in input_args.items():
-            self.assertEqual(getattr(agg, arg), val)
+            self.assertEqual(getattr(qc, arg), val)
 
     @parameterized.expand([
         (ComparisonCheck, {"compare_to": 10, "operator": ">"}, ComparisonCheck),
@@ -37,18 +43,18 @@ class TestQCCheck(unittest.TestCase):
     ])
     def test_get_with_class(self, get_input, input_args, expected):
         """Test QCCheck.get() with class input."""
-        agg = QCCheck.get(get_input, **input_args)
-        self.assertIsInstance(agg, expected)
+        qc = QCCheck.get(get_input, **input_args)
+        self.assertIsInstance(qc, expected)
         for arg, val in input_args.items():
-            self.assertEqual(getattr(agg, arg), val)
+            self.assertEqual(getattr(qc, arg), val)
 
     @parameterized.expand([
         (ComparisonCheck(10, ">"), ComparisonCheck), (SpikeCheck(100.), SpikeCheck), (RangeCheck(1, 50), RangeCheck)
     ])
     def test_get_with_instance(self, get_input, expected):
         """Test QCCheck.get() with instance input."""
-        agg = QCCheck.get(get_input)
-        self.assertIsInstance(agg, expected)
+        qc = QCCheck.get(get_input)
+        self.assertIsInstance(qc, expected)
 
     @parameterized.expand([
         "dummy", "RANGE", "123"
@@ -74,6 +80,19 @@ class TestQCCheck(unittest.TestCase):
         """Test QCCheck.get() with invalid type."""
         with self.assertRaises(TypeError):
             QCCheck.get(get_input)
+
+    @parameterized.expand([
+        ("some_within", (datetime(2025, 1, 1), datetime(2025, 4, 1)), [True, True, True, True, False, False, False]),
+        ("all_within", (datetime(2024, 1, 1), datetime(2026, 1, 1)), [True, True, True, True, True, True, True]),
+        ("all_out", (datetime(2026, 1, 1), datetime(2027, 1, 1)), [False, False, False, False, False, False, False]),
+        ("start_only", datetime(2025, 3, 1), [False, False, True, True, True, True, True]),
+        ("start_only_with_none", (datetime(2025, 3, 1), None), [False, False, True, True, True, True, True]),
+    ])
+    def test_get_date_filter(self, _, observation_interval, expected_eval):
+        date_filter = MockQC()._get_date_filter(self.mock_ts, observation_interval)
+        result = self.mock_ts.df.select(date_filter).to_series()
+        expected = pl.Series("timestamp", expected_eval)
+        assert_series_equal(result, expected)
 
 
 class TestComparisonCheck(unittest.TestCase):

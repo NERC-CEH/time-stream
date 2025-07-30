@@ -206,7 +206,7 @@ class RangeCheck(QCCheck):
         Args:
             min_value: Minimum acceptable value. Values below this will be flagged.
             max_value: Maximum acceptable value. Values above this will be flagged.
-            inclusive: Whether the range bounds are inclusive.
+            inclusive: Whether the range bounds are inclusive (default = True).
             within: Whether values get flagged when within this range (within=True)
                     or not within this range (within=False, default).
         """
