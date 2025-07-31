@@ -45,7 +45,7 @@ class InfillMethod(ABC):
 
     def _infilled_column_name(self, infill_column: str) -> str:
         """Return the name of the infilled column."""
-        return f"{self.name}_{infill_column}"
+        return f"{infill_column}_{self.name}"
 
     @abstractmethod
     def _fill(self, df: pl.DataFrame, infill_column: str) -> pl.DataFrame:
