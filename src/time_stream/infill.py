@@ -327,7 +327,7 @@ class AkimaInterpolation(ScipyInterpolation):
     name = "akima"
     min_points_required = 5
 
-    def _create_interpolator(self, x_valid: np.ndarray, y_valid: np.ndarray):
+    def _create_interpolator(self, x_valid: np.ndarray, y_valid: np.ndarray) -> Any:
         """Create scipy Akima interpolator."""
         return Akima1DInterpolator(x_valid, y_valid, **self.scipy_kwargs)
 
@@ -339,6 +339,6 @@ class PchipInterpolation(ScipyInterpolation):
     name = "pchip"
     min_points_required = 2
 
-    def _create_interpolator(self, x_valid: np.ndarray, y_valid: np.ndarray):
+    def _create_interpolator(self, x_valid: np.ndarray, y_valid: np.ndarray) -> Any:
         """Create scipy PCHIP interpolator."""
         return PchipInterpolator(x_valid, y_valid, **self.scipy_kwargs)

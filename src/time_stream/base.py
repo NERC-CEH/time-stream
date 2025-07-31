@@ -14,6 +14,7 @@ from time_stream.utils import pad_time, truncate_to_period
 
 if TYPE_CHECKING:
     from time_stream.aggregation import AggregationFunction
+    from time_stream.infill import InfillMethod
     from time_stream.qc import QCCheck
 
 
@@ -603,10 +604,10 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
 
     def qc_check(
         self,
-        check: Union[str, Type["QCCheck"]],
+        check: Union[str, "QCCheck", Type["QCCheck"]],
         check_column: str,
         observation_interval: Optional[Tuple[datetime, Optional[datetime]]] = None,
-        **check_params,
+        **kwargs,
     ) -> pl.Series:
         """Apply a quality control check to the TimeSeries.
 
@@ -614,7 +615,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
             check: The QC check to apply.
             check_column: The column to perform the check on.
             observation_interval: Optional time interval to limit the check to.
-            **check_params: Parameters specific to the check type.
+            **kwargs: Parameters specific to the check type.
 
         Returns:
             pl.Series: Boolean series of the resolved expression on the TimeSeries.
@@ -636,8 +637,36 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         from time_stream.qc import QCCheck  # noqa: PLC0415
 
         # Get the QC check instance and run the apply method
-        check_instance = QCCheck.get(check, **check_params)
+        check_instance = QCCheck.get(check, **kwargs)
         return check_instance.apply(self, check_column, observation_interval)
+
+    def infill(
+        self,
+        infill_method: Union[str, Type["InfillMethod"], "InfillMethod"],
+        column: str,
+        observation_interval: Optional[Tuple[datetime, Optional[datetime]]] = None,
+        max_gap_size: Optional[int] = None,
+        **kwargs,
+    ) -> "TimeSeries":
+        """Apply an infilling method to a column in the TimeSeries to fill in missing data.
+
+        Args:
+            infill_method: The method to use for infilling
+            column: The column to infill
+            observation_interval: Optional time interval to limit the check to.
+            max_gap_size: The maximum size of consecutive null gaps that should be filled. Any gap larger than this
+                          will not be infilled and will remain as null.
+            **kwargs: Parameters specific to the infill method.
+
+        Returns:
+            A TimeSeries containing the aggregated data.
+        """
+        # Import at runtime to avoid circular import
+        from time_stream.infill import InfillMethod  # noqa: PLC0415
+
+        # Get the infill method instance and run the apply method
+        infill_instance = InfillMethod.get(infill_method, **kwargs)
+        return infill_instance.apply(self, column, observation_interval, max_gap_size)
 
     def metadata(self, key: Optional[Sequence[str]] = None, strict: bool = True) -> Dict[str, Any]:
         """Retrieve metadata for all or specific keys.

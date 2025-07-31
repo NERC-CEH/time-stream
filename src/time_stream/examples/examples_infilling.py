@@ -40,7 +40,8 @@ for m in methods:
     else:
         i = InfillMethod.get(m)
     print(i)
-    ts = i.apply(ts, "data", max_gap_size=2)
+
+    ts = ts.infill(i, "data", max_gap_size=2)
 
     old_df = ts.df.rename({"data": m}).join(old_df, on="timestamp", how="full").drop("timestamp_right")
 

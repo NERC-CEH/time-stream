@@ -46,7 +46,7 @@ class QCCheck(ABC):
         pass
 
     @classmethod
-    def get(cls, check: Union[str, Type["QCCheck"]], **kwargs) -> "QCCheck":
+    def get(cls, check: Union[str, "QCCheck", Type["QCCheck"]], **kwargs) -> "QCCheck":
         """Factory method to get a QC check instance from string names or class type.
 
         Args:
