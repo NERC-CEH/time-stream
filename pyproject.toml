@@ -12,7 +12,8 @@ dependencies = [
     "pydantic>=2.8.2",
     "isodate",
     "setuptools",
-    "numpy"
+    "numpy",
+    "scipy>=1.16.1",
 ]
 name = "time-stream"
 dynamic = ["version"]

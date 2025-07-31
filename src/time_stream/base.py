@@ -10,6 +10,7 @@ from time_stream.enums import DuplicateOption
 from time_stream.flag_manager import TimeSeriesFlagManager
 from time_stream.period import Period
 from time_stream.relationships import RelationshipManager
+from time_stream.utils import pad_time, truncate_to_period
 
 if TYPE_CHECKING:
     from time_stream.aggregation import AggregationFunction
@@ -190,44 +191,10 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         self.df = self.df.sort(self.time_name)
 
     def _pad_time(self) -> None:
-        """Pad the time series with missing datetime rows, filling in NULLs for missing values.
-
-        This method ensures a complete time series by adding rows for any missing timestamps within the range of
-        the original DataFrame's time column. The process:
-
-        1. Truncates existing timestamps to align with the start of their periodicity interval
-        2. Finds the minimum and maximum timestamps in the dataset
-        3. Generates a complete series of timestamps at the correct periodicity between min and max
-        4. Identifies which expected timestamps are missing from the actual data
-        5. Creates a DataFrame with these missing timestamps
-        6. Joins this with the original data to create a complete time series
-
-        The resulting padded DataFrame maintains all original data and column types, with NULL values populated
-        for all non-time columns in the added rows.
-        """
+        """Pad the time series with missing datetime rows, filling in NULLs for missing values."""
         if not self._pad:
             return
-
-        # Extract the existing datetimes, truncated to the start of their periodicity period
-        existing_datetimes = self.truncate_to_period(self.df[self.time_name], self.periodicity)
-
-        # Get the min and max datetime from the existing datetimes
-        min_datetime = existing_datetimes.min()
-        max_datetime = existing_datetimes.max()
-
-        # Generate a series of the datetimes we would expect with a full time series between the start and end date
-        expected_datetimes = pl.datetime_range(
-            min_datetime, max_datetime, interval=self.periodicity.pl_interval, eager=True
-        )
-
-        # Find any missing datetimes between expected and existing
-        missing_datetimes = expected_datetimes.filter(~expected_datetimes.is_in(existing_datetimes))
-        missing_df = pl.DataFrame({self.time_name: missing_datetimes})
-
-        # Perform a join to create a complete time series
-        padded_df = missing_df.join(self.df, on=self.time_name, how="full", coalesce=True)
-
-        self._df = padded_df
+        self._df = pad_time(self.df, self.time_name, self.periodicity)
         self.sort_time()
 
     def _handle_duplicates(self) -> None:
@@ -318,7 +285,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
            True if the Series conforms to the resolution period.
            False otherwise
         """
-        return date_times.equals(TimeSeries.truncate_to_period(date_times, resolution))
+        return date_times.equals(truncate_to_period(date_times, resolution))
 
     @property
     def periodicity(self) -> Period:
@@ -380,38 +347,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         """
         # Check how many unique values are in the truncated times. It should equal the length of the original
         # time-series if all time values map to single periodicity
-        return TimeSeries.truncate_to_period(date_times, periodicity).n_unique() == len(date_times)
-
-    @staticmethod
-    def truncate_to_period(date_times: pl.Series, period: Period) -> pl.Series:
-        """Truncate a Series of date/time values to the given period.
-
-        All the date/time values in the input series are "rounded down" to the specified period.
-
-        Args:
-           date_times: A Series of date/times to be truncated.
-           period: The period to which the date/times should be truncated.
-
-        Examples:
-           For a period of one day (Period.of_days(1)) all the date/time values are rounded
-           down, or truncated, to the start of the day (the hour, minute, second, and microsecond
-           fields are all set to 0).
-
-           For a period of fifteen minutes (Period.of_minutes(15)) all the date/time values are rounded
-           down, or truncated, to the start of a fifteen-minute period (the minute field is rounded down
-           to either 0, 15, 30 or 45, and the second, and microsecond fields are set to 0).
-
-        Returns:
-           A `Polars` Series with the truncated date/time values.
-        """
-        # Remove any offset from the time series
-        time_series_no_offset = date_times.dt.offset_by("-" + period.pl_offset)
-
-        # truncate the (non-offset) time series to the given resolution interval and add the offset back on
-        truncated_times = time_series_no_offset.dt.truncate(period.pl_interval)
-        truncated_times_with_offset = truncated_times.dt.offset_by(period.pl_offset)
-
-        return truncated_times_with_offset
+        return truncate_to_period(date_times, periodicity).n_unique() == len(date_times)
 
     @staticmethod
     def _epoch_check(period: Period) -> None:

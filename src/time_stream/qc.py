@@ -5,6 +5,7 @@ from typing import List, Optional, Tuple, Type, Union
 import polars as pl
 
 from time_stream import TimeSeries
+from time_stream.utils import get_date_filter
 
 # Registry for built-in QC checks
 _QC_REGISTRY = {}
@@ -119,7 +120,7 @@ class QCCheck(ABC):
 
         # Apply observation interval filter if specified
         if observation_interval:
-            date_filter = self._get_date_filter(ts, observation_interval)
+            date_filter = get_date_filter(ts.time_name, observation_interval)
             check_expr = check_expr & date_filter
 
         # Evaluate and return the result of the QC check
@@ -128,28 +129,6 @@ class QCCheck(ABC):
         result = ts.df.select(check_expr).to_series().alias("")
 
         return result
-
-    @staticmethod
-    def _get_date_filter(ts: TimeSeries, observation_interval: datetime | Tuple[datetime, datetime | None]) -> pl.Expr:
-        """Get Polars expression for observation date interval filtering.
-
-        Args:
-            ts: The TimeSeries to create the filter for.
-            observation_interval: Tuple of (start_date, end_date) defining the time period.
-
-        Returns:
-            pl.Expr: Boolean polars expression for date filtering.
-        """
-        if isinstance(observation_interval, datetime):
-            start_date = observation_interval
-            end_date = None
-        else:
-            start_date, end_date = observation_interval
-
-        if end_date is None:
-            return pl.col(ts.time_name) >= start_date
-        else:
-            return pl.col(ts.time_name).is_between(start_date, end_date)
 
 
 @register_qc_check
