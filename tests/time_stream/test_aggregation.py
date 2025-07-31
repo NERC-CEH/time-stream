@@ -9,7 +9,7 @@ from polars.testing import assert_frame_equal
 
 from time_stream.period import Period
 from time_stream.base import TimeSeries
-from time_stream.aggregation import AggregationFunction, Max, Mean, Min
+from time_stream.aggregation import AggregationFunction, Max, Mean, Min, MeanSum, Sum
 
 
 def generate_time_series(resolution: Period, periodicity: Period, length: int, missing_data: bool=False) -> TimeSeries:
@@ -129,7 +129,7 @@ class TestAggregationFunction(unittest.TestCase):
         self.mock_ts.time_name = "timestamp"
 
     @parameterized.expand([
-        ("mean", Mean), ("min", Min), ("max", Max)
+        ("mean", Mean), ("min", Min), ("max", Max), ("mean_sum", MeanSum), ("sum", Sum)
     ])
     def test_get_with_string(self, get_input, expected):
         """Test AggregationFunction.get() with string input."""
@@ -137,7 +137,7 @@ class TestAggregationFunction(unittest.TestCase):
         self.assertIsInstance(agg, expected)
 
     @parameterized.expand([
-        (Mean, Mean), (Min, Min), (Max, Max)
+        (Mean, Mean), (Min, Min), (Max, Max), (MeanSum, MeanSum), (Sum, Sum)
     ])
     def test_get_with_class(self, get_input, expected):
         """Test AggregationFunction.get() with class input."""
@@ -145,7 +145,7 @@ class TestAggregationFunction(unittest.TestCase):
         self.assertIsInstance(agg, expected)
 
     @parameterized.expand([
-        (Mean(), Mean), (Min(), Min), (Max(), Max)
+        (Mean(), Mean), (Min(), Min), (Max(), Max), (MeanSum(), MeanSum), (Sum(), Sum)
     ])
     def test_get_with_instance(self, get_input, expected):
         """Test AggregationFunction.get() with instance input."""
@@ -153,7 +153,7 @@ class TestAggregationFunction(unittest.TestCase):
         self.assertIsInstance(agg, expected)
 
     @parameterized.expand([
-        "Mean", "MIN", "mAx", "123"
+        "Mean", "MIN", "mAx", "123", "meansum", "sUm"
     ])
     def test_get_with_invalid_string(self, get_input):
         """Test AggregationFunction.get() with invalid string."""
@@ -232,7 +232,14 @@ class TestSimpleAggregations(unittest.TestCase):
 
         ("hourly_to_daily_min", ts_PT1H_2days, Min, P1D, "value", [datetime(2025, 1, 1), datetime(2025, 1, 2)],
          [24, 24], {"value": [0, 24]}, [datetime(2025, 1, 1), datetime(2025, 1, 2)]),
+
+        ("hourly_to_daily_mean_sum", ts_PT1H_2days, MeanSum, P1D, "value", [datetime(2025, 1, 1), datetime(2025, 1, 2)],
+         [24, 24], {"value": [276, 852]}, None),
+        
+        ("hourly_to_daily_sum", ts_PT1H_2days, Sum, P1D, "value", [datetime(2025, 1, 1), datetime(2025, 1, 2)],
+         [24, 24], {"value": [276, 852]}, None),
     ])
+
     def test_microsecond_to_microsecond(
             self, _, input_ts, aggregator, target_period, column, timestamps, counts, values, timestamps_of
     ):
@@ -251,6 +258,12 @@ class TestSimpleAggregations(unittest.TestCase):
 
         ("hourly_to_monthly_min", ts_PT1H_2month, Min, P1M, "value", [datetime(2025, 1, 1), datetime(2025, 2, 1)],
          [744, 672], {"value": [0, 744]}, [datetime(2025, 1, 1), datetime(2025, 2, 1)]),
+        
+        ("hourly_to_monthly_mean_sum", ts_PT1H_2month, MeanSum, P1M, "value", [datetime(2025, 1, 1), datetime(2025, 2, 1)],
+         [744, 672], {"value": [276396, 725424]}, None),
+        
+        ("hourly_to_monthly_sum", ts_PT1H_2month, Sum, P1M, "value", [datetime(2025, 1, 1), datetime(2025, 2, 1)],
+         [744, 672], {"value": [276396, 725424]}, None),
     ])
     def test_microsecond_to_month(
             self, _, input_ts, aggregator, target_period, column, timestamps, counts, values, timestamps_of
@@ -258,6 +271,8 @@ class TestSimpleAggregations(unittest.TestCase):
         """Test aggregations of microsecond-based (i.e., 1-day or less) resolution data, to a month-based resolution."""
         expected_df = generate_expected_df(timestamps, aggregator, column, values, counts, counts, timestamps_of)
         result = aggregator().apply(input_ts, target_period, column)
+        print(result.df)
+        print(expected_df)
         assert_frame_equal(result.df, expected_df, check_dtype=False, check_column_order=False)
 
     @parameterized.expand([
@@ -269,6 +284,12 @@ class TestSimpleAggregations(unittest.TestCase):
 
         ("monthly_to_yearly_min", ts_P1M_2years, Min, P1Y, "value", [datetime(2025, 1, 1), datetime(2026, 1, 1)],
          [12, 12], {"value": [0, 12]}, [datetime(2025, 1, 1), datetime(2026, 1, 1)]),
+
+        ("monthly_to_yearly_mean_sum", ts_P1M_2years, MeanSum, P1Y, "value", [datetime(2025, 1, 1), datetime(2026, 1, 1)],
+         [12, 12], {"value": [66, 210]}, None),
+        
+        ("monthly_to_yearly_sum", ts_P1M_2years, Sum, P1Y, "value", [datetime(2025, 1, 1), datetime(2026, 1, 1)],
+         [12, 12], {"value": [66, 210]}, None),
     ])
     def test_month_to_month(
             self, _, input_ts, aggregator, target_period, column, timestamps, counts, values, timestamps_of
@@ -292,6 +313,14 @@ class TestSimpleAggregations(unittest.TestCase):
          [datetime(2025, 1, 1), datetime(2025, 1, 2)], [24, 24],
          {"value": [0, 24], "value_plus1": [1, 25], "value_times2": [0, 48]},
          [datetime(2025, 1, 1), datetime(2025, 1, 2)]),
+        
+        ("multi_column_mean_sum", ts_PT1H_2days, MeanSum, P1D, ["value", "value_plus1", "value_times2"],
+         [datetime(2025, 1, 1), datetime(2025, 1, 2)], [24, 24],
+         {"value": [276, 852], "value_plus1": [300, 876], "value_times2": [552, 1704]}, None),
+        
+        ("multi_column_sum", ts_PT1H_2days, Sum, P1D, ["value", "value_plus1", "value_times2"],
+         [datetime(2025, 1, 1), datetime(2025, 1, 2)], [24, 24],
+         {"value": [276, 852], "value_plus1": [300, 876], "value_times2": [552, 1704]}, None),
     ])
     def test_multi_column(
             self, _, input_ts, aggregator, target_period, column, timestamps, counts, values, timestamps_of
@@ -489,6 +518,31 @@ class TestMissingCriteriaAggregations(unittest.TestCase):
             self.actual_counts, valid=valid
         )
         result = self.aggregator().apply(self.input_ts, self.target_period, self.column, criteria)
+        assert_frame_equal(result.df, expected_df, check_dtype=False, check_column_order=False, check_exact=False)
+
+
+class TestMeanSumWithMissingData(unittest.TestCase):
+    """Tests the MeanSum aggregation with time series that has missing data."""
+    def setUp(self):
+        self.input_ts = ts_PT1H_2days_missing
+        self.target_period = P1D
+        self.column = "value"
+        self.timestamps = [datetime(2025, 1, 1), datetime(2025, 1, 2)]
+        self.expected_counts = [24, 24]
+        self.actual_counts = [20, 21]
+        self.values = {"value": [280.8, 853.7]}
+
+    def test_mean_sum_with_missing_data(self):
+        """Test MeanSum aggregation with time series that has missing data."""
+        expected_df = generate_expected_df(
+            self.timestamps, MeanSum, self.column, self.values, self.expected_counts,
+            self.actual_counts
+        )
+        result = MeanSum().apply(self.input_ts, self.target_period, self.column)
+        # Round the values to avoid floating point precision issues in the test
+        result.df = result.df.with_columns(
+            pl.col("mean_sum_value").round(1)
+        )
         assert_frame_equal(result.df, expected_df, check_dtype=False, check_column_order=False, check_exact=False)
 
 
