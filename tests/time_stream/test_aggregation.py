@@ -271,8 +271,6 @@ class TestSimpleAggregations(unittest.TestCase):
         """Test aggregations of microsecond-based (i.e., 1-day or less) resolution data, to a month-based resolution."""
         expected_df = generate_expected_df(timestamps, aggregator, column, values, counts, counts, timestamps_of)
         result = aggregator().apply(input_ts, target_period, column)
-        print(result.df)
-        print(expected_df)
         assert_frame_equal(result.df, expected_df, check_dtype=False, check_column_order=False)
 
     @parameterized.expand([
@@ -530,7 +528,7 @@ class TestMeanSumWithMissingData(unittest.TestCase):
         self.timestamps = [datetime(2025, 1, 1), datetime(2025, 1, 2)]
         self.expected_counts = [24, 24]
         self.actual_counts = [20, 21]
-        self.values = {"value": [280.8, 853.7]}
+        self.values = {"value": [280.8, 853.71]}
 
     def test_mean_sum_with_missing_data(self):
         """Test MeanSum aggregation with time series that has missing data."""
@@ -539,10 +537,6 @@ class TestMeanSumWithMissingData(unittest.TestCase):
             self.actual_counts
         )
         result = MeanSum().apply(self.input_ts, self.target_period, self.column)
-        # Round the values to avoid floating point precision issues in the test
-        result.df = result.df.with_columns(
-            pl.col("mean_sum_value").round(1)
-        )
         assert_frame_equal(result.df, expected_df, check_dtype=False, check_column_order=False, check_exact=False)
 
 
