@@ -46,6 +46,10 @@ class AggregationFunction(ABC):
         """Return the Polars expressions for this aggregation."""
         pass
 
+    def post_expr(self, columns: List[str]) -> List[pl.Expr]:
+        """Return additional Polars expressions to be applied after the aggregation."""
+        return []
+
     @classmethod
     def get(cls, aggregation: Union[str, Type["AggregationFunction"], "AggregationFunction"]) -> "AggregationFunction":
         """Factory method to get an aggregation function instance from string names, class types, or existing instances.
@@ -158,6 +162,7 @@ class AggregationFunction(ABC):
         with_columns_expressions = []
         with_columns_expressions.append(self._expected_count_expr(self.ts, aggregation_period))
         with_columns_expressions.extend(self._missing_data_expr(self.ts, columns, missing_criteria))
+        with_columns_expressions.extend(self.post_expr(columns))
 
         # Do the with_column methods
         for with_column in with_columns_expressions:
@@ -311,6 +316,34 @@ class Mean(AggregationFunction):
     def expr(self, columns: List[str]) -> List[pl.Expr]:
         """Return the `Polars` expression for calculating the mean in an aggregation period."""
         return [pl.col(col).mean().alias(f"mean_{col}") for col in columns]
+
+
+@register_aggregation
+class Sum(AggregationFunction):
+    """An aggregation class to calculate the sum (total) of values within each aggregation period."""
+
+    name = "sum"
+
+    def expr(self, columns: List[str]) -> List[pl.Expr]:
+        """Return the `Polars` expression for calculating the mean in an aggregation period."""
+        return [pl.col(col).sum().alias(f"sum_{col}") for col in columns]
+
+
+@register_aggregation
+class MeanSum(AggregationFunction):
+    """An aggregation class to calculate the mean sum (averaged total) of values within each aggregation period.
+    This will estimate the sum when values are missing according how many values are expected in the period."""
+
+    name = "mean_sum"
+
+    def expr(self, columns: List[str]) -> List[pl.Expr]:
+        """To calculate the mean sum the expression must return the mean, and be multiplied by the expected
+        counts, which is calculated after in the post_expr method."""
+        return [pl.col(col).mean().alias(f"mean_sum_{col}") for col in columns]
+
+    def post_expr(self, columns: List[str]) -> List[pl.Expr]:
+        """Multiply the mean by the expected count to get the mean sum."""
+        return [(pl.col(f"mean_sum_{col}") * pl.col(f"expected_count_{self.ts.time_name}")) for col in columns]
 
 
 @register_aggregation
