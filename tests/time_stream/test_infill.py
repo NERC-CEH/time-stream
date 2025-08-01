@@ -1,12 +1,12 @@
 import unittest
-from datetime import datetime, time
+from datetime import datetime
 from unittest.mock import Mock
 
+import numpy as np
 import polars as pl
 from parameterized import parameterized
 from polars.testing import assert_series_equal
 
-from time_stream.base import TimeSeries
 from time_stream.infill import (InfillMethod, BSplineInterpolation, CubicInterpolation, QuadraticInterpolation,
                                 LinearInterpolation, AkimaInterpolation, PchipInterpolation)
 
@@ -14,7 +14,7 @@ from time_stream.infill import (InfillMethod, BSplineInterpolation, CubicInterpo
 LINEAR = pl.DataFrame({"values": [1.0, None, 3.0, None, 5.0]})  # Linear progression
 QUADRATIC = pl.DataFrame({"values": [0.0, None, 4.0, None, 16.0, None, 36.0]})  # Quadratic data: y = x^2
 CUBIC = pl.DataFrame({"values": [0.0, None, 8.0, None, 64.0, None, 216.0, None, 512.0]})  # Cubic data: y = x^3
-INSUFFICIENT_DATA = pl.DataFrame({"values": [1.0, None, None, None, 5.0]}) # Insufficient data
+INSUFFICIENT_DATA = pl.DataFrame({"values": [1.0, None, None, None, None]}) # Insufficient data
 COMPLETE = pl.DataFrame({"values": [1.0, 2.0, 3.0, 4.0, 5.0]}) # No missing data
 ALL_MISSING = pl.DataFrame({"values": [None, None, None, None, None]}) # All missing data
 
@@ -90,6 +90,19 @@ class TestInfillMethod(unittest.TestCase):
             InfillMethod.get(get_input)
 
 
+class TestBSplineInterpolation(unittest.TestCase):
+    def test_initialization(self):
+        """Test BSplineInterpolation initialization."""
+        # Custom order
+        interp = BSplineInterpolation(order=2)
+        self.assertEqual(interp.order, 2)
+        self.assertEqual(interp.min_points_required, 3)
+
+        # With scipy kwargs
+        interp = BSplineInterpolation(order=1, bc_type="clamped")
+        self.assertEqual(interp.scipy_kwargs['bc_type'], "clamped")
+
+
 class TestLinearInterpolation(unittest.TestCase):
 
     @parameterized.expand([
@@ -104,10 +117,21 @@ class TestLinearInterpolation(unittest.TestCase):
         expected = pl.Series("values_linear", expected_data)
         assert_series_equal(result["values_linear"], expected)
 
-    def test_all_missing_data_raises_error(self):
-        """Test that all missing data raises ValueError."""
+    @parameterized.expand([
+        ("1 data points", INSUFFICIENT_DATA),
+        ("0 data points", ALL_MISSING),
+    ])
+    def test_insufficient_data_raises_error(self, _, input_data):
+        """Test that insufficient data raises ValueError."""
         with self.assertRaises(ValueError):
-            LinearInterpolation()._fill(ALL_MISSING, "values")
+            LinearInterpolation()._fill(input_data, "values")
+
+    def test_complete_data_unchanged(self):
+        """Test that complete data is unchanged."""
+        result = LinearInterpolation()._fill(COMPLETE, "values")
+        expected = pl.Series("values_linear", COMPLETE)
+        assert_series_equal(result["values_linear"], expected)
+
 
 class TestQuadraticInterpolation(unittest.TestCase):
 
@@ -122,16 +146,20 @@ class TestQuadraticInterpolation(unittest.TestCase):
         expected = pl.Series("values_quadratic", expected_data)
         assert_series_equal(result["values_quadratic"], expected)
 
-    def test_all_missing_data_raises_error(self):
-        """Test that all missing data raises ValueError."""
-        with self.assertRaises(ValueError):
-            QuadraticInterpolation()._fill(ALL_MISSING, "values")
-
-    def test_insufficient_data_raises_error(self):
+    @parameterized.expand([
+        ("1 data points", INSUFFICIENT_DATA),
+        ("0 data points", ALL_MISSING)
+    ])
+    def test_insufficient_data_raises_error(self, _, input_data):
         """Test that insufficient data raises ValueError."""
         with self.assertRaises(ValueError):
-            QuadraticInterpolation()._fill(INSUFFICIENT_DATA, "values")
+            QuadraticInterpolation()._fill(input_data, "values")
 
+    def test_complete_data_unchanged(self):
+        """Test that complete data is unchanged."""
+        result = QuadraticInterpolation()._fill(COMPLETE, "values")
+        expected = pl.Series("values_quadratic", COMPLETE)
+        assert_series_equal(result["values_quadratic"], expected)
 
 class TestCubicInterpolation(unittest.TestCase):
 
@@ -145,16 +173,105 @@ class TestCubicInterpolation(unittest.TestCase):
         expected = pl.Series("values_cubic", expected_data)
         assert_series_equal(result["values_cubic"], expected)
 
-    def test_all_missing_data_raises_error(self):
-        """Test that all missing data raises ValueError."""
-        with self.assertRaises(ValueError):
-            CubicInterpolation()._fill(ALL_MISSING, "values")
-
     @parameterized.expand([
-        (LINEAR,),
-        (INSUFFICIENT_DATA,)
+        ("3 data points", LINEAR),
+        ("1 data points", INSUFFICIENT_DATA),
+        ("0 data points", ALL_MISSING)
     ])
-    def test_insufficient_data_raises_error(self, input_data):
+    def test_insufficient_data_raises_error(self, _, input_data):
         """Test that insufficient data raises ValueError."""
         with self.assertRaises(ValueError):
             CubicInterpolation()._fill(input_data, "values")
+
+    def test_complete_data_unchanged(self):
+        """Test that complete data is unchanged."""
+        result = CubicInterpolation()._fill(COMPLETE, "values")
+        expected = pl.Series("values_cubic", COMPLETE)
+        assert_series_equal(result["values_cubic"], expected)
+
+        
+class TestAkimaInterpolation(unittest.TestCase):
+    # Manually calculating the Akima interpolation isn't practical.
+    #   Let's assume that SciPy is well tested and the Akima interpolation results are correct and let's just test
+    #   behaviours of the interpolation class
+
+    def test_initialization(self):
+        """Test Akima initialization."""
+        interp = AkimaInterpolation()
+        self.assertEqual(interp.min_points_required, 5)
+        self.assertEqual(interp.name, "akima")
+
+        # With scipy kwargs
+        interp = AkimaInterpolation(extrapolate=True)
+        self.assertEqual(interp.scipy_kwargs['extrapolate'], True)
+
+    def test_akima_interpolation_with_sufficient_data(self):
+        """Test akima interpolation works when there is sufficient data (at least 5 points)."""
+        result = AkimaInterpolation()._fill(CUBIC, "values")
+        self.assertIn("values_akima", result.columns)
+
+    @parameterized.expand([
+        ("4 data points", QUADRATIC),
+        ("3 data points", LINEAR),
+        ("1 data points", INSUFFICIENT_DATA),
+        ("0 data points", ALL_MISSING)
+    ])
+    def test_insufficient_data_raises_error(self, _, input_data):
+        """Test that insufficient data raises ValueError."""
+        with self.assertRaises(ValueError):
+            AkimaInterpolation()._fill(input_data, "values")
+
+    def test_complete_data_unchanged(self):
+        """Test that complete data is unchanged."""
+        result = AkimaInterpolation()._fill(COMPLETE, "values")
+        expected = pl.Series("values_akima", COMPLETE)
+        assert_series_equal(result["values_akima"], expected)
+
+        
+class TestPchipInterpolation(unittest.TestCase):
+    # Manually calculating the Pchip interpolation isn't practical.
+    #   Let's assume that SciPy is well tested and the Pchip interpolation results are correct and let's just test
+    #   behaviours of the interpolation class
+
+    def test_initialization(self):
+        """Test Akima initialization."""
+        interp = PchipInterpolation()
+        self.assertEqual(interp.min_points_required, 2)
+        self.assertEqual(interp.name, "pchip")
+
+        # With scipy kwargs
+        interp = PchipInterpolation(extrapolate=True)
+        self.assertEqual(interp.scipy_kwargs['extrapolate'], True)
+
+    def test_pchip_interpolation_with_sufficient_data(self):
+        """Test akima interpolation works when there is sufficient data (at least 2 points)."""
+        result = PchipInterpolation()._fill(LINEAR, "values")
+        self.assertIn("values_pchip", result.columns)
+
+    @parameterized.expand([
+        ("1 data points", INSUFFICIENT_DATA),
+        ("0 data points", ALL_MISSING)
+    ])
+    def test_insufficient_data_raises_error(self, _, input_data):
+        """Test that insufficient data raises ValueError."""
+        with self.assertRaises(ValueError):
+            PchipInterpolation()._fill(input_data, "values")
+
+    @parameterized.expand([
+        (LINEAR,),
+        (QUADRATIC,),
+        (CUBIC,),
+    ])
+    def test_pchip_monotonic_preservation(self, input_data):
+        """Part of the pchip behaviour is that it should preserve local monotonicity if the input data is monotonic."""
+        result = PchipInterpolation()._fill(input_data, "values")
+        interpolated = result["values_pchip"].to_numpy()
+
+        # Check that result is monotonically increasing
+        self.assertTrue(np.all(np.diff(interpolated) > 0))
+
+    def test_complete_data_unchanged(self):
+        """Test that complete data is unchanged."""
+        result = PchipInterpolation()._fill(COMPLETE, "values")
+        expected = pl.Series("values_pchip", COMPLETE)
+        assert_series_equal(result["values_pchip"], expected)

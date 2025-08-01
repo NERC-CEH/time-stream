@@ -263,7 +263,9 @@ class ScipyInterpolation(InfillMethod, ABC):
 
 @register_infill_method
 class BSplineInterpolation(ScipyInterpolation):
-    """B-spline interpolation using scipy make_interp_spline with configurable order."""
+    """B-spline interpolation using scipy make_interp_spline with configurable order.
+    https://docs.scipy.org/doc/scipy-1.16.1/reference/generated/scipy.interpolate.make_interp_spline.html
+    """
 
     name = "bspline"
 
@@ -289,7 +291,9 @@ class BSplineInterpolation(ScipyInterpolation):
 
 @register_infill_method
 class LinearInterpolation(BSplineInterpolation):
-    """Linear spline interpolation (Convenience wrapper around B-spline with order=1)."""
+    """Linear spline interpolation (Convenience wrapper around B-spline with order=1).
+    https://docs.scipy.org/doc/scipy-1.16.1/reference/generated/scipy.interpolate.make_interp_spline.html
+    """
 
     name = "linear"
 
@@ -300,7 +304,9 @@ class LinearInterpolation(BSplineInterpolation):
 
 @register_infill_method
 class QuadraticInterpolation(BSplineInterpolation):
-    """Quadratic spline interpolation (Convenience wrapper around B-spline with order=2)."""
+    """Quadratic spline interpolation (Convenience wrapper around B-spline with order=2).
+    https://docs.scipy.org/doc/scipy-1.16.1/reference/generated/scipy.interpolate.make_interp_spline.html
+    """
 
     name = "quadratic"
 
@@ -311,7 +317,9 @@ class QuadraticInterpolation(BSplineInterpolation):
 
 @register_infill_method
 class CubicInterpolation(BSplineInterpolation):
-    """Cubic spline interpolation (Convenience wrapper around B-spline with order=3)."""
+    """Cubic spline interpolation (Convenience wrapper around B-spline with order=3).
+    https://docs.scipy.org/doc/scipy-1.16.1/reference/generated/scipy.interpolate.make_interp_spline.html
+    """
 
     name = "cubic"
 
@@ -322,7 +330,9 @@ class CubicInterpolation(BSplineInterpolation):
 
 @register_infill_method
 class AkimaInterpolation(ScipyInterpolation):
-    """Akima interpolation using scipy (good for avoiding oscillations)."""
+    """Akima interpolation using scipy (good for avoiding oscillations).
+    https://docs.scipy.org/doc/scipy-1.16.1/reference/generated/scipy.interpolate.Akima1DInterpolator.html
+    """
 
     name = "akima"
     min_points_required = 5
@@ -334,7 +344,9 @@ class AkimaInterpolation(ScipyInterpolation):
 
 @register_infill_method
 class PchipInterpolation(ScipyInterpolation):
-    """PCHIP interpolation using scipy (preserves monotonicity)."""
+    """PCHIP interpolation using scipy (preserves monotonicity).
+    https://docs.scipy.org/doc/scipy-1.16.1/reference/generated/scipy.interpolate.PchipInterpolator.html
+    """
 
     name = "pchip"
     min_points_required = 2
