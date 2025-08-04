@@ -168,7 +168,7 @@ class InfillMethod(ABC):
             metadata=ts._metadata,
             supplementary_columns=list(ts.supplementary_columns.keys()),
             flag_systems=ts.flag_systems,
-            flag_columns={name: col.flag_system for name, col in ts.flag_columns.items()},
+            flag_columns={name: col.flag_system.name for name, col in ts.flag_columns.items()},
             pad=True,
         )
 
