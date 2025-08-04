@@ -31,6 +31,7 @@ extensions = [
     'matplotlib.sphinxext.plot_directive',
 ]
 
+plot_formats = ['svg']
 plot_include_source = False
 plot_html_show_source_link = False
 plot_html_show_formats = False
