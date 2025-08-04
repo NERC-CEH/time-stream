@@ -155,7 +155,7 @@ class InfillMethod(ABC):
         # Do some tidying up of columns, leaving only the original column names
         df_infilled = df_infilled.with_columns(
             pl.col(infilled_column).alias(infill_column)  # Rename the infilled column back to the original name
-        ).drop([infilled_column, "gap_size"])  # Drop the temporary processing columns
+        ).drop([infilled_column, "gap_size"], strict=False)  # Drop the temporary processing columns
 
         # Create result TimeSeries
         #   Need to do this as the time column might have changed due to the padding/adding of infilled rows.

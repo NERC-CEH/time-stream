@@ -37,11 +37,49 @@ Each method supports configuration through parameters specific to that method.
 
 The examples given below all use this ``TimeSeries`` object:
 
-.. literalinclude:: ../../../src/time_stream/examples/examples_quality_control.py
+.. literalinclude:: ../../../src/time_stream/examples/examples_infilling.py
    :language: python
    :start-after: [start_block_1]
    :end-before: [end_block_1]
    :dedent:
+
+.. jupyter-execute::
+   :hide-code:
+
+   import examples_infilling
+   ts = examples_infilling.create_simple_time_series_with_gaps()
+
+.. plot::
+
+   import polars as pl
+   import matplotlib.pyplot as plt
+
+   # Create sample data
+   df = pl.DataFrame({
+       "x": range(10),
+       "y": [i**2 for i in range(10)]
+   })
+
+   # Plot using Polars' matplotlib backend
+   df.plot.scatter(x="x", y="y")
+   plt.title("Polars Scatter Plot")
+   plt.show()
+
+
+Examples
+~~~~~~~~~~~~~~~~~~~
+
+.. literalinclude:: ../../../src/time_stream/examples/examples_infilling.py
+   :language: python
+   :start-after: [start_block_2]
+   :end-before: [end_block_2]
+   :dedent:
+
+.. jupyter-execute::
+   :hide-code:
+
+   import examples_infilling
+   ts = examples_infilling.all_infills()
 
 Linear Interpolation
 ~~~~~~~~~~~~~~~~~~~
@@ -50,22 +88,12 @@ Linear Interpolation
 
 .. autoclass:: time_stream.infill.LinearInterpolation
 
-Examples
-^^^^^^^^^^^^^
-
-todo
-
 Quadratic Interpolation
 ~~~~~~~~~~~~~~~~~~~
 
 **Name**: ``"quadratic"``
 
 .. autoclass:: time_stream.infill.QuadraticInterpolation
-
-Examples
-^^^^^^^^^^^^^
-
-todo
 
 Quadratic Interpolation
 ~~~~~~~~~~~~~~~~~~~
@@ -74,11 +102,6 @@ Quadratic Interpolation
 
 .. autoclass:: time_stream.infill.CubicInterpolation
 
-Examples
-^^^^^^^^^^^^^
-
-todo
-
 Akima Interpolation
 ~~~~~~~~~~~~~~~~~~~
 
@@ -86,19 +109,9 @@ Akima Interpolation
 
 .. autoclass:: time_stream.infill.AkimaInterpolation
 
-Examples
-^^^^^^^^^^^^^
-
-todo
-
 PCHIP Interpolation
 ~~~~~~~~~~~~~~~~~~~
 
 **Name**: ``"pchip"``
 
 .. autoclass:: time_stream.infill.PchipInterpolation
-
-Examples
-^^^^^^^^^^^^^
-
-todo

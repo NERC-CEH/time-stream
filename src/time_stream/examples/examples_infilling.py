@@ -1,49 +1,83 @@
+from datetime import datetime
 
-# Create sample data with gaps
-from datetime import datetime, timedelta
 import numpy as np
-from time_stream import TimeSeries, Period
-from time_stream.infill import InfillMethod
 import polars as pl
 
+from time_stream import Period, TimeSeries
 
-n_rows = 50
-missing_rate = 0.5
+from utils import suppress_output
 
-dates = [datetime(2024, 1, 1) + timedelta(days=i) for i in range(n_rows)]
 
-# Create simple data column with trend + noise
-values = np.arange(n_rows) * 0.5 + np.random.normal(0, 2, n_rows)
+def create_simple_time_series_with_gaps():
+    # [start_block_1]
+    np.random.seed(42)
 
-# Create DataFrame first
-df = pl.DataFrame({
-    "timestamp": dates,
-    "data": values,
-})
+    # Set up a daily time series with varying gaps
+    dates = [
+        datetime(2024, 1, 1), datetime(2024, 1, 2), # One-day gap,
+        datetime(2024, 1, 4), datetime(2024, 1, 5), datetime(2024, 1, 6),
+        datetime(2024, 1, 7), # Two-day gap,
+        datetime(2024, 1, 10), datetime(2024, 1, 11), datetime(2024, 1, 12),
+        # Three-day gap,
+        datetime(2024, 1, 16)
+    ]
 
-# Remove random rows to create gaps
-n_to_remove = int(n_rows * missing_rate)
-indices_to_remove = np.random.choice(n_rows, n_to_remove, replace=False)
+    # Create example random column data
+    df = pl.DataFrame({
+        "timestamp": dates,
+        "temperature": np.arange(len(dates)) * 0.5 + np.random.normal(0, 2, len(dates)),
+    })
 
-# Keep only rows not in the removal list
-df = df.filter(pl.Series("keep", ~np.isin(np.arange(n_rows), indices_to_remove)))
+    ts = TimeSeries(
+        df=df,
+        time_name="timestamp",
+        resolution=Period.of_days(1),
+        periodicity=Period.of_days(1),
+        pad=True
+    )
+    # [end_block_1]
+    with pl.Config(tbl_rows=-1):
+        print(ts)
 
-old_df = df.clone()
+    return ts
 
-methods = ["linear", "cubic", "quadratic", "pchip", "akima", "bspline"]
 
-for m in methods:
-    ts = TimeSeries(df, "timestamp", resolution=Period.of_days(1), periodicity=Period.of_days(1), pad=True)
+def all_infills():
+    with suppress_output():
+        ts = create_simple_time_series_with_gaps()
 
-    if m == "bspline":
-        i = InfillMethod.get(m, order=1)
-    else:
-        i = InfillMethod.get(m)
-    print(i)
+    # [start_block_2]
+    methods = ["linear", "cubic", "quadratic", "pchip", "akima"]
+    result = ts.df.clone()
+    for method in methods:
+        ts_infilled = ts.infill(method, "temperature")
+        ts_infilled.df = ts_infilled.df.rename({"temperature": method})
+        result = result.join(ts_infilled.df, on="timestamp", how="full").drop("timestamp_right")
+    # [end_block_2]
 
-    ts = ts.infill(i, "data", max_gap_size=2)
+    with pl.Config(tbl_rows=-1):
+        print(result)
+    return ts
 
-    old_df = ts.df.rename({"data": m}).join(old_df, on="timestamp", how="full").drop("timestamp_right")
-
-with pl.Config(tbl_rows=-1):
-        print(old_df)
+# 
+# 
+# 
+# old_df = df.clone()
+# 
+# methods = ["linear", "cubic", "quadratic", "pchip", "akima", "bspline"]
+# 
+# for m in methods:
+#     ts = TimeSeries(df, "timestamp", resolution=Period.of_days(1), periodicity=Period.of_days(1), pad=True)
+# 
+#     if m == "bspline":
+#         i = InfillMethod.get(m, order=1)
+#     else:
+#         i = InfillMethod.get(m)
+#     print(i)
+# 
+#     ts = ts.infill(i, "data", max_gap_size=2)
+# 
+#     old_df = ts.df.rename({"data": m}).join(old_df, on="timestamp", how="full").drop("timestamp_right")
+# 
+# with pl.Config(tbl_rows=-1):
+#         print(old_df)
