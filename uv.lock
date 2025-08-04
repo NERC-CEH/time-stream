@@ -12,6 +12,22 @@ wheels = [
 ]
 
 [[package]]
+name = "altair"
+version = "5.5.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "jinja2" },
+    { name = "jsonschema" },
+    { name = "narwhals" },
+    { name = "packaging" },
+    { name = "typing-extensions", marker = "python_full_version < '3.14'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/16/b1/f2969c7bdb8ad8bbdda031687defdce2c19afba2aa2c8e1d2a17f78376d8/altair-5.5.0.tar.gz", hash = "sha256:d960ebe6178c56de3855a68c47b516be38640b73fb3b5111c2a9ca90546dd73d", size = 705305, upload-time = "2024-11-23T23:39:58.542Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/aa/f3/0b6ced594e51cc95d8c1fc1640d3623770d01e4969d29c0bd09945fafefa/altair-5.5.0-py3-none-any.whl", hash = "sha256:91a310b926508d560fe0148d02a194f38b824122641ef528113d029fcd129f8c", size = 731200, upload-time = "2024-11-23T23:39:56.4Z" },
+]
+
+[[package]]
 name = "annotated-types"
 version = "0.7.0"
 source = { registry = "https://pypi.org/simple" }
@@ -839,6 +855,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/c4/79/bda47f7dd7c3c55770478d6d02c9960c430b0cf1773b72366ff89126ea31/mistune-3.1.3.tar.gz", hash = "sha256:a7035c21782b2becb6be62f8f25d3df81ccb4d6fa477a6525b15af06539f02a0", size = 94347, upload-time = "2025-03-19T14:27:24.955Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/01/4d/23c4e4f09da849e127e9f123241946c23c1e30f45a88366879e064211815/mistune-3.1.3-py3-none-any.whl", hash = "sha256:1a32314113cff28aa6432e99e522677c8587fd83e3d51c29b82a52409c842bd9", size = 53410, upload-time = "2025-03-19T14:27:23.451Z" },
+]
+
+[[package]]
+name = "narwhals"
+version = "2.0.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/e2/8f/51d14e402c4f9d281a2e153a6a805cad5460088027a999faf264b54e7641/narwhals-2.0.1.tar.gz", hash = "sha256:235e61ca807bc21110ca36a4d53888ecc22c42dcdf50a7c886e10dde3fd7f38c", size = 525541, upload-time = "2025-07-29T08:39:04.81Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/7f/26/43caf834e47c63883a5eddc02893b7fdbe6a0a4508ff6dc401907f3cc085/narwhals-2.0.1-py3-none-any.whl", hash = "sha256:837457e36a2ba1710c881fb69e1f79ce44fb81728c92ac378f70892a53af8ddb", size = 385436, upload-time = "2025-07-29T08:39:03.163Z" },
 ]
 
 [[package]]
@@ -1767,6 +1792,7 @@ wheels = [
 name = "time-stream"
 source = { editable = "." }
 dependencies = [
+    { name = "altair" },
     { name = "autosemver" },
     { name = "config" },
     { name = "isodate" },
@@ -1815,6 +1841,7 @@ test = [
 
 [package.metadata]
 requires-dist = [
+    { name = "altair", specifier = ">=5.5.0" },
     { name = "autosemver" },
     { name = "config", specifier = ">=0.5.1" },
     { name = "isodate" },

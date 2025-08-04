@@ -49,23 +49,6 @@ The examples given below all use this ``TimeSeries`` object:
    import examples_infilling
    ts = examples_infilling.create_simple_time_series_with_gaps()
 
-.. plot::
-
-   import polars as pl
-   import matplotlib.pyplot as plt
-
-   # Create sample data
-   df = pl.DataFrame({
-       "x": range(10),
-       "y": [i**2 for i in range(10)]
-   })
-
-   # Plot using Polars' matplotlib backend
-   df.plot.scatter(x="x", y="y")
-   plt.title("Polars Scatter Plot")
-   plt.show()
-
-
 Examples
 ~~~~~~~~~~~~~~~~~~~
 
@@ -80,6 +63,43 @@ Examples
 
    import examples_infilling
    ts = examples_infilling.all_infills()
+
+.. plot:: ../../src/time_stream/examples/examples_infilling.py plot_all_infills
+
+Specifying Maximum Gap Size
+^^^^^^^^^^^^^
+
+The ``infill`` method accepts a ``max_gap_size`` parameter, which indicates the maximum size of consecutive null gaps
+that should be filled. Any gap larger than this will not be infilled and will remain as null.
+
+.. literalinclude:: ../../../src/time_stream/examples/examples_infilling.py
+   :language: python
+   :start-after: [start_block_3]
+   :end-before: [end_block_3]
+   :dedent:
+
+.. jupyter-execute::
+   :hide-code:
+
+   import examples_infilling
+   ts = examples_infilling.infill_with_max_gap()
+
+Applying Infilling during a specific time range
+^^^^^^^^^^^^^
+The ``observation_interval`` argument can be used to constrain the infilling to a chunk of your time series.
+
+.. literalinclude:: ../../../src/time_stream/examples/examples_infilling.py
+   :language: python
+   :start-after: [start_block_4]
+   :end-before: [end_block_4]
+   :dedent:
+
+.. jupyter-execute::
+   :hide-code:
+
+   import examples_infilling
+   ts = examples_infilling.observation_interval_example()
+
 
 Linear Interpolation
 ~~~~~~~~~~~~~~~~~~~

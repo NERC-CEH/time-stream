@@ -60,16 +60,18 @@ def all_infills():
         print(result)
     return result
 
-
 def plot_all_infills():
     with suppress_output():
         df = all_infills()
 
-    plt.figure(figsize=(10, 6))
+    plt.figure(figsize=(12, 8))
 
     datetime_col = 'timestamp'
+    value_columns = [col for col in df.columns if col != datetime_col]
+
     x_values = df[datetime_col].to_list()
-    for col in [col for col in df.columns if col != datetime_col]:
+
+    for col in value_columns:
         y_values = df[col].to_list()
         if col == "temperature":
             plt.scatter(x_values, y_values, label=col, s=70, c="black", zorder=10)
@@ -85,31 +87,25 @@ def plot_all_infills():
     plt.xticks(rotation=45)
     plt.tight_layout()
 
-
-def infill_with_max_gap():
-    with suppress_output():
-        ts = create_simple_time_series_with_gaps()
-
-    # [start_block_3]
-    # The gap of 3 missing dates will not be infilled
-    ts_infilled = ts.infill("linear", "temperature", max_gap_size=2)
-    # [end_block_3]
-
-    with pl.Config(tbl_rows=-1):
-        print(ts_infilled)
-
-
-def observation_interval_example():
-    with suppress_output():
-        ts = create_simple_time_series_with_gaps()
-
-    # [start_block_4]
-    # Only infill data between specific dates
-    start_date = datetime(2024, 1, 1)
-    end_date = datetime(2024, 1, 5)
-
-    ts_infilled = ts.infill("linear", "temperature", observation_interval=(start_date, end_date))
-    # [end_block_4]
-
-    with pl.Config(tbl_rows=-1):
-        print(ts_infilled)
+# 
+# 
+# 
+# old_df = df.clone()
+# 
+# methods = ["linear", "cubic", "quadratic", "pchip", "akima", "bspline"]
+# 
+# for m in methods:
+#     ts = TimeSeries(df, "timestamp", resolution=Period.of_days(1), periodicity=Period.of_days(1), pad=True)
+# 
+#     if m == "bspline":
+#         i = InfillMethod.get(m, order=1)
+#     else:
+#         i = InfillMethod.get(m)
+#     print(i)
+# 
+#     ts = ts.infill(i, "data", max_gap_size=2)
+# 
+#     old_df = ts.df.rename({"data": m}).join(old_df, on="timestamp", how="full").drop("timestamp_right")
+# 
+# with pl.Config(tbl_rows=-1):
+#         print(old_df)
