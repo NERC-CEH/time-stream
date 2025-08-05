@@ -124,12 +124,12 @@ class InfillMethod(ABC):
         """
         df = gap_size_count(df, infill_column)
 
-        # Default is that there is no data to infill
-        filter_expr = pl.lit(False)
-
+        # Check for any gaps
+        filter_expr = pl.col("gap_size") > 0
         if max_gap_size:
-            # Check if there is any missing data in gaps with: 0 < gap <= max_gap_size
+            # If constrained, change the filter to check if there is any missing data with: 0 < gap <= max_gap_size
             filter_expr = pl.col("gap_size").is_between(0, max_gap_size, closed="right")
+
         if observation_interval:
             # Check if these gaps are within the specified observation interval
             filter_expr = filter_expr & get_date_filter(time_name, observation_interval)
