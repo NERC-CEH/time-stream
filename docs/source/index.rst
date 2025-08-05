@@ -12,13 +12,13 @@ Key Features
 * **Aggregation framework**: Easily aggregate time series data over various periods
 * **Flagging system**: Built-in flagging system for data point management and provenance
 * **Column relationships**: Define and manage relationships between data and metadata
+* **Infilling routines**: Fill gaps in time series data using a variety of infilling methods
 
 Getting Started
 --------------
 
 .. toctree::
    :maxdepth: 2
-   :caption: Getting Started
    
    getting_started/installation
    getting_started/quick_start
@@ -29,11 +29,11 @@ User Guide
 
 .. toctree::
    :maxdepth: 2
-   :caption: User Guide
    
    user_guide/timeseries_basics
    user_guide/periods
    user_guide/quality_control
+   user_guide/infilling
    user_guide/aggregation
    user_guide/flagging
    user_guide/column_relationships
@@ -43,7 +43,6 @@ Examples
 
 .. toctree::
    :maxdepth: 2
-   :caption: Examples
    
    examples/creating_timeseries
    examples/aggregation_examples
@@ -55,7 +54,6 @@ API Reference
 
 .. toctree::
    :maxdepth: 2
-   :caption: API Reference
    
    api/timeseries
    api/period
@@ -70,7 +68,6 @@ Developer Guide
 
 .. toctree::
    :maxdepth: 2
-   :caption: Developer Guide
    
    developer/contributing
    developer/testing

@@ -68,7 +68,7 @@ class InfillMethod(ABC):
             method: The infill method specification, which can be:
                 - A string name: e.g. "linear_interpolation"
                 - A class type: LinearInterpolation
-                - An instance: LinearInterpolation(), or any InfillMehod instance
+                - An instance: LinearInterpolation(), or any InfillMethod instance
             **kwargs: Parameters specific to the infill method, used to initialise the class object.
                       Ignored if method is already an instance of the class.
 
@@ -100,6 +100,31 @@ class InfillMethod(ABC):
         else:
             raise TypeError(f"Infill method must be a string or an InfillMethod class. Got {type(method).__name__}")
 
+    @classmethod
+    def _anything_to_infill(
+            cls,
+            df: pl.DataFrame,
+            time_name: str,
+            infill_column: str,
+            observation_interval: Optional[datetime | Tuple[datetime, datetime | None]] = None,
+            max_gap_size: Optional[int] = None,
+    ):
+        df = gap_size_count(df, infill_column)
+
+        # Default is that there is no data to infill
+        filter_expr = pl.lit(False)
+
+        if max_gap_size:
+            # Check if there is any missing data in gaps with: 0 < gap <= max_gap_size
+            filter_expr = pl.col("gap_size").is_between(0, max_gap_size, closed="right")
+        if observation_interval:
+            # Check if these gaps are within the specified observation interval
+            filter_expr = filter_expr & get_date_filter(time_name, observation_interval)
+
+        # If anything left in the dataframe using the filter, then these are the data points that need infilling
+        df = df.filter(filter_expr)
+        return not df.is_empty()
+
     def apply(
         self,
         ts: TimeSeries,
@@ -114,7 +139,7 @@ class InfillMethod(ABC):
             infill_column: The column to infill data within.
             observation_interval: Optional time interval to limit the infilling to.
             max_gap_size: The maximum size of consecutive null gaps that should be filled. Any gap larger than this
-                          will not be interpolated and will remain as null.
+                          will not be infilled and will remain as null.
         Returns:
             TimeSeries: The infilled time series
         """
@@ -128,6 +153,11 @@ class InfillMethod(ABC):
         # We need to make sure the data is padded so that missing time steps are filled with nulls
         df = pad_time(ts.df, ts.time_name, ts.periodicity)
 
+        # Check if there is actually anything to infill
+        if not self._anything_to_infill(df, ts.time_name, infill_column, observation_interval, max_gap_size):
+            # If not, return the original time series
+            return ts
+
         # Apply the specific infill logic from the child class
         df_infilled = self._fill(df, infill_column)
         infilled_column = self._infilled_column_name(infill_column)
@@ -137,6 +167,7 @@ class InfillMethod(ABC):
             # Count the size of gaps in the data
             df_infilled = gap_size_count(df_infilled, infill_column)
 
+            # Limit the infilled data to where the gap size is less than the user specified limit
             df_infilled = df_infilled.with_columns(
                 pl.when(pl.col("gap_size") <= max_gap_size)
                 .then(pl.col(infilled_column))

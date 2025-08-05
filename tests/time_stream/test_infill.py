@@ -11,12 +11,13 @@ from time_stream.infill import (InfillMethod, BSplineInterpolation, CubicInterpo
                                 LinearInterpolation, AkimaInterpolation, PchipInterpolation)
 
 # Data used through the tests
-LINEAR = pl.DataFrame({"values": [1.0, None, 3.0, None, 5.0]})  # Linear progression
-QUADRATIC = pl.DataFrame({"values": [0.0, None, 4.0, None, 16.0, None, 36.0]})  # Quadratic data: y = x^2
-CUBIC = pl.DataFrame({"values": [0.0, None, 8.0, None, 64.0, None, 216.0, None, 512.0]})  # Cubic data: y = x^3
-INSUFFICIENT_DATA = pl.DataFrame({"values": [1.0, None, None, None, None]}) # Insufficient data
-COMPLETE = pl.DataFrame({"values": [1.0, 2.0, 3.0, 4.0, 5.0]}) # No missing data
+LINEAR = pl.DataFrame({"values": [1., None, 3., None, 5.]})  # Linear progression
+QUADRATIC = pl.DataFrame({"values": [0., None, 4., None, 16., None, 36.]})  # Quadratic data: y = x^2
+CUBIC = pl.DataFrame({"values": [0., None, 8., None, 64., None, 216., None, 512.]})  # Cubic data: y = x^3
+INSUFFICIENT_DATA = pl.DataFrame({"values": [1., None, None, None, None]}) # Insufficient data
+COMPLETE = pl.DataFrame({"values": [1., 2., 3., 4., 5.]}) # No missing data
 ALL_MISSING = pl.DataFrame({"values": [None, None, None, None, None]}) # All missing data
+VARYING_GAPS = pl.DataFrame({"values": [1., None, 3., None, None, 6., None, None, None, 10.]})
 
 
 class MockInfill(InfillMethod):
@@ -88,6 +89,32 @@ class TestInfillMethod(unittest.TestCase):
         """Test InfillMethod.get() with invalid type."""
         with self.assertRaises(TypeError):
             InfillMethod.get(get_input)
+
+    @parameterized.expand([
+        (COMPLETE, 1, None, False),
+        (LINEAR, 1, None, True),
+        (INSUFFICIENT_DATA, 1, None, False),
+        (ALL_MISSING, 1, None, False),
+        (VARYING_GAPS, 1, None, True),
+        (VARYING_GAPS, 2, None, True),
+        (VARYING_GAPS, 3, None, True),
+        (VARYING_GAPS, 1, (datetime(2025, 1, 3), datetime(2025, 1, 10)), False),
+        (VARYING_GAPS, 2, (datetime(2025, 1, 6), datetime(2025, 1, 10)), False),
+        (VARYING_GAPS, 3, datetime(2025, 1, 10), False),
+    ])
+    def test_anything_to_infill(self, df, max_gap_size, observation_interval, expected):
+        """Test whether the anything to infill method returns expected boolean."""
+        # Add timestamp column to input df
+        df = df.with_columns(pl.Series("timestamp", [datetime(2025, 1, d) for d in range(1, len(df)+1)]))
+
+        result = InfillMethod._anything_to_infill(
+            df=df,
+            time_name="timestamp",
+            infill_column="values",
+            max_gap_size=max_gap_size,
+            observation_interval=observation_interval
+        )
+        self.assertEqual(result, expected)
 
 
 class TestBSplineInterpolation(unittest.TestCase):
