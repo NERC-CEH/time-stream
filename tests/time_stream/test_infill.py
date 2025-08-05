@@ -92,19 +92,20 @@ class TestInfillMethod(unittest.TestCase):
 
     @parameterized.expand([
         (COMPLETE, 1, None, False),
+        (COMPLETE, None, None, False),
         (LINEAR, 1, None, True),
         (INSUFFICIENT_DATA, 1, None, False),
+        (INSUFFICIENT_DATA, None, None, True),
         (ALL_MISSING, 1, None, False),
         (VARYING_GAPS, 1, None, True),
         (VARYING_GAPS, 2, None, True),
         (VARYING_GAPS, 3, None, True),
+        (VARYING_GAPS, 1, (datetime(2025, 1, 1), datetime(2025, 1, 3)), True),
         (VARYING_GAPS, 1, (datetime(2025, 1, 3), datetime(2025, 1, 10)), False),
         (VARYING_GAPS, 2, (datetime(2025, 1, 6), datetime(2025, 1, 10)), False),
         (VARYING_GAPS, 3, datetime(2025, 1, 10), False),
         (VARYING_GAPS, None, datetime(2025, 1, 3), True),
         (VARYING_GAPS, None, None, True),
-        (COMPLETE, None, None, False),
-        (INSUFFICIENT_DATA, None, None, True),
     ])
     def test_anything_to_infill(self, df, max_gap_size, observation_interval, expected):
         """Test whether the anything to infill method returns expected boolean."""
