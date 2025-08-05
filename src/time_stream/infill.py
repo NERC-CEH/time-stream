@@ -102,13 +102,26 @@ class InfillMethod(ABC):
 
     @classmethod
     def _anything_to_infill(
-            cls,
-            df: pl.DataFrame,
-            time_name: str,
-            infill_column: str,
-            observation_interval: Optional[datetime | Tuple[datetime, datetime | None]] = None,
-            max_gap_size: Optional[int] = None,
-    ):
+        cls,
+        df: pl.DataFrame,
+        time_name: str,
+        infill_column: str,
+        observation_interval: Optional[datetime | Tuple[datetime, datetime | None]] = None,
+        max_gap_size: Optional[int] = None,
+    ) -> bool:
+        """Check if there is actually anything to infill in the provided dataframe, considering the maximum gap size
+        and datetime observation interval constraints
+
+        Args:
+            df: Dataframe to check.
+            time_name: Name of the datetime column in the dataframe.
+            infill_column: The column to check whether anything to infill.
+            observation_interval: Optional time interval to limit the infilling to.
+            max_gap_size: The maximum size of consecutive null gaps that should be filled.
+
+        Returns:
+            Boolean of whether there is anything to infill (True) or not (False)
+        """
         df = gap_size_count(df, infill_column)
 
         # Default is that there is no data to infill
