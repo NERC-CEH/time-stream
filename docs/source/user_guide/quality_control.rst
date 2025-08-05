@@ -3,7 +3,8 @@ Quality control checks
 
 The quality control (QC) system in the Time Stream library provides a flexible framework for flagging
 potential issues in time series data. It allows users to define and apply QC checks to individual
-columns of a ``TimeSeries`` object, storing the results in flag columns for further inspection or filtering.
+columns of a ``TimeSeries`` object, the results of which can then be used to update flag columns or lead to
+further inspection or filtering of your data.
 
 Applying a QC Check
 -------------------
@@ -12,14 +13,12 @@ To apply a QC check, call the ``TimeSeries.qc_check`` method on a ``TimeSeries``
 
 - Specify the **check type** (see below for available built-in quality control checks)
 - Choose the **column** to evaluate
-- Assign a **flag column** to store the results
-- Provide a **flag value** to mark failing data
-- Optionally limit the QC check to a **time window**
+- Optionally limit the QC check to a **time observation window**
 
 Built-in Quality Control Checks
 ---------------
 Several built-in QC checks are available. Each check encapsulates a validation rule and supports configuration
-through parameters specific to that check:
+through parameters specific to that check.
 
 The examples given below all use this ``TimeSeries`` object:
 

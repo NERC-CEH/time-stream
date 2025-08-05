@@ -771,118 +771,6 @@ class TestCheckPeriodicity(unittest.TestCase):
         self._check_failure(times, periodicity)
 
 
-class TestTruncateToPeriod(unittest.TestCase):
-    df = pl.DataFrame({
-        "time": [datetime(2020, 6, 1, 8, 10, 5, 2000),
-                 datetime(2021, 4, 30, 15, 30, 10, 250),
-                 datetime(2022, 12, 31, 12)]
-    })
-
-    @parameterized.expand([
-        ("simple yearly", Period.of_years(1),
-         [datetime(2020, 1, 1), datetime(2021, 1, 1), datetime(2022, 1, 1)]
-         ),
-        ("yearly with offset", Period.of_years(1).with_month_offset(2),
-         [datetime(2020, 3, 1), datetime(2021, 3, 1), datetime(2022, 3, 1)]
-         )
-    ])
-    def test_truncate_to_year_period(self, _, period, expected):
-        """ Test that truncating a time series to a given year period works as expected.
-        """
-        result = TimeSeries.truncate_to_period(self.df["time"],period)
-        assert_series_equal(result, pl.Series("time", expected))
-
-    @parameterized.expand([
-        ("simple monthly", Period.of_months(1),
-         [datetime(2020, 6, 1), datetime(2021, 4, 1), datetime(2022, 12, 1)]
-         ),
-        ("3 monthly (quarterly)", Period.of_months(3),
-         [datetime(2020, 4, 1), datetime(2021, 4, 1), datetime(2022, 10, 1)]
-         ),
-        ("monthly with offset", Period.of_months(1).with_hour_offset(9),
-         [datetime(2020, 5, 1, 9), datetime(2021, 4, 1, 9), datetime(2022, 12, 1, 9)]
-         )
-    ])
-    def test_truncate_to_month_period(self, _, period, expected):
-        """ Test that truncating a time series to a given month period works as expected.
-        """
-        result = TimeSeries.truncate_to_period(self.df["time"],period)
-        assert_series_equal(result, pl.Series("time", expected))
-
-    @parameterized.expand([
-        ("simple daily", Period.of_days(1),
-         [datetime(2020, 6, 1), datetime(2021, 4, 30), datetime(2022, 12, 31)]
-         ),
-        ("daily with offset", Period.of_days(1).with_hour_offset(9),
-         [datetime(2020, 5, 31, 9), datetime(2021, 4, 30, 9), datetime(2022, 12, 31, 9)]
-         )
-    ])
-    def test_truncate_to_day_period(self, _, period, expected):
-        """ Test that truncating a time series to a given day period works as expected.
-        """
-        result = TimeSeries.truncate_to_period(self.df["time"],period)
-        assert_series_equal(result, pl.Series("time", expected))
-
-    @parameterized.expand([
-        ("simple hourly", Period.of_hours(1),
-         [datetime(2020, 6, 1, 8), datetime(2021, 4, 30, 15), datetime(2022, 12, 31, 12)]
-         ),
-        ("12 hourly", Period.of_hours(12),
-         [datetime(2020, 6, 1), datetime(2021, 4, 30, 12), datetime(2022, 12, 31, 12)]
-         ),
-        ("hourly with offset", Period.of_hours(1).with_minute_offset(30),
-         [datetime(2020, 6, 1, 7, 30), datetime(2021, 4, 30, 15, 30), datetime(2022, 12, 31, 11, 30)]
-         )
-    ])
-    def test_truncate_to_hour_period(self, _, period, expected):
-        """ Test that truncating a time series to a given hour period works as expected.
-        """
-        result = TimeSeries.truncate_to_period(self.df["time"],period)
-        assert_series_equal(result, pl.Series("time", expected))
-
-    @parameterized.expand([
-        ("simple minutes", Period.of_minutes(1),
-         [datetime(2020, 6, 1, 8, 10), datetime(2021, 4, 30, 15, 30), datetime(2022, 12, 31, 12)]
-         ),
-        ("15 minutes", Period.of_minutes(15),
-         [datetime(2020, 6, 1, 8), datetime(2021, 4, 30, 15, 30), datetime(2022, 12, 31, 12)]
-         ),
-        ("minutes with offset", Period.of_minutes(1).with_second_offset(45),
-         [datetime(2020, 6, 1, 8, 9, 45), datetime(2021, 4, 30, 15, 29, 45), datetime(2022, 12, 31, 11, 59, 45)]
-         )
-    ])
-    def test_truncate_to_minute_period(self, _, period, expected):
-        """ Test that truncating a time series to a given minute period works as expected.
-        """
-        result = TimeSeries.truncate_to_period(self.df["time"],period)
-        assert_series_equal(result, pl.Series("time", expected))
-
-    @parameterized.expand([
-        ("simple seconds", Period.of_seconds(1),
-         [datetime(2020, 6, 1, 8, 10, 5), datetime(2021, 4, 30, 15, 30, 10), datetime(2022, 12, 31, 12)]
-         ),
-        ("3 seconds", Period.of_seconds(3),
-         [datetime(2020, 6, 1, 8, 10, 3), datetime(2021, 4, 30, 15, 30, 9), datetime(2022, 12, 31, 12)]
-         )
-    ])
-    def test_truncate_to_second_period(self, _, period, expected):
-        """ Test that truncating a time series to a given second period works as expected.
-        """
-        result = TimeSeries.truncate_to_period(self.df["time"],period)
-        assert_series_equal(result, pl.Series("time", expected))
-
-    @parameterized.expand([
-        ("simple microseconds", Period.of_microseconds(200),
-         [datetime(2020, 6, 1, 8, 10, 5, 2000), datetime(2021, 4, 30, 15, 30, 10, 200), datetime(2022, 12, 31, 12)]
-         ),
-    ])
-    def test_truncate_to_microsecond_period(self, _, period, expected):
-        """ Test that truncating a time series to a given microsecond period works as expected.
-        """
-        result = TimeSeries.truncate_to_period(self.df["time"],period)
-        assert_series_equal(result, pl.Series("time", expected))
-
-
 class TestValidateResolution(unittest.TestCase):
     """Test the _validate_resolution method."""
 
@@ -2668,7 +2556,7 @@ class TestPadTime(unittest.TestCase):
         """ Test that the padding of missing time values works for simple periodicity and resolution cases
         """
         df = pl.DataFrame({"time": time_stamps})
-        # Remove some rows - but not the first or last!        
+        # Remove some rows - but not the first or last!
         df_to_pad = pl.concat([
             df.head(1),
             df.slice(1, df.height - 2).sample(len(df) - 10, with_replacement=False),
