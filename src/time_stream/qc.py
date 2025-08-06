@@ -5,7 +5,6 @@ from typing import List, Optional, Tuple, Type, Union
 import polars as pl
 
 from time_stream import TimeSeries
-
 from time_stream.enums import ClosedInterval
 from time_stream.utils import get_date_filter
 
