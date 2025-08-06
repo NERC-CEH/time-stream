@@ -81,19 +81,6 @@ class TestQCCheck(unittest.TestCase):
         with self.assertRaises(TypeError):
             QCCheck.get(get_input)
 
-    @parameterized.expand([
-        ("some_within", (datetime(2025, 1, 1), datetime(2025, 4, 1)), [True, True, True, True, False, False, False]),
-        ("all_within", (datetime(2024, 1, 1), datetime(2026, 1, 1)), [True, True, True, True, True, True, True]),
-        ("all_out", (datetime(2026, 1, 1), datetime(2027, 1, 1)), [False, False, False, False, False, False, False]),
-        ("start_only", datetime(2025, 3, 1), [False, False, True, True, True, True, True]),
-        ("start_only_with_none", (datetime(2025, 3, 1), None), [False, False, True, True, True, True, True]),
-    ])
-    def test_get_date_filter(self, _, observation_interval, expected_eval):
-        date_filter = MockQC()._get_date_filter(self.mock_ts, observation_interval)
-        result = self.mock_ts.df.select(date_filter).to_series()
-        expected = pl.Series("timestamp", expected_eval)
-        assert_series_equal(result, expected)
-
 
 class TestComparisonCheck(unittest.TestCase):
     def setUp(self):

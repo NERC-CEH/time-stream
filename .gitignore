@@ -72,6 +72,8 @@ instance/
 
 # Sphinx documentation
 docs/_build/
+# Using the plot directive from code in src/examples will copy outputs to docs/src/examples.  No need to commit this.
+docs/src
 
 # PyBuilder
 .pybuilder/
