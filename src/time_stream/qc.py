@@ -5,6 +5,7 @@ from typing import List, Optional, Tuple, Type, Union
 import polars as pl
 
 from time_stream import TimeSeries
+from time_stream.enums import ClosedInterval
 
 # Registry for built-in QC checks
 _QC_REGISTRY = {}
@@ -25,6 +26,14 @@ def register_qc_check(cls: Type["QCCheck"]) -> Type["QCCheck"]:
 
 class QCCheck(ABC):
     """Base class for quality control checks."""
+
+    _ts = None
+
+    @property
+    def ts(self) -> TimeSeries:
+        if self._ts is None:
+            raise AttributeError("TimeSeries has not been initialised for this QC check.")
+        return self._ts
 
     @property
     @abstractmethod
@@ -114,6 +123,9 @@ class QCCheck(ABC):
         if check_column not in ts.columns and check_column != ts.time_name:
             raise KeyError(f"Check column '{check_column}' not found in TimeSeries.")
 
+        # Set the timeseries property, in case class expr method needs access to properties in the object
+        self._ts = ts
+
         # Get the check expression
         check_expr = self.expr(check_column)
 
@@ -199,20 +211,24 @@ class RangeCheck(QCCheck):
     name = "range"
 
     def __init__(
-        self, min_value: float, max_value: float, inclusive: Optional[bool] = True, within: Optional[bool] = False
+        self,
+        min_value: float | time,
+        max_value: float | time,
+        closed: Optional[str | ClosedInterval] = "both",
+        within: Optional[bool] = True,
     ) -> None:
         """Initialize range check.
 
         Args:
-            min_value: Minimum acceptable value. Values below this will be flagged.
-            max_value: Maximum acceptable value. Values above this will be flagged.
-            inclusive: Whether the range bounds are inclusive (default = True).
-            within: Whether values get flagged when within this range (within=True)
-                    or not within this range (within=False, default).
+            min_value: Minimum of the range.
+            max_value: Maximum of the range.
+            closed: Define which sides of the interval are closed (inclusive) {'both', 'left', 'right', 'none'}
+                    (default = "both")
+            within: Whether values get flagged when within or outside the range (default = True (within)).
         """
         self.min_value = min_value
         self.max_value = max_value
-        self.inclusive = inclusive
+        self.closed = ClosedInterval(closed)
         self.within = within
 
     def expr(self, check_column: str) -> pl.Expr:
@@ -221,23 +237,47 @@ class RangeCheck(QCCheck):
         # Check if we're doing a time-based range check
         if isinstance(self.min_value, time) and isinstance(self.max_value, time):
             check_column = pl.col(check_column).dt.time()
+
+            # Consider ranges that cross midnight, e.g. min_value = 11:00, max_value = 01:00
+            if self.min_value > self.max_value:
+                # Swap the values so the comparison operators work the correct way around
+                self.min_value, self.max_value = self.max_value, self.min_value
+
+                # Reverse the within parameter, as we've swapped the min/max logic
+                self.within = not self.within
+
+                # We also need to swap the close parameter (if "both" or "none")
+                # Don't have to change "left" or "right" as it shakes out the same even when reversing the min/max
+                if self.closed == ClosedInterval.BOTH:
+                    self.closed = ClosedInterval.NONE
+                elif self.closed == ClosedInterval.NONE:
+                    self.closed = ClosedInterval.BOTH
         else:
             check_column = pl.col(check_column)
 
-        # Set the operators based on "inclusive" option
-        if self.inclusive:
-            min_expr = check_column < self.min_value
-            max_expr = check_column > self.max_value
-        else:
-            min_expr = check_column <= self.min_value
-            max_expr = check_column >= self.max_value
+        in_range = check_column.is_between(
+            self.min_value,
+            self.max_value,
+            closed=self.closed.value,  # type: ignore[arg-type] ignore Literal typing as the enum constrains the values
+        )
+        return in_range if self.within else ~in_range
 
-        # Return expression based on "within" option
-        base_expr = min_expr | max_expr
-        if self.within:
-            return ~base_expr  # Flag if INSIDE range
-        else:
-            return base_expr  # Flag if OUTSIDE range
+
+@register_qc_check
+class TimeRangeCheck(RangeCheck):
+    """Flag rows where the primary time column of the time series fall within an acceptable range.
+
+    Useful for scenarios where there are consistent errors at a certain time of day, e.g., during an automated
+    sensor calibration time.
+
+    Note: This is equivalent to using `RangeCheck` with `check_column = ts.time_name`. However, adding this as a
+          convenience method as it may not be obvious that the `RangeCheck` can be used for this purpose.
+    """
+
+    name = "time_range"
+
+    def expr(self, _: str) -> pl.Expr:
+        return super().expr(self.ts.time_name)
 
 
 @register_qc_check

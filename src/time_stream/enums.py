@@ -77,3 +77,19 @@ class MissingCriteria(Enum):
     MISSING = "missing"
     AVAILABLE = "available"
     NA = "na"
+
+
+class ClosedInterval(Enum):
+    """Enum representing how to handle the edges of intervals
+
+    Attributes:
+        BOTH: Both edges are considered closed (inclusive)
+        LEFT: Only the left edge is considered closed (left inclusive, right exclusive)
+        RIGHT: Only the right edge is considered closed (left exclusive, right inclusive)
+        NONE: Neither edge is considered closed (exclusive)
+    """
+
+    BOTH = "both"
+    LEFT = "left"
+    RIGHT = "right"
+    NONE = "none"
