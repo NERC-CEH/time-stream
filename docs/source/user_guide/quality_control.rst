@@ -127,6 +127,37 @@ Examples
    import examples_quality_control
    ts = examples_quality_control.range_qc_2()
 
+Time Range Check
+~~~~~~~~~~~~~
+Flags values in the ``TimeSeries`` outside or within a specified time range in the ``TimeSeries``
+primary time column.
+
+This is useful for scenarios where there are consistent errors at a certain time of day, for example, during an
+automated sensor calibration time.
+
+**Name**: ``"time_range"``
+
+.. note::
+    This is equivalent to using ``RangeCheck`` with ``check_column = ts.time_name``. This is a
+    convenience method to be explicit that we are working with the primary time column in the ``TimeSeries`` object.
+
+Examples
+^^^^^^^^^^^^^
+
+**1. Flag values between the hours of 01:00 and 03:00**
+
+.. literalinclude:: ../../../src/time_stream/examples/examples_quality_control.py
+   :language: python
+   :start-after: [start_block_9]
+   :end-before: [end_block_9]
+   :dedent:
+
+.. jupyter-execute::
+   :hide-code:
+
+   import examples_quality_control
+   ts = examples_quality_control.time_range_qc_1()
+
 Spike Check
 ~~~~~~~~~~~~~
 
