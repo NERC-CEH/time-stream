@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, time
+from datetime import datetime, date, timedelta, time
 
 import polars as pl
 
@@ -178,3 +178,39 @@ def time_range_qc_1():
 
     print(ts)
     # [end_block_9]
+
+
+def time_range_qc_2():
+    with suppress_output():
+        ts = create_simple_time_series()
+
+    # [start_block_10]
+    ts.df = ts.df.with_columns(
+        ts.qc_check(
+            "time_range",
+            check_column="temperature",
+            min_value=datetime(2023, 1, 1, 3, 30),
+            max_value=datetime(2023, 1, 1, 9, 30),
+        ).alias("qc_result")
+    )
+
+    print(ts)
+    # [end_block_10]
+
+
+def time_range_qc_3():
+    with suppress_output():
+        ts = create_simple_time_series()
+
+    # [start_block_11]
+    ts.df = ts.df.with_columns(
+        ts.qc_check(
+            "time_range",
+            check_column="temperature",
+            min_value=date(2023, 1, 1),
+            max_value=date(2023, 1, 2),
+        ).alias("qc_result")
+    )
+
+    print(ts)
+    # [end_block_11]
