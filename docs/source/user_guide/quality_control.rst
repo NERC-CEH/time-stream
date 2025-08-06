@@ -126,6 +126,73 @@ Examples
    import examples_quality_control
    ts = examples_quality_control.range_qc_2()
 
+Time Range Check
+~~~~~~~~~~~~~
+Flags values in the ``TimeSeries`` outside or within a specified time range in the ``TimeSeries``
+primary time column.
+
+This can either be used with min / max values of:
+
+- ``datetime.time`` : Useful for scenarios where there are consistent errors at a certain time of day,
+  e.g., during an automated sensor calibration time.
+
+- ``datetime.date`` : Useful for scenarios where a specific date range is known to be bad,
+  e.g., during a date range of known sensor malfunction.
+
+- ``datetime.datetime`` : As above, but where there you need to add a time to the date range as well.
+
+**Name**: ``"time_range"``
+
+.. note::
+    This is equivalent to using ``RangeCheck`` with ``check_column = ts.time_name``. This is a
+    convenience method to be explicit that we are working with the primary time column in the ``TimeSeries`` object.
+
+Examples
+^^^^^^^^^^^^^
+
+**1. Flag values between the hours of 01:00 and 03:00**
+
+.. literalinclude:: ../../../src/time_stream/examples/examples_quality_control.py
+   :language: python
+   :start-after: [start_block_9]
+   :end-before: [end_block_9]
+   :dedent:
+
+.. jupyter-execute::
+   :hide-code:
+
+   import examples_quality_control
+   ts = examples_quality_control.time_range_qc_1()
+
+**2. Flag values between 03:30 on the 1st January and 09:30 on the 1st January**
+
+.. literalinclude:: ../../../src/time_stream/examples/examples_quality_control.py
+   :language: python
+   :start-after: [start_block_10]
+   :end-before: [end_block_10]
+   :dedent:
+
+.. jupyter-execute::
+   :hide-code:
+
+   import examples_quality_control
+   ts = examples_quality_control.time_range_qc_2()
+
+
+**3. Flag values between 1st January and the 2nd January**
+
+.. literalinclude:: ../../../src/time_stream/examples/examples_quality_control.py
+   :language: python
+   :start-after: [start_block_11]
+   :end-before: [end_block_11]
+   :dedent:
+
+.. jupyter-execute::
+   :hide-code:
+
+   import examples_quality_control
+   ts = examples_quality_control.time_range_qc_3()
+
 Spike Check
 ~~~~~~~~~~~~~
 
