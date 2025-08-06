@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from datetime import datetime, time
+from datetime import date, datetime, time
 from typing import List, Optional, Tuple, Type, Union
 
 import polars as pl
@@ -212,8 +212,8 @@ class RangeCheck(QCCheck):
 
     def __init__(
         self,
-        min_value: float | time,
-        max_value: float | time,
+        min_value: float | time | date | datetime,
+        max_value: float | time | date | datetime,
         closed: Optional[str | ClosedInterval] = "both",
         within: Optional[bool] = True,
     ) -> None:
@@ -233,9 +233,13 @@ class RangeCheck(QCCheck):
 
     def expr(self, check_column: str) -> pl.Expr:
         """Return the Polars expression for range checking."""
+        if type(self.min_value) is not type(self.max_value):
+            raise TypeError("'min_value' and 'max_value' must be of same type")
+
+        check_type = type(self.min_value)
 
         # Check if we're doing a time-based range check
-        if isinstance(self.min_value, time) and isinstance(self.max_value, time):
+        if check_type is time:
             check_column = pl.col(check_column).dt.time()
 
             # Consider ranges that cross midnight, e.g. min_value = 11:00, max_value = 01:00
@@ -252,7 +256,13 @@ class RangeCheck(QCCheck):
                     self.closed = ClosedInterval.NONE
                 elif self.closed == ClosedInterval.NONE:
                     self.closed = ClosedInterval.BOTH
+
+        elif check_type is date:
+            # For datetime.date objects (NOT datetime.datetime!), we want to consider the whole date part of the column
+            check_column = pl.col(check_column).dt.date()
+
         else:
+            # This should handle numeric objects and datetime.datetime objects
             check_column = pl.col(check_column)
 
         in_range = check_column.is_between(
@@ -267,8 +277,12 @@ class RangeCheck(QCCheck):
 class TimeRangeCheck(RangeCheck):
     """Flag rows where the primary time column of the time series fall within an acceptable range.
 
-    Useful for scenarios where there are consistent errors at a certain time of day, e.g., during an automated
-    sensor calibration time.
+    This can either be used with min / max values of:
+        - datetime.time : Useful for scenarios where there are consistent errors at a certain time of day,
+                          e.g., during an automated sensor calibration time.
+        - datetime.date : Useful for scenarios where a specific date range is known to be bad,
+                              e.g., during a time of sensor errors not picked up elsewhere.
+        - datetime.datetime : As above, but where there you need to add a time to the date range as well.
 
     Note: This is equivalent to using `RangeCheck` with `check_column = ts.time_name`. However, adding this as a
           convenience method as it may not be obvious that the `RangeCheck` can be used for this purpose.

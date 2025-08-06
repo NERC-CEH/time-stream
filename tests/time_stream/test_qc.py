@@ -1,5 +1,5 @@
 import unittest
-from datetime import datetime, time
+from datetime import datetime, date, time
 from unittest.mock import Mock
 
 import polars as pl
@@ -7,7 +7,7 @@ from parameterized import parameterized
 from polars.testing import assert_series_equal
 
 from time_stream.base import TimeSeries
-from time_stream.qc import QCCheck, ComparisonCheck, SpikeCheck, RangeCheck, TimeRangeCheck
+from time_stream.qc import QCCheck, ComparisonCheck, SpikeCheck, RangeCheck
 
 
 class MockQC(QCCheck):
@@ -197,6 +197,19 @@ class TestRangeCheck(unittest.TestCase):
         self.ts = TimeSeries(data, "time")
 
     @parameterized.expand([
+        (1., 5),
+        (1., datetime(2023, 8, 10)),
+        (datetime(2023, 8, 10), 100),
+        (datetime(2023, 8, 9), date(2023, 8, 10)),
+        (date(2023, 8, 9), datetime(2023, 8, 10)),
+    ])
+    def test_type_mismatch(self, min_value, max_value):
+        """Test that error raised if min and max value are not the same type."""
+        with self.assertRaises(TypeError):
+            check = RangeCheck(min_value, max_value)
+            check.expr("value_a")
+
+    @parameterized.expand([
         # min, max, closed, within, expected
         ("distinct_flag_within", 0.5, 3.5, "both", True, [False, True, True, True, False, False, False, False]),
         ("distinct_flag_outside", 0.5, 3.5, "both", False, [True, False, False, False, True, True, True, True]),
@@ -286,6 +299,48 @@ class TestRangeCheck(unittest.TestCase):
     ])
     def test_time_range_check_across_midnight(self, _, min_value, max_value, closed, within, expected):
         """ Test that the time range check works as expected when the range is across midnight
+        """
+        check = RangeCheck(min_value, max_value, closed, within)
+        result = check.apply(self.ts, "time")
+        assert_series_equal(result, pl.Series(expected))
+
+    @parameterized.expand([
+        # min, max, closed, within, expected
+        ("distinct_flag_within", datetime(2023, 8, 9, 23, 45), datetime(2023, 8, 10, 1, 45), "both", True,
+         [False, False, True, True, True, True, False, False]),
+
+        ("distinct_flag_outside", datetime(2023, 8, 9, 23, 45), datetime(2023, 8, 10, 1, 45), "both", False,
+         [True, True, False, False, False, False, True, True]),
+
+        ("all_outside_flag_within", datetime(2023, 8, 1), datetime(2023, 8, 9, 12), "both", True,
+         [False, False, False, False, False, False, False, False]),
+
+        ("all_outside_flag_outside", datetime(2023, 8, 1), datetime(2023, 8, 9, 12), "both", False,
+         [True, True, True, True, True, True, True, True]),
+    ])
+    def test_range_check_using_datetimes(self, _, min_value, max_value, closed, within, expected):
+        """ Test that the range check accepts datetime values.
+        """
+        check = RangeCheck(min_value, max_value, closed, within)
+        result = check.apply(self.ts, "time")
+        assert_series_equal(result, pl.Series(expected))
+
+    @parameterized.expand([
+        # min, max, closed, within, expected
+        ("distinct_flag_within", date(2023, 8, 9), date(2023, 8, 10), "both", True,
+         [True, True, True, True, True, True, True, True]),
+
+        ("distinct_flag_outside", date(2023, 8, 9), date(2023, 8, 10), "both", False,
+         [False, False, False, False, False, False, False, False]),
+
+        ("all_outside_flag_within", date(2023, 8, 1), date(2023, 8, 8), "both", True,
+         [False, False, False, False, False, False, False, False]),
+
+        ("all_outside_flag_outside", date(2023, 8, 1), date(2023, 8, 8), "both", False,
+         [True, True, True, True, True, True, True, True]),
+    ])
+    def test_range_check_using_dates(self, _, min_value, max_value, closed, within, expected):
+        """ Test that the range check accepts date values.
         """
         check = RangeCheck(min_value, max_value, closed, within)
         result = check.apply(self.ts, "time")
