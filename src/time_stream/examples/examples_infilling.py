@@ -113,3 +113,5 @@ def observation_interval_example():
 
     with pl.Config(tbl_rows=-1):
         print(ts_infilled)
+
+all_infills()
