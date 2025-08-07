@@ -3,10 +3,14 @@ from typing import Union
 
 
 class BitwiseMeta(EnumType):
+    @property
+    def name(self) -> str:
+        return self.__name__
+
     def __repr__(self):
         """Return a helpful representation of the flag, listing all enum members."""
         members = ", ".join(f"{name}={member.value}" for name, member in self.__members__.items())
-        return f"<{self.__name__} ({members})>"
+        return f"<{self.name} ({members})>"
 
 
 class BitwiseFlag(int, Flag, metaclass=BitwiseMeta):
