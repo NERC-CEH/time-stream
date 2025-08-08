@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import Any, Optional, Tuple, Type, Union
+from typing import Any, Type
 
 import numpy as np
 import polars as pl
@@ -61,7 +61,7 @@ class InfillMethod(ABC):
         pass
 
     @classmethod
-    def get(cls, method: Union[str, Type["InfillMethod"]], **kwargs) -> "InfillMethod":
+    def get(cls, method: str | Type["InfillMethod"], **kwargs) -> "InfillMethod":
         """Factory method to get an infill method class instance from string names or class type.
 
         Args:
@@ -106,8 +106,8 @@ class InfillMethod(ABC):
         df: pl.DataFrame,
         time_name: str,
         infill_column: str,
-        observation_interval: Optional[datetime | Tuple[datetime, datetime | None]] = None,
-        max_gap_size: Optional[int] = None,
+        observation_interval: datetime | tuple[datetime, datetime | None] | None = None,
+        max_gap_size: int | None = None,
     ) -> bool:
         """Check if there is actually anything to infill in the provided dataframe, considering the maximum gap size
         and datetime observation interval constraints
@@ -142,8 +142,8 @@ class InfillMethod(ABC):
         self,
         ts: TimeSeries,
         infill_column: str,
-        observation_interval: Optional[datetime | Tuple[datetime, datetime | None]] = None,
-        max_gap_size: Optional[int] = None,
+        observation_interval: datetime | tuple[datetime, datetime | None] | None = None,
+        max_gap_size: int | None = None,
     ) -> "TimeSeries":
         """Apply the infill method to the TimeSeries.
 
