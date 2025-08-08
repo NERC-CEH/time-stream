@@ -16,8 +16,7 @@ import zoneinfo
 
 from typing import (
     Any,
-    Callable,
-    Optional,
+    Callable
 )
 from unittest.mock import patch, Mock
 from parameterized import parameterized
@@ -2949,7 +2948,7 @@ class TestPeriodTimedelta(unittest.TestCase):
     def test_is_valid(self, text: Any) -> None:
         """Test Period.timedelta property is valid for a set of Period instances"""
         period: Period = Period.of(text)
-        delta: Optional[datetime.timedelta] = period.timedelta
+        delta: datetime.timedelta = period.timedelta
         if delta is None:
             self.assertEqual(period._properties.step, p._STEP_MONTHS)
         else:
@@ -5379,10 +5378,10 @@ class TestPeriodWithTzinfo(unittest.TestCase):
             ("P1D", [TZ_UTC, None]),
         ]
     )
-    def test_offset_durations(self, name: Any, tz_info_list: list[Optional[datetime.tzinfo]]) -> None:
+    def test_offset_durations(self, name: Any, tz_info_list: list[datetime.tzinfo | None]) -> None:
         """Test Period.with_microsecond_offset method"""
         period: Period = Period.of_duration(name)
-        old_tz: datetime.tzinfo = None
+        old_tz: datetime.tzinfo | None = None
         for new_tz in tz_info_list:
             self.assertEqual(period.tzinfo, old_tz)
             period = period.with_tzinfo(new_tz)
@@ -6878,7 +6877,7 @@ class TestDateMatch(unittest.TestCase):
     def test_good(self, text: Any, d: datetime.date, t: datetime.time) -> None:
         prefix: str = "d"
         regex = re.compile(p._datetime_regex(prefix))
-        matcher: Optional[re.Match[str]] = regex.match(text)
+        matcher: re.Match[str] | None = regex.match(text)
         self.assertNotEqual(matcher, None)
         dt: datetime.date = p._date_match(prefix, matcher)
         self.assertEqual(dt, d)
@@ -6891,7 +6890,7 @@ class TestTimeMatch(unittest.TestCase):
     def test_good(self, text: Any, d: datetime.date, t: datetime.time) -> None:
         prefix: str = "d"
         regex = re.compile(p._datetime_regex(prefix))
-        matcher: Optional[re.Match[str]] = regex.match(text)
+        matcher: re.Match[str] | None = regex.match(text)
         self.assertNotEqual(matcher, None)
         tm: datetime.date = p._time_match(prefix, matcher)
         self.assertEqual(tm, t)
@@ -6913,7 +6912,7 @@ class TestTimezone(unittest.TestCase):
             ("-01:30", datetime.timezone(datetime.timedelta(hours=-1, minutes=-30))),
         ]
     )
-    def test_good(self, text: Any, tz: Optional[datetime.tzinfo]) -> None:
+    def test_good(self, text: Any, tz: datetime.tzinfo | None) -> None:
         self.assertEqual(tz, p._timezone(text))
 
 
@@ -6924,7 +6923,7 @@ class TestTzinfoMatch(unittest.TestCase):
     def test_good(self, text: Any, d: datetime.date, t: datetime.time) -> None:
         prefix: str = "d"
         regex = re.compile(p._datetime_regex(prefix))
-        matcher: Optional[re.Match[str]] = regex.match(text)
+        matcher: re.Match[str] | None = regex.match(text)
         self.assertNotEqual(matcher, None)
         tz: datetime.date = p._tzinfo_match(prefix, matcher)
         self.assertEqual(tz, t.tzinfo)
@@ -6937,7 +6936,7 @@ class TestDatetimeMatch(unittest.TestCase):
     def test_good(self, text: Any, d: datetime.date, t: datetime.time) -> None:
         prefix: str = "d"
         regex = re.compile(p._datetime_regex(prefix))
-        matcher: Optional[re.Match[str]] = regex.match(text)
+        matcher: re.Match[str] | None = regex.match(text)
         self.assertNotEqual(matcher, None)
         dt: datetime.date = p._datetime_match(prefix, matcher)
         answer: datetime.datetime = datetime.datetime.combine(date=d, time=t)
@@ -6961,7 +6960,7 @@ class TestMatchPeriod(unittest.TestCase):
     )
     def test_good(self, text: Any, iso: str) -> None:
         regex = re.compile(p._period_regex("period"))
-        matcher: Optional[re.Match[str]] = regex.match(text)
+        matcher: re.Match[str] | None = regex.match(text)
         self.assertNotEqual(matcher, None)
         period: Period = p._match_period(matcher)
         self.assertEqual(period, Period.of_iso_duration(iso))
@@ -6985,7 +6984,7 @@ class TestMatchPeriodOffset(unittest.TestCase):
     )
     def test_good(self, text: Any, duration: str) -> None:
         regex = re.compile(p._period_regex("period") + " -- " + p._period_regex("offset"))
-        matcher: Optional[re.Match[str]] = regex.match(text)
+        matcher: re.Match[str] | None = regex.match(text)
         self.assertNotEqual(matcher, None)
         period: Period = p._match_period_offset(matcher)
         self.assertEqual(period, Period.of_duration(duration))
@@ -7028,7 +7027,7 @@ class TestMatchDatetimePeriod(unittest.TestCase):
     )
     def test_good(self, text: Any, match_period: Period) -> None:
         regex = re.compile(p._datetime_regex("d") + r" -- " + p._period_regex("period"))
-        matcher: Optional[re.Match[str]] = regex.match(text)
+        matcher: re.Match[str] | None = regex.match(text)
         self.assertNotEqual(matcher, None)
         period: Period = p._match_datetime_period(matcher)
         self.assertEqual(period, match_period)
@@ -7078,7 +7077,7 @@ class TestMatchRepr(unittest.TestCase):
         ]
     )
     def test_good(self, text: Any, match_period: Period) -> None:
-        matcher: Optional[re.Match[str]] = _REPR_REGEX.match(text)
+        matcher: re.Match[str] | None = _REPR_REGEX.match(text)
         self.assertNotEqual(matcher, None)
         period: Period = p._match_repr(matcher)
         self.assertEqual(period, match_period)
@@ -7086,7 +7085,7 @@ class TestMatchRepr(unittest.TestCase):
         ordinal: int = period.ordinal(shift_date)
         origin_date: datetime.datetime = period.datetime(ordinal)
         shift_amount: int = 0 - ordinal
-        matcher2: Optional[re.Match[str]] = _REPR_REGEX.match(f"{text}{shift_amount}")
+        matcher2: re.Match[str] | None = _REPR_REGEX.match(f"{text}{shift_amount}")
         self.assertNotEqual(matcher2, None)
         shifted_period: Period = p._match_repr(matcher2)
         ordinal2: int = shifted_period.ordinal(origin_date)

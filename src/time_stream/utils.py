@@ -1,12 +1,11 @@
 from datetime import datetime
-from typing import Tuple
 
 import polars as pl
 
 from time_stream import Period
 
 
-def get_date_filter(time_name: str, observation_interval: datetime | Tuple[datetime, datetime | None]) -> pl.Expr:
+def get_date_filter(time_name: str, observation_interval: datetime | tuple[datetime, datetime | None]) -> pl.Expr:
     """Get Polars expression for observation date interval filtering.
 
     Args:

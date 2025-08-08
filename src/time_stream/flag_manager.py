@@ -1,5 +1,5 @@
 import enum
-from typing import TYPE_CHECKING, Sequence, Type, Union
+from typing import TYPE_CHECKING, Sequence, Type
 
 import polars as pl
 
@@ -28,7 +28,7 @@ class TimeSeriesFlagManager:
     def flag_systems(self) -> dict[str, Type[enum.Enum]]:
         return self._flag_systems
 
-    def _setup_flag_systems(self, flag_systems: dict[str, Union[dict[str, int], Type[enum.Enum]]] = None) -> None:
+    def _setup_flag_systems(self, flag_systems: dict[str, dict[str, int] | Type[enum.Enum]] | None = None) -> None:
         """Adds flag systems into the flag manager.
 
         Args:
@@ -38,7 +38,7 @@ class TimeSeriesFlagManager:
         for name, flag_system in flag_systems.items():
             self.add_flag_system(name, flag_system)
 
-    def add_flag_system(self, name: str, flag_system: Union[dict[str, int], Type[enum.Enum]]) -> None:
+    def add_flag_system(self, name: str, flag_system: dict[str, dict[str, int] | Type[enum.Enum]]) -> None:
         """Adds a flag system to the flag manager, which contains flag values and their meanings.
 
         A flag system can be used to create flag columns that are specific to a particular type of flag.
@@ -75,7 +75,7 @@ class TimeSeriesFlagManager:
         else:
             raise TypeError(f"Unknown type of flag system: {type(flag_system)}")
 
-    def init_flag_column(self, flag_system: str, col_name: str, data: Union[int, Sequence[int]] = 0) -> None:
+    def init_flag_column(self, flag_system: str, col_name: str, data: int | Sequence[int] = 0) -> None:
         """Add a new column to the TimeSeries DataFrame, setting it as a Flag Column.
 
         Args:
@@ -102,7 +102,7 @@ class TimeSeriesFlagManager:
         flag_col = FlagColumn(col_name, self._ts, flag_system)
         self._ts._columns[col_name] = flag_col
 
-    def set_flag_column(self, flag_system: str, col_name: Union[str, list[str]]) -> None:
+    def set_flag_column(self, flag_system: str, col_name: str | list[str]) -> None:
         """Mark the specified existing column(s) as a flag column.
 
         Args:
@@ -115,7 +115,7 @@ class TimeSeriesFlagManager:
         for col in col_name:
             self._ts.columns[col].set_as_flag(flag_system)
 
-    def add_flag(self, col_name: str, flag_value: Union[int, str], expr: pl.Expr = pl.lit(True)) -> None:
+    def add_flag(self, col_name: str, flag_value: int | str, expr: pl.Expr = pl.lit(True)) -> None:
         """Add flag value (if not there) to flag column, where expression is True.
 
         Args:
@@ -125,7 +125,7 @@ class TimeSeriesFlagManager:
         """
         self._ts.columns[col_name].add_flag(flag_value, expr)
 
-    def remove_flag(self, col_name: str, flag_value: Union[int, str], expr: pl.Expr = pl.lit(True)) -> None:
+    def remove_flag(self, col_name: str, flag_value: int | str, expr: pl.Expr = pl.lit(True)) -> None:
         """
         Remove flag value (if there) from flag column.
 

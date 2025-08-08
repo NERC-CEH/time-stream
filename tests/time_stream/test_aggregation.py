@@ -1,6 +1,6 @@
 import unittest
 from datetime import datetime
-from typing import Dict, List, Union, Type
+from typing import Type
 from unittest.mock import Mock
 
 import polars as pl
@@ -47,14 +47,14 @@ def generate_time_series(resolution: Period, periodicity: Period, length: int, m
 
 
 def generate_expected_df(
-        timestamps: List[datetime],
+        timestamps: list[datetime],
         aggregator: Type[AggregationFunction],
-        columns: Union[str, List[str]],
-        values: Dict[str, List[Union[float, int]]],
-        expected_counts: List[int],
-        actual_counts: List[int],
-        timestamps_of: List[datetime]=None,
-        valid: Dict[str, List[bool]]=None
+        columns: str | list[str],
+        values: dict[str, list[float | int]],
+        expected_counts: list[int],
+        actual_counts: list[int],
+        timestamps_of: list[datetime]=None,
+        valid: dict[str, list[bool]]=None
 ) -> pl.DataFrame:
     """Helper function to create a dataframe of expected results from an aggregation test.
 
