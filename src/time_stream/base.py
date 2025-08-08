@@ -579,7 +579,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
     def aggregate(
         self,
         aggregation_period: Period,
-        aggregation_function: str | Type["AggregationFunction"] | AggregationFunction,
+        aggregation_function: "str | Type[AggregationFunction] | AggregationFunction",
         columns: str | list[str],
         missing_criteria: tuple[str, float | int] | None = None,
     ) -> "TimeSeries":
@@ -604,7 +604,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
 
     def qc_check(
         self,
-        check: str | Type["QCCheck"] | QCCheck,
+        check: "str | Type[QCCheck] | QCCheck",
         check_column: str,
         observation_interval: tuple[datetime, datetime | None] | None = None,
         **kwargs,
@@ -642,7 +642,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
 
     def infill(
         self,
-        infill_method: str | Type["InfillMethod"] | InfillMethod,
+        infill_method: "str | Type[InfillMethod] | InfillMethod",
         column: str,
         observation_interval: tuple[datetime, datetime | None] | None = None,
         max_gap_size: int | None = None,
