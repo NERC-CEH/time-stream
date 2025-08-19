@@ -114,6 +114,15 @@ class InfillMethod(ABC):
         - Observation interval - constraining the time series to a specific datetime range
         - Maximum gap size - constraining the infilling to gaps of a maximum size
         - Start and end gaps - constraining so nulls at the beginning and end of the series remain null.
+
+        Args:
+            time_name: Name of the datetime column in the dataframe.
+            infill_column: The column to check whether anything to infill.
+            observation_interval: Optional time interval to limit the infilling to.
+            max_gap_size: The maximum size of consecutive null gaps that should be filled.
+
+        Returns:
+            Polars expression that can be used to determine which values to infill (True) or not (False)
         """
         # Base assumption is that any gap can be infilled
         filter_expr = pl.col("gap_size") > 0
