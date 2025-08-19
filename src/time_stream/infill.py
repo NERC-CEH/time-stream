@@ -170,7 +170,7 @@ class InfillMethod(ABC):
         df = gap_size_count(df, infill_column)
 
         # Create a mask determining which values get infilled
-        infill_mask = self.infill_mask(infill_column, ts.time_name, observation_interval, max_gap_size)
+        infill_mask = self.infill_mask(ts.time_name, infill_column, observation_interval, max_gap_size)
 
         # Check if there is actually anything to infill
         if df.filter(infill_mask).is_empty():
