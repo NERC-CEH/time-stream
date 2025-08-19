@@ -18,6 +18,8 @@ INSUFFICIENT_DATA = pl.DataFrame({"values": [1., None, None, None, None]}) # Ins
 COMPLETE = pl.DataFrame({"values": [1., 2., 3., 4., 5.]}) # No missing data
 ALL_MISSING = pl.DataFrame({"values": [None, None, None, None, None]}) # All missing data
 VARYING_GAPS = pl.DataFrame({"values": [1., None, 3., None, None, 6., None, None, None, 10.]})
+START_GAP = pl.DataFrame({"values": [None, 2., 3., 4. ,5.]})
+END_GAP = pl.DataFrame({"values": [1., 2., 3., 4., None]})
 
 
 class MockInfill(InfillMethod):
@@ -164,6 +166,18 @@ class TestLinearInterpolation(unittest.TestCase):
         expected = pl.Series("values_linear", COMPLETE)
         assert_series_equal(result["values_linear"], expected)
 
+    def test_start_gap(self):
+        """Test that gaps at the start of a time series are not infilled."""
+        result = LinearInterpolation()._fill(START_GAP, "values")
+        expected = pl.Series("values_linear", START_GAP)
+        assert_series_equal(result["values_linear"], expected)
+
+    def test_end_gap(self):
+        """Test that gaps at the start of a time series are not infilled."""
+        result = LinearInterpolation()._fill(END_GAP, "values")
+        expected = pl.Series("values_linear", END_GAP)
+        assert_series_equal(result["values_linear"], expected)
+
 
 class TestQuadraticInterpolation(unittest.TestCase):
 
@@ -193,6 +207,19 @@ class TestQuadraticInterpolation(unittest.TestCase):
         expected = pl.Series("values_quadratic", COMPLETE)
         assert_series_equal(result["values_quadratic"], expected)
 
+    def test_start_gap(self):
+        """Test that gaps at the start of a time series are not infilled."""
+        result = QuadraticInterpolation()._fill(START_GAP, "values")
+        expected = pl.Series("values_quadratic", START_GAP)
+        assert_series_equal(result["values_quadratic"], expected)
+
+    def test_end_gap(self):
+        """Test that gaps at the start of a time series are not infilled."""
+        result = QuadraticInterpolation()._fill(END_GAP, "values")
+        expected = pl.Series("values_quadratic", END_GAP)
+        assert_series_equal(result["values_quadratic"], expected)
+
+
 class TestCubicInterpolation(unittest.TestCase):
 
     @parameterized.expand([
@@ -219,6 +246,18 @@ class TestCubicInterpolation(unittest.TestCase):
         """Test that complete data is unchanged."""
         result = CubicInterpolation()._fill(COMPLETE, "values")
         expected = pl.Series("values_cubic", COMPLETE)
+        assert_series_equal(result["values_cubic"], expected)
+
+    def test_start_gap(self):
+        """Test that gaps at the start of a time series are not infilled."""
+        result = CubicInterpolation()._fill(START_GAP, "values")
+        expected = pl.Series("values_cubic", START_GAP)
+        assert_series_equal(result["values_cubic"], expected)
+
+    def test_end_gap(self):
+        """Test that gaps at the start of a time series are not infilled."""
+        result = CubicInterpolation()._fill(END_GAP, "values")
+        expected = pl.Series("values_cubic", END_GAP)
         assert_series_equal(result["values_cubic"], expected)
 
         
@@ -257,6 +296,18 @@ class TestAkimaInterpolation(unittest.TestCase):
         """Test that complete data is unchanged."""
         result = AkimaInterpolation()._fill(COMPLETE, "values")
         expected = pl.Series("values_akima", COMPLETE)
+        assert_series_equal(result["values_akima"], expected)
+
+    def test_start_gap(self):
+        """Test that gaps at the start of a time series are not infilled."""
+        result = AkimaInterpolation()._fill(START_GAP, "values")
+        expected = pl.Series("values_akima", START_GAP)
+        assert_series_equal(result["values_akima"], expected)
+
+    def test_end_gap(self):
+        """Test that gaps at the start of a time series are not infilled."""
+        result = AkimaInterpolation()._fill(END_GAP, "values")
+        expected = pl.Series("values_akima", END_GAP)
         assert_series_equal(result["values_akima"], expected)
 
         
@@ -306,4 +357,16 @@ class TestPchipInterpolation(unittest.TestCase):
         """Test that complete data is unchanged."""
         result = PchipInterpolation()._fill(COMPLETE, "values")
         expected = pl.Series("values_pchip", COMPLETE)
+        assert_series_equal(result["values_pchip"], expected)
+
+    def test_start_gap(self):
+        """Test that gaps at the start of a time series are not infilled."""
+        result = PchipInterpolation()._fill(START_GAP, "values")
+        expected = pl.Series("values_pchip", START_GAP)
+        assert_series_equal(result["values_pchip"], expected)
+
+    def test_end_gap(self):
+        """Test that gaps at the start of a time series are not infilled."""
+        result = PchipInterpolation()._fill(END_GAP, "values")
+        expected = pl.Series("values_pchip", END_GAP)
         assert_series_equal(result["values_pchip"], expected)
