@@ -18,6 +18,10 @@ To apply infilling, call the ``TimeSeries.infill`` method on a ``TimeSeries`` ob
 - Optionally limit the infilling to a **time observation window**
 - Optionally limit the infilling to a maximum **gap window** size, to avoid unrealistic estimates across large missing periods
 
+.. note::
+    Nulls at the beginning and end of the time series remain will remain null as there is no pre- or post- data to
+    constrain the infilling method.
+
 Built-in Infilling Methods
 ---------------
 Several built-in infilling methods are available. These are built upon well established methods from the `SciPy
@@ -99,6 +103,21 @@ The ``observation_interval`` argument can be used to constrain the infilling to 
 
    import examples_infilling
    ts = examples_infilling.observation_interval_example()
+
+
+Nulls at the start and end are maintained
+^^^^^^^^^^^^^
+.. literalinclude:: ../../../src/time_stream/examples/examples_infilling.py
+   :language: python
+   :start-after: [start_block_5]
+   :end-before: [end_block_5]
+   :dedent:
+
+.. jupyter-execute::
+   :hide-code:
+
+   import examples_infilling
+   ts = examples_infilling.start_end_gaps_example()
 
 
 Linear Interpolation
