@@ -18,8 +18,8 @@ INSUFFICIENT_DATA = pl.DataFrame({"values": [1., None, None, None, None]}) # Ins
 COMPLETE = pl.DataFrame({"values": [1., 2., 3., 4., 5.]}) # No missing data
 ALL_MISSING = pl.DataFrame({"values": [None, None, None, None, None]}) # All missing data
 VARYING_GAPS = pl.DataFrame({"values": [1., None, 3., None, None, 6., None, None, None, 10.]})
-START_GAP = pl.DataFrame({"values": [None, 2., 3., 4. ,5.]})
-END_GAP = pl.DataFrame({"values": [1., 2., 3., 4., None]})
+START_GAP = pl.DataFrame({"values": [None, 2., 3., 4. ,5., 6.]})
+END_GAP = pl.DataFrame({"values": [1., 2., 3., 4., 5., None]})
 
 
 class MockInfill(InfillMethod):

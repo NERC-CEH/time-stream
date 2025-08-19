@@ -299,10 +299,19 @@ class ScipyInterpolation(InfillMethod, ABC):
         # Apply interpolation
         interpolated = interpolator(x)
 
-        # Handle any remaining NaNs or infinities
-        interpolated = np.where(np.isfinite(interpolated), interpolated, np.nan)
+        # Make a mask to ensure that Nulls at the beginning and end of the series remain null.
+        inside = (x >= x_valid.min()) & (x <= x_valid.max())
+        # Make a mask to handle any remaining NaNs or infinities
+        finite_values = np.isfinite(interpolated)
 
-        return df.with_columns(pl.Series(self._infilled_column_name(infill_column), interpolated))
+        # Apply the masks to only include valid interpolation values
+        df = df.with_columns(
+            pl.when(pl.Series(inside) & pl.Series(finite_values))
+            .then(pl.Series(self._infilled_column_name(infill_column), interpolated))
+            .otherwise(None)
+        )
+
+        return df
 
 
 @register_infill_method
