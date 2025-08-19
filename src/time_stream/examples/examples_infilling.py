@@ -114,4 +114,22 @@ def observation_interval_example():
     with pl.Config(tbl_rows=-1):
         print(ts_infilled)
 
-all_infills()
+
+def start_end_gaps_example():
+    with suppress_output():
+        ts = create_simple_time_series_with_gaps()
+
+    # [start_block_5]
+    # Set gaps at the start and end
+    ts.df = ts.df.with_columns(
+        pl.when(pl.col("timestamp").is_in([datetime(2024, 1, 1), datetime(2024, 1, 16)]))
+        .then(None)
+        .otherwise(pl.col("temperature"))
+        .alias("temperature")
+    )
+
+    ts_infilled = ts.infill("linear", "temperature")
+    # [end_block_5]
+
+    with pl.Config(tbl_rows=-1):
+        print(ts_infilled)
