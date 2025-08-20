@@ -101,42 +101,51 @@ class InfillMethod(ABC):
             raise TypeError(f"Infill method must be a string or an InfillMethod class. Got {type(method).__name__}")
 
     @classmethod
-    def _anything_to_infill(
+    def infill_mask(
         cls,
-        df: pl.DataFrame,
         time_name: str,
         infill_column: str,
         observation_interval: datetime | tuple[datetime, datetime | None] | None = None,
         max_gap_size: int | None = None,
-    ) -> bool:
-        """Check if there is actually anything to infill in the provided dataframe, considering the maximum gap size
-        and datetime observation interval constraints
+    ) -> pl.Expr:
+        """Create a mask for determining which values in a time series to infill.
+
+        Take into account:
+        - Observation interval - constraining the time series to a specific datetime range
+        - Maximum gap size - constraining the infilling to gaps of a maximum size
+        - Start and end gaps - constraining so nulls at the beginning and end of the series remain null.
 
         Args:
-            df: Dataframe to check.
             time_name: Name of the datetime column in the dataframe.
             infill_column: The column to check whether anything to infill.
             observation_interval: Optional time interval to limit the infilling to.
             max_gap_size: The maximum size of consecutive null gaps that should be filled.
 
         Returns:
-            Boolean of whether there is anything to infill (True) or not (False)
+            Polars expression that can be used to determine which values to infill (True) or not (False)
         """
-        df = gap_size_count(df, infill_column)
+        # Base assumption is that any gap can be infilled
+        filter_expr = pl.col("gap_size") > 0
 
         # Check for any gaps
-        filter_expr = pl.col("gap_size") > 0
         if max_gap_size:
             # If constrained, change the filter to check if there is any missing data with: 0 < gap <= max_gap_size
             filter_expr = pl.col("gap_size").is_between(0, max_gap_size, closed="right")
 
+        # Apply observation interval constraint
         if observation_interval:
             # Check if these gaps are within the specified observation interval
             filter_expr = filter_expr & get_date_filter(time_name, observation_interval)
 
-        # If anything left in the dataframe using the filter, then these are the data points that need infilling
-        df = df.filter(filter_expr)
-        return not df.is_empty()
+        # Make a mask to ensure that Nulls at the beginning and end of the series remain null.
+        not_null_mask = pl.col(infill_column).is_not_null()
+        row_idx = pl.arange(0, pl.count())
+        filter_expr = filter_expr & row_idx.is_between(
+            (row_idx.filter(not_null_mask).min()),  # first True
+            (row_idx.filter(not_null_mask).max()),  # last True
+        )
+
+        return filter_expr
 
     def apply(
         self,
@@ -166,8 +175,14 @@ class InfillMethod(ABC):
         # We need to make sure the data is padded so that missing time steps are filled with nulls
         df = pad_time(ts.df, ts.time_name, ts.periodicity)
 
+        # Calculate sizes of each gap in the time series
+        df = gap_size_count(df, infill_column)
+
+        # Create a mask determining which values get infilled
+        infill_mask = self.infill_mask(ts.time_name, infill_column, observation_interval, max_gap_size)
+
         # Check if there is actually anything to infill
-        if not self._anything_to_infill(df, ts.time_name, infill_column, observation_interval, max_gap_size):
+        if df.filter(infill_mask).is_empty():
             # If not, return the original time series
             return ts
 
@@ -175,26 +190,10 @@ class InfillMethod(ABC):
         df_infilled = self._fill(df, infill_column)
         infilled_column = self._infilled_column_name(infill_column)
 
-        # Apply gap size limitation if specified
-        if max_gap_size:
-            # Count the size of gaps in the data
-            df_infilled = gap_size_count(df_infilled, infill_column)
-
-            # Limit the infilled data to where the gap size is less than the user specified limit
-            df_infilled = df_infilled.with_columns(
-                pl.when(pl.col("gap_size") <= max_gap_size)
-                .then(pl.col(infilled_column))
-                .otherwise(None)
-                .alias(infilled_column)
-            )
-
-        # Apply observation interval filter if specified
-        if observation_interval:
-            date_filter = get_date_filter(ts.time_name, observation_interval)
-
-            df_infilled = df_infilled.with_columns(
-                pl.when(date_filter).then(pl.col(infilled_column)).otherwise(infill_column).alias(infilled_column)
-            )
+        # Limit the infilled data to where the infill mask is True
+        df_infilled = df_infilled.with_columns(
+            pl.when(infill_mask).then(pl.col(infilled_column)).otherwise(pl.col(infill_column)).alias(infilled_column)
+        )
 
         # Do some tidying up of columns, leaving only the original column names
         df_infilled = df_infilled.with_columns(
