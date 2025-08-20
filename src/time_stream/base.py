@@ -186,7 +186,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         """
         for k, v in metadata.items():
             if k in self._df.columns:
-                raise MetadataError(f"Metadata key {k} exists as a Column in the Time Series.")
+                raise MetadataError(f"Metadata key '{k}' exists as a Column in the Time Series.")
             self._metadata[k] = v
 
     @property
@@ -222,7 +222,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         #       In this instance, we are happy with this as we know we are mutating the time values.
         if duplicated_times:
             if self._on_duplicates == DuplicateOption.ERROR:
-                raise DuplicateTimeError(f"Duplicate time values found: {duplicated_times}")
+                raise DuplicateTimeError(duplicates=duplicated_times)
 
             if self._on_duplicates == DuplicateOption.KEEP_FIRST:
                 self._df = self._df.unique(subset=self.time_name, keep="first")
@@ -439,9 +439,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
             new_timestamps = df[self.time_name]
             old_timestamps = self.df[self.time_name]
             if Counter(new_timestamps.to_list()) != Counter(old_timestamps.to_list()):
-                raise TimeMutatedError(
-                    f"Time column {self.time_name} data has mutated.", old_timestamps, new_timestamps
-                )
+                raise TimeMutatedError(old_timestamps=old_timestamps, new_timestamps=new_timestamps)
 
     def _remove_missing_columns(self, old_df: pl.DataFrame, new_df: pl.DataFrame) -> None:
         """Remove reference to columns that are missing in the new DataFrame.
@@ -734,15 +732,17 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
 
         result = {col: self.columns[col].metadata(key, strict=False) for col in column}
 
-        missing_keys = {
-            k
-            for col, metadata in result.items()
-            for k, v in metadata.items()
-            if all(metadata.get(k) is None for metadata in result.values())
-        }
+        missing_keys = sorted(
+            {
+                k
+                for col, metadata in result.items()
+                for k, v in metadata.items()
+                if all(metadata.get(k) is None for metadata in result.values())
+            }
+        )
 
         if missing_keys:
-            raise MetadataError(f"Metadata key(s) '{missing_keys}' not found in any column.")
+            raise MetadataError(f"Metadata key(s) {missing_keys} not found in any column.")
 
         return result
 
@@ -785,7 +785,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
             The matching flag column if exactly one match is found, or None if no matching column is found.
         """
         if isinstance(data_column, str):
-            error_msg = f"Column {data_column} not found."
+            error_msg = f"Data Column '{data_column}' not found."
             data_column = self.columns.get(data_column, None)
             if data_column is None:
                 raise ColumnNotFoundError(error_msg)
@@ -847,7 +847,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
             else:
                 raise AttributeError
 
-        except (KeyError, AttributeError):
+        except (KeyError, AttributeError, MetadataError):
             raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
 
     def __getitem__(self, key: str | Iterable[str]) -> "TimeSeries | PrimaryTimeColumn":

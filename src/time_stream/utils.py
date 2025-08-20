@@ -139,6 +139,6 @@ def check_columns_in_dataframe(df: pl.DataFrame, columns: Iterable[str]) -> None
     Raises:
         ColumnNotFoundError: If any of the columns in the list do not exist in the dataframe.
     """
-    invalid_columns = set(columns) - set(df.columns)
+    invalid_columns = sorted(set(columns) - set(df.columns))
     if invalid_columns:
         raise ColumnNotFoundError(f"Columns not found in dataframe: {invalid_columns}")
