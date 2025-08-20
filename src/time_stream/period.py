@@ -59,7 +59,6 @@ from dataclasses import (
 )
 from typing import (
     Any,
-    Optional,
     override,
 )
 
@@ -185,7 +184,7 @@ class DateTimeAdjusters:
     advance: Callable[[dt.datetime], dt.datetime]
 
     @staticmethod
-    def of_month_offset(month_offset: int) -> Optional["DateTimeAdjusters"]:
+    def of_month_offset(month_offset: int) -> "DateTimeAdjusters | None":
         """Return a DateTimeAdjusters object for a given month offset,
         or return None if the month offset is 0
 
@@ -210,7 +209,7 @@ class DateTimeAdjusters:
         )
 
     @staticmethod
-    def of_microsecond_offset(microsecond_offset: int) -> Optional["DateTimeAdjusters"]:
+    def of_microsecond_offset(microsecond_offset: int) -> "DateTimeAdjusters | None":
         """Return a DateTimeAdjusters object for a given microsecond offset,
         or return None if the microsecond offset is 0
 
@@ -544,7 +543,7 @@ def _fmt_tzdelta(delta: dt.timedelta) -> str:
     return f"{sign}{hours:02}:{minutes:02}"
 
 
-def _fmt_tzinfo(tz: Optional[dt.tzinfo]) -> str:
+def _fmt_tzinfo(tz: dt.tzinfo | None) -> str:
     """Convert an optional tzinfo object into a string that
     can be used to represent the timezone in an ISO 8601 format
 
@@ -688,7 +687,7 @@ class Properties:
     multiplier: int
     month_offset: int
     microsecond_offset: int
-    tzinfo: Optional[dt.tzinfo]
+    tzinfo: dt.tzinfo | None
     ordinal_shift: int
 
     @staticmethod
@@ -948,7 +947,7 @@ class Properties:
             ordinal_shift=0,
         ).normalise_offsets()
 
-    def with_tzinfo(self, tzinfo: Optional[dt.tzinfo]) -> "Properties":
+    def with_tzinfo(self, tzinfo: dt.tzinfo | None) -> "Properties":
         """Return a Properties object derived from this one with
         the given datetime tzinfo object (time zone)
 
@@ -1036,7 +1035,7 @@ class Properties:
             return _get_month_period_name(self.multiplier)
         raise AssertionError(f"Illegal step: {self.step}")
 
-    def get_timedelta(self) -> Optional[dt.timedelta]:
+    def get_timedelta(self) -> dt.timedelta | None:
         """Return a timedelta object that matches the duration
         of this period, or None if no such timedelta exists
 
@@ -1609,7 +1608,7 @@ class PeriodFields:
         return self.get_months_seconds().get_base_properties()
 
 
-def _str2int(num: Optional[str], default: int = 0) -> int:
+def _str2int(num: str | None, default: int = 0) -> int:
     """Convert string to int, None becomes 0 (or default if specified)
 
     Args:
@@ -1625,7 +1624,7 @@ def _str2int(num: Optional[str], default: int = 0) -> int:
     return default if num is None else int(num)
 
 
-def _str2microseconds(num: Optional[str], default: int = 0) -> int:
+def _str2microseconds(num: str | None, default: int = 0) -> int:
     """Convert string to microseconds, None becomes 0 (or default if specified)
 
     A seconds + microseconds string looks like "nn.uuu". This function
@@ -1918,7 +1917,7 @@ class Period(ABC):
         return self._properties.get_iso8601()
 
     @property
-    def tzinfo(self) -> Optional[dt.tzinfo]:
+    def tzinfo(self) -> dt.tzinfo | None:
         """Get the tzinfo property"""
         return self._properties.tzinfo
 
@@ -1959,7 +1958,7 @@ class Period(ABC):
         return self.ordinal(dt.datetime.max)
 
     @property
-    def timedelta(self) -> Optional[dt.timedelta]:
+    def timedelta(self) -> dt.timedelta | None:
         """A timedelta object that matches the duration
         of this period, or None if no such timedelta exists
 
@@ -2291,7 +2290,7 @@ class Period(ABC):
         """
         return _get_offset_period(self._properties.with_microsecond_offset(microsecond_amount))
 
-    def with_tzinfo(self, tzinfo: Optional[dt.tzinfo]) -> "Period":
+    def with_tzinfo(self, tzinfo: dt.tzinfo | None) -> "Period":
         """Return a Period derived from this one but with the
         specified tzinfo
 
@@ -2911,7 +2910,7 @@ class AwareMicroSecondPeriod(Period):
 
 
 def _get_period_tzinfo(
-    tzinfo: Optional[dt.tzinfo],
+    tzinfo: dt.tzinfo | None,
     properties: Properties,
     naive: Callable[[Properties], Period],
     aware: Callable[[Properties], Period],
@@ -3157,7 +3156,7 @@ def _time_match(prefix: str, matcher: re.Match[str]) -> dt.time:
     )
 
 
-def _timezone(utc_offset: Optional[str]) -> Optional[dt.tzinfo]:
+def _timezone(utc_offset: str | None) -> dt.tzinfo | None:
     """Convert an optional string into an optional tzinfo
     object
 
@@ -3183,7 +3182,7 @@ def _timezone(utc_offset: Optional[str]) -> Optional[dt.tzinfo]:
     return dt.timezone(dt.timedelta(seconds=seconds))
 
 
-def _tzinfo_match(prefix: str, matcher: re.Match[str]) -> Optional[dt.tzinfo]:
+def _tzinfo_match(prefix: str, matcher: re.Match[str]) -> dt.tzinfo | None:
     """Extract a tzinfo object out of a regular expression matcher that
     has parsed an ISO 8601 format datetime
 
@@ -3295,11 +3294,11 @@ def _match_repr(matcher: re.Match[str]) -> Period:
     """
     period_fields: PeriodFields = _period_match("period", matcher)
     offset: str = matcher.group("offset")
-    offset_period_fields: Optional[PeriodFields] = None
+    offset_period_fields: PeriodFields | None = None
     if offset == "+":
         offset_period_fields = _period_match("offset", matcher)
     zone: str = matcher.group("zone")
-    tzinfo: Optional[dt.tzinfo] = None
+    tzinfo: dt.tzinfo | None = None
     if zone is not None and len(zone) > 0:
         tzinfo = _timezone(zone)
     shift: str = matcher.group("shift")
@@ -3375,7 +3374,7 @@ _RE_REPR = re.compile(
 #            object created from the Pattern into an optional
 #            Period object.
 #
-_PARSERS: list[tuple[re.Pattern[str], Callable[[re.Match[str]], Optional[Period]]]] = [
+_PARSERS: list[tuple[re.Pattern[str], Callable[[re.Match[str]], Period | None]]] = [
     (_RE_PERIOD, _match_period),
     (_RE_PERIOD_OFFSET, _match_period_offset),
     (_RE_DATETIME_PERIOD, _match_datetime_period),
@@ -3383,7 +3382,7 @@ _PARSERS: list[tuple[re.Pattern[str], Callable[[re.Match[str]], Optional[Period]
 ]
 
 
-def _get_period(period_string: str) -> Optional[Period]:
+def _get_period(period_string: str) -> Period | None:
     """Return an optional Period object from a string
 
     Tries a number of possible string formats and returns
@@ -3395,9 +3394,9 @@ def _get_period(period_string: str) -> Optional[Period]:
         not be converted to a Period
     """
     regex: re.Pattern[str]
-    match_fn: Callable[[re.Match[str]], Optional[Period]]
+    match_fn: Callable[[re.Match[str]], Period | None]
     for regex, match_fn in _PARSERS:
-        matcher: Optional[re.Match[str]] = regex.match(period_string)
+        matcher: re.Match[str] | None = regex.match(period_string)
         if matcher:
             period = match_fn(matcher)
             if period is not None:
@@ -3415,7 +3414,7 @@ def _of(period_string: str) -> Period:
     Returns:
         A Period object
     """
-    period: Optional[Period] = _get_period(period_string)
+    period: Period | None = _get_period(period_string)
     if period is None:
         raise ValueError(f"Illegal period: {period_string}")
     return period
@@ -3433,7 +3432,7 @@ def _of_iso_duration(iso_8601_duration: str) -> Period:
         ValueError if the string contains a valid ISO 8601
         duration that cannot be converted into a Period object
     """
-    matcher: Optional[re.Match[str]] = _RE_PERIOD.match(iso_8601_duration)
+    matcher: re.Match[str] | None = _RE_PERIOD.match(iso_8601_duration)
     if matcher:
         return _match_period(matcher)
     raise ValueError(f"Illegal ISO 8601 duration: {iso_8601_duration}")
@@ -3453,7 +3452,7 @@ def _of_duration(duration: str) -> Period:
         ValueError if duration does not contains a valid duration
         string
     """
-    matcher: Optional[re.Match[str]] = _RE_PERIOD_OFFSET.match(duration)
+    matcher: re.Match[str] | None = _RE_PERIOD_OFFSET.match(duration)
     if matcher:
         return _match_period_offset(matcher)
     matcher = _RE_PERIOD.match(duration)
@@ -3475,7 +3474,7 @@ def _of_date_and_duration(date_duration: str) -> Period:
     Raises:
         ValueError if date_duration does not contains a valid value
     """
-    matcher: Optional[re.Match[str]] = _RE_DATETIME_PERIOD.match(date_duration)
+    matcher: re.Match[str] | None = _RE_DATETIME_PERIOD.match(date_duration)
     if matcher:
         return _match_datetime_period(matcher)
     raise ValueError(f"Illegal date/duration string: {date_duration}")
@@ -3490,7 +3489,7 @@ def _of_repr(repr_string: str) -> Period:
     Raises:
         ValueError if the string does not contain a valid repr string
     """
-    matcher: Optional[re.Match[str]] = _RE_REPR.match(repr_string)
+    matcher: re.Match[str] | None = _RE_REPR.match(repr_string)
     if matcher:
         return _match_repr(matcher)
     raise ValueError(f"Illegal repr string: {repr_string}")

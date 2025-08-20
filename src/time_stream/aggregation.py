@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from datetime import timedelta
-from typing import List, Optional, Tuple, Type, Union
+from typing import Type
 
 import polars as pl
 
@@ -42,16 +42,16 @@ class AggregationFunction(ABC):
         pass
 
     @abstractmethod
-    def expr(self, columns: List[str]) -> List[pl.Expr]:
+    def expr(self, columns: list[str]) -> list[pl.Expr]:
         """Return the Polars expressions for this aggregation."""
         pass
 
-    def post_expr(self, columns: List[str]) -> List[pl.Expr]:
+    def post_expr(self, columns: list[str]) -> list[pl.Expr]:
         """Return additional Polars expressions to be applied after the aggregation."""
         return []
 
     @classmethod
-    def get(cls, aggregation: Union[str, Type["AggregationFunction"], "AggregationFunction"]) -> "AggregationFunction":
+    def get(cls, aggregation: "str | Type[AggregationFunction] | AggregationFunction") -> "AggregationFunction":
         """Factory method to get an aggregation function instance from string names, class types, or existing instances.
 
         Args:
@@ -105,8 +105,8 @@ class AggregationFunction(ABC):
         self,
         ts: TimeSeries,
         aggregation_period: Period,
-        columns: Union[str, List[str]],
-        missing_criteria: Optional[Tuple[str, Union[float, int]]] = None,
+        columns: str | list[str],
+        missing_criteria: tuple[str, float | int] | None = None,
     ) -> TimeSeries:
         """Run the aggregation.
 
@@ -196,7 +196,7 @@ class AggregationFunction(ABC):
             raise UserWarning(f"TimeSeries periodicity: {ts.periodicity} not subperiod of aggregation period: {period}")
 
     @staticmethod
-    def _actual_count_expr(columns: List[str]) -> List[pl.Expr]:
+    def _actual_count_expr(columns: list[str]) -> list[pl.Expr]:
         """A `Polars` expression to generate the actual count of values in a TimeSeries found in each period.
 
         Args:
@@ -253,8 +253,8 @@ class AggregationFunction(ABC):
 
     @staticmethod
     def _missing_data_expr(
-        ts: TimeSeries, columns: List[str], missing_criteria: Optional[Tuple[str, Union[float, int]]] = None
-    ) -> List[pl.Expr]:
+        ts: TimeSeries, columns: list[str], missing_criteria: tuple[str, float | int] | None = None
+    ) -> list[pl.Expr]:
         """Convert missing criteria to a Polars expression for validation.
 
         Args:
@@ -313,7 +313,7 @@ class Mean(AggregationFunction):
 
     name = "mean"
 
-    def expr(self, columns: List[str]) -> List[pl.Expr]:
+    def expr(self, columns: list[str]) -> list[pl.Expr]:
         """Return the `Polars` expression for calculating the mean in an aggregation period."""
         return [pl.col(col).mean().alias(f"mean_{col}") for col in columns]
 
@@ -324,7 +324,7 @@ class Sum(AggregationFunction):
 
     name = "sum"
 
-    def expr(self, columns: List[str]) -> List[pl.Expr]:
+    def expr(self, columns: list[str]) -> list[pl.Expr]:
         """Return the `Polars` expression for calculating the mean in an aggregation period."""
         return [pl.col(col).sum().alias(f"sum_{col}") for col in columns]
 
@@ -336,12 +336,12 @@ class MeanSum(AggregationFunction):
 
     name = "mean_sum"
 
-    def expr(self, columns: List[str]) -> List[pl.Expr]:
+    def expr(self, columns: list[str]) -> list[pl.Expr]:
         """To calculate the mean sum the expression must return the mean, and be multiplied by the expected
         counts, which is calculated after in the post_expr method."""
         return [pl.col(col).mean().alias(f"mean_sum_{col}") for col in columns]
 
-    def post_expr(self, columns: List[str]) -> List[pl.Expr]:
+    def post_expr(self, columns: list[str]) -> list[pl.Expr]:
         """Multiply the mean by the expected count to get the mean sum."""
         return [(pl.col(f"mean_sum_{col}") * pl.col(f"expected_count_{self.ts.time_name}")) for col in columns]
 
@@ -352,7 +352,7 @@ class Min(AggregationFunction):
 
     name = "min"
 
-    def expr(self, columns: List[str]) -> List[pl.Expr]:
+    def expr(self, columns: list[str]) -> list[pl.Expr]:
         """Return the `Polars` expression for calculating the minimum in an aggregation period.
         This expression also returns a column that holds the datetime that the minimum value occurred on.
         """
@@ -378,7 +378,7 @@ class Max(AggregationFunction):
 
     name = "max"
 
-    def expr(self, columns: str) -> List[pl.Expr]:
+    def expr(self, columns: str) -> list[pl.Expr]:
         """Return the `Polars` expression for calculating the maximum in an aggregation period.
         This expression also returns a column that holds the datetime that the maximum value occurred on.
         """

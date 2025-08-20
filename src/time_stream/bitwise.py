@@ -1,5 +1,4 @@
 from enum import EnumType, Flag
-from typing import Union
 
 
 class BitwiseMeta(EnumType):
@@ -68,7 +67,7 @@ class BitwiseFlag(int, Flag, metaclass=BitwiseMeta):
             raise ValueError(f"Flag is not unique: {value}")
 
     @classmethod
-    def get_single_flag(cls, flag: Union[int, str]) -> "BitwiseFlag":
+    def get_single_flag(cls, flag: int | str) -> "BitwiseFlag":
         """Retrieves a single flag from an integer or string value.
 
         Can't be a combination of integer flag values, for example with the classification of:
