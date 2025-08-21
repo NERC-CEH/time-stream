@@ -1,6 +1,12 @@
 import unittest
 
 from time_stream.bitwise import BitwiseFlag
+from time_stream.exceptions import (
+    BitwiseFlagDuplicateError,
+    BitwiseFlagTypeError,
+    BitwiseFlagUnknownError,
+    BitwiseFlagValueError,
+)
 
 
 class Flags(BitwiseFlag):
@@ -18,19 +24,19 @@ class TestBitwiseFlag(unittest.TestCase):
 
     def test_invalid_flag_value_not_power_of_two(self):
         """Test that a non-power-of-two flag value raises error."""
-        with self.assertRaises(ValueError):
+        with self.assertRaises(BitwiseFlagValueError):
             class _Flags(BitwiseFlag):
                 INVALID_FLAG = 3
 
     def test_invalid_flag_value_negative(self):
         """Test that a negative flag value raises error."""
-        with self.assertRaises(ValueError):
+        with self.assertRaises(BitwiseFlagTypeError):
             class _Flags(BitwiseFlag):
                 INVALID_FLAG = -2
 
     def test_flag_uniqueness(self):
         """Test that duplicate flag values raise ValueError."""
-        with self.assertRaises(ValueError):
+        with self.assertRaises(BitwiseFlagDuplicateError):
             class _Flags(BitwiseFlag):
                 FLAG_A = 1
                 FLAG_B = 2
@@ -50,15 +56,15 @@ class TestBitwiseFlag(unittest.TestCase):
 
     def test_get_single_flag_invalid_integer(self):
         """Test that requesting an invalid integer flag raises error."""
-        with self.assertRaises(KeyError):
+        with self.assertRaises(BitwiseFlagUnknownError):
             Flags.get_single_flag(3)  # 3 is a combination of 1 and 2, not a valid single flag
 
     def test_get_single_flag_invalid_string(self):
         """Test that requesting an invalid string flag raises error."""
-        with self.assertRaises(KeyError):
+        with self.assertRaises(BitwiseFlagUnknownError):
             Flags.get_single_flag("FLAG_D")
 
     def test_get_single_flag_invalid_type(self):
         """Test that requesting a flag with an invalid type raises error."""
-        with self.assertRaises(TypeError):
+        with self.assertRaises(BitwiseFlagTypeError):
             Flags.get_single_flag(3.5)

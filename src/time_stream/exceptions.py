@@ -82,3 +82,23 @@ class AggregationPeriodError(AggregationError):
 
 class MissingCriteriaError(AggregationError):
     """Raised when invalid or inconsistent missing data criteria are provided."""
+
+
+class BitwiseFlagError(TimeStreamError):
+    """Base class for BitwiseFlag-related errors."""
+
+
+class BitwiseFlagTypeError(BitwiseFlagError, TypeError):
+    """Raised when a flag value has the wrong type."""
+
+
+class BitwiseFlagValueError(BitwiseFlagError, ValueError):
+    """Raised when a flag value is invalid (negative, not power of two, or zero)."""
+
+
+class BitwiseFlagDuplicateError(BitwiseFlagError, ValueError):
+    """Raised when a flag value is not unique within the enumeration."""
+
+
+class BitwiseFlagUnknownError(BitwiseFlagError, KeyError):
+    """Raised when a flag lookup fails or a non-singular flag is requested."""

@@ -1,5 +1,12 @@
 from enum import EnumType, Flag
 
+from time_stream.exceptions import (
+    BitwiseFlagDuplicateError,
+    BitwiseFlagTypeError,
+    BitwiseFlagUnknownError,
+    BitwiseFlagValueError,
+)
+
 
 class BitwiseMeta(EnumType):
     @property
@@ -31,10 +38,10 @@ class BitwiseFlag(int, Flag, metaclass=BitwiseMeta):
             value: The flag value.
 
         Raises:
-            ValueError: If the value is not a positive integer.
+            BitwiseFlagTypeError: If the value is not a positive integer.
         """
         if not isinstance(value, int) or value < 0:
-            raise ValueError(f"Flag value must be a positive integer: {value}")
+            raise BitwiseFlagTypeError(f"Flag value must be a positive integer: {value}")
 
     @staticmethod
     def _check_bitwise(value: int) -> None:
@@ -47,10 +54,10 @@ class BitwiseFlag(int, Flag, metaclass=BitwiseMeta):
             value: The flag value.
 
         Raises:
-            ValueError: If the value is not a power of two.
+            BitwiseFlagValueError: If the value is not a power of two.
         """
         if value == 0 or ((value & (value - 1)) != 0):
-            raise ValueError(f"Flag is not a bitwise value: {value}")
+            raise BitwiseFlagValueError(f"Flag is not a bitwise value: {value}")
 
     @classmethod
     def _check_unique(cls, value: int) -> None:
@@ -60,11 +67,11 @@ class BitwiseFlag(int, Flag, metaclass=BitwiseMeta):
             value: The flag value.
 
         Raises:
-            ValueError: If the flag value is already defined in the enumeration.
+            BitwiseFlagDuplicateError: If the flag value is already defined in the enumeration.
         """
         all_values = [i.value for _, i in cls.__members__.items()]
         if all_values.count(value) > 1:
-            raise ValueError(f"Flag is not unique: {value}")
+            raise BitwiseFlagDuplicateError(f"Flag is not unique: {value}")
 
     @classmethod
     def get_single_flag(cls, flag: int | str) -> "BitwiseFlag":
@@ -83,14 +90,18 @@ class BitwiseFlag(int, Flag, metaclass=BitwiseMeta):
             BitwiseFlag: The corresponding BitwiseFlag instance.
 
         Raises:
-            KeyError: If the flag value is not valid or is a combination of multiple flags.
-            TypeError: If the flag value is not an integer or string.
+            BitwiseFlagUnknownError: If the flag value is not valid or is a combination of multiple flags.
+            BitwiseFlagTypeError: If the flag value is not an integer or string.
         """
         if isinstance(flag, str):
-            return cls.__getitem__(flag)
+            try:
+                return cls.__getitem__(flag)
+            except KeyError:
+                raise BitwiseFlagUnknownError(f"Flag value '{flag}' is not a valid singular flag.")
+
         elif isinstance(flag, int):
             if flag not in cls.__members__.values():
-                raise KeyError(f"Flag value {flag} is not a valid singular flag.")
+                raise BitwiseFlagUnknownError(f"Flag value '{flag}' is not a valid singular flag.")
             return cls(flag)
         else:
-            raise TypeError(f"Flag value must be an integer or string, not {type(flag)}.")
+            raise BitwiseFlagTypeError(f"Flag value must be an integer or string, not {type(flag)}.")
