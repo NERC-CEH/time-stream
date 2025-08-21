@@ -88,17 +88,33 @@ class BitwiseFlagError(TimeStreamError):
     """Base class for BitwiseFlag-related errors."""
 
 
-class BitwiseFlagTypeError(BitwiseFlagError, TypeError):
+class BitwiseFlagTypeError(BitwiseFlagError):
     """Raised when a flag value has the wrong type."""
 
 
-class BitwiseFlagValueError(BitwiseFlagError, ValueError):
+class BitwiseFlagValueError(BitwiseFlagError):
     """Raised when a flag value is invalid (negative, not power of two, or zero)."""
 
 
-class BitwiseFlagDuplicateError(BitwiseFlagError, ValueError):
+class BitwiseFlagDuplicateError(BitwiseFlagError):
     """Raised when a flag value is not unique within the enumeration."""
 
 
-class BitwiseFlagUnknownError(BitwiseFlagError, KeyError):
+class BitwiseFlagUnknownError(BitwiseFlagError):
     """Raised when a flag lookup fails or a non-singular flag is requested."""
+
+
+class InfillError(TimeStreamError):
+    """Base class for infill-related errors"""
+
+
+class UnknownInfillError(InfillError):
+    """Raised when an unknown infill method is requested."""
+
+
+class InfillTypeError(InfillError):
+    """Raised when an invalid infill method type is provided."""
+
+
+class InfillInsufficientValuesError(InfillError):
+    """Raised when there are insufficient number of values to carry out the infill method."""

@@ -8,8 +8,20 @@ from parameterized import parameterized
 from polars.testing import assert_frame_equal, assert_series_equal
 
 from time_stream import TimeSeries
-from time_stream.infill import (InfillMethod, BSplineInterpolation, CubicInterpolation, QuadraticInterpolation,
-                                LinearInterpolation, AkimaInterpolation, PchipInterpolation)
+from time_stream.exceptions import (
+    UnknownInfillError,
+    InfillInsufficientValuesError,
+    InfillTypeError
+)
+from time_stream.infill import (
+    InfillMethod,
+    BSplineInterpolation,
+    CubicInterpolation,
+    QuadraticInterpolation,
+    LinearInterpolation,
+    AkimaInterpolation,
+    PchipInterpolation
+)
 from time_stream.utils import gap_size_count
 
 # Data used through the tests
@@ -25,6 +37,7 @@ START_GAP = pl.DataFrame({"values": [None, 2., 3., 4., 5., 6.]})
 END_GAP = pl.DataFrame({"values": [1., 2., 3., 4., 5., None]})
 START_GAP_WITH_MID_GAP = pl.DataFrame({"values": [None, 2., 3., None, 5., 6.]})
 END_GAP_WITH_MID_GAP = pl.DataFrame({"values": [1., 2., 3., None, 5., None]})
+ALL_NULL = pl.DataFrame({"values": [None, None, None, None]})
 
 
 class TestInfillMethod(unittest.TestCase):
@@ -65,7 +78,7 @@ class TestInfillMethod(unittest.TestCase):
     ])
     def test_get_with_invalid_string(self, get_input):
         """Test InfillMethod.get() with invalid string."""
-        with self.assertRaises(KeyError):
+        with self.assertRaises(UnknownInfillError):
             InfillMethod.get(get_input)
 
     def test_get_with_invalid_class(self):
@@ -74,7 +87,7 @@ class TestInfillMethod(unittest.TestCase):
         class InvalidClass:
             pass
 
-        with self.assertRaises(TypeError):
+        with self.assertRaises(InfillTypeError):
             InfillMethod.get(InvalidClass)  # noqa - expecting type warning
 
     @parameterized.expand([
@@ -82,7 +95,7 @@ class TestInfillMethod(unittest.TestCase):
     ])
     def test_get_with_invalid_type(self, get_input):
         """Test InfillMethod.get() with invalid type."""
-        with self.assertRaises(TypeError):
+        with self.assertRaises(InfillTypeError):
             InfillMethod.get(get_input)
 
     @parameterized.expand([
@@ -105,6 +118,7 @@ class TestInfillMethod(unittest.TestCase):
         (END_GAP, None, None, False),
         (START_GAP_WITH_MID_GAP, None, None, True),
         (END_GAP_WITH_MID_GAP, None, None, True),
+        (ALL_NULL, None, None, False)
     ])
     def test_infill_mask(self, df, max_gap_size, observation_interval, expected):
         """Test whether the infill_mask returns expected results."""
@@ -152,8 +166,8 @@ class TestLinearInterpolation(unittest.TestCase):
         ("0 data points", ALL_MISSING),
     ])
     def test_insufficient_data_raises_error(self, _, input_data):
-        """Test that insufficient data raises ValueError."""
-        with self.assertRaises(ValueError):
+        """Test that insufficient data raises InfillInsufficientValuesError."""
+        with self.assertRaises(InfillInsufficientValuesError):
             LinearInterpolation()._fill(input_data, "values")
 
     def test_complete_data_unchanged(self):
@@ -181,8 +195,8 @@ class TestQuadraticInterpolation(unittest.TestCase):
         ("0 data points", ALL_MISSING)
     ])
     def test_insufficient_data_raises_error(self, _, input_data):
-        """Test that insufficient data raises ValueError."""
-        with self.assertRaises(ValueError):
+        """Test that insufficient data raises InfillInsufficientValuesError."""
+        with self.assertRaises(InfillInsufficientValuesError):
             QuadraticInterpolation()._fill(input_data, "values")
 
     def test_complete_data_unchanged(self):
@@ -210,8 +224,8 @@ class TestCubicInterpolation(unittest.TestCase):
         ("0 data points", ALL_MISSING)
     ])
     def test_insufficient_data_raises_error(self, _, input_data):
-        """Test that insufficient data raises ValueError."""
-        with self.assertRaises(ValueError):
+        """Test that insufficient data raises InfillInsufficientValuesError."""
+        with self.assertRaises(InfillInsufficientValuesError):
             CubicInterpolation()._fill(input_data, "values")
 
     def test_complete_data_unchanged(self):
@@ -248,8 +262,8 @@ class TestAkimaInterpolation(unittest.TestCase):
         ("0 data points", ALL_MISSING)
     ])
     def test_insufficient_data_raises_error(self, _, input_data):
-        """Test that insufficient data raises ValueError."""
-        with self.assertRaises(ValueError):
+        """Test that insufficient data raises InfillInsufficientValuesError."""
+        with self.assertRaises(InfillInsufficientValuesError):
             AkimaInterpolation()._fill(input_data, "values")
 
     def test_complete_data_unchanged(self):
@@ -284,8 +298,8 @@ class TestPchipInterpolation(unittest.TestCase):
         ("0 data points", ALL_MISSING)
     ])
     def test_insufficient_data_raises_error(self, _, input_data):
-        """Test that insufficient data raises ValueError."""
-        with self.assertRaises(ValueError):
+        """Test that insufficient data raises InfillInsufficientValuesError."""
+        with self.assertRaises(InfillInsufficientValuesError):
             PchipInterpolation()._fill(input_data, "values")
 
     @parameterized.expand([
