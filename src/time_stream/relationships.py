@@ -1,6 +1,7 @@
 from typing import TYPE_CHECKING
 
 from time_stream.enums import DeletionPolicy, RelationshipType
+from time_stream.exceptions import ColumnRelationshipError
 
 if TYPE_CHECKING:
     # Import is for type hinting only.  Make sure there is no runtime import, to avoid recursion.
@@ -137,9 +138,9 @@ class RelationshipManager:
                             raise ValueError
 
                 except ValueError:
-                    raise ValueError(
-                        f"{col.name} can only be related to one column. "
-                        f"Existing relationships: {existing_relationships}"
+                    raise ColumnRelationshipError(
+                        f"'{col.name}' can only be related to one column. "
+                        f"Existing relationships: {existing_relationships}."
                     )
 
         __check(relationship.primary_column)
@@ -188,9 +189,9 @@ class RelationshipManager:
                 self._remove(relationship)
 
             elif relationship.deletion_policy.value == DeletionPolicy.RESTRICT.value:
-                raise UserWarning(
-                    f"Cannot delete {column} because it has restricted relationship "
-                    f"with: {relationship.other_column.name}"
+                raise ColumnRelationshipError(
+                    f"Cannot delete '{column}' because it has restricted relationship "
+                    f"with: '{relationship.other_column.name}'"
                 )
 
         self._relationships.pop(column.name, None)

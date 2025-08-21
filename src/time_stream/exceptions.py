@@ -15,6 +15,10 @@ class ColumnTypeError(TimeStreamError):
     """Raised when a requested column is not the expected type."""
 
 
+class ColumnRelationshipError(TimeStreamError):
+    """Raised when there is an issue with the relationship of one column to another"""
+
+
 class DuplicateColumnError(TimeStreamError):
     """Raised when a column name is duplicated."""
 

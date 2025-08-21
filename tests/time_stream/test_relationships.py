@@ -8,6 +8,7 @@ import polars as pl
 
 from time_stream import TimeSeries
 from time_stream.relationships import Relationship, RelationshipManager, RelationshipType, DeletionPolicy
+from time_stream.exceptions import ColumnRelationshipError
 
 
 class BaseRelationshipTest(unittest.TestCase):
@@ -135,7 +136,7 @@ class TestRelationshipManagerAdd(BaseRelationshipTest):
         self.relationship_manager._add(relationship1)
 
         relationship2 = Relationship(self.ts.colA, self.ts.colC, RelationshipType.ONE_TO_ONE, deletion_policy)
-        with self.assertRaises(ValueError):
+        with self.assertRaises(ColumnRelationshipError):
             self.relationship_manager._add(relationship2)
 
     @parameterized.expand([(str(d), d) for d in DeletionPolicy])
@@ -145,7 +146,7 @@ class TestRelationshipManagerAdd(BaseRelationshipTest):
         self.relationship_manager._add(relationship1)
 
         relationship2 = Relationship(self.ts.colA, self.ts.colC, RelationshipType.MANY_TO_ONE, deletion_policy)
-        with self.assertRaises(ValueError):
+        with self.assertRaises(ColumnRelationshipError):
             self.relationship_manager._add(relationship2)
 
     @parameterized.expand([(str(d), d) for d in DeletionPolicy])
@@ -198,7 +199,7 @@ class TestRelationshipManagerAdd(BaseRelationshipTest):
         relationship2 = Relationship(self.ts.colB, self.ts.colC, RelationshipType.MANY_TO_MANY, deletion_policy)
 
         self.relationship_manager._add(relationship1)
-        with self.assertRaises(ValueError):
+        with self.assertRaises(ColumnRelationshipError):
             self.relationship_manager._add(relationship2)
 
 
@@ -334,10 +335,10 @@ class TestRelationshipManagerHandleDeletion(BaseRelationshipTest):
         relationship = Relationship(self.ts.colA, self.ts.colB, RelationshipType.ONE_TO_ONE, DeletionPolicy.RESTRICT)
         self.ts._relationship_manager._add(relationship)
 
-        with self.assertRaises(UserWarning):
+        with self.assertRaises(ColumnRelationshipError):
             self.ts._relationship_manager._handle_deletion(self.ts.colA)
 
-        with self.assertRaises(UserWarning):
+        with self.assertRaises(ColumnRelationshipError):
             self.ts._relationship_manager._handle_deletion(self.ts.colB)
 
 
