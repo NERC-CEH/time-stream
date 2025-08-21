@@ -62,3 +62,23 @@ class TimeMutatedError(TimeStreamError):
         self.old_timestamps = old_timestamps
         self.new_timestamps = new_timestamps
         super().__init__(msg)
+
+
+class AggregationError(TimeStreamError):
+    """Base class for aggregation-related errors"""
+
+
+class UnknownAggregationError(AggregationError):
+    """Raised when an unknown aggregation is requested."""
+
+
+class AggregationTypeError(AggregationError):
+    """Raised when an invalid aggregation type is provided."""
+
+
+class AggregationPeriodError(AggregationError):
+    """Raised when an aggregation period is invalid."""
+
+
+class MissingCriteriaError(AggregationError):
+    """Raised when invalid or inconsistent missing data criteria are provided."""
