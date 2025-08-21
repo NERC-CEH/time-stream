@@ -104,6 +104,22 @@ class BitwiseFlagUnknownError(BitwiseFlagError):
     """Raised when a flag lookup fails or a non-singular flag is requested."""
 
 
+class QcError(TimeStreamError):
+    """Base class for qc-related errors"""
+
+
+class UnknownQcError(QcError):
+    """Raised when an unknown QC method is requested."""
+
+
+class QcTypeError(QcError):
+    """Raised when an invalid QC method type is provided."""
+
+
+class QcUnknownOperatorError(QcError):
+    """Raised when an invalid operator is passed to a QC check."""
+
+
 class InfillError(TimeStreamError):
     """Base class for infill-related errors"""
 

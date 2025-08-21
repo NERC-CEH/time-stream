@@ -7,8 +7,13 @@ import polars as pl
 from scipy.interpolate import Akima1DInterpolator, PchipInterpolator, make_interp_spline
 
 from time_stream import TimeSeries
-from time_stream.exceptions import InfillInsufficientValuesError, InfillTypeError, UnknownInfillError
-from time_stream.utils import check_columns_in_dataframe, gap_size_count, get_date_filter, pad_time
+from time_stream.exceptions import (
+    ColumnNotFoundError,
+    InfillInsufficientValuesError,
+    InfillTypeError,
+    UnknownInfillError,
+)
+from time_stream.utils import gap_size_count, get_date_filter, pad_time
 
 # Registry for built-in infill methods
 _INFILL_REGISTRY = {}
@@ -102,7 +107,7 @@ class InfillMethod(ABC):
 
         else:
             raise InfillTypeError(
-                f"Infill method must be a string or an InfillMethod class. Got {type(method).__name__}"
+                f"Infill method must be a string or an InfillMethod class. Got '{type(method).__name__}'"
             )
 
     @classmethod
@@ -172,7 +177,7 @@ class InfillMethod(ABC):
         """
         # Validate column exists
         if infill_column not in ts.columns:
-            raise check_columns_in_dataframe(f"Infill column '{infill_column}' not found in TimeSeries.")
+            raise ColumnNotFoundError(f"Infill column '{infill_column}' not found in TimeSeries.")
 
         # Set the timeseries property
         self._ts = ts

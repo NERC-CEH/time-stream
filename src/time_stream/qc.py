@@ -6,6 +6,7 @@ import polars as pl
 
 from time_stream import TimeSeries
 from time_stream.enums import ClosedInterval
+from time_stream.exceptions import ColumnNotFoundError, QcTypeError, QcUnknownOperatorError, UnknownQcError
 from time_stream.utils import get_date_filter
 
 # Registry for built-in QC checks
@@ -92,17 +93,17 @@ class QCCheck(ABC):
             try:
                 return _QC_REGISTRY[check](**kwargs)
             except KeyError:
-                raise KeyError(f"Unknown QC check '{check}'.")
+                raise UnknownQcError(f"Unknown QC check '{check}'. Available methods: {list(_QC_REGISTRY.keys())}")
 
         # If it's a class, check the subclass type and return
         elif isinstance(check, type):
             if issubclass(check, QCCheck):
                 return check(**kwargs)  # type: ignore[misc]
             else:
-                raise TypeError(f"QC check class {check.__name__} must inherit from QCCheck")
+                raise QcTypeError(f"QC check class '{check.__name__}' must inherit from QCCheck")
 
         else:
-            raise TypeError(f"QC check must be a string or a QCCheck class. Got {type(check).__name__}")
+            raise QcTypeError(f"QC check must be a string or a QCCheck class. Got '{type(check).__name__}'")
 
     def apply(
         self,
@@ -122,7 +123,7 @@ class QCCheck(ABC):
         """
         # Validate column exists
         if check_column not in ts.columns and check_column != ts.time_name:
-            raise KeyError(f"Check column '{check_column}' not found in TimeSeries.")
+            raise ColumnNotFoundError(f"Check column '{check_column}' not found in TimeSeries.")
 
         # Set the timeseries property, in case class expr method needs access to properties in the object
         self._ts = ts
@@ -174,7 +175,7 @@ class ComparisonCheck(QCCheck):
         }
 
         if self.operator not in operator_map:
-            raise KeyError(f"Invalid operator '{self.operator}'. Use: {', '.join(operator_map.keys())}")
+            raise QcUnknownOperatorError(f"Invalid operator '{self.operator}'. Use: {', '.join(operator_map.keys())}")
 
         operator_expr = operator_map[self.operator]
         if self.flag_na:
