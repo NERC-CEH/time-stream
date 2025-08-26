@@ -5,8 +5,9 @@ import polars as pl
 from polars.testing import assert_series_equal
 
 from time_stream.base import TimeSeries
-from time_stream.bitwise import BitwiseMeta
+from time_stream.bitwise import BitwiseMeta, ColumnRelationshipError
 from time_stream.columns import DataColumn, FlagColumn, SupplementaryColumn
+from time_stream.exceptions import BitwiseFlagUnknownError
 from time_stream.relationships import Relationship, RelationshipType, DeletionPolicy
 
 
@@ -374,7 +375,7 @@ class TestAddFlag(BaseTimeSeriesTest):
     def test_adding_non_existent_flag_to_flag_column_raises_error(self):
         """ Test that trying to add an invalid flag to a valid flag column raises error"""
         column = FlagColumn("flag_col", self.ts, "example_flag_system", {})
-        with self.assertRaises(KeyError):
+        with self.assertRaises(BitwiseFlagUnknownError):
             column.add_flag(10)
 
     def test_add_flag_to_data_column_raises_error(self):
@@ -475,7 +476,7 @@ class TestRemoveFlag(BaseTimeSeriesTest):
     def test_removing_non_existent_flag_from_flag_column_raises_error(self):
         """ Test that trying to remove an invalid flag to a valid flag column raises error"""
         column = FlagColumn("flag_col", self.ts, "example_flag_system", {})
-        with self.assertRaises(KeyError):
+        with self.assertRaises(BitwiseFlagUnknownError):
             column.remove_flag(10)
 
     def test_remove_flag_from_data_column_raises_error(self):
@@ -627,7 +628,7 @@ class TestAddRelationship(BaseTimeSeriesTest):
 
     def test_flag_column_only_allowed_one_relationship(self):
         self.ts.flag_col.add_relationship("data_col1")
-        with self.assertRaises(ValueError):
+        with self.assertRaises(ColumnRelationshipError):
             self.ts.flag_col.add_relationship("data_col2")
 
 class TestRemoveRelationship(BaseTimeSeriesTest):

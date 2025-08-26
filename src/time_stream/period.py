@@ -2598,22 +2598,23 @@ class YearPeriod(Period):
 
         if properties.multiplier != 12:
             raise PeriodValidationError(
-                f"Illegal multiplier: {properties.multiplier}. Must be '12' for a '{self.__name__}'."
+                f"Illegal multiplier: {properties.multiplier}. Must be '12' for a '{self.__class__.__name__}'."
             )
 
         if properties.month_offset != 0:
             raise PeriodValidationError(
-                f"Illegal month offset: {properties.month_offset}. Must be '0' for a '{self.__name__}'."
+                f"Illegal month offset: {properties.month_offset}. Must be '0' for a '{self.__class__.__name__}'."
             )
 
         if properties.microsecond_offset != 0:
             raise PeriodValidationError(
-                f"Illegal microsecond offset: {properties.microsecond_offset}. Must be '0' for a '{self.__name__}'."
+                f"Illegal microsecond offset: {properties.microsecond_offset}. "
+                f"Must be '0' for a '{self.__class__.__name__}'."
             )
 
         if properties.ordinal_shift != 0:
             raise PeriodValidationError(
-                f"Illegal ordinal shift: {properties.ordinal_shift}. Must be '0' for a '{self.__name__}'."
+                f"Illegal ordinal shift: {properties.ordinal_shift}. Must be '0' for a '{self.__class__.__name__}'."
             )
 
     @override
@@ -2639,22 +2640,23 @@ class MultiYearPeriod(Period):
         if properties.multiplier <= 12 or (properties.multiplier % 12) != 0:
             raise PeriodValidationError(
                 f"Illegal multiplier: {properties.multiplier}. "
-                f"Must be a >12 and multiple of 12 for a '{self.__name__}'."
+                f"Must be a >12 and multiple of 12 for a '{self.__class__.__name__}'."
             )
 
         if properties.month_offset != 0:
             raise PeriodValidationError(
-                f"Illegal month offset: {properties.month_offset}. Must be '0' for a '{self.__name__}'."
+                f"Illegal month offset: {properties.month_offset}. Must be '0' for a '{self.__class__.__name__}'."
             )
 
         if properties.microsecond_offset != 0:
             raise PeriodValidationError(
-                f"Illegal microsecond offset: {properties.microsecond_offset}. Must be '0' for a '{self.__name__}'."
+                f"Illegal microsecond offset: {properties.microsecond_offset}. "
+                f"Must be '0' for a '{self.__class__.__name__}'."
             )
 
         if properties.ordinal_shift != 0:
             raise PeriodValidationError(
-                f"Illegal ordinal shift: {properties.ordinal_shift}. Must be '0' for a '{self.__name__}'."
+                f"Illegal ordinal shift: {properties.ordinal_shift}. Must be '0' for a '{self.__class__.__name__}'."
             )
 
         self._n = properties.multiplier // 12
@@ -2681,22 +2683,23 @@ class MonthPeriod(Period):
 
         if properties.multiplier != 1:
             raise PeriodValidationError(
-                f"Illegal multiplier: {properties.multiplier}. Must be a 1 for a '{self.__name__}'."
+                f"Illegal multiplier: {properties.multiplier}. Must be a 1 for a '{self.__class__.__name__}'."
             )
 
         if properties.month_offset != 0:
             raise PeriodValidationError(
-                f"Illegal month offset: {properties.month_offset}. Must be '0' for a '{self.__name__}'."
+                f"Illegal month offset: {properties.month_offset}. Must be '0' for a '{self.__class__.__name__}'."
             )
 
         if properties.microsecond_offset != 0:
             raise PeriodValidationError(
-                f"Illegal microsecond offset: {properties.microsecond_offset}. Must be '0' for a '{self.__name__}'."
+                f"Illegal microsecond offset: {properties.microsecond_offset}. "
+                f"Must be '0' for a '{self.__class__.__name__}'."
             )
 
         if properties.ordinal_shift != 0:
             raise PeriodValidationError(
-                f"Illegal ordinal shift: {properties.ordinal_shift}. Must be '0' for a '{self.__name__}'."
+                f"Illegal ordinal shift: {properties.ordinal_shift}. Must be '0' for a '{self.__class__.__name__}'."
             )
 
     @override
@@ -2723,22 +2726,23 @@ class MultiMonthPeriod(Period):
 
         if properties.multiplier <= 1:
             raise PeriodValidationError(
-                f"Illegal multiplier: {properties.multiplier}. Must be a >1 for a '{self.__name__}'."
+                f"Illegal multiplier: {properties.multiplier}. Must be a >1 for a '{self.__class__.__name__}'."
             )
 
         if properties.month_offset != 0:
             raise PeriodValidationError(
-                f"Illegal month offset: {properties.month_offset}. Must be '0' for a '{self.__name__}'."
+                f"Illegal month offset: {properties.month_offset}. Must be '0' for a '{self.__class__.__name__}'."
             )
 
         if properties.microsecond_offset != 0:
             raise PeriodValidationError(
-                f"Illegal microsecond offset: {properties.microsecond_offset}. Must be '0' for a '{self.__name__}'."
+                f"Illegal microsecond offset: {properties.microsecond_offset}. "
+                f"Must be '0' for a '{self.__class__.__name__}'."
             )
 
         if properties.ordinal_shift != 0:
             raise PeriodValidationError(
-                f"Illegal ordinal shift: {properties.ordinal_shift}. Must be '0' for a '{self.__name__}'."
+                f"Illegal ordinal shift: {properties.ordinal_shift}. Must be '0' for a '{self.__class__.__name__}'."
             )
 
         self._n = properties.multiplier
@@ -2766,26 +2770,29 @@ class NaiveDayPeriod(Period):
 
         if properties.multiplier != 86_400:
             raise PeriodValidationError(
-                f"Illegal multiplier: {properties.multiplier}. Must be a 86_400 for a '{self.__name__}'."
+                f"Illegal multiplier: {properties.multiplier}. Must be a 86_400 for a '{self.__class__.__name__}'."
             )
 
         if properties.month_offset != 0:
             raise PeriodValidationError(
-                f"Illegal month offset: {properties.month_offset}. Must be '0' for a '{self.__name__}'."
+                f"Illegal month offset: {properties.month_offset}. Must be '0' for a '{self.__class__.__name__}'."
             )
 
         if properties.microsecond_offset != 0:
             raise PeriodValidationError(
-                f"Illegal microsecond offset: {properties.microsecond_offset}. Must be '0' for a '{self.__name__}'."
+                f"Illegal microsecond offset: "
+                f"{properties.microsecond_offset}. Must be '0' for a '{self.__class__.__name__}'."
             )
 
         if properties.ordinal_shift != 0:
             raise PeriodValidationError(
-                f"Illegal ordinal shift: {properties.ordinal_shift}. Must be '0' for a '{self.__name__}'."
+                f"Illegal ordinal shift: {properties.ordinal_shift}. Must be '0' for a '{self.__class__.__name__}'."
             )
 
         if properties.tzinfo is not None:
-            raise PeriodValidationError(f"Illegal tzinfo: '{properties.tzinfo}'. Must be None for a '{self.__name__}'.")
+            raise PeriodValidationError(
+                f"Illegal tzinfo: '{properties.tzinfo}'. Must be None for a '{self.__class__.__name__}'."
+            )
 
     @override
     def ordinal(self, datetime_obj: dt.datetime) -> int:
@@ -2809,27 +2816,28 @@ class AwareDayPeriod(Period):
 
         if properties.multiplier != 86_400:
             raise PeriodValidationError(
-                f"Illegal multiplier: {properties.multiplier}. Must be a 86_400 for a '{self.__name__}'."
+                f"Illegal multiplier: {properties.multiplier}. Must be a 86_400 for a '{self.__class__.__name__}'."
             )
 
         if properties.month_offset != 0:
             raise PeriodValidationError(
-                f"Illegal month offset: {properties.month_offset}. Must be '0' for a '{self.__name__}'."
+                f"Illegal month offset: {properties.month_offset}. Must be '0' for a '{self.__class__.__name__}'."
             )
 
         if properties.microsecond_offset != 0:
             raise PeriodValidationError(
-                f"Illegal microsecond offset: {properties.microsecond_offset}. Must be '0' for a '{self.__name__}'."
+                f"Illegal microsecond offset: "
+                f"{properties.microsecond_offset}. Must be '0' for a '{self.__class__.__name__}'."
             )
 
         if properties.ordinal_shift != 0:
             raise PeriodValidationError(
-                f"Illegal ordinal shift: {properties.ordinal_shift}. Must be '0' for a '{self.__name__}'."
+                f"Illegal ordinal shift: {properties.ordinal_shift}. Must be '0' for a '{self.__class__.__name__}'."
             )
 
         if not isinstance(properties.tzinfo, dt.tzinfo):
             raise PeriodValidationError(
-                f"Illegal tzinfo: '{properties.tzinfo}'. Must be of type tzinfo for a '{self.__name__}'."
+                f"Illegal tzinfo: '{properties.tzinfo}'. Must be of type tzinfo for a '{self.__class__.__name__}'."
             )
 
     @override
@@ -2854,26 +2862,30 @@ class NaiveMultiDayPeriod(Period):
 
         if properties.multiplier < 86_400 or (properties.multiplier % 86_400) != 0:
             raise PeriodValidationError(
-                f"Illegal multiplier: {properties.multiplier}. Must be a multiple of 86_400 for a '{self.__name__}'."
+                f"Illegal multiplier: {properties.multiplier}. "
+                f"Must be a multiple of 86_400 for a '{self.__class__.__name__}'."
             )
 
         if properties.month_offset != 0:
             raise PeriodValidationError(
-                f"Illegal month offset: {properties.month_offset}. Must be '0' for a '{self.__name__}'."
+                f"Illegal month offset: {properties.month_offset}. Must be '0' for a '{self.__class__.__name__}'."
             )
 
         if properties.microsecond_offset != 0:
             raise PeriodValidationError(
-                f"Illegal microsecond offset: {properties.microsecond_offset}. Must be '0' for a '{self.__name__}'."
+                f"Illegal microsecond offset: {properties.microsecond_offset}. "
+                f"Must be '0' for a '{self.__class__.__name__}'."
             )
 
         if properties.ordinal_shift != 0:
             raise PeriodValidationError(
-                f"Illegal ordinal shift: {properties.ordinal_shift}. Must be '0' for a '{self.__name__}'."
+                f"Illegal ordinal shift: {properties.ordinal_shift}. Must be '0' for a '{self.__class__.__name__}'."
             )
 
         if properties.tzinfo is not None:
-            raise PeriodValidationError(f"Illegal tzinfo: '{properties.tzinfo}'. Must be None for a '{self.__name__}'.")
+            raise PeriodValidationError(
+                f"Illegal tzinfo: '{properties.tzinfo}'. Must be None for a '{self.__class__.__name__}'."
+            )
 
         self._n = properties.multiplier // 86_400
 
@@ -2899,27 +2911,29 @@ class AwareMultiDayPeriod(Period):
 
         if properties.multiplier < 86_400 or (properties.multiplier % 86_400) != 0:
             raise PeriodValidationError(
-                f"Illegal multiplier: {properties.multiplier}. Must be a multiple of 86_400 for a '{self.__name__}'."
+                f"Illegal multiplier: {properties.multiplier}. "
+                f"Must be a multiple of 86_400 for a '{self.__class__.__name__}'."
             )
 
         if properties.month_offset != 0:
             raise PeriodValidationError(
-                f"Illegal month offset: {properties.month_offset}. Must be '0' for a '{self.__name__}'."
+                f"Illegal month offset: {properties.month_offset}. Must be '0' for a '{self.__class__.__name__}'."
             )
 
         if properties.microsecond_offset != 0:
             raise PeriodValidationError(
-                f"Illegal microsecond offset: {properties.microsecond_offset}. Must be '0' for a '{self.__name__}'."
+                f"Illegal microsecond offset: {properties.microsecond_offset}. "
+                f"Must be '0' for a '{self.__class__.__name__}'."
             )
 
         if properties.ordinal_shift != 0:
             raise PeriodValidationError(
-                f"Illegal ordinal shift: {properties.ordinal_shift}. Must be '0' for a '{self.__name__}'."
+                f"Illegal ordinal shift: {properties.ordinal_shift}. Must be '0' for a '{self.__class__.__name__}'."
             )
 
         if not isinstance(properties.tzinfo, dt.tzinfo):
             raise PeriodValidationError(
-                f"Illegal tzinfo: '{properties.tzinfo}'. Must be of type tzinfo for a '{self.__name__}'."
+                f"Illegal tzinfo: '{properties.tzinfo}'. Must be of type tzinfo for a '{self.__class__.__name__}'."
             )
 
         self._n = properties.multiplier // 86_400
@@ -2946,22 +2960,24 @@ class MultiHourPeriod(Period):
 
         if properties.multiplier < 3_600 or (properties.multiplier % 3_600) != 0:
             raise PeriodValidationError(
-                f"Illegal multiplier: {properties.multiplier}. Must be a multiple of 3_600 for a '{self.__name__}'."
+                f"Illegal multiplier: {properties.multiplier}. "
+                f"Must be a multiple of 3_600 for a '{self.__class__.__name__}'."
             )
 
         if properties.month_offset != 0:
             raise PeriodValidationError(
-                f"Illegal month offset: {properties.month_offset}. Must be '0' for a '{self.__name__}'."
+                f"Illegal month offset: {properties.month_offset}. Must be '0' for a '{self.__class__.__name__}'."
             )
 
         if properties.microsecond_offset != 0:
             raise PeriodValidationError(
-                f"Illegal microsecond offset: {properties.microsecond_offset}. Must be '0' for a '{self.__name__}'."
+                f"Illegal microsecond offset: {properties.microsecond_offset}. "
+                f"Must be '0' for a '{self.__class__.__name__}'."
             )
 
         if properties.ordinal_shift != 0:
             raise PeriodValidationError(
-                f"Illegal ordinal shift: {properties.ordinal_shift}. Must be '0' for a '{self.__name__}'."
+                f"Illegal ordinal shift: {properties.ordinal_shift}. Must be '0' for a '{self.__class__.__name__}'."
             )
 
         self._n = properties.multiplier // 3_600
@@ -2989,26 +3005,30 @@ class NaiveMultiMinutePeriod(Period):
 
         if properties.multiplier < 60 or (properties.multiplier % 60) != 0:
             raise PeriodValidationError(
-                f"Illegal multiplier: {properties.multiplier}. Must be a multiple of 60 for a '{self.__name__}'."
+                f"Illegal multiplier: {properties.multiplier}. "
+                f"Must be a multiple of 60 for a '{self.__class__.__name__}'."
             )
 
         if properties.month_offset != 0:
             raise PeriodValidationError(
-                f"Illegal month offset: {properties.month_offset}. Must be '0' for a '{self.__name__}'."
+                f"Illegal month offset: {properties.month_offset}. Must be '0' for a '{self.__class__.__name__}'."
             )
 
         if properties.microsecond_offset != 0:
             raise PeriodValidationError(
-                f"Illegal microsecond offset: {properties.microsecond_offset}. Must be '0' for a '{self.__name__}'."
+                f"Illegal microsecond offset: {properties.microsecond_offset}. "
+                f"Must be '0' for a '{self.__class__.__name__}'."
             )
 
         if properties.ordinal_shift != 0:
             raise PeriodValidationError(
-                f"Illegal ordinal shift: {properties.ordinal_shift}. Must be '0' for a '{self.__name__}'."
+                f"Illegal ordinal shift: {properties.ordinal_shift}. Must be '0' for a '{self.__class__.__name__}'."
             )
 
         if properties.tzinfo is not None:
-            raise PeriodValidationError(f"Illegal tzinfo: {properties.tzinfo}. Must be None for a '{self.__name__}'.")
+            raise PeriodValidationError(
+                f"Illegal tzinfo: {properties.tzinfo}. Must be None for a '{self.__class__.__name__}'."
+            )
 
         self._n = properties.multiplier // 60
 
@@ -3035,27 +3055,29 @@ class AwareMultiMinutePeriod(Period):
 
         if properties.multiplier < 60 or (properties.multiplier % 60) != 0:
             raise PeriodValidationError(
-                f"Illegal multiplier: {properties.multiplier}. Must be a multiple of 60 for a '{self.__name__}'."
+                f"Illegal multiplier: {properties.multiplier}. "
+                f"Must be a multiple of 60 for a '{self.__class__.__name__}'."
             )
 
         if properties.month_offset != 0:
             raise PeriodValidationError(
-                f"Illegal month offset: {properties.month_offset}. Must be '0' for a '{self.__name__}'."
+                f"Illegal month offset: {properties.month_offset}. Must be '0' for a '{self.__class__.__name__}'."
             )
 
         if properties.microsecond_offset != 0:
             raise PeriodValidationError(
-                f"Illegal microsecond offset: {properties.microsecond_offset}. Must be '0' for a '{self.__name__}'."
+                f"Illegal microsecond offset: {properties.microsecond_offset}. "
+                f"Must be '0' for a '{self.__class__.__name__}'."
             )
 
         if properties.ordinal_shift != 0:
             raise PeriodValidationError(
-                f"Illegal ordinal shift: {properties.ordinal_shift}. Must be '0' for a '{self.__name__}'."
+                f"Illegal ordinal shift: {properties.ordinal_shift}. Must be '0' for a '{self.__class__.__name__}'."
             )
 
         if not isinstance(properties.tzinfo, dt.tzinfo):
             raise PeriodValidationError(
-                f"Illegal tzinfo: {properties.tzinfo}. Must of type tzinfo for a '{self.__name__}'."
+                f"Illegal tzinfo: {properties.tzinfo}. Must of type tzinfo for a '{self.__class__.__name__}'."
             )
 
         self._n = properties.multiplier // 60
@@ -3083,21 +3105,24 @@ class NaiveMultiSecondPeriod(Period):
 
         if properties.month_offset != 0:
             raise PeriodValidationError(
-                f"Illegal month offset: {properties.month_offset}. Must be '0' for a '{self.__name__}'."
+                f"Illegal month offset: {properties.month_offset}. Must be '0' for a '{self.__class__.__name__}'."
             )
 
         if properties.microsecond_offset != 0:
             raise PeriodValidationError(
-                f"Illegal microsecond offset: {properties.microsecond_offset}. Must be '0' for a '{self.__name__}'."
+                f"Illegal microsecond offset: {properties.microsecond_offset}. "
+                f"Must be '0' for a '{self.__class__.__name__}'."
             )
 
         if properties.ordinal_shift != 0:
             raise PeriodValidationError(
-                f"Illegal ordinal shift: {properties.ordinal_shift}. Must be '0' for a '{self.__name__}'."
+                f"Illegal ordinal shift: {properties.ordinal_shift}. Must be '0' for a '{self.__class__.__name__}'."
             )
 
         if properties.tzinfo is not None:
-            raise PeriodValidationError(f"Illegal tzinfo: {properties.tzinfo}. Must be None for a '{self.__name__}'.")
+            raise PeriodValidationError(
+                f"Illegal tzinfo: {properties.tzinfo}. Must be None for a '{self.__class__.__name__}'."
+            )
 
         self._n = properties.multiplier
 
@@ -3122,22 +3147,23 @@ class AwareMultiSecondPeriod(Period):
 
         if properties.month_offset != 0:
             raise PeriodValidationError(
-                f"Illegal month offset: {properties.month_offset}. Must be '0' for a '{self.__name__}'."
+                f"Illegal month offset: {properties.month_offset}. Must be '0' for a '{self.__class__.__name__}'."
             )
 
         if properties.microsecond_offset != 0:
             raise PeriodValidationError(
-                f"Illegal microsecond offset: {properties.microsecond_offset}. Must be '0' for a '{self.__name__}'."
+                f"Illegal microsecond offset: {properties.microsecond_offset}. "
+                f"Must be '0' for a '{self.__class__.__name__}'."
             )
 
         if properties.ordinal_shift != 0:
             raise PeriodValidationError(
-                f"Illegal ordinal shift: {properties.ordinal_shift}. Must be '0' for a '{self.__name__}'."
+                f"Illegal ordinal shift: {properties.ordinal_shift}. Must be '0' for a '{self.__class__.__name__}'."
             )
 
         if not isinstance(properties.tzinfo, dt.tzinfo):
             raise PeriodValidationError(
-                f"Illegal tzinfo: {properties.tzinfo}. Must be of type tzinfo for a '{self.__name__}'."
+                f"Illegal tzinfo: {properties.tzinfo}. Must be of type tzinfo for a '{self.__class__.__name__}'."
             )
 
         self._n = properties.multiplier
@@ -3165,21 +3191,24 @@ class NaiveMicroSecondPeriod(Period):
 
         if properties.month_offset != 0:
             raise PeriodValidationError(
-                f"Illegal month offset: {properties.month_offset}. Must be '0' for a '{self.__name__}'."
+                f"Illegal month offset: {properties.month_offset}. Must be '0' for a '{self.__class__.__name__}'."
             )
 
         if properties.microsecond_offset != 0:
             raise PeriodValidationError(
-                f"Illegal microsecond offset: {properties.microsecond_offset}. Must be '0' for a '{self.__name__}'."
+                f"Illegal microsecond offset: {properties.microsecond_offset}. "
+                f"Must be '0' for a '{self.__class__.__name__}'."
             )
 
         if properties.ordinal_shift != 0:
             raise PeriodValidationError(
-                f"Illegal ordinal shift: {properties.ordinal_shift}. Must be '0' for a '{self.__name__}'."
+                f"Illegal ordinal shift: {properties.ordinal_shift}. Must be '0' for a '{self.__class__.__name__}'."
             )
 
         if properties.tzinfo is not None:
-            raise PeriodValidationError(f"Illegal tzinfo: {properties.tzinfo}. Must be None for a '{self.__name__}'.")
+            raise PeriodValidationError(
+                f"Illegal tzinfo: {properties.tzinfo}. Must be None for a '{self.__class__.__name__}'."
+            )
 
         self._n = properties.multiplier
 
@@ -3209,22 +3238,23 @@ class AwareMicroSecondPeriod(Period):
 
         if properties.month_offset != 0:
             raise PeriodValidationError(
-                f"Illegal month offset: {properties.month_offset}. Must be '0' for a '{self.__name__}'."
+                f"Illegal month offset: {properties.month_offset}. Must be '0' for a '{self.__class__.__name__}'."
             )
 
         if properties.microsecond_offset != 0:
             raise PeriodValidationError(
-                f"Illegal microsecond offset: {properties.microsecond_offset}. Must be '0' for a '{self.__name__}'."
+                f"Illegal microsecond offset: {properties.microsecond_offset}. "
+                f"Must be '0' for a '{self.__class__.__name__}'."
             )
 
         if properties.ordinal_shift != 0:
             raise PeriodValidationError(
-                f"Illegal ordinal shift: {properties.ordinal_shift}. Must be '0' for a '{self.__name__}'."
+                f"Illegal ordinal shift: {properties.ordinal_shift}. Must be '0' for a '{self.__class__.__name__}'."
             )
 
         if not isinstance(properties.tzinfo, dt.tzinfo):
             raise PeriodValidationError(
-                f"Illegal tzinfo: {properties.tzinfo}. Must be of type tzinfo for a '{self.__name__}'."
+                f"Illegal tzinfo: {properties.tzinfo}. Must be of type tzinfo for a '{self.__class__.__name__}'."
             )
 
         self._n = properties.multiplier

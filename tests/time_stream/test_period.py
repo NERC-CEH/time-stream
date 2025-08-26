@@ -3114,13 +3114,13 @@ class TestPeriodNaiveFormatter(unittest.TestCase):
     def test_bad(self, text: Any) -> None:
         """Test Period.naive_formatter method with bad arguments"""
         period: Period = Period.of(text)
-        with self.assertRaises(ValueError):
+        with self.assertRaises(PeriodParsingError):
             period.naive_formatter("")
-        with self.assertRaises(ValueError):
+        with self.assertRaises(PeriodParsingError):
             period.naive_formatter("x")
-        with self.assertRaises(ValueError):
+        with self.assertRaises(PeriodParsingError):
             period.naive_formatter("  ")
-        with self.assertRaises(ValueError):
+        with self.assertRaises(PeriodParsingError):
             period.naive_formatter("t ")
 
     @parameterized.expand(
@@ -6364,7 +6364,7 @@ class TestGetOffsetPeriod(unittest.TestCase):
         base_properties: p.Properties = base_period._properties
         self.assertEqual(base_period, p._get_offset_period(base_properties))
         shifted_properties: p.Properties = base_properties.with_ordinal_shift(1)
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(PeriodValidationError):
             p._get_offset_period(shifted_properties)
         offset_properties: p.Properties = base_properties.with_microsecond_offset(1)
         offset_period: Period = p._get_offset_period(offset_properties)
@@ -6381,10 +6381,10 @@ class TestGetBasePeriod(unittest.TestCase):
         base_properties: p.Properties = base_period._properties
         self.assertEqual(base_period, p._get_base_period(base_properties))
         shifted_properties: p.Properties = base_properties.with_ordinal_shift(1)
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(PeriodValidationError):
             p._get_base_period(shifted_properties)
         offset_properties: p.Properties = base_properties.with_microsecond_offset(1)
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(PeriodValidationError):
             p._get_base_period(offset_properties)
 
 
