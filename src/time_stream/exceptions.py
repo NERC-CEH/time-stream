@@ -152,7 +152,7 @@ class PeriodParsingError(PeriodError):
     """Raised when things like a period string or timedelta cannot be parsed."""
 
 
-class PeriodValidationError(PeriodError, ValueError):
+class PeriodValidationError(PeriodError):
     """Raised when a validation on objects in the Period module fails."""
 
 
