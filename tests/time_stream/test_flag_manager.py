@@ -8,6 +8,11 @@ from polars.testing import assert_series_equal
 from time_stream import TimeSeries
 from time_stream.bitwise import BitwiseFlag
 from time_stream.columns import FlagColumn
+from time_stream.exceptions import (
+    DuplicateColumnError,
+    DuplicateFlagSystemError,
+    FlagSystemNotFoundError
+)
 from time_stream.flag_manager import TimeSeriesFlagManager
 
 
@@ -49,7 +54,7 @@ class TestAddFlagSystem(BaseFlagManagerTest):
         """Test adding a duplicate flag system raises error."""
         flag_manager = TimeSeriesFlagManager(self.ts, self.flag_systems)
         new_flag_system = {"FLAG_A": 1, "FLAG_B": 2, "FLAG_C": 4}
-        with self.assertRaises(KeyError):
+        with self.assertRaises(DuplicateFlagSystemError):
             flag_manager.add_flag_system("quality_control", new_flag_system)
 
 
@@ -66,13 +71,13 @@ class TestInitFlagColumn(BaseFlagManagerTest):
     def test_init_flag_column_invalid_flag_system_raises_error(self):
         """Test initialising a flag column with a non-existent flag system raises error."""
         flag_manager = TimeSeriesFlagManager(self.ts, self.flag_systems)
-        with self.assertRaises(KeyError):
+        with self.assertRaises(FlagSystemNotFoundError):
             flag_manager.init_flag_column("bad_system", "flag_column")
 
     def test_init_flag_column_invalid_column_name_raises_error(self):
         """Test initialising a flag column with a duplicate column name raises error."""
         flag_manager = TimeSeriesFlagManager(self.ts, self.flag_systems)
-        with self.assertRaises(KeyError):
+        with self.assertRaises(DuplicateColumnError):
             flag_manager.init_flag_column("quality_control", "existing_flags")
 
     def test_init_flag_column_with_nonzero_default(self):

@@ -154,3 +154,19 @@ class PeriodParsingError(PeriodError):
 
 class PeriodValidationError(PeriodError, ValueError):
     """Raised when a validation on objects in the Period module fails."""
+
+
+class FlagSystemError(TimeStreamError):
+    """Base class for flag-system related errors."""
+
+
+class DuplicateFlagSystemError(FlagSystemError):
+    """Raised when a flag system already exists."""
+
+
+class FlagSystemTypeError(FlagSystemError):
+    """Raised when an invalid flag system type is provided."""
+
+
+class FlagSystemNotFoundError(FlagSystemError):
+    """Raised when a flag system can't be found."""

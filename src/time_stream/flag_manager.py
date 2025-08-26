@@ -5,6 +5,12 @@ import polars as pl
 
 from time_stream.bitwise import BitwiseFlag
 from time_stream.columns import FlagColumn
+from time_stream.exceptions import (
+    DuplicateColumnError,
+    DuplicateFlagSystemError,
+    FlagSystemNotFoundError,
+    FlagSystemTypeError,
+)
 
 if TYPE_CHECKING:
     from time_stream.base import TimeSeries
@@ -64,16 +70,16 @@ class TimeSeriesFlagManager:
             flag_system: The flag system containing flag values and their meanings.
 
         Raises:
-            TypeError: If the flag system is not a valid type.
+            FlagSystemTypeError: If the flag system is not a valid type.
         """
         if name in self._flag_systems:
-            raise KeyError(f"Flag system '{name}' already exists.")
+            raise DuplicateFlagSystemError(f"Flag system '{name}' already exists.")
         if isinstance(flag_system, enum.EnumType):
             self._flag_systems[name] = flag_system
         elif isinstance(flag_system, dict):
             self._flag_systems[name] = BitwiseFlag(name, flag_system)
         else:
-            raise TypeError(f"Unknown type of flag system: {type(flag_system)}")
+            raise FlagSystemTypeError(f"Unknown type of flag system: {type(flag_system)}")
 
     def init_flag_column(self, flag_system: str, col_name: str, data: int | Sequence[int] = 0) -> None:
         """Add a new column to the TimeSeries DataFrame, setting it as a Flag Column.
@@ -84,14 +90,14 @@ class TimeSeriesFlagManager:
             data: The default value to populate the flag column with. Can be a scalar or list-like. Defaults to 0.
 
         Raises:
-            KeyError: If flag system has not been created, or if the flag column already exists in the DataFrame or
-                      the data column does not exist in the DataFrame.
+            FlagSystemNotFoundError: If flag system has not been created
+            DuplicateColumnError: If the flag column already exists in the DataFrame
         """
         if flag_system not in self._flag_systems:
-            raise KeyError(f"Flag system '{flag_system}' not found.")
+            raise FlagSystemNotFoundError(f"Flag system '{flag_system}' not found.")
 
         if col_name in self._ts.columns:
-            raise KeyError(f"Column '{col_name}' already exists in the DataFrame.")
+            raise DuplicateColumnError(f"Column '{col_name}' already exists in the DataFrame.")
 
         if isinstance(data, int):
             data = pl.lit(data, dtype=pl.Int64)
