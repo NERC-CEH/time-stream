@@ -1,7 +1,7 @@
 from collections import Counter
 from datetime import datetime
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Iterable, Iterator, Type
+from typing import TYPE_CHECKING, Any, Iterable, Iterator, Sequence, Type
 
 import polars as pl
 
@@ -681,11 +681,11 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         infill_instance = InfillMethod.get(infill_method, **kwargs)
         return infill_instance.apply(self, column, observation_interval, max_gap_size)
 
-    def metadata(self, key: str | list[str] | None = None, strict: bool = True) -> dict[str, Any]:
+    def metadata(self, key: str | Sequence[str] | None = None, strict: bool = True) -> dict[str, Any]:
         """Retrieve metadata for all or specific keys.
 
         Args:
-            key: A specific key or list/tuple of keys to filter the metadata. If None, all metadata is returned.
+            key: A specific key or sequence of keys to filter the metadata. If None, all metadata is returned.
             strict: If True, raises a KeyError when a key is missing.  Otherwise, missing keys return None.
         Returns:
             A dictionary of the requested metadata.
@@ -708,13 +708,13 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         return result
 
     def column_metadata(
-        self, column: str | list[str] | None = None, key: str | list[str] | None = None
+        self, column: str | Sequence[str] | None = None, key: str | Sequence[str] | None = None
     ) -> dict[str, dict[str, Any]]:
         """Retrieve metadata for a given column(s), for all or specific keys.
 
         Args:
-            column: A specific column or list of columns to filter the metadata. If None, all columns are returned.
-            key: A specific key or list/tuple of keys to filter the metadata. If None, all metadata is returned.
+            column: A specific column or sequence of columns to filter the metadata. If None, all columns are returned.
+            key: A specific key or sequence of keys to filter the metadata. If None, all metadata is returned.
 
         Returns:
             A dictionary of the requested metadata.

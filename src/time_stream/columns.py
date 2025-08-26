@@ -44,11 +44,11 @@ class TimeSeriesColumn(ABC):  # noqa: PLW1641 ignore hash warning
         if self.name not in self._ts.df.columns:
             raise ColumnNotFoundError(f"Column '{self.name}' not found in TimeSeries.")
 
-    def metadata(self, key: Sequence[str] = None, strict: bool = True) -> dict[str, Any]:
+    def metadata(self, key: str | Sequence[str] | None = None, strict: bool = True) -> dict[str, Any]:
         """Retrieve metadata for all or specific keys.
 
         Args:
-            key: A specific key or list/tuple of keys to filter the metadata. If None, all metadata is returned.
+            key: A specific key or sequence of keys to filter the metadata. If None, all metadata is returned.
             strict: If True, raises a MetadataError when a key is missing.  Otherwise, missing keys return None.
         Returns:
             A dictionary of the requested metadata.
@@ -70,11 +70,11 @@ class TimeSeriesColumn(ABC):  # noqa: PLW1641 ignore hash warning
             result[k] = value
         return result
 
-    def remove_metadata(self, key: str | list[str] | tuple[str, ...] | None = None) -> None:
+    def remove_metadata(self, key: str | Sequence[str] | None = None) -> None:
         """Removes metadata associated with a column, either completely or for specific keys.
 
         Args:
-            key: A specific key or list/tuple of keys to remove. If None, all metadata for the column is removed.
+            key: A specific key or sequence of keys to remove. If None, all metadata for the column is removed.
         """
         if isinstance(key, str):
             key = [key]
