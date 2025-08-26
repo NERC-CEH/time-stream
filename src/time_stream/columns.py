@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING, Any, Sequence, Type
 
 import polars as pl
 
+from time_stream.exceptions import ColumnNotFoundError, ColumnTypeError, MetadataError
 from time_stream.relationships import DeletionPolicy, Relationship, RelationshipType
 
 if TYPE_CHECKING:
@@ -22,12 +23,6 @@ class TimeSeriesColumn(ABC):  # noqa: PLW1641 ignore hash warning
             ts: The TimeSeries instance this column belongs to.
             metadata: Optional metadata for the column.
         """
-        if self.__class__ is TimeSeriesColumn:
-            raise TypeError(
-                f"Cannot instantiate TimeSeriesColumn directly. "
-                f"Use one of the subclasses: {TimeSeriesColumn.__subclasses__()}."
-            )
-
         self._name = name
         self._ts = ts
         self._validate_name()
@@ -44,22 +39,22 @@ class TimeSeriesColumn(ABC):  # noqa: PLW1641 ignore hash warning
         """Check if column name is within the TimeSeries.
 
         Raises:
-            ValueError: If the column name is not within the TimeSeries.
+            ColumnNotFoundError: If the column name is not within the TimeSeries.
         """
         if self.name not in self._ts.df.columns:
-            raise ValueError(f"Column '{self.name}' not found in TimeSeries.")
+            raise ColumnNotFoundError(f"Column '{self.name}' not found in TimeSeries.")
 
     def metadata(self, key: Sequence[str] = None, strict: bool = True) -> dict[str, Any]:
         """Retrieve metadata for all or specific keys.
 
         Args:
             key: A specific key or list/tuple of keys to filter the metadata. If None, all metadata is returned.
-            strict: If True, raises a KeyError when a key is missing.  Otherwise, missing keys return None.
+            strict: If True, raises a MetadataError when a key is missing.  Otherwise, missing keys return None.
         Returns:
             A dictionary of the requested metadata.
 
         Raises:
-            KeyError: If the requested key(s) are not found in the metadata.
+            MetadataError: If the requested key(s) are not found in the metadata.
         """
         if not key:
             return self._metadata
@@ -71,7 +66,7 @@ class TimeSeriesColumn(ABC):  # noqa: PLW1641 ignore hash warning
         for k in key:
             value = self._metadata.get(k)
             if strict and value is None:
-                raise KeyError(f"Metadata key '{k}' not found")
+                raise MetadataError(f"Metadata key '{k}' not found")
             result[k] = value
         return result
 
@@ -184,9 +179,9 @@ class TimeSeriesColumn(ABC):  # noqa: PLW1641 ignore hash warning
         is not a FlagColumn.
 
         Raises:
-            AttributeError: If the column is not a FlagColumn.
+            ColumnTypeError: If the column is not a FlagColumn.
         """
-        raise TypeError(
+        raise ColumnTypeError(
             f"Column '{self.name}' is not a FlagColumn. Use `set_as_flag(flag_system_name)` first to enable flagging."
         )
 
@@ -195,9 +190,9 @@ class TimeSeriesColumn(ABC):  # noqa: PLW1641 ignore hash warning
         column that is not a FlagColumn.
 
         Raises:
-            AttributeError: If the column is not a FlagColumn.
+            ColumnTypeError: If the column is not a FlagColumn.
         """
-        raise TypeError(
+        raise ColumnTypeError(
             f"Column '{self.name}' is not a FlagColumn. Use `set_as_flag(flag_system_name)` first to enable flagging."
         )
 
@@ -211,10 +206,10 @@ class TimeSeriesColumn(ABC):  # noqa: PLW1641 ignore hash warning
             pl.DataFrame: A DataFrame with the time column and the current column.
 
         Raises:
-            KeyError: If the column does not exist in the DataFrame.
+            ColumnNotFoundError: If the column does not exist in the DataFrame.
         """
         if self.name not in self._ts.df.columns:
-            raise KeyError(f"Column '{self.name}' not found in TimeSeries.")
+            raise ColumnNotFoundError(f"Column '{self.name}' not found in TimeSeries.")
 
         return self._ts.df.select([self._ts.time_name, self.name])
 
@@ -227,10 +222,10 @@ class TimeSeriesColumn(ABC):  # noqa: PLW1641 ignore hash warning
             TimeSeries: A new TimeSeries object with just the selected column.
 
         Raises:
-            KeyError: If the column does not exist in the TimeSeries.
+            ColumnNotFoundError: If the column does not exist in the TimeSeries.
         """
         if self.name not in self._ts.df.columns:
-            raise KeyError(f"Column '{self.name}' not found in TimeSeries.")
+            raise ColumnNotFoundError(f"Column '{self.name}' not found in TimeSeries.")
 
         return self._ts.select([self.name])
 
@@ -411,7 +406,7 @@ class DataColumn(TimeSeriesColumn):
             other: Supplementary or flag column(s) to associate.
 
         Raises:
-            TypeError: If any other column is not supplementary or flag.
+            ColumnTypeError: If any other column is not supplementary or flag.
         """
         if not isinstance(other, list):
             other = [other]
@@ -424,7 +419,7 @@ class DataColumn(TimeSeriesColumn):
             elif type(col) is FlagColumn:
                 relationship = Relationship(self, col, RelationshipType.ONE_TO_MANY, DeletionPolicy.CASCADE)
             else:
-                raise TypeError(f"Related column must be supplementary or flag: {col.name}:{type(col)}")
+                raise ColumnTypeError(f"Related column must be supplementary or flag: {col.name}:{type(col)}")
 
             self._ts._relationship_manager._add(relationship)
 
@@ -435,7 +430,7 @@ class DataColumn(TimeSeriesColumn):
             flag_system: The name of the flag system.
 
         Raises:
-            UserWarning: If more than one flag column is found matching the given flag system.
+            ColumnNotFoundError: If more than one flag column is found matching the given flag system.
 
         Returns:
             The matching flag column if exactly one match is found, or None if no matching column is found.
@@ -449,7 +444,7 @@ class DataColumn(TimeSeriesColumn):
 
         if len(matches) > 1:
             # Should only be one (or no) matches.  Something gone wrong further upstream if this has happened!
-            raise UserWarning(f"More than one column matches found for flag system {flag_system}: {matches}")
+            raise ColumnNotFoundError(f"More than one column matches found for flag system {flag_system}: {matches}")
         elif len(matches) == 1:
             return matches[0]
         else:
@@ -466,7 +461,7 @@ class SupplementaryColumn(TimeSeriesColumn):
             other: Data column(s) to associate.
 
         Raises:
-            TypeError: If any other column is not data.
+            ColumnTypeError: If any other column is not data.
         """
         if not isinstance(other, list):
             other = [other]
@@ -477,7 +472,7 @@ class SupplementaryColumn(TimeSeriesColumn):
             if type(col) is DataColumn:
                 relationship = Relationship(col, self, RelationshipType.MANY_TO_MANY, DeletionPolicy.UNLINK)
             else:
-                raise TypeError(f"Related column must be data: {col.name}:{type(col)}")
+                raise ColumnTypeError(f"Related column must be data: {col.name}:{type(col)}")
 
             self._ts._relationship_manager._add(relationship)
 
@@ -509,7 +504,7 @@ class FlagColumn(SupplementaryColumn):
             other: Data column(s) to associate.
 
         Raises:
-            TypeError: If any other column is not data.
+            ColumnTypeError: If any other column is not data.
         """
         if not isinstance(other, list):
             other = [other]
@@ -520,7 +515,7 @@ class FlagColumn(SupplementaryColumn):
             if type(col) is DataColumn:
                 relationship = Relationship(col, self, RelationshipType.ONE_TO_MANY, DeletionPolicy.CASCADE)
             else:
-                raise TypeError(f"Related column must be data: {col.name}:{type(col)}")
+                raise ColumnTypeError(f"Related column must be data: {col.name}:{type(col)}")
 
             self._ts._relationship_manager._add(relationship)
 
