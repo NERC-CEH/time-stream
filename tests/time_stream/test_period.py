@@ -2051,7 +2051,7 @@ class TestMonthsSecondsPostInit(unittest.TestCase):
     )
     def test_post_init_invalid(self, name, string, months, seconds, microseconds):
         """Test __post_init__ method with invalid periods."""
-        with self.assertRaises(ValueError):
+        with self.assertRaises(PeriodValidationError):
             p.MonthsSeconds(string, months, seconds, microseconds)
 
 
@@ -2078,7 +2078,7 @@ class TestGetStepAndMultiplier(unittest.TestCase):
     def test_get_step_and_multiplier_invalid(self, name, string, months, seconds, microseconds):
         """Test get_step_and_multiplier method with invalid periods."""
         period = p.MonthsSeconds(string, months, seconds, microseconds)
-        with self.assertRaises(ValueError):
+        with self.assertRaises(PeriodValidationError):
             period.get_step_and_multiplier()
 
 
@@ -2121,7 +2121,7 @@ class TestMonthsSecondsGetBaseProperties(unittest.TestCase):
     def test_get_base_properties_invalid(self, name, string, months, seconds, microseconds):
         """Test get_base_properties method with invalid periods."""
         period = p.MonthsSeconds(string, months, seconds, microseconds)
-        with self.assertRaises(ValueError):
+        with self.assertRaises(PeriodValidationError):
             period.get_base_properties()
 
 
@@ -2159,7 +2159,7 @@ class TestPeriodFieldsPostInit(unittest.TestCase):
     )
     def test_post_init_invalid(self, name, string, years, months, days, hours, minutes, seconds, microseconds):
         """Test __post_init__ method with invalid periods."""
-        with self.assertRaises(ValueError):
+        with self.assertRaises(PeriodValidationError):
             p.PeriodFields(string, years, months, days, hours, minutes, seconds, microseconds)
 
 

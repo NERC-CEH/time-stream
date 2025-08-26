@@ -2039,7 +2039,7 @@ class TestGetattr(unittest.TestCase):
     def test_access_nonexistent_attribute(self):
         """Test accessing metadata key that doesn't exist"""
         ts = TimeSeries(self.df, time_name="time", column_metadata=self.column_metadata)
-        with self.assertRaises(AttributeError):
+        with self.assertRaises(MetadataError):
             _ = ts.col1.key0
 
 
