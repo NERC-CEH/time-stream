@@ -2,17 +2,12 @@
 Unit tests for the period module
 """
 
-from collections.abc import (
-    Callable,
-)
 from dataclasses import (
     dataclass,
 )
 
-import collections
 import datetime
 import unittest
-import zoneinfo
 
 from typing import (
     Any,
@@ -23,6 +18,7 @@ from parameterized import parameterized
 import re
 
 import time_stream.period as p
+from time_stream.exceptions import PeriodConfigError, PeriodParsingError, PeriodValidationError
 from time_stream.period import Period
 
 
@@ -265,7 +261,7 @@ class TestOfOffsets(unittest.TestCase):
 
     def test_of_offsets_zero(self):
         """Test DateTimeAdjusters.of_offsets with zero month and microsecond offsets."""
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(PeriodConfigError):
             p.DateTimeAdjusters.of_offsets(0, 0)
 
 
@@ -281,7 +277,7 @@ class TestDateTimeAdjustersPostInit(unittest.TestCase):
     )
     def test_post_init_raises_with_none(self, name, retreat, advance):
         """Test DateTimeAdjusters.__post_init__ to ensure it raises AssertionError when retreat or advance is None."""
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(PeriodConfigError):
             p.DateTimeAdjusters(retreat=retreat, advance=advance).__post_init__()
 
 
@@ -571,7 +567,7 @@ class TestFmtTzdelta(unittest.TestCase):
     )
     def test_fmt_tzdelta_invalid(self, name, delta):
         """Test _fmt_tzdelta function with invalid timedelta objects."""
-        with self.assertRaises(ValueError):
+        with self.assertRaises(PeriodParsingError):
             p._fmt_tzdelta(delta)
 
 
@@ -819,7 +815,7 @@ class TestOfYears(unittest.TestCase):
 
     def test_zero_years(self):
         """Test Properties.of_years method with various year inputs."""
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(PeriodValidationError):
             p.Properties.of_years(0)
 
 
@@ -847,7 +843,7 @@ class TestOfMonths(unittest.TestCase):
 
     def test_zero_months(self):
         """Test Properties.of_months method with zero month input."""
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(PeriodValidationError):
             p.Properties.of_months(0)
 
 
@@ -875,7 +871,7 @@ class TestOfDays(unittest.TestCase):
 
     def test_zero_days(self):
         """Test Properties.of_days method with zero day input."""
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(PeriodValidationError):
             p.Properties.of_days(0)
 
 
@@ -903,7 +899,7 @@ class TestOfHours(unittest.TestCase):
 
     def test_zero_hours(self):
         """Test Properties.of_hours method with zero hour input."""
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(PeriodValidationError):
             p.Properties.of_hours(0)
 
 
@@ -931,7 +927,7 @@ class TestOfMinutes(unittest.TestCase):
 
     def test_zero_minutes(self):
         """Test Properties.of_minutes method with zero minute input."""
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(PeriodValidationError):
             p.Properties.of_minutes(0)
 
 
@@ -959,7 +955,7 @@ class TestOfSeconds(unittest.TestCase):
 
     def test_zero_seconds(self):
         """Test Properties.of_seconds method with zero second input."""
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(PeriodValidationError):
             p.Properties.of_seconds(0)
 
 
@@ -998,7 +994,7 @@ class TestOfMicroseconds(unittest.TestCase):
 
     def test_zero_microseconds(self):
         """Test Properties.of_microseconds method with zero microsecond input."""
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(PeriodValidationError):
             p.Properties.of_microseconds(0)
 
 
@@ -1022,7 +1018,7 @@ class TestOfStepAndMultiplier(unittest.TestCase):
 
     def test_invalid_step(self):
         """Test Properties.of_step_and_multiplier method with invalid step input."""
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(PeriodValidationError):
             p.Properties.of_step_and_multiplier(999, 1)
 
 
@@ -1260,7 +1256,7 @@ class TestWithMonthOffset(unittest.TestCase):
         props = p.Properties(
             step=p._STEP_MONTHS, multiplier=12, month_offset=0, microsecond_offset=0, tzinfo=None, ordinal_shift=0
         )
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(PeriodValidationError):
             props.with_month_offset(-1)
 
 
@@ -1330,7 +1326,7 @@ class TestWithMicrosecondOffset(unittest.TestCase):
             tzinfo=None,
             ordinal_shift=0,
         )
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(PeriodValidationError):
             props.with_microsecond_offset(-1)
 
 
@@ -2511,7 +2507,7 @@ class TestPeriodOf(unittest.TestCase):
     @parameterized.expand(sorted(_BAD_ISO_DURATION | _BAD_DURATION))
     def test_bad(self, text: Any) -> None:
         """Test Period.of against a set of known bad arguments"""
-        with self.assertRaises(ValueError):
+        with self.assertRaises((PeriodParsingError, PeriodValidationError)):
             Period.of(text)
 
 
@@ -2527,7 +2523,7 @@ class TestPeriodOfIsoDuration(unittest.TestCase):
     @parameterized.expand(sorted(_BAD_ISO_DURATION))
     def test_bad(self, text: Any) -> None:
         """Test Period.of_iso_duration against a set of known bad arguments"""
-        with self.assertRaises(ValueError):
+        with self.assertRaises((PeriodParsingError, PeriodValidationError)):
             Period.of_iso_duration(text)
 
 
@@ -2543,7 +2539,7 @@ class TestPeriodOfDuration(unittest.TestCase):
     @parameterized.expand(sorted(_BAD_ISO_DURATION | _BAD_DURATION))
     def test_bad(self, text: Any) -> None:
         """Test Period.of_duration against a set of known bad arguments"""
-        with self.assertRaises(ValueError):
+        with self.assertRaises((PeriodParsingError, PeriodValidationError)):
             Period.of_duration(text)
 
     @parameterized.expand(
@@ -2576,7 +2572,7 @@ class TestPeriodOfDateAndDuration(unittest.TestCase):
     @parameterized.expand(sorted(_BAD_DATE_AND_DURATION))
     def test_bad(self, text: Any) -> None:
         """Test Period.of_date_and_duration against a set of known bad arguments"""
-        with self.assertRaises(ValueError):
+        with self.assertRaises((PeriodParsingError, PeriodValidationError)):
             Period.of_date_and_duration(text)
 
 
@@ -2592,7 +2588,7 @@ class TestPeriodOfRepr(unittest.TestCase):
     @parameterized.expand(sorted(_BAD_REPR))
     def test_bad(self, text: Any) -> None:
         """Test Period.of_repr against a set of known bad arguments"""
-        with self.assertRaises(ValueError):
+        with self.assertRaises((PeriodParsingError, PeriodValidationError)):
             Period.of_repr(text)
 
 
@@ -2608,7 +2604,7 @@ class TestPeriodOfYears(unittest.TestCase):
     @parameterized.expand([-999, -1, 0])
     def test_bad(self, years: Any) -> None:
         """Test Period.of_years against a set of known bad years values"""
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(PeriodValidationError):
             Period.of_years(years)
 
     @parameterized.expand(
@@ -2640,7 +2636,7 @@ class TestPeriodOfMonths(unittest.TestCase):
     @parameterized.expand([-1, 0])
     def test_bad(self, months: Any) -> None:
         """Test Period.of_months against a set of known bad months values"""
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(PeriodValidationError):
             Period.of_months(months)
 
     @parameterized.expand(
@@ -2674,7 +2670,7 @@ class TestPeriodOfDays(unittest.TestCase):
     @parameterized.expand([-1, 0])
     def test_bad(self, days: Any) -> None:
         """Test Period.of_days against a set of known bad days values"""
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(PeriodValidationError):
             Period.of_days(days)
 
     @parameterized.expand(
@@ -2706,7 +2702,7 @@ class TestPeriodOfHours(unittest.TestCase):
     @parameterized.expand([-1, 0])
     def test_bad(self, hours: Any) -> None:
         """Test Period.of_hours against a set of known bad hours values"""
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(PeriodValidationError):
             Period.of_hours(hours)
 
     @parameterized.expand(
@@ -2740,7 +2736,7 @@ class TestPeriodOfMinutes(unittest.TestCase):
     @parameterized.expand([-1, 0])
     def test_bad(self, minutes: Any) -> None:
         """Test Period.of_minutes against a set of known bad minutes values"""
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(PeriodValidationError):
             Period.of_minutes(minutes)
 
     @parameterized.expand(
@@ -2774,7 +2770,7 @@ class TestPeriodOfSeconds(unittest.TestCase):
     @parameterized.expand([-1, 0])
     def test_bad(self, seconds: Any) -> None:
         """Test Period.of_seconds against a set of known bad seconds values"""
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(PeriodValidationError):
             Period.of_seconds(seconds)
 
     @parameterized.expand(
@@ -2809,7 +2805,7 @@ class TestPeriodOfMicroseconds(unittest.TestCase):
     @parameterized.expand([-1, 0])
     def test_bad(self, microseconds: Any) -> None:
         """Test Period.of_microseconds against a set of known bad microseconds values"""
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(PeriodValidationError):
             Period.of_microseconds(microseconds)
 
     @parameterized.expand(
@@ -2859,7 +2855,7 @@ class TestPeriodOfTimedelta(unittest.TestCase):
     )
     def test_bad(self, timedelta: Any) -> None:
         """Test Period.of_timedelta against a set of known bad timedelta values"""
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(PeriodValidationError):
             Period.of_timedelta(timedelta)
 
     @parameterized.expand(
