@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from datetime import date, datetime, time
-from typing import List, Optional, Tuple, Type, Union
+from typing import Type
 
 import polars as pl
 
@@ -55,7 +55,7 @@ class QCCheck(ABC):
         pass
 
     @classmethod
-    def get(cls, check: Union[str, "QCCheck", Type["QCCheck"]], **kwargs) -> "QCCheck":
+    def get(cls, check: "str | QCCheck | Type[QCCheck]", **kwargs) -> "QCCheck":
         """Factory method to get a QC check instance from string names or class type.
 
         Args:
@@ -108,7 +108,7 @@ class QCCheck(ABC):
         self,
         ts: TimeSeries,
         check_column: str,
-        observation_interval: Optional[datetime | Tuple[datetime, datetime | None]] = None,
+        observation_interval: datetime | tuple[datetime, datetime | None] | None = None,
     ) -> pl.Series:
         """Apply the QC check to the TimeSeries.
 
@@ -149,7 +149,7 @@ class ComparisonCheck(QCCheck):
 
     name = "comparison"
 
-    def __init__(self, compare_to: float | List, operator: str, flag_na: Optional[bool] = False) -> None:
+    def __init__(self, compare_to: float | list, operator: str, flag_na: bool = False) -> None:
         """Initialize comparison check.
 
         Args:
@@ -193,8 +193,8 @@ class RangeCheck(QCCheck):
         self,
         min_value: float | time | date | datetime,
         max_value: float | time | date | datetime,
-        closed: Optional[str | ClosedInterval] = "both",
-        within: Optional[bool] = True,
+        closed: str | ClosedInterval = "both",
+        within: bool = True,
     ) -> None:
         """Initialize range check.
 

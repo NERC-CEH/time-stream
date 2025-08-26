@@ -1,6 +1,6 @@
 import copy
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any, Dict, Optional, Sequence, Type, Union
+from typing import TYPE_CHECKING, Any, Sequence, Type
 
 import polars as pl
 
@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 class TimeSeriesColumn(ABC):  # noqa: PLW1641 ignore hash warning
     """Base class for all column types in a TimeSeries."""
 
-    def __init__(self, name: str, ts: "TimeSeries", metadata: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(self, name: str, ts: "TimeSeries", metadata: dict[str, Any] | None = None) -> None:
         """Initializes a TimeSeriesColumn instance.
 
         Args:
@@ -49,11 +49,11 @@ class TimeSeriesColumn(ABC):  # noqa: PLW1641 ignore hash warning
         if self.name not in self._ts.df.columns:
             raise ValueError(f"Column '{self.name}' not found in TimeSeries.")
 
-    def metadata(self, key: Optional[Sequence[str]] = None, strict: bool = True) -> Dict[str, Any]:
+    def metadata(self, key: str | Sequence[str] | None = None, strict: bool = True) -> dict[str, Any]:
         """Retrieve metadata for all or specific keys.
 
         Args:
-            key: A specific key or list/tuple of keys to filter the metadata. If None, all metadata is returned.
+            key: A specific key or sequence of keys to filter the metadata. If None, all metadata is returned.
             strict: If True, raises a KeyError when a key is missing.  Otherwise, missing keys return None.
         Returns:
             A dictionary of the requested metadata.
@@ -75,11 +75,11 @@ class TimeSeriesColumn(ABC):  # noqa: PLW1641 ignore hash warning
             result[k] = value
         return result
 
-    def remove_metadata(self, key: Optional[Union[str, list[str], tuple[str, ...]]] = None) -> None:
+    def remove_metadata(self, key: str | Sequence[str] | None = None) -> None:
         """Removes metadata associated with a column, either completely or for specific keys.
 
         Args:
-            key: A specific key or list/tuple of keys to remove. If None, all metadata for the column is removed.
+            key: A specific key or sequence of keys to remove. If None, all metadata for the column is removed.
         """
         if isinstance(key, str):
             key = [key]
@@ -91,8 +91,8 @@ class TimeSeriesColumn(ABC):  # noqa: PLW1641 ignore hash warning
 
     def _set_as(
         self,
-        column_type: "Type[TimeSeriesColumn]",
-        related_columns: Optional[Union["TimeSeriesColumn", str, list[Union["TimeSeriesColumn", str]]]] = None,
+        column_type: Type["TimeSeriesColumn"],
+        related_columns: "str | TimeSeriesColumn | list[TimeSeriesColumn | str] | None" = None,
         *args,
         **kwargs,
     ) -> "TimeSeriesColumn":
@@ -124,7 +124,7 @@ class TimeSeriesColumn(ABC):  # noqa: PLW1641 ignore hash warning
         return column
 
     def set_as_supplementary(
-        self, related_columns: Optional[Union["TimeSeriesColumn", str, list[Union["TimeSeriesColumn", str]]]] = None
+        self, related_columns: "str | TimeSeriesColumn | list[TimeSeriesColumn | str] | None" = None
     ) -> "TimeSeriesColumn":
         """Converts the column to a SupplementaryColumn while preserving metadata.
 
@@ -142,7 +142,7 @@ class TimeSeriesColumn(ABC):  # noqa: PLW1641 ignore hash warning
     def set_as_flag(
         self,
         flag_system: str,
-        related_columns: Optional[Union["TimeSeriesColumn", str, list[Union["TimeSeriesColumn", str]]]] = None,
+        related_columns: "str | TimeSeriesColumn | list[TimeSeriesColumn | str] | None" = None,
     ) -> "TimeSeriesColumn":
         """Converts the column to a FlagColumn while preserving metadata.
 
@@ -235,7 +235,7 @@ class TimeSeriesColumn(ABC):  # noqa: PLW1641 ignore hash warning
         return self._ts.select([self.name])
 
     @abstractmethod
-    def add_relationship(self, other: Union["TimeSeriesColumn", str, list[Union["TimeSeriesColumn", str]]]) -> None:
+    def add_relationship(self, other: "str | TimeSeriesColumn | list[TimeSeriesColumn | str]") -> None:
         """Defines relationships between columns.
 
         Args:
@@ -243,7 +243,7 @@ class TimeSeriesColumn(ABC):  # noqa: PLW1641 ignore hash warning
         """
         pass
 
-    def remove_relationship(self, other: Union["TimeSeriesColumn", str]) -> None:
+    def remove_relationship(self, other: "TimeSeriesColumn | str") -> None:
         """Remove relationships between columns.
 
         Args:
@@ -404,7 +404,7 @@ class PrimaryTimeColumn(TimeSeriesColumn):
 class DataColumn(TimeSeriesColumn):
     """Represents primary data columns."""
 
-    def add_relationship(self, other: Union["TimeSeriesColumn", str, list[Union["TimeSeriesColumn", str]]]) -> None:
+    def add_relationship(self, other: "str | TimeSeriesColumn | list[TimeSeriesColumn | str]") -> None:
         """Adds a relationship between this data column and supplementary or flag column(s).
 
         Args:
@@ -428,7 +428,7 @@ class DataColumn(TimeSeriesColumn):
 
             self._ts._relationship_manager._add(relationship)
 
-    def get_flag_system_column(self, flag_system: str) -> Optional["TimeSeriesColumn"]:
+    def get_flag_system_column(self, flag_system: str) -> "TimeSeriesColumn | None":
         """Retrieves the flag column linked to this data column that corresponds to the specified flag system.
 
         Args:
@@ -459,7 +459,7 @@ class DataColumn(TimeSeriesColumn):
 class SupplementaryColumn(TimeSeriesColumn):
     """Represents supplementary columns (e.g., metadata, extra information)."""
 
-    def add_relationship(self, other: Union["TimeSeriesColumn", str, list[Union["TimeSeriesColumn", str]]]) -> None:
+    def add_relationship(self, other: "str | TimeSeriesColumn | list[TimeSeriesColumn | str]") -> None:
         """Adds a relationship between this supplementary column and data column(s).
 
         Args:
@@ -489,9 +489,7 @@ class FlagColumn(SupplementaryColumn):
     or other categorical flags. Flags are stored using bitwise operations for efficiency.
     """
 
-    def __init__(
-        self, name: str, ts: "TimeSeries", flag_system: str, metadata: Optional[Dict[str, Any]] = None
-    ) -> None:
+    def __init__(self, name: str, ts: "TimeSeries", flag_system: str, metadata: dict[str, Any] | None = None) -> None:
         """
         Initializes a FlagColumn.
 
@@ -504,7 +502,7 @@ class FlagColumn(SupplementaryColumn):
         super().__init__(name, ts, metadata)
         self.flag_system = self._ts.flag_systems[flag_system]
 
-    def add_relationship(self, other: Union["TimeSeriesColumn", str, list[Union["TimeSeriesColumn", str]]]) -> None:
+    def add_relationship(self, other: "str | TimeSeriesColumn | list[TimeSeriesColumn | str]") -> None:
         """Adds a relationship between this flag column and data column(s).
 
         Args:
@@ -526,7 +524,7 @@ class FlagColumn(SupplementaryColumn):
 
             self._ts._relationship_manager._add(relationship)
 
-    def add_flag(self, flag: Union[int, str], expr: pl.Expr = pl.lit(True)) -> None:
+    def add_flag(self, flag: int | str, expr: pl.Expr = pl.lit(True)) -> None:
         """Adds a flag value to this FlagColumn using a bitwise OR operation.
 
         Args:
@@ -539,7 +537,7 @@ class FlagColumn(SupplementaryColumn):
             pl.when(expr).then(pl.col(self.name) | flag.value).otherwise(pl.col(self.name))
         )
 
-    def remove_flag(self, flag: Union[int, str], expr: pl.Expr = pl.lit(True)) -> None:
+    def remove_flag(self, flag: int | str, expr: pl.Expr = pl.lit(True)) -> None:
         """Remove a flag value from this FlagColumn using a bitwise AND operation.
 
         Args:

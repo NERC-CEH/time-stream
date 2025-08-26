@@ -1,7 +1,7 @@
 from collections import Counter
 from datetime import datetime
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Dict, Iterable, Iterator, List, Optional, Sequence, Tuple, Type, Union
+from typing import TYPE_CHECKING, Any, Iterable, Iterator, Sequence, Type
 
 import polars as pl
 
@@ -25,15 +25,15 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         self,
         df: pl.DataFrame,
         time_name: str,
-        resolution: Optional[Period | str] = None,
-        periodicity: Optional[Period | str] = None,
-        supplementary_columns: Optional[list] = None,
-        flag_systems: Optional[Union[Dict[str, dict], Dict[str, Type[Enum]]]] = None,
-        flag_columns: Optional[Dict[str, str]] = None,
-        metadata: Optional[Dict[str, Any]] = None,
-        column_metadata: Optional[Dict[str, Dict[str, Any]]] = None,
-        on_duplicates: Optional[Union[DuplicateOption, str]] = DuplicateOption.ERROR,
-        pad: Optional[bool] = False,
+        resolution: Period | str | None = None,
+        periodicity: Period | str | None = None,
+        supplementary_columns: list | None = None,
+        flag_systems: dict[str, dict] | dict[str, Type[Enum]] | None = None,
+        flag_columns: dict[str, str] | None = None,
+        metadata: dict[str, Any] | None = None,
+        column_metadata: dict[str, dict[str, Any]] | None = None,
+        on_duplicates: DuplicateOption | str = DuplicateOption.ERROR,
+        pad: bool = False,
     ) -> None:
         """Initialise a TimeSeries instance.
 
@@ -67,7 +67,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
 
     def _setup(
         self,
-        supplementary_columns: List[str],
+        supplementary_columns: list[str],
         flag_columns: dict[str, str],
         column_metadata: dict[str, dict[str, Any]],
         metadata: dict[str, Any],
@@ -104,7 +104,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
 
     def _setup_columns(
         self,
-        supplementary_columns: List[str] = None,
+        supplementary_columns: list[str] = None,
         flag_columns: dict[str, str] = None,
         column_metadata: dict[str, dict[str, Any]] = None,
     ) -> None:
@@ -492,7 +492,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         columns = {col.name: col for col in self._columns.values() if type(col) is not PrimaryTimeColumn}
         return columns
 
-    def select(self, col_names: List[str]) -> "TimeSeries":
+    def select(self, col_names: list[str]) -> "TimeSeries":
         """Filter TimeSeries instance to include only the specified columns.
 
         Args:
@@ -534,8 +534,8 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
     def init_supplementary_column(
         self,
         col_name: str,
-        data: Optional[Union[int, float, str, Iterable]] = None,
-        dtype: Optional[pl.DataType] = None,
+        data: int | float | str | Iterable | None = None,
+        dtype: pl.DataType | None = None,
     ) -> None:
         """Add a new column to the TimeSeries DataFrame, marking it as a supplementary column.
 
@@ -564,7 +564,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         supplementary_col = SupplementaryColumn(col_name, self)
         self._columns[col_name] = supplementary_col
 
-    def set_supplementary_column(self, col_name: Union[str, List[str]]) -> None:
+    def set_supplementary_column(self, col_name: str | list[str]) -> None:
         """Mark the specified existing column(s) as a supplementary column.
 
         Args:
@@ -579,9 +579,9 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
     def aggregate(
         self,
         aggregation_period: Period,
-        aggregation_function: Union[str, Type["AggregationFunction"], "AggregationFunction"],
-        columns: Union[str, List[str]],
-        missing_criteria: Optional[Tuple[str, Union[float, int]]] = None,
+        aggregation_function: "str | Type[AggregationFunction] | AggregationFunction",
+        columns: str | list[str],
+        missing_criteria: tuple[str, float | int] | None = None,
     ) -> "TimeSeries":
         """Apply an aggregation function to a column in this TimeSeries, check the aggregation satisfies user
         requirements and return a new derived TimeSeries containing the aggregated data.
@@ -604,9 +604,9 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
 
     def qc_check(
         self,
-        check: Union[str, "QCCheck", Type["QCCheck"]],
+        check: "str | Type[QCCheck] | QCCheck",
         check_column: str,
-        observation_interval: Optional[Tuple[datetime, Optional[datetime]]] = None,
+        observation_interval: tuple[datetime, datetime | None] | None = None,
         **kwargs,
     ) -> pl.Series:
         """Apply a quality control check to the TimeSeries.
@@ -642,10 +642,10 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
 
     def infill(
         self,
-        infill_method: Union[str, Type["InfillMethod"], "InfillMethod"],
+        infill_method: "str | Type[InfillMethod] | InfillMethod",
         column: str,
-        observation_interval: Optional[Tuple[datetime, Optional[datetime]]] = None,
-        max_gap_size: Optional[int] = None,
+        observation_interval: tuple[datetime, datetime | None] | None = None,
+        max_gap_size: int | None = None,
         **kwargs,
     ) -> "TimeSeries":
         """Apply an infilling method to a column in the TimeSeries to fill in missing data.
@@ -668,11 +668,11 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         infill_instance = InfillMethod.get(infill_method, **kwargs)
         return infill_instance.apply(self, column, observation_interval, max_gap_size)
 
-    def metadata(self, key: Optional[Sequence[str]] = None, strict: bool = True) -> Dict[str, Any]:
+    def metadata(self, key: str | Sequence[str] | None = None, strict: bool = True) -> dict[str, Any]:
         """Retrieve metadata for all or specific keys.
 
         Args:
-            key: A specific key or list/tuple of keys to filter the metadata. If None, all metadata is returned.
+            key: A specific key or sequence of keys to filter the metadata. If None, all metadata is returned.
             strict: If True, raises a KeyError when a key is missing.  Otherwise, missing keys return None.
         Returns:
             A dictionary of the requested metadata.
@@ -695,13 +695,13 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         return result
 
     def column_metadata(
-        self, column: Optional[Union[str, Sequence[str]]] = None, key: Optional[Union[str, Sequence[str]]] = None
-    ) -> Dict[str, Dict[str, Any]]:
+        self, column: str | Sequence[str] | None = None, key: str | Sequence[str] | None = None
+    ) -> dict[str, dict[str, Any]]:
         """Retrieve metadata for a given column(s), for all or specific keys.
 
         Args:
-            column: A specific column or list of columns to filter the metadata. If None, all columns are returned.
-            key: A specific key or list/tuple of keys to filter the metadata. If None, all metadata is returned.
+            column: A specific column or sequence of columns to filter the metadata. If None, all columns are returned.
+            key: A specific key or sequence of keys to filter the metadata. If None, all metadata is returned.
 
         Returns:
             A dictionary of the requested metadata.
@@ -731,7 +731,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
 
         return result
 
-    def add_column_relationship(self, primary: str, other: Union[str, List[str]]) -> None:
+    def add_column_relationship(self, primary: str, other: str | list[str]) -> None:
         """Adds a relationship between the primary column and other column(s).
 
         Args:
@@ -744,7 +744,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         primary = self.columns[primary]
         primary.add_relationship(other)
 
-    def remove_column_relationship(self, primary: str, other: Union[str, List[str]]) -> None:
+    def remove_column_relationship(self, primary: str, other: str | list[str]) -> None:
         """Removes a relationship between the primary column and other column(s).
 
         Args:
@@ -758,9 +758,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         for other_column in other:
             primary.remove_relationship(other_column)
 
-    def get_flag_system_column(
-        self, data_column: Union[str, TimeSeriesColumn], flag_system: str
-    ) -> Optional["TimeSeriesColumn"]:
+    def get_flag_system_column(self, data_column: str | TimeSeriesColumn, flag_system: str) -> TimeSeriesColumn | None:
         """Retrieves the flag system column corresponding to the given data column and flag system.
 
         Args:
@@ -837,7 +835,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         except (KeyError, AttributeError):
             raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
 
-    def __getitem__(self, key: Union[str, List[str], tuple[str]]) -> Union["TimeSeries", PrimaryTimeColumn]:
+    def __getitem__(self, key: str | Iterable[str]) -> "TimeSeries | PrimaryTimeColumn":
         """Access columns or the time column using indexing syntax.
 
         This method enables convenient access to DataFrame columns or the time column by using indexing. It supports:
@@ -897,7 +895,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
             f"flag_columns={list(self.flag_columns.keys())}, "
         )
 
-    def __dir__(self) -> List[str]:
+    def __dir__(self) -> list[str]:
         """Return a list of attributes associated with the TimeSeries class.
 
         This method extends the default attributes of the TimeSeries class by including the column names of the
