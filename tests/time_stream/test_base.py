@@ -2431,7 +2431,7 @@ class TestSubPeriodCheck(unittest.TestCase):
             periodicity=Period.of_seconds(10))
 
     def test_illegal(self):
-        with self.assertRaises(UserWarning):
+        with self.assertRaises(ResolutionError):
             TimeSeries(df=self.df, time_name="time",
                 resolution=Period.of_seconds(10),
                 periodicity=Period.of_seconds(1))
