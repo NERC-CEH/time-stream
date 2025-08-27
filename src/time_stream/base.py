@@ -107,7 +107,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         self._validate_resolution()
         self._validate_periodicity()
         if not self.resolution.is_subperiod_of(self.periodicity):
-            raise UserWarning(f"Resolution {self.resolution} is not a subperiod of periodicity {self.periodicity}")
+            raise ResolutionError(f"Resolution {self.resolution} is not a subperiod of periodicity {self.periodicity}")
 
         self._pad_time()
         self.sort_time()
@@ -263,7 +263,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         """Validate the resolution of the time series.
 
         Raises:
-            UserWarning: If the datetimes are not aligned to the resolution.
+            ResolutionError: If the datetimes are not aligned to the resolution.
         """
         if self.resolution is None:
             # Default to a resolution that accepts all datetimes
@@ -322,7 +322,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         """Validate the periodicity of the time series.
 
         Raises:
-            UserWarning: If the datetimes do not conform to the periodicity.
+            PeriodicityError: If the datetimes do not conform to the periodicity.
         """
         if self.periodicity is None:
             # Default to a periodicity that accepts all datetimes
