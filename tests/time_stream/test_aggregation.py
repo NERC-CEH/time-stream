@@ -7,10 +7,15 @@ import polars as pl
 from parameterized import parameterized
 from polars.testing import assert_frame_equal
 
-from time_stream.period import Period
+from time_stream.aggregation import _AGGREGATION_REGISTRY, AggregationFunction, Max, Mean, Min, MeanSum, Sum
 from time_stream.base import TimeSeries
-from time_stream.aggregation import AggregationFunction, Max, Mean, Min, MeanSum, Sum
-
+from time_stream.period import Period
+from time_stream.exceptions import (
+    AggregationPeriodError,
+    AggregationTypeError,
+    MissingCriteriaError,
+    UnknownAggregationError,
+)
 
 def generate_time_series(resolution: Period, periodicity: Period, length: int, missing_data: bool=False) -> TimeSeries:
     """Helper function to generate a TimeSeries object for test purposes.
@@ -157,8 +162,12 @@ class TestAggregationFunction(unittest.TestCase):
     ])
     def test_get_with_invalid_string(self, get_input):
         """Test AggregationFunction.get() with invalid string."""
-        with self.assertRaises(KeyError):
+        with self.assertRaises(UnknownAggregationError) as err:
             AggregationFunction.get(get_input)
+        self.assertEqual(
+            f"Unknown aggregation '{get_input}'. Available aggregations: {list(_AGGREGATION_REGISTRY.keys())}",
+            str(err.exception)
+        )
 
     def test_get_with_invalid_class(self):
         """Test AggregationFunction.get() with invalid class."""
@@ -166,24 +175,30 @@ class TestAggregationFunction(unittest.TestCase):
         class InvalidClass:
             pass
 
-        with self.assertRaises(TypeError):
+        with self.assertRaises(AggregationTypeError) as err:
             AggregationFunction.get(InvalidClass)  # noqa - expecting type warning
+        self.assertEqual("Aggregation class 'InvalidClass' must inherit from AggregationFunction.", str(err.exception))
 
     @parameterized.expand([
         (123,), ([Mean, Max],), ({Min},)
     ])
     def test_get_with_invalid_type(self, get_input):
         """Test AggregationFunction.get() with invalid type."""
-        with self.assertRaises(TypeError):
+        with self.assertRaises(AggregationTypeError) as err:
             AggregationFunction.get(get_input)
+        self.assertEqual(
+            f"Aggregation must be a string, AggregationFunction class, or instance. Got {type(get_input).__name__}.",
+            str(err.exception)
+        )
 
     def test_validate_aggregation_period_non_epoch_agnostic(self):
         """Test validation fails for non-epoch agnostic periods."""
         period = Mock()
         period.is_epoch_agnostic.return_value = False
 
-        with self.assertRaises(NotImplementedError):
+        with self.assertRaises(AggregationPeriodError) as err:
             Mean()._validate_aggregation_period(self.mock_ts, period)
+        self.assertEqual(f"Non-epoch agnostic aggregation periods are not supported: '{period}'.", str(err.exception))
 
     def test_validate_aggregation_period_not_subperiod(self):
         """Test validation fails when the aggregation period is not a subperiod."""
@@ -191,8 +206,13 @@ class TestAggregationFunction(unittest.TestCase):
         period.is_epoch_agnostic.return_value = True
         self.mock_ts.periodicity.is_subperiod_of.return_value = False
 
-        with self.assertRaises(UserWarning):
+        with self.assertRaises(AggregationPeriodError) as err:
             Mean()._validate_aggregation_period(self.mock_ts, period)
+        self.assertEqual(
+            f"Incompatible aggregation period '{period}' with TimeSeries periodicity '{self.mock_ts.periodicity}'."
+            f"TimeSeries periodicity must be a subperiod of the aggregation period.",
+            str(err.exception)
+        )
 
     @parameterized.expand([
         ("percent", 50),
@@ -216,8 +236,9 @@ class TestAggregationFunction(unittest.TestCase):
     ])
     def test_missing_data_expr_validation_fail(self, criteria, threshold):
         """Test missing data expression validations that should fail."""
-        with self.assertRaises(ValueError):
+        with self.assertRaises(MissingCriteriaError):
             Mean()._missing_data_expr(self.mock_ts, ["value"], (criteria, threshold))
+
 
 class TestSimpleAggregations(unittest.TestCase):
     """Tests for simple aggregation cases, where the input time series has a simple resolution/periodicity and there is
@@ -386,7 +407,7 @@ class TestComplexPeriodicityAggregations(unittest.TestCase):
     def test_month_to_month_offset(self, input_ts, aggregator, target_period):
         """Test aggregations of month-based resolution data, to a month-based resolution with an offset. This should
         raise an error as a month-based period cannot be a subperiod of a month-based-with-offset period"""
-        with self.assertRaises(UserWarning):
+        with self.assertRaises(AggregationPeriodError):
             aggregator().apply(input_ts, target_period, "value")
 
     @parameterized.expand([
@@ -440,7 +461,7 @@ class TestComplexPeriodicityAggregations(unittest.TestCase):
     ])
     def test_non_epoch_agnostic_fails(self, input_ts, aggregator, target_period):
         """Test that the aggregation fails to run if the aggregation period is not an epoch-agnostic period"""
-        with self.assertRaises(NotImplementedError):
+        with self.assertRaises(AggregationPeriodError):
             aggregator().apply(input_ts, target_period, "value")
 
 

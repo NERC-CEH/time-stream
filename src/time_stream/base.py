@@ -7,10 +7,20 @@ import polars as pl
 
 from time_stream.columns import DataColumn, FlagColumn, PrimaryTimeColumn, SupplementaryColumn, TimeSeriesColumn
 from time_stream.enums import DuplicateOption
+from time_stream.exceptions import (
+    ColumnNotFoundError,
+    ColumnTypeError,
+    DuplicateColumnError,
+    DuplicateTimeError,
+    MetadataError,
+    PeriodicityError,
+    ResolutionError,
+    TimeMutatedError,
+)
 from time_stream.flag_manager import TimeSeriesFlagManager
 from time_stream.period import Period
 from time_stream.relationships import RelationshipManager
-from time_stream.utils import pad_time, truncate_to_period
+from time_stream.utils import check_columns_in_dataframe, pad_time, truncate_to_period
 
 if TYPE_CHECKING:
     from time_stream.aggregation import AggregationFunction
@@ -97,7 +107,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         self._validate_resolution()
         self._validate_periodicity()
         if not self.resolution.is_subperiod_of(self.periodicity):
-            raise UserWarning(f"Resolution {self.resolution} is not a subperiod of periodicity {self.periodicity}")
+            raise ResolutionError(f"Resolution {self.resolution} is not a subperiod of periodicity {self.periodicity}")
 
         self._pad_time()
         self.sort_time()
@@ -123,7 +133,6 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         Raises:
             KeyError: If any specified supplementary or flag column does not exist in the DataFrame.
         """
-        # Validate that all supplementary columns exist in the DataFrame
         if supplementary_columns is None:
             supplementary_columns = []
         if flag_columns is None:
@@ -131,14 +140,12 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         if column_metadata is None:
             column_metadata = {}
 
-        invalid_supplementary_columns = set(supplementary_columns) - set(self.df.columns)
-        if invalid_supplementary_columns:
-            raise KeyError(f"Invalid supplementary columns: {invalid_supplementary_columns}")
+        # Validate the time column
+        self._validate_time_column(self._df)
 
-        # Validate that all flag columns exist in the DataFrame
-        invalid_flag_columns = set(flag_columns) - set(self.df.columns)
-        if invalid_flag_columns:
-            raise KeyError(f"Invalid flag columns: {invalid_flag_columns}")
+        # Validate that all supplementary and flag columns exist in the DataFrame
+        check_columns_in_dataframe(self.df, supplementary_columns)
+        check_columns_in_dataframe(self.df, flag_columns.keys())
 
         # Classify each column in the DataFrame
         for col_name in self.df.columns:
@@ -179,7 +186,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         """
         for k, v in metadata.items():
             if k in self._df.columns:
-                raise KeyError(f"Metadata key {k} exists as a Column in the Time Series.")
+                raise MetadataError(f"Metadata key '{k}' exists as a Column in the Time Series.")
             self._metadata[k] = v
 
     @property
@@ -189,7 +196,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
 
     def sort_time(self) -> None:
         """Sort the TimeSeries DataFrame by the time column."""
-        self.df = self.df.sort(self.time_name)
+        self._df = self.df.sort(self.time_name)
 
     def _pad_time(self) -> None:
         """Pad the time series with missing datetime rows, filling in NULLs for missing values."""
@@ -215,7 +222,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         #       In this instance, we are happy with this as we know we are mutating the time values.
         if duplicated_times:
             if self._on_duplicates == DuplicateOption.ERROR:
-                raise ValueError(f"Duplicate time values found: {duplicated_times}")
+                raise DuplicateTimeError(duplicates=duplicated_times)
 
             if self._on_duplicates == DuplicateOption.KEEP_FIRST:
                 self._df = self._df.unique(subset=self.time_name, keep="first")
@@ -256,7 +263,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         """Validate the resolution of the time series.
 
         Raises:
-            UserWarning: If the datetimes are not aligned to the resolution.
+            ResolutionError: If the datetimes are not aligned to the resolution.
         """
         if self.resolution is None:
             # Default to a resolution that accepts all datetimes
@@ -270,7 +277,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
 
         # Compare the original series to the truncated series.  If no match, it is not aligned to the resolution.
         if not TimeSeries.check_resolution(self.df[self.time_name], self.resolution):
-            raise UserWarning(
+            raise ResolutionError(
                 f'Values in time field: "{self.time_name}" are not aligned to resolution: {self.resolution}'
             )
 
@@ -315,7 +322,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         """Validate the periodicity of the time series.
 
         Raises:
-            UserWarning: If the datetimes do not conform to the periodicity.
+            PeriodicityError: If the datetimes do not conform to the periodicity.
         """
         if self.periodicity is None:
             # Default to a periodicity that accepts all datetimes
@@ -330,7 +337,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         # Check how many unique values are in the truncated times. It should equal the length of the original
         # time-series if all time values map to single periodicity
         if not TimeSeries.check_periodicity(self.df[self.time_name], self.periodicity):
-            raise UserWarning(
+            raise PeriodicityError(
                 f'Values in time field: "{self.time_name}" do not conform to periodicity: {self.periodicity}'
             )
 
@@ -416,13 +423,23 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         Raises:
             ValueError: If the time column is missing or if its timestamps differ from the current DataFrame.
         """
+        # Validate that the time column actually exists
         if self.time_name not in df.columns:
-            raise ValueError(f"Time column {self.time_name} not found.")
+            raise ColumnNotFoundError(
+                f"Time column {self.time_name} not found in DataFrame. Available columns: {list(df.columns)}"
+            )
 
-        new_timestamps = df[self.time_name]
-        old_timestamps = self.df[self.time_name]
-        if Counter(new_timestamps.to_list()) != Counter(old_timestamps.to_list()):
-            raise ValueError("Time column has mutated.")
+        # Validate time column type
+        dtype = df[self.time_name].dtype
+        if not dtype.is_temporal():
+            raise ColumnTypeError(f"Time column {self.time_name} must be datetime type, got {dtype}")
+
+        # Validate that the time values haven't mutated (only if new dataframe is different to old)
+        if df is not self.df:  # Check if they are the same object
+            new_timestamps = df[self.time_name]
+            old_timestamps = self.df[self.time_name]
+            if Counter(new_timestamps.to_list()) != Counter(old_timestamps.to_list()):
+                raise TimeMutatedError(old_timestamps=old_timestamps, new_timestamps=new_timestamps)
 
     def _remove_missing_columns(self, old_df: pl.DataFrame, new_df: pl.DataFrame) -> None:
         """Remove reference to columns that are missing in the new DataFrame.
@@ -462,10 +479,8 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         """Return the primary time column of the TimeSeries."""
         time_column = [col for col in self._columns.values() if isinstance(col, PrimaryTimeColumn)]
         num_cols = len(time_column)
-        if num_cols == 0:
-            raise ValueError("No primary time column found.")
-        if num_cols > 1:
-            raise ValueError(f"Multiple primary time columns found: {time_column}")
+        if num_cols != 1:
+            raise ColumnNotFoundError("No single primary time column found.")
         return time_column[0]
 
     @property
@@ -502,11 +517,9 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
             New TimeSeries instance with only selected columns.
         """
         if not col_names:
-            raise KeyError("No columns specified.")
+            raise ColumnNotFoundError("No columns specified.")
 
-        invalid_columns = set(col_names) - set(self.df.columns)
-        if invalid_columns:
-            raise KeyError(f"Invalid columns found: {invalid_columns}")
+        check_columns_in_dataframe(self.df, col_names)
 
         new_df = self.df.select([self.time_name] + col_names)
         new_columns = [self.columns[col] for col in new_df.columns if col in self.columns]
@@ -550,7 +563,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
             KeyError: If the column name already exists in the DataFrame.
         """
         if col_name in self.columns:
-            raise KeyError(f"Column '{col_name}' already exists in the DataFrame.")
+            raise DuplicateColumnError(f"Column '{col_name}' already exists in the DataFrame.")
 
         if data is None or isinstance(data, (float, int, str)):
             data = pl.lit(data, dtype=dtype)
@@ -690,7 +703,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         for k in key:
             value = self._metadata.get(k)
             if strict and value is None:
-                raise KeyError(f"Metadata key '{k}' not found")
+                raise MetadataError(f"Metadata key '{k}' not found")
             result[k] = value
         return result
 
@@ -719,15 +732,17 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
 
         result = {col: self.columns[col].metadata(key, strict=False) for col in column}
 
-        missing_keys = {
-            k
-            for col, metadata in result.items()
-            for k, v in metadata.items()
-            if all(metadata.get(k) is None for metadata in result.values())
-        }
+        missing_keys = sorted(
+            {
+                k
+                for col, metadata in result.items()
+                for k, v in metadata.items()
+                if all(metadata.get(k) is None for metadata in result.values())
+            }
+        )
 
         if missing_keys:
-            raise KeyError(f"Metadata key(s) '{missing_keys}' not found in any column.")
+            raise MetadataError(f"Metadata key(s) {missing_keys} not found in any column.")
 
         return result
 
@@ -770,13 +785,13 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
             The matching flag column if exactly one match is found, or None if no matching column is found.
         """
         if isinstance(data_column, str):
-            error_msg = f"Column {data_column} not found."
+            error_msg = f"Data Column '{data_column}' not found."
             data_column = self.columns.get(data_column, None)
             if data_column is None:
-                raise KeyError(error_msg)
+                raise ColumnNotFoundError(error_msg)
 
         if type(data_column) is not DataColumn:
-            raise TypeError(f"Column '{data_column.name}' is type {type(data_column)}. Should be a data column.")
+            raise ColumnTypeError(f"Column '{data_column.name}' is type {type(data_column)}. Should be a data column.")
 
         return data_column.get_flag_system_column(flag_system)
 
@@ -832,7 +847,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
             else:
                 raise AttributeError
 
-        except (KeyError, AttributeError):
+        except (KeyError, AttributeError, MetadataError):
             raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
 
     def __getitem__(self, key: str | Iterable[str]) -> "TimeSeries | PrimaryTimeColumn":

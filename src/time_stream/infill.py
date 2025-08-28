@@ -7,6 +7,12 @@ import polars as pl
 from scipy.interpolate import Akima1DInterpolator, PchipInterpolator, make_interp_spline
 
 from time_stream import TimeSeries
+from time_stream.exceptions import (
+    ColumnNotFoundError,
+    InfillInsufficientValuesError,
+    InfillTypeError,
+    UnknownInfillError,
+)
 from time_stream.utils import gap_size_count, get_date_filter, pad_time
 
 # Registry for built-in infill methods
@@ -88,17 +94,21 @@ class InfillMethod(ABC):
             try:
                 return _INFILL_REGISTRY[method](**kwargs)
             except KeyError:
-                raise KeyError(f"Unknown infill method '{method}'.")
+                raise UnknownInfillError(
+                    f"Unknown infill method '{method}'. Available methods: {list(_INFILL_REGISTRY.keys())}"
+                )
 
         # If it's a class, check the subclass type and return
         elif isinstance(method, type):
             if issubclass(method, InfillMethod):
                 return method(**kwargs)  # type: ignore[misc]
             else:
-                raise TypeError(f"Infill method class {method.__name__} must inherit from InfillMethod")
+                raise InfillTypeError(f"Infill method class '{method.__name__}' must inherit from InfillMethod.")
 
         else:
-            raise TypeError(f"Infill method must be a string or an InfillMethod class. Got {type(method).__name__}")
+            raise InfillTypeError(
+                f"Infill method must be a string or an InfillMethod class. Got '{type(method).__name__}'"
+            )
 
     @classmethod
     def infill_mask(
@@ -167,7 +177,7 @@ class InfillMethod(ABC):
         """
         # Validate column exists
         if infill_column not in ts.columns:
-            raise KeyError(f"Infill column '{infill_column}' not found in TimeSeries.")
+            raise ColumnNotFoundError(f"Infill column '{infill_column}' not found in TimeSeries.")
 
         # Set the timeseries property
         self._ts = ts
@@ -284,8 +294,8 @@ class ScipyInterpolation(InfillMethod, ABC):
 
         # Check if we have enough points
         if n_valid < self.min_points_required:
-            raise ValueError(
-                f"{self.name} requires at least {self.min_points_required} data points, "
+            raise InfillInsufficientValuesError(
+                f"Infill method '{self.name}' requires at least {self.min_points_required} data points, "
                 f"but only {n_valid} valid points found."
             )
 

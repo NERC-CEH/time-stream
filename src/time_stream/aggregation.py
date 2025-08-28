@@ -6,6 +6,12 @@ import polars as pl
 
 from time_stream import Period, TimeSeries
 from time_stream.enums import MissingCriteria
+from time_stream.exceptions import (
+    AggregationPeriodError,
+    AggregationTypeError,
+    MissingCriteriaError,
+    UnknownAggregationError,
+)
 
 # Registry for built-in aggregations
 _AGGREGATION_REGISTRY = {}
@@ -64,8 +70,8 @@ class AggregationFunction(ABC):
             An instance of the appropriate AggregationFunction subclass.
 
         Raises:
-            KeyError: If a string name is not registered as an aggregation function.
-            TypeError: If the input type is not supported or a class doesn't inherit from AggregationFunction.
+            UnknownAggregationError: If a string name is not registered as an aggregation function.
+            AggregationTypeError: If the input type is not supported or class doesn't inherit from AggregationFunction.
 
         Examples:
             >>> # From string
@@ -86,19 +92,23 @@ class AggregationFunction(ABC):
             try:
                 return _AGGREGATION_REGISTRY[aggregation]()
             except KeyError:
-                raise KeyError(f"Unknown aggregation '{aggregation}'.")
+                raise UnknownAggregationError(
+                    f"Unknown aggregation '{aggregation}'. Available aggregations: {list(_AGGREGATION_REGISTRY.keys())}"
+                )
 
         # If it's a class, instantiate it
         elif isinstance(aggregation, type):
             if issubclass(aggregation, AggregationFunction):
                 return aggregation()
             else:
-                raise TypeError(f"Aggregation class {aggregation.__name__} must inherit from AggregationFunction")
+                raise AggregationTypeError(
+                    f"Aggregation class '{aggregation.__name__}' must inherit from AggregationFunction."
+                )
 
         else:
-            raise TypeError(
+            raise AggregationTypeError(
                 f"Aggregation must be a string, AggregationFunction class, or instance. "
-                f"Got {type(aggregation).__name__}"
+                f"Got {type(aggregation).__name__}."
             )
 
     def apply(
@@ -186,14 +196,16 @@ class AggregationFunction(ABC):
             period: The aggregation period to check
 
         Raises:
-            NotImplementedError: If period type is not supported
-            UserWarning: If aggregation period incompatible with TimeSeries
+            AggregationPeriodError: If period type is not supported or aggregation period incompatible with TimeSeries
         """
         if not period.is_epoch_agnostic():
-            raise NotImplementedError(f"Non-epoch agnostic aggregation periods are not supported: {period}")
+            raise AggregationPeriodError(f"Non-epoch agnostic aggregation periods are not supported: '{period}'.")
 
         if not ts.periodicity.is_subperiod_of(period):
-            raise UserWarning(f"TimeSeries periodicity: {ts.periodicity} not subperiod of aggregation period: {period}")
+            raise AggregationPeriodError(
+                f"Incompatible aggregation period '{period}' with TimeSeries periodicity '{ts.periodicity}'."
+                f"TimeSeries periodicity must be a subperiod of the aggregation period."
+            )
 
     @staticmethod
     def _actual_count_expr(columns: list[str]) -> list[pl.Expr]:
@@ -274,17 +286,16 @@ class AggregationFunction(ABC):
 
             criteria = MissingCriteria(criteria)
         except ValueError:
-            raise ValueError(f"Unknown criterion: {missing_criteria}")
+            raise MissingCriteriaError(
+                f"Unknown missing criteria: {missing_criteria}. Available criteria: {[c.name for c in MissingCriteria]}"
+            )
 
         if criteria == MissingCriteria.PERCENT:
             if not 0 <= threshold <= 100:
-                raise ValueError("Percent threshold must be between 0 and 100")
+                raise MissingCriteriaError(f"Invalid percent threshold '{threshold}'. Must be between 0 and 100.")
         else:
-            if type(threshold) is not int:
-                raise ValueError("Threshold must be an integer")
-
-            if threshold < 0:
-                raise ValueError("Threshold must be non-negative")
+            if not isinstance(threshold, int) or threshold < 0:
+                raise MissingCriteriaError(f"Invalid threshold '{threshold}'. Must be a non-negative integer.")
 
         # Build the expression based on the specified criteria
         expressions = []

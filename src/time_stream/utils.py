@@ -1,8 +1,10 @@
+from collections.abc import Iterable
 from datetime import datetime
 
 import polars as pl
 
 from time_stream import Period
+from time_stream.exceptions import ColumnNotFoundError
 
 
 def get_date_filter(time_name: str, observation_interval: datetime | tuple[datetime, datetime | None]) -> pl.Expr:
@@ -125,3 +127,21 @@ def gap_size_count(df: pl.DataFrame, column: str) -> pl.DataFrame:
         ]
     )
     return df
+
+
+def check_columns_in_dataframe(df: pl.DataFrame, columns: str | Iterable[str]) -> None:
+    """Checks that columns exist in the dataframe.
+
+    Args:
+        df: DataFrame to check against
+        columns: String or Iterable of column name(s) to check
+
+    Raises:
+        ColumnNotFoundError: If any of the columns in the list do not exist in the dataframe.
+    """
+    if isinstance(columns, str):
+        columns = [str]
+
+    invalid_columns = sorted(set(columns) - set(df.columns))
+    if invalid_columns:
+        raise ColumnNotFoundError(f"Columns not found in dataframe: {invalid_columns}")

@@ -7,6 +7,11 @@ from parameterized import parameterized
 from polars.testing import assert_series_equal
 
 from time_stream.base import TimeSeries
+from time_stream.exceptions import (
+    QcUnknownOperatorError,
+    QcTypeError,
+    UnknownQcError
+)
 from time_stream.qc import QCCheck, ComparisonCheck, SpikeCheck, RangeCheck
 
 
@@ -61,7 +66,7 @@ class TestQCCheck(unittest.TestCase):
     ])
     def test_get_with_invalid_string(self, get_input):
         """Test QCCheck.get() with invalid string."""
-        with self.assertRaises(KeyError):
+        with self.assertRaises(UnknownQcError):
             QCCheck.get(get_input)
 
     def test_get_with_invalid_class(self):
@@ -70,7 +75,7 @@ class TestQCCheck(unittest.TestCase):
         class InvalidClass:
             pass
 
-        with self.assertRaises(TypeError):
+        with self.assertRaises(QcTypeError):
             QCCheck.get(InvalidClass)  # noqa - expecting type warning
 
     @parameterized.expand([
@@ -78,7 +83,7 @@ class TestQCCheck(unittest.TestCase):
     ])
     def test_get_with_invalid_type(self, get_input):
         """Test QCCheck.get() with invalid type."""
-        with self.assertRaises(TypeError):
+        with self.assertRaises(QcTypeError):
             QCCheck.get(get_input)
 
 
@@ -161,7 +166,7 @@ class TestComparisonCheck(unittest.TestCase):
     def test_invalid_operator(self):
         """ Test that invalid operator raises error
         """
-        with self.assertRaises(KeyError):
+        with self.assertRaises(QcUnknownOperatorError):
             check = ComparisonCheck(10, ">>")
             check.apply(self.ts, "value_a")
 

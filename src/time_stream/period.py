@@ -62,6 +62,8 @@ from typing import (
     override,
 )
 
+from time_stream.exceptions import PeriodConfigError, PeriodParsingError, PeriodValidationError
+
 
 def _naive(datetime_obj: dt.datetime) -> dt.datetime:
     """Return a datetime object without a tzinfo
@@ -249,7 +251,7 @@ class DateTimeAdjusters:
         if (month_adjusters is not None) and (microsecond_adjusters is None):
             return month_adjusters
         if (month_adjusters is None) or (microsecond_adjusters is None):
-            raise AssertionError()
+            raise PeriodConfigError("At least one of 'month_offset' or 'microsecond_offset' must have a value.")
         m_retreat = month_adjusters.retreat
         m_advance = month_adjusters.advance
         s_retreat = microsecond_adjusters.retreat
@@ -272,7 +274,7 @@ class DateTimeAdjusters:
 
     def __post_init__(self) -> None:
         if (self.retreat is None) or (self.advance is None):
-            raise AssertionError()
+            raise PeriodConfigError("At least one of 'retreat' or 'advance' must have a value.")
 
 
 # ------------------------------------------------------------------------------
@@ -521,15 +523,13 @@ def _fmt_naive_year(obj: dt.datetime) -> str:
 
 
 def _fmt_tzdelta(delta: dt.timedelta) -> str:
-    """Convert a timedelta which represents a timezone
-    to a string that respresents that timezone
+    """Convert a timedelta which represents a timezone to a string that represents that timezone
 
     Args:
         delta: The timedelta
 
     Returns:
-        A string that can be used to represent a timezone
-        in an ISO 8601 format string
+        A string that can be used to represent a timezone in an ISO 8601 format string
     """
     seconds = int(delta.total_seconds())
     if seconds == 0:
@@ -537,7 +537,7 @@ def _fmt_tzdelta(delta: dt.timedelta) -> str:
     sign = "-" if seconds < 0 else "+"
     days, seconds_in_day = divmod(abs(seconds), 86_400)
     if days > 0:
-        raise ValueError(f"Illegal tz delta: {delta}")
+        raise PeriodParsingError(f"Illegal tz delta: {delta}. Amount of time must be less than 1 day.")
     hours, seconds_in_hour = divmod(seconds_in_day, 3_600)
     minutes = seconds_in_hour // 60
     return f"{sign}{hours:02}:{minutes:02}"
@@ -813,15 +813,24 @@ class Properties:
 
     def __post_init__(self) -> None:
         if self.step not in _VALID_STEPS:
-            raise AssertionError(f"Illegal step: {self.step}")
+            raise PeriodValidationError(f"Illegal step: '{self.step}'. Must be one of: {_VALID_STEPS}")
+
         if self.multiplier <= 0:
-            raise AssertionError(f"Illegal multiplier: {self.multiplier}")
+            raise PeriodValidationError(f"Illegal multiplier: {self.multiplier}. Must be greater than zero.")
+
         if self.month_offset < 0:
-            raise AssertionError(f"Illegal month offset: {self.month_offset}")
+            raise PeriodValidationError(f"Illegal month offset: {self.month_offset}. Must be zero or greater.")
+
         if self.microsecond_offset < 0:
-            raise AssertionError(f"Illegal microsecond offset: {self.microsecond_offset}")
+            raise PeriodValidationError(
+                f"Illegal microsecond offset: {self.microsecond_offset}. Must be zero or greater."
+            )
+
         if (self.step != _STEP_MONTHS) and (self.month_offset != 0):
-            raise AssertionError("Illegal month offset for non-month step")
+            raise PeriodValidationError(
+                f"Illegal month offset '{self.month_offset}' for non-month step '{self.step}'. "
+                f"Month offset must be zero.'"
+            )
 
     def normalise_step_and_multiplier(self) -> "Properties":
         """Return an equivalent Properties object where
@@ -876,14 +885,25 @@ class Properties:
         new_microsecond_offset: int = self.microsecond_offset
         if self.step == _STEP_MONTHS:
             new_month_offset = self.month_offset % self.multiplier
+
         elif self.step == _STEP_SECONDS:
-            assert self.month_offset == 0
+            if self.month_offset != 0:
+                raise PeriodValidationError(
+                    f"Illegal month offset '{self.month_offset}' for non-month step '{self.step}'. "
+                    f"Month offset must be zero.'"
+                )
             new_microsecond_offset = self.microsecond_offset % (self.multiplier * 1_000_000)
+
         elif self.step == _STEP_MICROSECONDS:
-            assert self.month_offset == 0
+            if self.month_offset != 0:
+                raise PeriodValidationError(
+                    f"Illegal month offset '{self.month_offset}' for non-month step '{self.step}'. "
+                    f"Month offset must be zero.'"
+                )
             new_microsecond_offset = self.microsecond_offset % self.multiplier
+
         else:
-            raise AssertionError(f"Illegal step: {self.step}")
+            raise PeriodValidationError(f"Illegal step: '{self.step}'. Must be one of: {_VALID_STEPS}")
 
         if (
             (new_month_offset == self.month_offset)
@@ -1033,7 +1053,8 @@ class Properties:
             return _get_second_period_name(self.multiplier)
         if self.step == _STEP_MONTHS:
             return _get_month_period_name(self.multiplier)
-        raise AssertionError(f"Illegal step: {self.step}")
+
+        raise PeriodValidationError(f"Illegal step: '{self.step}'. Must be one of: {_VALID_STEPS}")
 
     def get_timedelta(self) -> dt.timedelta | None:
         """Return a timedelta object that matches the duration
@@ -1052,7 +1073,8 @@ class Properties:
             return dt.timedelta(seconds=self.multiplier)
         if self.step == _STEP_MONTHS:
             return None
-        raise AssertionError(f"Illegal step: {self.step}")
+
+        raise PeriodValidationError(f"Illegal step: '{self.step}'. Must be one of: {_VALID_STEPS}")
 
     def _append_step_elems(self, elems: list[str]) -> None:
         """Add elements to a list of string that describe the
@@ -1069,7 +1091,7 @@ class Properties:
         elif self.step == _STEP_MONTHS:
             _append_month_elems(elems, self.multiplier)
         else:
-            raise AssertionError(f"Illegal step: {self.step}")
+            raise PeriodValidationError(f"Illegal step: '{self.step}'. Must be one of: {_VALID_STEPS}")
 
     def _append_offset_elems(self, elems: list[str]) -> None:
         """Add elements to a list of string that describe the
@@ -1164,7 +1186,11 @@ class Properties:
         if o_total_days > 0:
             return _fmt_naive_day
 
-        assert self.step == _STEP_MONTHS
+        if self.step != _STEP_MONTHS:
+            raise PeriodConfigError(
+                f"Error retrieving datetime formatter function. Invalid step: '{self.step}' for the period."
+            )
+
         o_months_nn = self.month_offset % 12
         s_months_nn = self.multiplier % 12
         # Check if months need to be output
@@ -1221,7 +1247,11 @@ class Properties:
         if o_hours_nn != 0:
             return lambda dt: _fmt_aware_hour(dt, separator)
 
-        assert self.step == _STEP_MONTHS
+        if self.step != _STEP_MONTHS:
+            raise PeriodConfigError(
+                f"Error retrieving datetime formatter function. Invalid step: '{self.step}' for the period."
+            )
+
         return lambda dt: _fmt_aware_hour(dt, separator)
 
     def pl_interval(self) -> str:
@@ -1246,7 +1276,7 @@ class Properties:
         elif self.step == _STEP_MONTHS:
             return f"{self.multiplier}mo"
         else:
-            raise AssertionError(f"Illegal step: {self.step}")
+            raise PeriodValidationError(f"Illegal step: '{self.step}'. Must be one of: {_VALID_STEPS}")
 
     def pl_offset(self) -> str:
         """Return a string that captures the month and microsecond
@@ -1300,7 +1330,7 @@ class Properties:
             num_per_year: int = 12 // self.multiplier
             return (self.multiplier * num_per_year) == 12
         else:
-            raise AssertionError(f"Illegal step: {self.step}")
+            raise PeriodValidationError(f"Illegal step: '{self.step}'. Must be one of: {_VALID_STEPS}")
 
     def count(self, other: "Properties") -> int:
         """
@@ -1470,7 +1500,7 @@ class Properties:
                     return _COUNT_UNALIGNED
                 return mult_q
 
-        raise AssertionError(f"Unhandled step combination: {self.step}/{other.step}")
+        raise PeriodConfigError(f"Unhandled step combination: {self.step}/{other.step}")
 
     def __str__(self) -> str:
         elems: list[str] = ["P"]
@@ -1503,9 +1533,9 @@ class MonthsSeconds:
 
     def __post_init__(self) -> None:
         if (self.months < 0) or (self.seconds < 0) or (self.microseconds < 0) or (self.microseconds > 999_999):
-            raise ValueError(f"Illegal period: {self.string}")
+            raise PeriodValidationError(f"Illegal period: {self.string}")
         if (self.months == 0) and (self.seconds == 0) and (self.microseconds == 0):
-            raise ValueError(f"Illegal period: {self.string}")
+            raise PeriodValidationError(f"Illegal period: {self.string}")
 
     def get_step_and_multiplier(self) -> tuple[int, int]:
         """Return a tuple of two integers containing the
@@ -1525,7 +1555,7 @@ class MonthsSeconds:
             return _STEP_SECONDS, self.seconds
         if (self.months == 0) and (self.microseconds > 0):
             return _STEP_MICROSECONDS, self.total_microseconds()
-        raise ValueError(f"Illegal period: {self.string}")
+        raise PeriodValidationError(f"Illegal period: {self.string}")
 
     def total_microseconds(self) -> int:
         """Return total microseconds from the seconds
@@ -1582,7 +1612,7 @@ class PeriodFields:
             or (self.microseconds < 0)
             or (self.microseconds > 999_999)
         ):
-            raise ValueError(f"Illegal period: {self.string}")
+            raise PeriodValidationError(f"Illegal period: {self.string}")
 
     def get_months_seconds(self) -> MonthsSeconds:
         """Return a MonthsSeconds object from the fields
@@ -1898,17 +1928,32 @@ class Period(ABC):
 
     def __init__(self, properties: Properties) -> None:
         if properties is None:
-            raise ValueError()
-        assert isinstance(properties.step, int)
-        assert properties.step in _VALID_STEPS
-        assert isinstance(properties.multiplier, int)
-        assert properties.multiplier > 0
-        assert isinstance(properties.month_offset, int)
-        assert properties.month_offset >= 0
-        assert isinstance(properties.microsecond_offset, int)
-        assert properties.microsecond_offset >= 0
-        assert isinstance(properties.tzinfo, (dt.tzinfo, type(None)))
-        assert isinstance(properties.ordinal_shift, int)
+            raise PeriodConfigError("No properties object provided.")
+
+        if properties.step not in _VALID_STEPS:
+            raise PeriodValidationError(f"Illegal step: '{properties.step}'. Must be one of: {_VALID_STEPS}")
+
+        if properties.multiplier <= 0 or not isinstance(properties.multiplier, int):
+            raise PeriodValidationError(
+                f"Illegal multiplier: {properties.multiplier}. Must be an integer greater than zero."
+            )
+
+        if properties.month_offset < 0 or not isinstance(properties.multiplier, int):
+            raise PeriodValidationError(
+                f"Illegal month offset: {properties.month_offset}. Must be an integer zero or greater."
+            )
+
+        if properties.microsecond_offset < 0 or not isinstance(properties.multiplier, int):
+            raise PeriodValidationError(
+                f"Illegal microsecond offset: {properties.microsecond_offset}. Must be an integer zero or greater."
+            )
+
+        if not isinstance(properties.tzinfo, (dt.tzinfo, type(None))):
+            raise PeriodValidationError(f"Illegal tzinfo: {properties.tzinfo}. Must be of type dt.tzinfo or None.")
+
+        if not isinstance(properties.ordinal_shift, int):
+            raise PeriodValidationError(f"Illegal ordinal shift: {properties.ordinal_shift}. Must be of type integer.")
+
         self._properties = properties
 
     @property
@@ -2040,7 +2085,7 @@ class Period(ABC):
             returns a string
         """
         if separator not in (" ", "T", "t"):
-            raise ValueError(f"Illegal separator: {separator}")
+            raise PeriodParsingError(f"Illegal separator: {separator}. Must be one of {(' ', 'T', 't')}")
         return self._properties.get_naive_formatter(separator)
 
     def aware_formatter(self, separator: str = "T") -> Callable[[dt.datetime], str]:
@@ -2056,7 +2101,7 @@ class Period(ABC):
             returns a string
         """
         if separator not in (" ", "T", "t"):
-            raise ValueError(f"Illegal separator: {separator}")
+            raise PeriodParsingError(f"Illegal separator: {separator}. Must be one of {(' ', 'T', 't')}")
         return self._properties.get_aware_formatter(separator)
 
     def formatter(self, separator: str = "T") -> Callable[[dt.datetime], str]:
@@ -2072,7 +2117,7 @@ class Period(ABC):
             returns a string
         """
         if separator not in (" ", "T", "t"):
-            raise ValueError(f"Illegal separator: {separator}")
+            raise PeriodParsingError(f"Illegal separator: {separator}. Must be one of {(' ', 'T', 't')}")
         return self.naive_formatter(separator) if self._properties.tzinfo is None else self.aware_formatter(separator)
 
     @abstractmethod
@@ -2547,11 +2592,30 @@ class YearPeriod(Period):
 
     def __init__(self, properties: Properties) -> None:
         super().__init__(properties)
-        assert properties.step == _STEP_MONTHS
-        assert properties.multiplier == 12
-        assert properties.month_offset == 0
-        assert properties.microsecond_offset == 0
-        assert properties.ordinal_shift == 0
+
+        if properties.step != _STEP_MONTHS:
+            raise PeriodValidationError(f"Illegal step: '{properties.step}'. Must be: {_STEP_MONTHS}.")
+
+        if properties.multiplier != 12:
+            raise PeriodValidationError(
+                f"Illegal multiplier: {properties.multiplier}. Must be '12' for a '{self.__class__.__name__}'."
+            )
+
+        if properties.month_offset != 0:
+            raise PeriodValidationError(
+                f"Illegal month offset: {properties.month_offset}. Must be '0' for a '{self.__class__.__name__}'."
+            )
+
+        if properties.microsecond_offset != 0:
+            raise PeriodValidationError(
+                f"Illegal microsecond offset: {properties.microsecond_offset}. "
+                f"Must be '0' for a '{self.__class__.__name__}'."
+            )
+
+        if properties.ordinal_shift != 0:
+            raise PeriodValidationError(
+                f"Illegal ordinal shift: {properties.ordinal_shift}. Must be '0' for a '{self.__class__.__name__}'."
+            )
 
     @override
     def ordinal(self, datetime_obj: dt.datetime) -> int:
@@ -2569,12 +2633,32 @@ class MultiYearPeriod(Period):
 
     def __init__(self, properties: Properties) -> None:
         super().__init__(properties)
-        assert properties.step == _STEP_MONTHS
-        assert properties.multiplier > 12
-        assert (properties.multiplier % 12) == 0
-        assert properties.month_offset == 0
-        assert properties.microsecond_offset == 0
-        assert properties.ordinal_shift == 0
+
+        if properties.step != _STEP_MONTHS:
+            raise PeriodValidationError(f"Illegal step: '{properties.step}'. Must be: {_STEP_MONTHS}.")
+
+        if properties.multiplier <= 12 or (properties.multiplier % 12) != 0:
+            raise PeriodValidationError(
+                f"Illegal multiplier: {properties.multiplier}. "
+                f"Must be a >12 and multiple of 12 for a '{self.__class__.__name__}'."
+            )
+
+        if properties.month_offset != 0:
+            raise PeriodValidationError(
+                f"Illegal month offset: {properties.month_offset}. Must be '0' for a '{self.__class__.__name__}'."
+            )
+
+        if properties.microsecond_offset != 0:
+            raise PeriodValidationError(
+                f"Illegal microsecond offset: {properties.microsecond_offset}. "
+                f"Must be '0' for a '{self.__class__.__name__}'."
+            )
+
+        if properties.ordinal_shift != 0:
+            raise PeriodValidationError(
+                f"Illegal ordinal shift: {properties.ordinal_shift}. Must be '0' for a '{self.__class__.__name__}'."
+            )
+
         self._n = properties.multiplier // 12
 
     @override
@@ -2593,11 +2677,30 @@ class MonthPeriod(Period):
 
     def __init__(self, properties: Properties) -> None:
         super().__init__(properties)
-        assert properties.step == _STEP_MONTHS
-        assert properties.multiplier == 1
-        assert properties.month_offset == 0
-        assert properties.microsecond_offset == 0
-        assert properties.ordinal_shift == 0
+
+        if properties.step != _STEP_MONTHS:
+            raise PeriodValidationError(f"Illegal step: '{properties.step}'. Must be: {_STEP_MONTHS}.")
+
+        if properties.multiplier != 1:
+            raise PeriodValidationError(
+                f"Illegal multiplier: {properties.multiplier}. Must be a 1 for a '{self.__class__.__name__}'."
+            )
+
+        if properties.month_offset != 0:
+            raise PeriodValidationError(
+                f"Illegal month offset: {properties.month_offset}. Must be '0' for a '{self.__class__.__name__}'."
+            )
+
+        if properties.microsecond_offset != 0:
+            raise PeriodValidationError(
+                f"Illegal microsecond offset: {properties.microsecond_offset}. "
+                f"Must be '0' for a '{self.__class__.__name__}'."
+            )
+
+        if properties.ordinal_shift != 0:
+            raise PeriodValidationError(
+                f"Illegal ordinal shift: {properties.ordinal_shift}. Must be '0' for a '{self.__class__.__name__}'."
+            )
 
     @override
     def ordinal(self, datetime_obj: dt.datetime) -> int:
@@ -2617,11 +2720,31 @@ class MultiMonthPeriod(Period):
 
     def __init__(self, properties: Properties) -> None:
         super().__init__(properties)
-        assert properties.step == _STEP_MONTHS
-        assert properties.multiplier > 1
-        assert properties.month_offset == 0
-        assert properties.microsecond_offset == 0
-        assert properties.ordinal_shift == 0
+
+        if properties.step != _STEP_MONTHS:
+            raise PeriodValidationError(f"Illegal step: '{properties.step}'. Must be: {_STEP_MONTHS}.")
+
+        if properties.multiplier <= 1:
+            raise PeriodValidationError(
+                f"Illegal multiplier: {properties.multiplier}. Must be a >1 for a '{self.__class__.__name__}'."
+            )
+
+        if properties.month_offset != 0:
+            raise PeriodValidationError(
+                f"Illegal month offset: {properties.month_offset}. Must be '0' for a '{self.__class__.__name__}'."
+            )
+
+        if properties.microsecond_offset != 0:
+            raise PeriodValidationError(
+                f"Illegal microsecond offset: {properties.microsecond_offset}. "
+                f"Must be '0' for a '{self.__class__.__name__}'."
+            )
+
+        if properties.ordinal_shift != 0:
+            raise PeriodValidationError(
+                f"Illegal ordinal shift: {properties.ordinal_shift}. Must be '0' for a '{self.__class__.__name__}'."
+            )
+
         self._n = properties.multiplier
 
     @override
@@ -2641,12 +2764,35 @@ class NaiveDayPeriod(Period):
 
     def __init__(self, properties: Properties) -> None:
         super().__init__(properties)
-        assert properties.step == _STEP_SECONDS
-        assert properties.multiplier == 86_400
-        assert properties.month_offset == 0
-        assert properties.microsecond_offset == 0
-        assert properties.tzinfo is None
-        assert properties.ordinal_shift == 0
+
+        if properties.step != _STEP_SECONDS:
+            raise PeriodValidationError(f"Illegal step: '{properties.step}'. Must be: {_STEP_SECONDS}.")
+
+        if properties.multiplier != 86_400:
+            raise PeriodValidationError(
+                f"Illegal multiplier: {properties.multiplier}. Must be a 86_400 for a '{self.__class__.__name__}'."
+            )
+
+        if properties.month_offset != 0:
+            raise PeriodValidationError(
+                f"Illegal month offset: {properties.month_offset}. Must be '0' for a '{self.__class__.__name__}'."
+            )
+
+        if properties.microsecond_offset != 0:
+            raise PeriodValidationError(
+                f"Illegal microsecond offset: "
+                f"{properties.microsecond_offset}. Must be '0' for a '{self.__class__.__name__}'."
+            )
+
+        if properties.ordinal_shift != 0:
+            raise PeriodValidationError(
+                f"Illegal ordinal shift: {properties.ordinal_shift}. Must be '0' for a '{self.__class__.__name__}'."
+            )
+
+        if properties.tzinfo is not None:
+            raise PeriodValidationError(
+                f"Illegal tzinfo: '{properties.tzinfo}'. Must be None for a '{self.__class__.__name__}'."
+            )
 
     @override
     def ordinal(self, datetime_obj: dt.datetime) -> int:
@@ -2664,12 +2810,35 @@ class AwareDayPeriod(Period):
 
     def __init__(self, properties: Properties) -> None:
         super().__init__(properties)
-        assert properties.step == _STEP_SECONDS
-        assert properties.multiplier == 86_400
-        assert properties.month_offset == 0
-        assert properties.microsecond_offset == 0
-        assert isinstance(properties.tzinfo, dt.tzinfo)
-        assert properties.ordinal_shift == 0
+
+        if properties.step != _STEP_SECONDS:
+            raise PeriodValidationError(f"Illegal step: '{properties.step}'. Must be: {_STEP_SECONDS}.")
+
+        if properties.multiplier != 86_400:
+            raise PeriodValidationError(
+                f"Illegal multiplier: {properties.multiplier}. Must be a 86_400 for a '{self.__class__.__name__}'."
+            )
+
+        if properties.month_offset != 0:
+            raise PeriodValidationError(
+                f"Illegal month offset: {properties.month_offset}. Must be '0' for a '{self.__class__.__name__}'."
+            )
+
+        if properties.microsecond_offset != 0:
+            raise PeriodValidationError(
+                f"Illegal microsecond offset: "
+                f"{properties.microsecond_offset}. Must be '0' for a '{self.__class__.__name__}'."
+            )
+
+        if properties.ordinal_shift != 0:
+            raise PeriodValidationError(
+                f"Illegal ordinal shift: {properties.ordinal_shift}. Must be '0' for a '{self.__class__.__name__}'."
+            )
+
+        if not isinstance(properties.tzinfo, dt.tzinfo):
+            raise PeriodValidationError(
+                f"Illegal tzinfo: '{properties.tzinfo}'. Must be of type tzinfo for a '{self.__class__.__name__}'."
+            )
 
     @override
     def ordinal(self, datetime_obj: dt.datetime) -> int:
@@ -2687,13 +2856,37 @@ class NaiveMultiDayPeriod(Period):
 
     def __init__(self, properties: Properties) -> None:
         super().__init__(properties)
-        assert properties.step == _STEP_SECONDS
-        assert properties.multiplier >= 86_400
-        assert (properties.multiplier % 86_400) == 0
-        assert properties.month_offset == 0
-        assert properties.microsecond_offset == 0
-        assert properties.tzinfo is None
-        assert properties.ordinal_shift == 0
+
+        if properties.step != _STEP_SECONDS:
+            raise PeriodValidationError(f"Illegal step: '{properties.step}'. Must be: {_STEP_SECONDS}.")
+
+        if properties.multiplier < 86_400 or (properties.multiplier % 86_400) != 0:
+            raise PeriodValidationError(
+                f"Illegal multiplier: {properties.multiplier}. "
+                f"Must be a multiple of 86_400 for a '{self.__class__.__name__}'."
+            )
+
+        if properties.month_offset != 0:
+            raise PeriodValidationError(
+                f"Illegal month offset: {properties.month_offset}. Must be '0' for a '{self.__class__.__name__}'."
+            )
+
+        if properties.microsecond_offset != 0:
+            raise PeriodValidationError(
+                f"Illegal microsecond offset: {properties.microsecond_offset}. "
+                f"Must be '0' for a '{self.__class__.__name__}'."
+            )
+
+        if properties.ordinal_shift != 0:
+            raise PeriodValidationError(
+                f"Illegal ordinal shift: {properties.ordinal_shift}. Must be '0' for a '{self.__class__.__name__}'."
+            )
+
+        if properties.tzinfo is not None:
+            raise PeriodValidationError(
+                f"Illegal tzinfo: '{properties.tzinfo}'. Must be None for a '{self.__class__.__name__}'."
+            )
+
         self._n = properties.multiplier // 86_400
 
     @override
@@ -2712,13 +2905,37 @@ class AwareMultiDayPeriod(Period):
 
     def __init__(self, properties: Properties) -> None:
         super().__init__(properties)
-        assert properties.step == _STEP_SECONDS
-        assert properties.multiplier >= 86_400
-        assert (properties.multiplier % 86_400) == 0
-        assert properties.month_offset == 0
-        assert properties.microsecond_offset == 0
-        assert isinstance(properties.tzinfo, dt.tzinfo)
-        assert properties.ordinal_shift == 0
+
+        if properties.step != _STEP_SECONDS:
+            raise PeriodValidationError(f"Illegal step: '{properties.step}'. Must be: {_STEP_SECONDS}.")
+
+        if properties.multiplier < 86_400 or (properties.multiplier % 86_400) != 0:
+            raise PeriodValidationError(
+                f"Illegal multiplier: {properties.multiplier}. "
+                f"Must be a multiple of 86_400 for a '{self.__class__.__name__}'."
+            )
+
+        if properties.month_offset != 0:
+            raise PeriodValidationError(
+                f"Illegal month offset: {properties.month_offset}. Must be '0' for a '{self.__class__.__name__}'."
+            )
+
+        if properties.microsecond_offset != 0:
+            raise PeriodValidationError(
+                f"Illegal microsecond offset: {properties.microsecond_offset}. "
+                f"Must be '0' for a '{self.__class__.__name__}'."
+            )
+
+        if properties.ordinal_shift != 0:
+            raise PeriodValidationError(
+                f"Illegal ordinal shift: {properties.ordinal_shift}. Must be '0' for a '{self.__class__.__name__}'."
+            )
+
+        if not isinstance(properties.tzinfo, dt.tzinfo):
+            raise PeriodValidationError(
+                f"Illegal tzinfo: '{properties.tzinfo}'. Must be of type tzinfo for a '{self.__class__.__name__}'."
+            )
+
         self._n = properties.multiplier // 86_400
 
     @override
@@ -2737,12 +2954,32 @@ class MultiHourPeriod(Period):
 
     def __init__(self, properties: Properties) -> None:
         super().__init__(properties)
-        assert properties.step == _STEP_SECONDS
-        assert properties.multiplier >= 3_600
-        assert (properties.multiplier % 3_600) == 0
-        assert properties.month_offset == 0
-        assert properties.microsecond_offset == 0
-        assert properties.ordinal_shift == 0
+
+        if properties.step != _STEP_SECONDS:
+            raise PeriodValidationError(f"Illegal step: '{properties.step}'. Must be: {_STEP_SECONDS}.")
+
+        if properties.multiplier < 3_600 or (properties.multiplier % 3_600) != 0:
+            raise PeriodValidationError(
+                f"Illegal multiplier: {properties.multiplier}. "
+                f"Must be a multiple of 3_600 for a '{self.__class__.__name__}'."
+            )
+
+        if properties.month_offset != 0:
+            raise PeriodValidationError(
+                f"Illegal month offset: {properties.month_offset}. Must be '0' for a '{self.__class__.__name__}'."
+            )
+
+        if properties.microsecond_offset != 0:
+            raise PeriodValidationError(
+                f"Illegal microsecond offset: {properties.microsecond_offset}. "
+                f"Must be '0' for a '{self.__class__.__name__}'."
+            )
+
+        if properties.ordinal_shift != 0:
+            raise PeriodValidationError(
+                f"Illegal ordinal shift: {properties.ordinal_shift}. Must be '0' for a '{self.__class__.__name__}'."
+            )
+
         self._n = properties.multiplier // 3_600
 
     @override
@@ -2762,13 +2999,37 @@ class NaiveMultiMinutePeriod(Period):
 
     def __init__(self, properties: Properties) -> None:
         super().__init__(properties)
-        assert properties.step == _STEP_SECONDS
-        assert properties.multiplier >= 60
-        assert (properties.multiplier % 60) == 0
-        assert properties.month_offset == 0
-        assert properties.microsecond_offset == 0
-        assert properties.tzinfo is None
-        assert properties.ordinal_shift == 0
+
+        if properties.step != _STEP_SECONDS:
+            raise PeriodValidationError(f"Illegal step: '{properties.step}'. Must be: {_STEP_SECONDS}.")
+
+        if properties.multiplier < 60 or (properties.multiplier % 60) != 0:
+            raise PeriodValidationError(
+                f"Illegal multiplier: {properties.multiplier}. "
+                f"Must be a multiple of 60 for a '{self.__class__.__name__}'."
+            )
+
+        if properties.month_offset != 0:
+            raise PeriodValidationError(
+                f"Illegal month offset: {properties.month_offset}. Must be '0' for a '{self.__class__.__name__}'."
+            )
+
+        if properties.microsecond_offset != 0:
+            raise PeriodValidationError(
+                f"Illegal microsecond offset: {properties.microsecond_offset}. "
+                f"Must be '0' for a '{self.__class__.__name__}'."
+            )
+
+        if properties.ordinal_shift != 0:
+            raise PeriodValidationError(
+                f"Illegal ordinal shift: {properties.ordinal_shift}. Must be '0' for a '{self.__class__.__name__}'."
+            )
+
+        if properties.tzinfo is not None:
+            raise PeriodValidationError(
+                f"Illegal tzinfo: {properties.tzinfo}. Must be None for a '{self.__class__.__name__}'."
+            )
+
         self._n = properties.multiplier // 60
 
     @override
@@ -2788,13 +3049,37 @@ class AwareMultiMinutePeriod(Period):
 
     def __init__(self, properties: Properties) -> None:
         super().__init__(properties)
-        assert properties.step == _STEP_SECONDS
-        assert properties.multiplier >= 60
-        assert (properties.multiplier % 60) == 0
-        assert properties.month_offset == 0
-        assert properties.microsecond_offset == 0
-        assert isinstance(properties.tzinfo, dt.tzinfo)
-        assert properties.ordinal_shift == 0
+
+        if properties.step != _STEP_SECONDS:
+            raise PeriodValidationError(f"Illegal step: '{properties.step}'. Must be: {_STEP_SECONDS}.")
+
+        if properties.multiplier < 60 or (properties.multiplier % 60) != 0:
+            raise PeriodValidationError(
+                f"Illegal multiplier: {properties.multiplier}. "
+                f"Must be a multiple of 60 for a '{self.__class__.__name__}'."
+            )
+
+        if properties.month_offset != 0:
+            raise PeriodValidationError(
+                f"Illegal month offset: {properties.month_offset}. Must be '0' for a '{self.__class__.__name__}'."
+            )
+
+        if properties.microsecond_offset != 0:
+            raise PeriodValidationError(
+                f"Illegal microsecond offset: {properties.microsecond_offset}. "
+                f"Must be '0' for a '{self.__class__.__name__}'."
+            )
+
+        if properties.ordinal_shift != 0:
+            raise PeriodValidationError(
+                f"Illegal ordinal shift: {properties.ordinal_shift}. Must be '0' for a '{self.__class__.__name__}'."
+            )
+
+        if not isinstance(properties.tzinfo, dt.tzinfo):
+            raise PeriodValidationError(
+                f"Illegal tzinfo: {properties.tzinfo}. Must of type tzinfo for a '{self.__class__.__name__}'."
+            )
+
         self._n = properties.multiplier // 60
 
     @override
@@ -2814,11 +3099,31 @@ class NaiveMultiSecondPeriod(Period):
 
     def __init__(self, properties: Properties) -> None:
         super().__init__(properties)
-        assert properties.step == _STEP_SECONDS
-        assert properties.month_offset == 0
-        assert properties.microsecond_offset == 0
-        assert properties.tzinfo is None
-        assert properties.ordinal_shift == 0
+
+        if properties.step != _STEP_SECONDS:
+            raise PeriodValidationError(f"Illegal step: '{properties.step}'. Must be: {_STEP_SECONDS}.")
+
+        if properties.month_offset != 0:
+            raise PeriodValidationError(
+                f"Illegal month offset: {properties.month_offset}. Must be '0' for a '{self.__class__.__name__}'."
+            )
+
+        if properties.microsecond_offset != 0:
+            raise PeriodValidationError(
+                f"Illegal microsecond offset: {properties.microsecond_offset}. "
+                f"Must be '0' for a '{self.__class__.__name__}'."
+            )
+
+        if properties.ordinal_shift != 0:
+            raise PeriodValidationError(
+                f"Illegal ordinal shift: {properties.ordinal_shift}. Must be '0' for a '{self.__class__.__name__}'."
+            )
+
+        if properties.tzinfo is not None:
+            raise PeriodValidationError(
+                f"Illegal tzinfo: {properties.tzinfo}. Must be None for a '{self.__class__.__name__}'."
+            )
+
         self._n = properties.multiplier
 
     @override
@@ -2836,11 +3141,31 @@ class AwareMultiSecondPeriod(Period):
 
     def __init__(self, properties: Properties) -> None:
         super().__init__(properties)
-        assert properties.step == _STEP_SECONDS
-        assert properties.month_offset == 0
-        assert properties.microsecond_offset == 0
-        assert isinstance(properties.tzinfo, dt.tzinfo)
-        assert properties.ordinal_shift == 0
+
+        if properties.step != _STEP_SECONDS:
+            raise PeriodValidationError(f"Illegal step: '{properties.step}'. Must be: {_STEP_SECONDS}.")
+
+        if properties.month_offset != 0:
+            raise PeriodValidationError(
+                f"Illegal month offset: {properties.month_offset}. Must be '0' for a '{self.__class__.__name__}'."
+            )
+
+        if properties.microsecond_offset != 0:
+            raise PeriodValidationError(
+                f"Illegal microsecond offset: {properties.microsecond_offset}. "
+                f"Must be '0' for a '{self.__class__.__name__}'."
+            )
+
+        if properties.ordinal_shift != 0:
+            raise PeriodValidationError(
+                f"Illegal ordinal shift: {properties.ordinal_shift}. Must be '0' for a '{self.__class__.__name__}'."
+            )
+
+        if not isinstance(properties.tzinfo, dt.tzinfo):
+            raise PeriodValidationError(
+                f"Illegal tzinfo: {properties.tzinfo}. Must be of type tzinfo for a '{self.__class__.__name__}'."
+            )
+
         self._n = properties.multiplier
 
     @override
@@ -2860,11 +3185,31 @@ class NaiveMicroSecondPeriod(Period):
 
     def __init__(self, properties: Properties) -> None:
         super().__init__(properties)
-        assert properties.step == _STEP_MICROSECONDS
-        assert properties.month_offset == 0
-        assert properties.microsecond_offset == 0
-        assert properties.tzinfo is None
-        assert properties.ordinal_shift == 0
+
+        if properties.step != _STEP_MICROSECONDS:
+            raise PeriodValidationError(f"Illegal step: '{properties.step}'. Must be: {_STEP_MICROSECONDS}.")
+
+        if properties.month_offset != 0:
+            raise PeriodValidationError(
+                f"Illegal month offset: {properties.month_offset}. Must be '0' for a '{self.__class__.__name__}'."
+            )
+
+        if properties.microsecond_offset != 0:
+            raise PeriodValidationError(
+                f"Illegal microsecond offset: {properties.microsecond_offset}. "
+                f"Must be '0' for a '{self.__class__.__name__}'."
+            )
+
+        if properties.ordinal_shift != 0:
+            raise PeriodValidationError(
+                f"Illegal ordinal shift: {properties.ordinal_shift}. Must be '0' for a '{self.__class__.__name__}'."
+            )
+
+        if properties.tzinfo is not None:
+            raise PeriodValidationError(
+                f"Illegal tzinfo: {properties.tzinfo}. Must be None for a '{self.__class__.__name__}'."
+            )
+
         self._n = properties.multiplier
 
     @override
@@ -2887,11 +3232,31 @@ class AwareMicroSecondPeriod(Period):
 
     def __init__(self, properties: Properties) -> None:
         super().__init__(properties)
-        assert properties.step == _STEP_MICROSECONDS
-        assert properties.month_offset == 0
-        assert properties.microsecond_offset == 0
-        assert isinstance(properties.tzinfo, dt.tzinfo)
-        assert properties.ordinal_shift == 0
+
+        if properties.step != _STEP_MICROSECONDS:
+            raise PeriodValidationError(f"Illegal step: '{properties.step}'. Must be: {_STEP_MICROSECONDS}.")
+
+        if properties.month_offset != 0:
+            raise PeriodValidationError(
+                f"Illegal month offset: {properties.month_offset}. Must be '0' for a '{self.__class__.__name__}'."
+            )
+
+        if properties.microsecond_offset != 0:
+            raise PeriodValidationError(
+                f"Illegal microsecond offset: {properties.microsecond_offset}. "
+                f"Must be '0' for a '{self.__class__.__name__}'."
+            )
+
+        if properties.ordinal_shift != 0:
+            raise PeriodValidationError(
+                f"Illegal ordinal shift: {properties.ordinal_shift}. Must be '0' for a '{self.__class__.__name__}'."
+            )
+
+        if not isinstance(properties.tzinfo, dt.tzinfo):
+            raise PeriodValidationError(
+                f"Illegal tzinfo: {properties.tzinfo}. Must be of type tzinfo for a '{self.__class__.__name__}'."
+            )
+
         self._n = properties.multiplier
 
     @override
@@ -2938,7 +3303,9 @@ def _get_offset_period(properties: Properties) -> Period:
     Returns:
         A Period object
     """
-    assert properties.ordinal_shift == 0
+    if properties.ordinal_shift != 0:
+        raise PeriodValidationError(f"Illegal ordinal shift: {properties.ordinal_shift}. Must be '0'.")
+
     if (properties.month_offset != 0) or (properties.microsecond_offset != 0):
         return OffsetPeriod(properties)
     return _get_base_period(properties)
@@ -2960,8 +3327,12 @@ def _get_base_period(properties: Properties) -> Period:
     month_offset = properties.month_offset
     microsecond_offset = properties.microsecond_offset
     tzinfo = properties.tzinfo
-    assert month_offset == 0
-    assert microsecond_offset == 0
+
+    if month_offset != 0:
+        raise PeriodValidationError(f"Illegal month_offset: {month_offset}. Must be '0'.")
+
+    if microsecond_offset != 0:
+        raise PeriodValidationError(f"Illegal microsecond_offset: {microsecond_offset}. Must be '0'.")
 
     if step == _STEP_MONTHS:
         if multiplier == 1:
@@ -3002,7 +3373,7 @@ def _get_base_period(properties: Properties) -> Period:
     if step == _STEP_MICROSECONDS:
         return _get_period_tzinfo(tzinfo, properties, NaiveMicroSecondPeriod, AwareMicroSecondPeriod)
 
-    raise ValueError("Oops")
+    raise PeriodValidationError(f"Illegal step: '{step}'. Must be one of: {_VALID_STEPS}")
 
 
 class OffsetPeriod(Period):
@@ -3012,8 +3383,16 @@ class OffsetPeriod(Period):
 
     def __init__(self, properties: Properties) -> None:
         super().__init__(properties)
-        assert (properties.month_offset > 0) or (properties.microsecond_offset > 0)
-        assert properties.ordinal_shift == 0
+
+        if not ((properties.month_offset > 0) or (properties.microsecond_offset > 0)):
+            raise PeriodValidationError(
+                f"No offset detected in month_offset or microsecond_offset: "
+                f"{properties.month_offset}/{properties.microsecond_offset}"
+            )
+
+        if properties.ordinal_shift != 0:
+            raise PeriodValidationError(f"Illegal ordinal shift: {properties.ordinal_shift}. Must be '0'.")
+
         date_time_adjusters = DateTimeAdjusters.of_offsets(properties.month_offset, properties.microsecond_offset)
         base_period = _get_base_period(
             Properties(
@@ -3052,7 +3431,10 @@ class ShiftedPeriod(Period):
 
     def __init__(self, properties: Properties) -> None:
         super().__init__(properties)
-        assert properties.ordinal_shift != 0
+
+        if properties.ordinal_shift == 0:
+            raise PeriodValidationError(f"Illegal ordinal shift: {properties.ordinal_shift}. Must not be '0'.")
+
         offset_period = _get_offset_period(
             Properties(
                 step=properties.step,
@@ -3124,11 +3506,14 @@ def _date_match(prefix: str, matcher: re.Match[str]) -> dt.date:
     Returns:
         A date object
     """
-    return dt.date(
-        year=int(matcher.group(f"{prefix}_yyyy")),
-        month=_str2int(matcher.group(f"{prefix}_mm"), 1),
-        day=_str2int(matcher.group(f"{prefix}_dd"), 1),
-    )
+    try:
+        return dt.date(
+            year=int(matcher.group(f"{prefix}_yyyy")),
+            month=_str2int(matcher.group(f"{prefix}_mm"), 1),
+            day=_str2int(matcher.group(f"{prefix}_dd"), 1),
+        )
+    except ValueError:
+        raise PeriodParsingError(f"Unable to parse date from {prefix}")
 
 
 def _time_match(prefix: str, matcher: re.Match[str]) -> dt.time:
@@ -3147,13 +3532,16 @@ def _time_match(prefix: str, matcher: re.Match[str]) -> dt.time:
     Returns:
         A time object
     """
-    return dt.time(
-        hour=_str2int(matcher.group(f"{prefix}_HH")),
-        minute=_str2int(matcher.group(f"{prefix}_MM")),
-        second=_str2int(matcher.group(f"{prefix}_SS")),
-        microsecond=_str2microseconds(matcher.group(f"{prefix}_MS")),
-        tzinfo=_tzinfo_match(prefix, matcher),
-    )
+    try:
+        return dt.time(
+            hour=_str2int(matcher.group(f"{prefix}_HH")),
+            minute=_str2int(matcher.group(f"{prefix}_MM")),
+            second=_str2int(matcher.group(f"{prefix}_SS")),
+            microsecond=_str2microseconds(matcher.group(f"{prefix}_MS")),
+            tzinfo=_tzinfo_match(prefix, matcher),
+        )
+    except ValueError:
+        raise PeriodParsingError(f"Unable to parse time from {prefix}.")
 
 
 def _timezone(utc_offset: str | None) -> dt.tzinfo | None:
@@ -3416,7 +3804,7 @@ def _of(period_string: str) -> Period:
     """
     period: Period | None = _get_period(period_string)
     if period is None:
-        raise ValueError(f"Illegal period: {period_string}")
+        raise PeriodParsingError(f"Illegal period: {period_string}")
     return period
 
 
@@ -3435,7 +3823,7 @@ def _of_iso_duration(iso_8601_duration: str) -> Period:
     matcher: re.Match[str] | None = _RE_PERIOD.match(iso_8601_duration)
     if matcher:
         return _match_period(matcher)
-    raise ValueError(f"Illegal ISO 8601 duration: {iso_8601_duration}")
+    raise PeriodParsingError(f"Illegal ISO 8601 duration: {iso_8601_duration}")
 
 
 def _of_duration(duration: str) -> Period:
@@ -3458,7 +3846,7 @@ def _of_duration(duration: str) -> Period:
     matcher = _RE_PERIOD.match(duration)
     if matcher:
         return _match_period(matcher)
-    raise ValueError(f"Illegal duration: {duration}")
+    raise PeriodParsingError(f"Illegal duration: {duration}")
 
 
 def _of_date_and_duration(date_duration: str) -> Period:
@@ -3472,12 +3860,12 @@ def _of_date_and_duration(date_duration: str) -> Period:
         A Period object
 
     Raises:
-        ValueError if date_duration does not contains a valid value
+        ValueError if date_duration does not contain a valid value
     """
     matcher: re.Match[str] | None = _RE_DATETIME_PERIOD.match(date_duration)
     if matcher:
         return _match_datetime_period(matcher)
-    raise ValueError(f"Illegal date/duration string: {date_duration}")
+    raise PeriodParsingError(f"Illegal date/duration string: {date_duration}")
 
 
 def _of_repr(repr_string: str) -> Period:
@@ -3492,4 +3880,4 @@ def _of_repr(repr_string: str) -> Period:
     matcher: re.Match[str] | None = _RE_REPR.match(repr_string)
     if matcher:
         return _match_repr(matcher)
-    raise ValueError(f"Illegal repr string: {repr_string}")
+    raise PeriodParsingError(f"Illegal repr string: {repr_string}")

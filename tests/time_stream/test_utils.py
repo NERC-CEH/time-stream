@@ -6,7 +6,37 @@ from parameterized import parameterized
 from polars.testing import assert_series_equal
 
 from time_stream import Period
-from time_stream.utils import get_date_filter, truncate_to_period, pad_time
+from time_stream.exceptions import ColumnNotFoundError
+from time_stream.utils import check_columns_in_dataframe, get_date_filter, truncate_to_period, pad_time
+
+
+class TestCheckColumnsInDataframe(unittest.TestCase):
+    def setUp(self):
+        self.df = pl.DataFrame({
+            "a": [1, 2, 3],
+            "b": [4, 5, 6],
+            "c": [7, 8, 9],
+        })
+
+    def test_all_columns_exist(self):
+        """Test error not raised when all requested columns exist."""
+        check_columns_in_dataframe(self.df, ["a", "b", "c"])
+
+    def test_single_missing_column(self):
+        """Should raise when one column is missing."""
+        with self.assertRaises(ColumnNotFoundError) as err:
+            check_columns_in_dataframe(self.df, ["a", "x"])
+        self.assertEqual("Columns not found in dataframe: ['x']", str(err.exception))
+
+    def test_multiple_missing_columns(self):
+        """Should raise when multiple columns are missing."""
+        with self.assertRaises(ColumnNotFoundError) as err:
+            check_columns_in_dataframe(self.df, ["a", "x", "y"])
+        self.assertEqual("Columns not found in dataframe: ['x', 'y']", str(err.exception))
+
+    def test_empty_columns_list(self):
+        """Test that empty list passes without error."""
+        check_columns_in_dataframe(self.df, [])
 
 
 class TestGetDateFilter(unittest.TestCase):

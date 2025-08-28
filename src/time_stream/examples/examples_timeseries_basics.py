@@ -6,6 +6,7 @@ import polars as pl
 from time_stream import TimeSeries, Period
 from time_stream.aggregation import Mean, Min, Max
 # [end_block_1]
+from time_stream.exceptions import DuplicateTimeError, PeriodicityError, ResolutionError, TimeMutatedError
 
 import numpy as np
 
@@ -146,14 +147,14 @@ def resolution_check_fail():
 
     df = pl.DataFrame({"timestamp": timestamps, "value": [1, 2, 3]})
 
-    # This will raise a UserWarning about resolution alignment
+    # This will raise an error about resolution alignment
     try:
         ts = TimeSeries(
             df=df,
             time_name="timestamp",
             resolution=Period.of_days(1)
         )
-    except UserWarning as w:
+    except ResolutionError as w:
         print(f"Warning: {w}")
     # [end_block_8]
 
@@ -176,7 +177,7 @@ def periodicity_check_fail():
             time_name="timestamp",
             periodicity=Period.of_days(1)
         )
-    except UserWarning as w:
+    except PeriodicityError as w:
         print(f"Warning: {w}")
     # [end_block_9]
 
@@ -384,7 +385,7 @@ def update_time_of_df_error():
     # (which inherently removes some of the time series)
     try:
         ts.df = ts.df.filter(pl.col("precipitation") > 0)
-    except ValueError as w:
+    except TimeMutatedError as w:
         print(f"Warning: {w}")
     # [end_block_20]
 
@@ -585,7 +586,7 @@ def aggregation_duplicate_row_example_error():
             time_name="timestamp",
             on_duplicates="error"
         )
-    except ValueError as w:
+    except DuplicateTimeError as w:
         print(f"Warning: {w}")
     # [end_block_28]
 

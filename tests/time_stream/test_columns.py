@@ -7,6 +7,13 @@ from polars.testing import assert_series_equal
 from time_stream.base import TimeSeries
 from time_stream.bitwise import BitwiseMeta
 from time_stream.columns import DataColumn, FlagColumn, SupplementaryColumn
+from time_stream.exceptions import (
+    BitwiseFlagUnknownError,
+    ColumnNotFoundError,
+    ColumnRelationshipError,
+    ColumnTypeError,
+    MetadataError
+)
 from time_stream.relationships import Relationship, RelationshipType, DeletionPolicy
 
 
@@ -62,7 +69,7 @@ class TestMetadata(BaseTimeSeriesTest):
 
     def test_retrieve_metadata_for_nonexistent_key(self):
         """Test that error raised when requesting a non-existent metadata key"""
-        with self.assertRaises(KeyError):
+        with self.assertRaises(MetadataError):
             self.column.metadata("nonexistent_key")
 
     def test_retrieve_metadata_for_nonexistent_key_strict_false(self):
@@ -374,19 +381,19 @@ class TestAddFlag(BaseTimeSeriesTest):
     def test_adding_non_existent_flag_to_flag_column_raises_error(self):
         """ Test that trying to add an invalid flag to a valid flag column raises error"""
         column = FlagColumn("flag_col", self.ts, "example_flag_system", {})
-        with self.assertRaises(KeyError):
+        with self.assertRaises(BitwiseFlagUnknownError):
             column.add_flag(10)
 
     def test_add_flag_to_data_column_raises_error(self):
         """ Test that trying to add a flag to a data column raises error"""
         column = DataColumn("data_col1", self.ts)
-        with self.assertRaises(TypeError):
+        with self.assertRaises(ColumnTypeError):
             column.add_flag(1)
 
     def test_add_flag_to_supplementary_column_raises_error(self):
         """ Test that trying to add a flag to a supplementary column raises error"""
         column = SupplementaryColumn("supp_col", self.ts)
-        with self.assertRaises(TypeError):
+        with self.assertRaises(ColumnTypeError):
             column.add_flag(1)
 
     def test_add_flag_twice(self):
@@ -475,19 +482,19 @@ class TestRemoveFlag(BaseTimeSeriesTest):
     def test_removing_non_existent_flag_from_flag_column_raises_error(self):
         """ Test that trying to remove an invalid flag to a valid flag column raises error"""
         column = FlagColumn("flag_col", self.ts, "example_flag_system", {})
-        with self.assertRaises(KeyError):
+        with self.assertRaises(BitwiseFlagUnknownError):
             column.remove_flag(10)
 
     def test_remove_flag_from_data_column_raises_error(self):
         """ Test that trying to remove a flag to a data column raises error"""
         column = DataColumn("data_col1", self.ts)
-        with self.assertRaises(TypeError):
+        with self.assertRaises(ColumnTypeError):
             column.remove_flag(1)
 
     def test_remove_flag_from_supplementary_column_raises_error(self):
         """ Test that trying to remove a flag to a supplementary column raises error"""
         column = SupplementaryColumn("supp_col", self.ts)
-        with self.assertRaises(TypeError):
+        with self.assertRaises(ColumnTypeError):
             column.remove_flag(1)
 
 
@@ -510,7 +517,7 @@ class TestGetattr(BaseTimeSeriesTest):
     def test_access_nonexistent_attribute(self):
         """Test accessing metadata key that doesn't exist"""
         column = DataColumn("data_col1", self.ts, self.metadata["data_col1"])
-        with self.assertRaises(AttributeError):
+        with self.assertRaises(MetadataError):
             _ = column.key0
 
 
@@ -612,22 +619,22 @@ class TestAddRelationship(BaseTimeSeriesTest):
 
     def test_add_data_rel_to_data_column_raises_error(self):
         """ Test that can't set relationship between two data columns"""
-        with self.assertRaises(TypeError):
+        with self.assertRaises(ColumnTypeError):
             self.ts.data_col1.add_relationship("data_col2")
 
     def test_add_supp_rel_to_flag_column_raises_error(self):
         """ Test that can't set relationship between supplementary and flag columns"""
-        with self.assertRaises(TypeError):
+        with self.assertRaises(ColumnTypeError):
             self.ts.supp_col.add_relationship("flag_col")
 
     def test_add_flag_rel_to_supp_column_raises_error(self):
         """ Test that can't set relationship between flag and supplementary columns"""
-        with self.assertRaises(TypeError):
+        with self.assertRaises(ColumnTypeError):
             self.ts.flag_col.add_relationship("supp_col")
 
     def test_flag_column_only_allowed_one_relationship(self):
         self.ts.flag_col.add_relationship("data_col1")
-        with self.assertRaises(ValueError):
+        with self.assertRaises(ColumnRelationshipError):
             self.ts.flag_col.add_relationship("data_col2")
 
 class TestRemoveRelationship(BaseTimeSeriesTest):
@@ -707,5 +714,5 @@ class TestGetFlagSystemColumn(BaseTimeSeriesTest):
                                     DeletionPolicy.CASCADE)
         self.ts._relationship_manager._add(relationship)
 
-        with self.assertRaises(UserWarning):
+        with self.assertRaises(ColumnNotFoundError):
             self.ts.data_col1.get_flag_system_column(flag_system)
