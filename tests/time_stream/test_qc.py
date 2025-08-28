@@ -8,7 +8,6 @@ from polars.testing import assert_series_equal
 
 from time_stream.base import TimeSeries
 from time_stream.exceptions import (
-    ColumnNotFoundError,
     QcUnknownOperatorError,
     QcTypeError,
     UnknownQcError
