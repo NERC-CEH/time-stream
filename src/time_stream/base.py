@@ -1,4 +1,3 @@
-from collections import Counter
 from datetime import datetime
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Iterable, Iterator, Sequence, Type
@@ -11,16 +10,14 @@ from time_stream.exceptions import (
     ColumnNotFoundError,
     ColumnTypeError,
     DuplicateColumnError,
-    DuplicateTimeError,
-    MetadataError,
-    PeriodicityError,
-    ResolutionError,
-    TimeMutatedError,
+    MetadataError
 )
 from time_stream.flag_manager import TimeSeriesFlagManager
 from time_stream.period import Period
 from time_stream.relationships import RelationshipManager
-from time_stream.utils import check_columns_in_dataframe, pad_time, truncate_to_period
+from time_stream.time_manager import TimeManager
+from time_stream.time_properties import TimeProperties
+from time_stream.utils import check_columns_in_dataframe
 
 if TYPE_CHECKING:
     from time_stream.aggregation import AggregationFunction
@@ -42,8 +39,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         flag_columns: dict[str, str] | None = None,
         metadata: dict[str, Any] | None = None,
         column_metadata: dict[str, dict[str, Any]] | None = None,
-        on_duplicates: DuplicateOption | str = DuplicateOption.ERROR,
-        pad: bool = False,
+        on_duplicates: DuplicateOption | str = DuplicateOption.ERROR
     ) -> None:
         """Initialise a TimeSeries instance.
 
@@ -59,19 +55,29 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
             metadata: Metadata relevant to the overall time series, e.g., network, site ID, license, etc.
             column_metadata: The metadata of the variables within the time series.
             on_duplicates: What to do if duplicate rows are found in the data. Default to ERROR.
-            pad: Whether to pad missing timestamps in the time series with missing values. Defaults to False.
         """
-        self._time_name = time_name
-        self._resolution = resolution
-        self._periodicity = periodicity
-        self._on_duplicates = DuplicateOption(on_duplicates)
-        self._pad = pad
+        self._df = df
+
+        self._time_properties = TimeProperties(
+            get_df=lambda: self._df,
+            time_name=time_name,
+            resolution=resolution,
+            periodicity=periodicity
+        )
+
+        self._time_manager = TimeManager(
+            get_df=lambda: self._df,
+            set_df=lambda new_df: self._update_df(new_df),
+            time_name=time_name,
+            resolution=resolution,
+            periodicity=periodicity,
+            on_duplicates=on_duplicates
+        )
 
         self._flag_manager = TimeSeriesFlagManager(self, flag_systems)
         self._columns: dict[str, TimeSeriesColumn] = {}
         self._metadata = {}
         self._relationship_manager = RelationshipManager(self)
-        self._df = df
 
         self._setup(supplementary_columns or [], flag_columns or {}, column_metadata or {}, metadata or {})
 
@@ -90,7 +96,6 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         - Handles any potentially duplicated rows (based on a user option)
         - Validates the resolution of the time column.
         - Validates the periodicity of the time column.
-        - Handles padding of missing time rows (based on a user option)
         - Sorts the DataFrame by the time column.
 
         Args:
@@ -103,14 +108,9 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         self._setup_columns(supplementary_columns, flag_columns, column_metadata)
         self._setup_metadata(metadata)
 
-        self._handle_duplicates()
-        self._validate_resolution()
-        self._validate_periodicity()
-        if not self.resolution.is_subperiod_of(self.periodicity):
-            raise ResolutionError(f"Resolution {self.resolution} is not a subperiod of periodicity {self.periodicity}")
-
-        self._pad_time()
-        self.sort_time()
+        self._time_manager.handle_time_duplicates()
+        self._time_properties.validate()
+        self._time_manager.sort_time()
 
     def _setup_columns(
         self,
@@ -192,209 +192,25 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
     @property
     def time_name(self) -> str:
         """The name of the primary datetime column in the underlying TimeSeries DataFrame."""
-        return self._time_name
-
-    def sort_time(self) -> None:
-        """Sort the TimeSeries DataFrame by the time column."""
-        self._df = self.df.sort(self.time_name)
-
-    def _pad_time(self) -> None:
-        """Pad the time series with missing datetime rows, filling in NULLs for missing values."""
-        if not self._pad:
-            return
-        self._df = pad_time(self.df, self.time_name, self.periodicity)
-        self.sort_time()
-
-    def _handle_duplicates(self) -> None:
-        """Handle duplicate values in the time column based on a specified strategy.
-
-        Current options:
-        - "error": Raise an error if duplicate rows are found.
-        - "keep_first": Keep the first row of any duplicate groups.
-        - "keep_last": Keep the last row of any duplicate groups.
-        - "drop": Drop all duplicate rows.
-        - "merge": Merge duplicate rows using "coalesce" (the first non-null value for each column takes precedence).
-        """
-        duplicate_mask = self.df[self.time_name].is_duplicated()
-        duplicated_times = self.df.filter(duplicate_mask)[self.time_name].unique().to_list()
-
-        # NOTE: Set _df directly, otherwise the df setter will complain that the time column is mutated.
-        #       In this instance, we are happy with this as we know we are mutating the time values.
-        if duplicated_times:
-            if self._on_duplicates == DuplicateOption.ERROR:
-                raise DuplicateTimeError(duplicates=duplicated_times)
-
-            if self._on_duplicates == DuplicateOption.KEEP_FIRST:
-                self._df = self._df.unique(subset=self.time_name, keep="first")
-
-            if self._on_duplicates == DuplicateOption.KEEP_LAST:
-                self._df = self._df.unique(subset=self.time_name, keep="last")
-
-            if self._on_duplicates == DuplicateOption.MERGE:
-                self._df = self._df.group_by(self.time_name).agg(
-                    [pl.col(col).drop_nulls().first().alias(col) for col in self.columns]
-                )
-
-            if self._on_duplicates == DuplicateOption.DROP:
-                self._df = self._df.filter(~duplicate_mask)
-
-            # Polars aggregate methods can change the order of rows due to how it optimises the functionality.
-            self.sort_time()
+        return self._time_properties.time_name
 
     @property
     def resolution(self) -> Period:
-        """Resolution defines how "precise" the datetimes are, i.e., to what precision of time unit should each
-        datetime in the time series match to.
-
-        Some examples:
-        PT0.000001S  Allow all datetime values, including microseconds.
-        PT1S         Allow datetimes with a whole number of seconds. Microseconds must be "0".
-        PT1M         Allow datetimes to be specified to the minute. Seconds and Microseconds must be "0".
-        PT15M	     Allow datetimes to be specified to a multiple of 15 minutes.
-                     Seconds and Microseconds must be "0", and Minutes be one of ("00", "15", "30", "45")
-        P1D	         Allow all dates, but the time must be "00:00:00"
-        P1M	         Allow all years and months, but the day must be "1" and time "00:00:00"
-        P3M	         Quarterly dates; month must be one of ("1", "4", "7", "10"), day must be "1" and time "00:00:00"
-        P1Y+9M9H	 Only dates at 09:00 am on the 1st of October are allowed.
-        """
-        return self._resolution
-
-    def _validate_resolution(self) -> None:
-        """Validate the resolution of the time series.
-
-        Raises:
-            ResolutionError: If the datetimes are not aligned to the resolution.
-        """
-        if self.resolution is None:
-            # Default to a resolution that accepts all datetimes
-            self._resolution = Period.of_microseconds(1)
-
-        # Validate and convert to a Period object
-        if isinstance(self._resolution, str):
-            self._resolution = Period.of_duration(self._resolution)
-
-        self._epoch_check(self.resolution)
-
-        # Compare the original series to the truncated series.  If no match, it is not aligned to the resolution.
-        if not TimeSeries.check_resolution(self.df[self.time_name], self.resolution):
-            raise ResolutionError(
-                f'Values in time field: "{self.time_name}" are not aligned to resolution: {self.resolution}'
-            )
-
-    @staticmethod
-    def check_resolution(date_times: pl.Series, resolution: Period) -> bool:
-        """Check that a Series of date/time values conforms to a given resolution period.
-
-        Args:
-           date_times: A Series of date/times to be tested.
-           resolution: The resolution period that the date/times are checked against.
-
-        Returns:
-           True if the Series conforms to the resolution period.
-           False otherwise
-        """
-        return date_times.equals(truncate_to_period(date_times, resolution))
+        return self._time_properties.resolution
 
     @property
     def periodicity(self) -> Period:
-        """Periodicity defines the allowed "frequency" of the datetimes, i.e., how many datetimes entries are allowed
-        within a given period of time.
-
-        Some examples:
-        PT0.000001S	Effectively there is no "periodicity".
-        PT1S	    At most 1 datetime can occur within any given second.
-        PT1M	    At most 1 datetime can occur within any given minute.
-        PT15M	    At most 1 datetime can occur within any 15-minute duration.
-                    Each 15-minute duration starts at ("00", "15", "30", "45") minutes past the hour.
-        P1D	        At most 1 datetime can occur within any given calendar day
-                    (from midnight of the first day up to, but not including, midnight of the next day).
-        P1M	        At most 1 datetime can occur within any given calendar month
-                    (from midnight on the 1st of the month up to, but not including, midnight on the 1st of the
-                    following month).
-        P3M	        At most 1 datetime can occur within any given quarterly period.
-        P1Y+9M9H	At most 1 datetime can occur within any given water year
-                    (from 09:00 am on the 1st of October up to, but including, 09:00 am on the 1st of the
-                    following year).
-        """
-        return self._periodicity
-
-    def _validate_periodicity(self) -> None:
-        """Validate the periodicity of the time series.
-
-        Raises:
-            PeriodicityError: If the datetimes do not conform to the periodicity.
-        """
-        if self.periodicity is None:
-            # Default to a periodicity that accepts all datetimes
-            self._periodicity = Period.of_microseconds(1)
-
-        # Convert to a Period object
-        if isinstance(self._periodicity, str):
-            self._periodicity = Period.of_duration(self._periodicity)
-
-        self._epoch_check(self.periodicity)
-
-        # Check how many unique values are in the truncated times. It should equal the length of the original
-        # time-series if all time values map to single periodicity
-        if not TimeSeries.check_periodicity(self.df[self.time_name], self.periodicity):
-            raise PeriodicityError(
-                f'Values in time field: "{self.time_name}" do not conform to periodicity: {self.periodicity}'
-            )
-
-    @staticmethod
-    def check_periodicity(date_times: pl.Series, periodicity: Period) -> bool:
-        """Check that a Series of date/time values conforms to given periodicity.
-
-        Args:
-           date_times: A Series of date/times to be tested.
-           periodicity: The periodicity period that the date/times are checked against.
-
-        Returns:
-           True if the Series conforms to the periodicity.
-           False otherwise
-        """
-        # Check how many unique values are in the truncated times. It should equal the length of the original
-        # time-series if all time values map to single periodicity
-        return truncate_to_period(date_times, periodicity).n_unique() == len(date_times)
-
-    @staticmethod
-    def _epoch_check(period: Period) -> None:
-        """Check if the period is epoch-agnostic.
-
-        A period is considered "epoch agnostic" if it divides the timeline into consistent intervals regardless of the
-        epoch (starting point) used for calculations. This ensures that the intervals are aligned with natural
-        calendar or clock units (e.g., days, months, years), rather than being influenced by the specific epoch used
-        in arithmetic.
-
-        For example:
-            - Epoch-agnostic periods include:
-                - `P1Y` (1 year): Intervals are aligned to calendar years.
-                - `P1M` (1 month): Intervals are aligned to calendar months.
-                - `P1D` (1 day): Intervals are aligned to whole days.
-                - `PT15M` (15 minutes): Intervals are aligned to clock minutes.
-
-            - Non-epoch-agnostic periods include:
-                - `P7D` (7 days): Intervals depend on the epoch. For example,
-                  starting from 2023-01-01 vs. 2023-01-03 would result in
-                  different alignments of 7-day periods.
-
-        Args:
-            period: The period to check.
-
-        Raises:
-            NotImplementedError: If the period is not epoch-agnostic.
-        """
-        if not period.is_epoch_agnostic():
-            # E.g., 5 hours, 7 days, 9 months, etc.
-            raise NotImplementedError("Not available for non-epoch agnostic periodicity")
+        return self._time_properties.periodicity
 
     @property
     def df(self) -> pl.DataFrame:
-        """The underlying DataFrame of the TimeSeries object."""
         return self._df
 
     @df.setter
     def df(self, new_df: pl.DataFrame) -> None:
+        self._update_df(new_df)
+
+    def _update_df(self, new_df: pl.DataFrame) -> None:
         """Update the underlying DataFrame while preserving the integrity of primary datetime field, metadata, and
         supplementary column settings.
 
@@ -405,41 +221,10 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
             new_df: The new Polars DataFrame to set as the time series data.
         """
         old_df = self._df.clone()  # A cheap operation that does not copy data, just the schema.
-        self._validate_time_column(new_df)
+        self._time_manager.check_time_integrity(old_df, new_df)
         self._df = new_df  # Set this before removing columns so that recursive removals via relationship manager works.
         self._remove_missing_columns(old_df, new_df)
         self._add_new_columns(old_df, new_df)
-
-    def _validate_time_column(self, df: pl.DataFrame) -> None:
-        """Validate that the DataFrame contains the required time column with unchanged timestamps.
-
-        This ensures that the `time_name` column exists and its values match the current time series.
-        Adding or removing rows (therefore modifying the time aspect of the timeseries) is considered a
-        significant change and should result in a new TimeSeries object.
-
-        Args:
-            df: The `Polars` DataFrame to validate.
-
-        Raises:
-            ValueError: If the time column is missing or if its timestamps differ from the current DataFrame.
-        """
-        # Validate that the time column actually exists
-        if self.time_name not in df.columns:
-            raise ColumnNotFoundError(
-                f"Time column {self.time_name} not found in DataFrame. Available columns: {list(df.columns)}"
-            )
-
-        # Validate time column type
-        dtype = df[self.time_name].dtype
-        if not dtype.is_temporal():
-            raise ColumnTypeError(f"Time column {self.time_name} must be datetime type, got {dtype}")
-
-        # Validate that the time values haven't mutated (only if new dataframe is different to old)
-        if df is not self.df:  # Check if they are the same object
-            new_timestamps = df[self.time_name]
-            old_timestamps = self.df[self.time_name]
-            if Counter(new_timestamps.to_list()) != Counter(old_timestamps.to_list()):
-                raise TimeMutatedError(old_timestamps=old_timestamps, new_timestamps=new_timestamps)
 
     def _remove_missing_columns(self, old_df: pl.DataFrame, new_df: pl.DataFrame) -> None:
         """Remove reference to columns that are missing in the new DataFrame.
@@ -541,7 +326,6 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
             column_metadata=new_metadata,
             metadata=self._metadata,
             on_duplicates=self._on_duplicates,
-            pad=self._pad,
         )
 
     def init_supplementary_column(

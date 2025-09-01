@@ -1,10 +1,12 @@
 from collections.abc import Iterable
 from datetime import datetime
+from typing import assert_never
 
 import polars as pl
 
 from time_stream import Period
-from time_stream.exceptions import ColumnNotFoundError
+from time_stream.enums import DuplicateOption
+from time_stream.exceptions import ColumnNotFoundError, DuplicateValueError
 
 
 def get_date_filter(time_name: str, observation_interval: datetime | tuple[datetime, datetime | None]) -> pl.Expr:
@@ -145,3 +147,93 @@ def check_columns_in_dataframe(df: pl.DataFrame, columns: str | Iterable[str]) -
     invalid_columns = sorted(set(columns) - set(df.columns))
     if invalid_columns:
         raise ColumnNotFoundError(f"Columns not found in dataframe: {invalid_columns}")
+
+
+def configure_period_object(period: str | Period | None) -> Period:
+    """Configure a time-stream Period object.
+
+    Converts strings to Period objects (if required) and checks that the Period can be used within time-stream.
+
+    Args:
+          period: The period to configure.
+
+    Returns:
+         A Period object.
+    """
+    if period is None:
+        # Default to a period that accepts all datetimes
+        return Period.of_microseconds(1)
+
+    # If it's a string, let's assume it's provided as a valid ISO duration string. And create a Period object
+    if isinstance(period, str):
+        period = Period.of_duration(period)
+
+    # Check the epoch agnostic nature of the period
+    return epoch_check(period)
+
+
+def epoch_check(period: Period) -> Period:
+    """Check if the period is epoch-agnostic.
+
+    A period is considered "epoch agnostic" if it divides the timeline into consistent intervals regardless of the
+    epoch (starting point) used for calculations. This ensures that the intervals are aligned with natural
+    calendar or clock units (e.g., days, months, years), rather than being influenced by the specific epoch used
+    in arithmetic.
+
+    Currently, Time-Stream does not allow working with non-epoch agnostic periods.
+
+    For example:
+        - Epoch-agnostic periods include:
+            - `P1Y` (1 year): Intervals are aligned to calendar years.
+            - `P1M` (1 month): Intervals are aligned to calendar months.
+            - `P1D` (1 day): Intervals are aligned to whole days.
+            - `PT15M` (15 minutes): Intervals are aligned to clock minutes.
+
+        - Non-epoch-agnostic periods include:
+            - `P7D` (7 days): Intervals depend on the epoch. For example, starting from 2023-01-01 vs. 2023-01-03
+                would result in different alignments of 7-day periods.
+
+    Args:
+        period: The period to check.
+
+    Returns:
+        The period object if it passes the check.
+    Raises:
+        NotImplementedError: If the period is not epoch-agnostic.
+    """
+    if not period.is_epoch_agnostic():
+        # E.g., 5 hours, 7 days, 9 months, etc.
+        raise NotImplementedError("Not available for non-epoch agnostic periodicity")
+    else:
+        return period
+
+
+def handle_duplicates(df, column, on_duplicates) -> pl.DataFrame:
+    duplicate_mask = df[column].is_duplicated()
+
+    if not duplicate_mask.any():
+        # Nothing to do!
+        return df
+
+    match on_duplicates:
+        case DuplicateOption.ERROR:
+            raise DuplicateValueError()
+
+        case DuplicateOption.KEEP_FIRST:
+            return df.unique(subset=column, keep="first")
+
+        case DuplicateOption.KEEP_LAST:
+            return df.unique(subset=column, keep="last")
+
+        case DuplicateOption.MERGE:
+            # Coalesce by first non-null per column
+            return df.group_by(column).agg(
+                [pl.col(col).drop_nulls().first().alias(col) for col in df.columns]
+            )
+
+        case DuplicateOption.DROP:
+            return df.filter(~duplicate_mask)
+
+        case _ as unreachable:
+            # Should never reach here, unless a new enum value is added in the future and logic has not been added here
+            assert_never(unreachable)

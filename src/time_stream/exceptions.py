@@ -23,7 +23,11 @@ class DuplicateColumnError(TimeStreamError):
     """Raised when a column name is duplicated."""
 
 
-class DuplicateTimeError(TimeStreamError):
+class DuplicateValueError(TimeStreamError):
+    """Raised when values that should be unique are found to have duplicates."""
+
+
+class DuplicateTimeError(DuplicateValueError):
     """Raised when duplicate time values are found."""
 
     def __init__(
