@@ -4,9 +4,16 @@ from typing import TYPE_CHECKING, Any, Iterable, Iterator, Sequence, Type
 
 import polars as pl
 
+from time_stream.aggregation import AggregationCtx, AggregationFunction
 from time_stream.columns import DataColumn, FlagColumn, PrimaryTimeColumn, SupplementaryColumn, TimeSeriesColumn
 from time_stream.enums import DuplicateOption, TimeAnchor
-from time_stream.exceptions import ColumnNotFoundError, ColumnTypeError, DuplicateColumnError, MetadataError
+from time_stream.exceptions import (
+    AggregationPeriodError,
+    ColumnNotFoundError,
+    ColumnTypeError,
+    DuplicateColumnError,
+    MetadataError,
+)
 from time_stream.flag_manager import TimeSeriesFlagManager
 from time_stream.period import Period
 from time_stream.relationships import RelationshipManager
@@ -14,7 +21,6 @@ from time_stream.time_manager import TimeManager
 from time_stream.utils import check_columns_in_dataframe, pad_time
 
 if TYPE_CHECKING:
-    from time_stream.aggregation import AggregationFunction
     from time_stream.infill import InfillMethod
     from time_stream.qc import QCCheck
 
@@ -373,7 +379,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
     def aggregate(
         self,
         aggregation_period: Period,
-        aggregation_function: "str | Type[AggregationFunction] | AggregationFunction",
+        aggregation_function: str | Type[AggregationFunction] | AggregationFunction,
         columns: str | list[str],
         missing_criteria: tuple[str, float | int] | None = None,
     ) -> "TimeSeries":
@@ -389,12 +395,29 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         Returns:
             A TimeSeries containing the aggregated data.
         """
-        # Import at runtime to avoid circular import
-        from time_stream.aggregation import AggregationFunction  # noqa: PLC0415
+        if not aggregation_period.is_epoch_agnostic():
+            raise AggregationPeriodError(
+                f"Non-epoch agnostic aggregation periods are not supported: '{aggregation_period}'."
+            )
+
+        if not self.periodicity.is_subperiod_of(aggregation_period):
+            raise AggregationPeriodError(
+                f"Incompatible aggregation period '{aggregation_period}' with TimeSeries periodicity "
+                f"'{self.periodicity}'. TimeSeries periodicity must be a subperiod of the aggregation period."
+            )
 
         # Get the aggregation function instance and run the apply method
+        ctx = AggregationCtx(self.df, self.time_name, self.time_anchor, self.periodicity)
         agg_instance = AggregationFunction.get(aggregation_function)
-        return agg_instance.apply(self, aggregation_period, columns, missing_criteria)
+        agg_df = agg_instance.apply(ctx, aggregation_period, columns, missing_criteria)
+
+        return TimeSeries(
+            df=agg_df,
+            time_name=self.time_name,
+            resolution=aggregation_period,
+            periodicity=aggregation_period,
+            metadata=self._metadata.copy(),
+        )
 
     def qc_check(
         self,

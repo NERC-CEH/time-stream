@@ -13,12 +13,7 @@ from time_stream.exceptions import (
     ResolutionError,
     TimeMutatedError,
 )
-from time_stream.utils import (
-    check_periodicity,
-    check_resolution,
-    configure_period_object,
-    handle_duplicates
-)
+from time_stream.utils import check_periodicity, check_resolution, configure_period_object, handle_duplicates
 
 
 class TimeManager:

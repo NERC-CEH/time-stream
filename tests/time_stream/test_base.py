@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import patch
+from unittest.mock import patch, Mock
 from datetime import date, datetime
 
 import polars as pl
@@ -7,7 +7,7 @@ from parameterized import parameterized
 from polars.testing import assert_series_equal, assert_frame_equal
 
 from time_stream.base import TimeSeries
-from time_stream.exceptions import ColumnNotFoundError, ColumnTypeError, MetadataError
+from time_stream.exceptions import AggregationPeriodError, ColumnNotFoundError, ColumnTypeError, MetadataError
 from time_stream.period import Period
 from time_stream.columns import DataColumn, FlagColumn, PrimaryTimeColumn, SupplementaryColumn, TimeSeriesColumn
 
@@ -849,3 +849,37 @@ class TestGetFlagSystemColumn(unittest.TestCase):
         expected = self.ts.flag_col
         result = self.ts.get_flag_system_column(data_column, flag_system)
         self.assertEqual(result, expected)
+
+
+class TestAggregate(unittest.TestCase):
+    def setUp(self):
+        df = pl.DataFrame({
+            "time": [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)],
+            "data_col": [10, 20, 30]
+        })
+        self.ts = TimeSeries(df=df, time_name="time", resolution="P1D", periodicity="P1D")
+
+    def test_validate_aggregation_period_non_epoch_agnostic(self):
+        """Test validation fails for non-epoch agnostic periods."""
+        period = Mock()
+        period.is_epoch_agnostic.return_value = False
+
+        with self.assertRaises(AggregationPeriodError) as err:
+            self.ts.aggregate(period, "mean", "data_col")
+        self.assertEqual(f"Non-epoch agnostic aggregation periods are not supported: '{period}'.", str(err.exception))
+
+    def test_validate_aggregation_period_not_subperiod(self):
+        """Test validation fails when the aggregation period is not a subperiod."""
+        period = Mock()
+        period.is_epoch_agnostic.return_value = True
+        period.is_subperiod_of.return_value = False
+
+        self.ts._periodicity = period
+
+        with self.assertRaises(AggregationPeriodError) as err:
+            self.ts.aggregate(period, "mean", "data_col")
+        self.assertEqual(
+            f"Incompatible aggregation period '{period}' with TimeSeries periodicity '{self.ts.periodicity}'. "
+            f"TimeSeries periodicity must be a subperiod of the aggregation period.",
+            str(err.exception)
+        )
