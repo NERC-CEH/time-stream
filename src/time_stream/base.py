@@ -617,7 +617,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
             # Otherwise, look for name within columns
             if name == self.time_name:
                 # If the attribute name matches the time column, return the PrimaryTimeColumn
-                return self.time_column
+                return self.time_columnon_duplicates
             elif name in self.columns:
                 # If the attribute name matches a column in the DataFrame (excluding the time column),
                 # select that Column
@@ -748,14 +748,3 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
             return False
 
         return True
-
-    def __ne__(self, other: object) -> bool:
-        """Checks if two TimeSeries instances are not equal.
-
-        Args:
-            other: The object to compare.
-
-        Returns:
-            bool: True if the TimeSeries instances are not equal, False otherwise.
-        """
-        return not self.__eq__(other)
