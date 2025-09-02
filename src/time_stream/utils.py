@@ -246,3 +246,39 @@ def handle_duplicates(df, column, on_duplicates) -> pl.DataFrame:
         case _ as unreachable:
             # Should never reach here, unless a new enum value is added in the future and logic has not been added here
             assert_never(unreachable)
+
+
+def check_resolution(date_times: pl.Series, resolution: Period, time_anchor: TimeAnchor) -> bool:
+    """Check that a Series of date/time values conforms to a given resolution period.
+
+    Resolution defines how "precise" the datetimes are, i.e., to what precision of time unit
+    should each datetime in the time series match to.
+
+    Args:
+       date_times: A Series of date/times to be tested.
+       resolution: The resolution period that the date/times are checked against.
+       time_anchor: The time anchor to which the date/times should conform to.
+
+    Returns:
+       True if the Series conforms to the resolution period.
+    """
+    return date_times.equals(truncate_to_period(date_times, resolution, time_anchor))
+
+
+def check_periodicity(date_times: pl.Series, periodicity: Period, time_anchor: TimeAnchor) -> bool:
+    """Check that a Series of date/time values conforms to given periodicity.
+
+    Periodicity defines the allowed "frequency" of the datetimes, i.e., how many datetimes
+     entries are allowed within a given period of time.
+
+    Args:
+       date_times: A Series of date/times to be tested.
+       periodicity: The periodicity period that the date/times are checked against.
+       time_anchor: The time anchor to which the date/times should conform to.
+
+    Returns:
+       True if the Series conforms to the periodicity.
+    """
+    # Check how many unique values are in the truncated times. It should equal the length of the original
+    # time-series if all time values map to single periodicity
+    return truncate_to_period(date_times, periodicity, time_anchor).n_unique() == date_times.len()
