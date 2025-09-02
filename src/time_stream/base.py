@@ -5,19 +5,13 @@ from typing import TYPE_CHECKING, Any, Iterable, Iterator, Sequence, Type
 import polars as pl
 
 from time_stream.columns import DataColumn, FlagColumn, PrimaryTimeColumn, SupplementaryColumn, TimeSeriesColumn
-from time_stream.enums import DuplicateOption
-from time_stream.exceptions import (
-    ColumnNotFoundError,
-    ColumnTypeError,
-    DuplicateColumnError,
-    MetadataError
-)
+from time_stream.enums import DuplicateOption, TimeAnchor
+from time_stream.exceptions import ColumnNotFoundError, ColumnTypeError, DuplicateColumnError, MetadataError
 from time_stream.flag_manager import TimeSeriesFlagManager
 from time_stream.period import Period
 from time_stream.relationships import RelationshipManager
 from time_stream.time_manager import TimeManager
-from time_stream.time_properties import TimeProperties
-from time_stream.utils import check_columns_in_dataframe
+from time_stream.utils import check_columns_in_dataframe, pad_time
 
 if TYPE_CHECKING:
     from time_stream.aggregation import AggregationFunction
@@ -39,7 +33,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         flag_columns: dict[str, str] | None = None,
         metadata: dict[str, Any] | None = None,
         column_metadata: dict[str, dict[str, Any]] | None = None,
-        on_duplicates: DuplicateOption | str = DuplicateOption.ERROR
+        on_duplicates: DuplicateOption | str = DuplicateOption.ERROR,
     ) -> None:
         """Initialise a TimeSeries instance.
 
@@ -58,20 +52,13 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         """
         self._df = df
 
-        self._time_properties = TimeProperties(
-            get_df=lambda: self._df,
-            time_name=time_name,
-            resolution=resolution,
-            periodicity=periodicity
-        )
-
         self._time_manager = TimeManager(
             get_df=lambda: self._df,
             set_df=lambda new_df: self._update_df(new_df),
             time_name=time_name,
             resolution=resolution,
             periodicity=periodicity,
-            on_duplicates=on_duplicates
+            on_duplicates=on_duplicates,
         )
 
         self._flag_manager = TimeSeriesFlagManager(self, flag_systems)
@@ -109,8 +96,8 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         self._setup_metadata(metadata)
 
         self._time_manager.handle_time_duplicates()
-        self._time_properties.validate()
-        self._time_manager.sort_time()
+        self._time_manager.validate()
+        self.sort_time()
 
     def _setup_columns(
         self,
@@ -139,9 +126,6 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
             flag_columns = {}
         if column_metadata is None:
             column_metadata = {}
-
-        # Validate the time column
-        self._validate_time_column(self._df)
 
         # Validate that all supplementary and flag columns exist in the DataFrame
         check_columns_in_dataframe(self.df, supplementary_columns)
@@ -192,15 +176,19 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
     @property
     def time_name(self) -> str:
         """The name of the primary datetime column in the underlying TimeSeries DataFrame."""
-        return self._time_properties.time_name
+        return self._time_manager.time_name
 
     @property
     def resolution(self) -> Period:
-        return self._time_properties.resolution
+        return self._time_manager.resolution
 
     @property
     def periodicity(self) -> Period:
-        return self._time_properties.periodicity
+        return self._time_manager.periodicity
+
+    @property
+    def time_anchor(self) -> TimeAnchor:
+        return self._time_manager.time_anchor
 
     @property
     def df(self) -> pl.DataFrame:
@@ -220,7 +208,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         Args:
             new_df: The new Polars DataFrame to set as the time series data.
         """
-        old_df = self._df.clone()  # A cheap operation that does not copy data, just the schema.
+        old_df = self._df.clone()
         self._time_manager.check_time_integrity(old_df, new_df)
         self._df = new_df  # Set this before removing columns so that recursive removals via relationship manager works.
         self._remove_missing_columns(old_df, new_df)
@@ -291,6 +279,15 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         """Return all the columns of the TimeSeries."""
         columns = {col.name: col for col in self._columns.values() if type(col) is not PrimaryTimeColumn}
         return columns
+
+    def sort_time(self) -> None:
+        """Sort the TimeSeries DataFrame by the time column."""
+        self._df = self.df.sort(self.time_name)
+
+    def pad(self):
+        """Pad the time series with missing datetime rows, filling in NULLs for missing values."""
+        self._df = pad_time(self.df, self.time_name, self.periodicity, self.time_anchor)
+        self.sort_time()
 
     def select(self, col_names: list[str]) -> "TimeSeries":
         """Filter TimeSeries instance to include only the specified columns.

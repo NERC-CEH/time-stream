@@ -5,7 +5,7 @@ from typing import assert_never
 import polars as pl
 
 from time_stream import Period
-from time_stream.enums import DuplicateOption
+from time_stream.enums import DuplicateOption, TimeAnchor
 from time_stream.exceptions import ColumnNotFoundError, DuplicateValueError
 
 
@@ -31,38 +31,48 @@ def get_date_filter(time_name: str, observation_interval: datetime | tuple[datet
         return pl.col(time_name).is_between(start_date, end_date)
 
 
-def truncate_to_period(date_times: pl.Series, period: Period) -> pl.Series:
+def truncate_to_period(date_times: pl.Series, period: Period, time_anchor: TimeAnchor | None = None) -> pl.Series:
     """Truncate a Series of date/time values to the given period.
 
-    All the date/time values in the input series are "rounded down" to the specified period.
+    All the date/time values in the input series are "rounded" to the specified period, based on the time anchor
+    strategy chosen.
 
     Args:
-       date_times: A Series of date/times to be truncated.
-       period: The period to which the date/times should be truncated.
-
-    Examples:
-       For a period of one day (Period.of_days(1)) all the date/time values are rounded
-       down, or truncated, to the start of the day (the hour, minute, second, and microsecond
-       fields are all set to 0).
-
-       For a period of fifteen minutes (Period.of_minutes(15)) all the date/time values are rounded
-       down, or truncated, to the start of a fifteen-minute period (the minute field is rounded down
-       to either 0, 15, 30 or 45, and the second, and microsecond fields are set to 0).
+        date_times: A Series of date/times to be truncated.
+        period: The period to which the date/times should be truncated.
+        time_anchor: The time anchor to which the date/times should be truncated.
 
     Returns:
-       A `Polars` Series with the truncated date/time values.
+        A `Polars` Series with the truncated date/time values.
     """
-    # Remove any offset from the time series
-    time_series_no_offset = date_times.dt.offset_by("-" + period.pl_offset)
+    # 1. Remove any offset from the time series
+    date_times = date_times.dt.offset_by("-" + period.pl_offset)
 
-    # truncate the (non-offset) time series to the given resolution interval and add the offset back on
-    truncated_times = time_series_no_offset.dt.truncate(period.pl_interval)
-    truncated_times_with_offset = truncated_times.dt.offset_by(period.pl_offset)
+    # 2. Truncate the (non-offset) time series to the given resolution interval
+    #    Here we need to determine where the anchor points are, and if we need to nudge the datetimes towards
+    #    the anchor.
+    if time_anchor == TimeAnchor.END:
+        # In this case, the anchor point is at the END of the period.
+        #   - Subtract a micro-second (to handle datetimes on 'boundary' points that are within their own period),
+        #   - Truncate to the start of the period,
+        #   - Add on 1 period to get to the end point.
+        date_times = date_times.dt.offset_by("-1us")
+        date_times = date_times.dt.truncate(period.pl_interval)
+        date_times = date_times.dt.offset_by(period.pl_interval)
+    else:
+        # This is a "standard" case, where the anchor point is at the START of the period,
+        #   so simply truncate to the start of the period
+        date_times = date_times.dt.truncate(period.pl_interval)
 
-    return truncated_times_with_offset
+    # 3. Re-apply the offset
+    date_times = date_times.dt.offset_by(period.pl_offset)
+
+    return date_times
 
 
-def pad_time(df: pl.DataFrame, time_name: str, periodicity: Period) -> pl.DataFrame:
+def pad_time(
+    df: pl.DataFrame, time_name: str, periodicity: Period, time_anchor: TimeAnchor = TimeAnchor.START
+) -> pl.DataFrame:
     """Pad the time series in the DataFrame with missing datetime rows, filling in NULLs for missing values.
 
     This method ensures a complete time series by adding rows for any missing timestamps within the range of
@@ -82,12 +92,13 @@ def pad_time(df: pl.DataFrame, time_name: str, periodicity: Period) -> pl.DataFr
         df: The DataFrame to pad.
         time_name: The name of the time column to pad.
         periodicity: The periodicity of the time series.
+        time_anchor: The time anchor to which the date/times conform to.
 
     Returns:
         pl.DataFrame of padded data
     """
-    # Extract the existing datetimes, truncated to the start of their periodicity period
-    existing_datetimes = truncate_to_period(df[time_name], periodicity)
+    # Extract the existing datetimes, truncated to the boundary of their periodicity period
+    existing_datetimes = truncate_to_period(df[time_name], periodicity, time_anchor)
 
     # Get the min and max datetime from the existing datetimes
     min_datetime = existing_datetimes.min()
@@ -227,9 +238,7 @@ def handle_duplicates(df, column, on_duplicates) -> pl.DataFrame:
 
         case DuplicateOption.MERGE:
             # Coalesce by first non-null per column
-            return df.group_by(column).agg(
-                [pl.col(col).drop_nulls().first().alias(col) for col in df.columns]
-            )
+            return df.group_by(column).agg([pl.col(col).drop_nulls().first().alias(col) for col in df.columns])
 
         case DuplicateOption.DROP:
             return df.filter(~duplicate_mask)

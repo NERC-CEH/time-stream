@@ -1,11 +1,13 @@
 import unittest
 from datetime import datetime
+from unittest import expectedFailure
 
 import polars as pl
 from parameterized import parameterized
 from polars.testing import assert_series_equal
 
 from time_stream import Period
+from time_stream.enums import TimeAnchor
 from time_stream.exceptions import ColumnNotFoundError
 from time_stream.utils import check_columns_in_dataframe, get_date_filter, truncate_to_period, pad_time
 
@@ -57,115 +59,375 @@ class TestGetDateFilter(unittest.TestCase):
 
 
 class TestTruncateToPeriod(unittest.TestCase):
-    df = pl.DataFrame({
-        "time": [datetime(2020, 6, 1, 8, 10, 5, 2000),
-                 datetime(2021, 4, 30, 15, 30, 10, 250),
-                 datetime(2022, 12, 31, 12)]
-    })
+    dt = pl.Series([
+            datetime(2020, 6, 1, 8, 10, 5, 2001),
+            datetime(2021, 4, 30, 15, 30, 10, 250),
+            datetime(2022, 12, 31, 12, 0, 0),
+            datetime(2023, 1, 1, 0, 0),
+            datetime(2023, 3, 1, 0, 15)
+    ])
 
     @parameterized.expand([
-        ("simple yearly", Period.of_years(1),
-         [datetime(2020, 1, 1), datetime(2021, 1, 1), datetime(2022, 1, 1)]
+        ("simple yearly", Period.of_years(1), TimeAnchor.START,
+         pl.Series([
+             datetime(2020, 1, 1),
+             datetime(2021, 1, 1),
+             datetime(2022, 1, 1),
+             datetime(2023, 1, 1),
+             datetime(2023, 1, 1)
+         ])
          ),
-        ("yearly with offset", Period.of_years(1).with_month_offset(2),
-         [datetime(2020, 3, 1), datetime(2021, 3, 1), datetime(2022, 3, 1)]
+        ("yearly with offset", Period.of_years(1).with_month_offset(2), TimeAnchor.START,
+         pl.Series([
+             datetime(2020, 3, 1),
+             datetime(2021, 3, 1),
+             datetime(2022, 3, 1),
+             datetime(2022, 3, 1),
+             datetime(2023, 3, 1)
+         ])
+         ),
+        ("simple yearly end anchor", Period.of_years(1), TimeAnchor.END,
+         pl.Series([
+             datetime(2021, 1, 1),
+             datetime(2022, 1, 1),
+             datetime(2023, 1, 1),
+             datetime(2023, 1, 1),
+             datetime(2024, 1, 1)
+         ])
+         ),
+        ("yearly with offset end anchor", Period.of_years(1).with_month_offset(2), TimeAnchor.END,
+         pl.Series([
+             datetime(2021, 3, 1),
+             datetime(2022, 3, 1),
+             datetime(2023, 3, 1),
+             datetime(2023, 3, 1),
+             datetime(2024, 3, 1)
+         ])
          )
     ])
-    def test_truncate_to_year_period(self, _, period, expected):
+    def test_truncate_to_year_period(self, _, period, anchor, expected):
         """ Test that truncating a time series to a given year period works as expected.
         """
-        result = truncate_to_period(self.df["time"],period)
-        assert_series_equal(result, pl.Series("time", expected))
+        result = truncate_to_period(self.dt, period, anchor)
+        assert_series_equal(result, expected)
 
     @parameterized.expand([
-        ("simple monthly", Period.of_months(1),
-         [datetime(2020, 6, 1), datetime(2021, 4, 1), datetime(2022, 12, 1)]
+        ("simple monthly", Period.of_months(1), TimeAnchor.START,
+         pl.Series([
+             datetime(2020, 6, 1),
+             datetime(2021, 4, 1),
+             datetime(2022, 12, 1),
+             datetime(2023, 1, 1),
+             datetime(2023, 3, 1)
+         ])
          ),
-        ("3 monthly (quarterly)", Period.of_months(3),
-         [datetime(2020, 4, 1), datetime(2021, 4, 1), datetime(2022, 10, 1)]
+        ("3 monthly (quarterly)", Period.of_months(3), TimeAnchor.START,
+         pl.Series([
+             datetime(2020, 4, 1),
+             datetime(2021, 4, 1),
+             datetime(2022, 10, 1),
+             datetime(2023, 1, 1),
+             datetime(2023, 1, 1)
+         ])
          ),
-        ("monthly with offset", Period.of_months(1).with_hour_offset(9),
-         [datetime(2020, 5, 1, 9), datetime(2021, 4, 1, 9), datetime(2022, 12, 1, 9)]
+        ("monthly with offset", Period.of_months(1).with_hour_offset(9), TimeAnchor.START,
+         pl.Series([
+             datetime(2020, 5, 1, 9),
+             datetime(2021, 4, 1, 9),
+             datetime(2022, 12, 1, 9),
+             datetime(2022, 12, 1, 9),
+             datetime(2023, 2, 1, 9)
+         ])
+         ),
+        ("simple monthly end anchor", Period.of_months(1), TimeAnchor.END,
+         pl.Series([
+             datetime(2020, 7, 1),
+             datetime(2021, 5, 1),
+             datetime(2023, 1, 1),
+             datetime(2023, 1, 1),
+             datetime(2023, 4, 1)
+         ])
+         ),
+        ("3 monthly (quarterly) end anchor", Period.of_months(3), TimeAnchor.END,
+         pl.Series([
+             datetime(2020, 7, 1),
+             datetime(2021, 7, 1),
+             datetime(2023, 1, 1),
+             datetime(2023, 1, 1),
+             datetime(2023, 4, 1)
+         ])
+         ),
+        ("monthly with offset end anchor", Period.of_months(1).with_hour_offset(9), TimeAnchor.END,
+         pl.Series([
+             datetime(2020, 6, 1, 9),
+             datetime(2021, 5, 1, 9),
+             datetime(2023, 1, 1, 9),
+             datetime(2023, 1, 1, 9),
+             datetime(2023, 3, 1, 9)
+         ])
          )
     ])
-    def test_truncate_to_month_period(self, _, period, expected):
+    def test_truncate_to_month_period(self, _, period, anchor, expected):
         """ Test that truncating a time series to a given month period works as expected.
         """
-        result = truncate_to_period(self.df["time"],period)
-        assert_series_equal(result, pl.Series("time", expected))
+        result = truncate_to_period(self.dt, period, anchor)
+        assert_series_equal(result, pl.Series(expected))
 
     @parameterized.expand([
-        ("simple daily", Period.of_days(1),
-         [datetime(2020, 6, 1), datetime(2021, 4, 30), datetime(2022, 12, 31)]
+        ("simple daily", Period.of_days(1), TimeAnchor.START,
+         pl.Series([
+             datetime(2020, 6, 1),
+             datetime(2021, 4, 30),
+             datetime(2022, 12, 31),
+             datetime(2023, 1, 1),
+             datetime(2023, 3, 1)
+         ])
          ),
-        ("daily with offset", Period.of_days(1).with_hour_offset(9),
-         [datetime(2020, 5, 31, 9), datetime(2021, 4, 30, 9), datetime(2022, 12, 31, 9)]
+        ("daily with offset", Period.of_days(1).with_hour_offset(9), TimeAnchor.START,
+         pl.Series([
+             datetime(2020, 5, 31, 9),
+             datetime(2021, 4, 30, 9),
+             datetime(2022, 12, 31, 9),
+             datetime(2022, 12, 31, 9),
+             datetime(2023, 2, 28, 9)
+         ])
+         ),
+        ("simple daily end anchor", Period.of_days(1), TimeAnchor.END,
+         pl.Series([
+             datetime(2020, 6, 2),
+             datetime(2021, 5, 1),
+             datetime(2023, 1, 1),
+             datetime(2023, 1, 1),
+             datetime(2023, 3, 2)
+         ])
+         ),
+        ("daily with offset end anchor", Period.of_days(1).with_hour_offset(9), TimeAnchor.END,
+         pl.Series([
+             datetime(2020, 6, 1, 9),
+             datetime(2021, 5, 1, 9),
+             datetime(2023, 1, 1, 9),
+             datetime(2023, 1, 1, 9),
+             datetime(2023, 3, 1, 9)
+         ])
          )
     ])
-    def test_truncate_to_day_period(self, _, period, expected):
+    def test_truncate_to_day_period(self, _, period, anchor, expected):
         """ Test that truncating a time series to a given day period works as expected.
         """
-        result = truncate_to_period(self.df["time"],period)
-        assert_series_equal(result, pl.Series("time", expected))
+        result = truncate_to_period(self.dt, period, anchor)
+        assert_series_equal(result, pl.Series(expected))
 
     @parameterized.expand([
-        ("simple hourly", Period.of_hours(1),
-         [datetime(2020, 6, 1, 8), datetime(2021, 4, 30, 15), datetime(2022, 12, 31, 12)]
+        ("simple hourly", Period.of_hours(1), TimeAnchor.START,
+         pl.Series([
+             datetime(2020, 6, 1, 8),
+             datetime(2021, 4, 30, 15),
+             datetime(2022, 12, 31, 12),
+             datetime(2023, 1, 1),
+             datetime(2023, 3, 1)
+         ])
          ),
-        ("12 hourly", Period.of_hours(12),
-         [datetime(2020, 6, 1), datetime(2021, 4, 30, 12), datetime(2022, 12, 31, 12)]
+        ("12 hourly", Period.of_hours(12), TimeAnchor.START,
+         pl.Series([
+             datetime(2020, 6, 1),
+             datetime(2021, 4, 30, 12),
+             datetime(2022, 12, 31, 12),
+             datetime(2023, 1, 1),
+             datetime(2023, 3, 1)
+         ])
          ),
-        ("hourly with offset", Period.of_hours(1).with_minute_offset(30),
-         [datetime(2020, 6, 1, 7, 30), datetime(2021, 4, 30, 15, 30), datetime(2022, 12, 31, 11, 30)]
+        ("hourly with offset", Period.of_hours(1).with_minute_offset(30), TimeAnchor.START,
+        pl.Series([
+             datetime(2020, 6, 1, 7, 30),
+             datetime(2021, 4, 30, 15, 30),
+             datetime(2022, 12, 31, 11, 30),
+             datetime(2022, 12, 31, 23, 30),
+             datetime(2023, 2, 28, 23, 30)
+         ])
+         ),
+        ("simple hourly end anchor", Period.of_hours(1), TimeAnchor.END,
+         pl.Series([
+             datetime(2020, 6, 1, 9),
+             datetime(2021, 4, 30, 16),
+             datetime(2022, 12, 31, 12),
+             datetime(2023, 1, 1),
+             datetime(2023, 3, 1, 1)
+         ])
+         ),
+        ("12 hourly end anchor", Period.of_hours(12), TimeAnchor.END,
+         pl.Series([
+             datetime(2020, 6, 1, 12),
+             datetime(2021, 5, 1),
+             datetime(2022, 12, 31, 12),
+             datetime(2023, 1, 1),
+             datetime(2023, 3, 1, 12)
+         ])
+         ),
+        ("hourly with offset end anchor", Period.of_hours(1).with_minute_offset(30), TimeAnchor.END,
+         pl.Series([
+             datetime(2020, 6, 1, 8, 30),
+             datetime(2021, 4, 30, 16, 30),
+             datetime(2022, 12, 31, 12, 30),
+             datetime(2023, 1, 1, 0, 30),
+             datetime(2023, 3, 1, 0, 30)
+         ])
          )
     ])
-    def test_truncate_to_hour_period(self, _, period, expected):
+    def test_truncate_to_hour_period(self, _, period, anchor, expected):
         """ Test that truncating a time series to a given hour period works as expected.
         """
-        result = truncate_to_period(self.df["time"],period)
-        assert_series_equal(result, pl.Series("time", expected))
+        result = truncate_to_period(self.dt, period, anchor)
+        assert_series_equal(result, pl.Series(expected))
 
     @parameterized.expand([
-        ("simple minutes", Period.of_minutes(1),
-         [datetime(2020, 6, 1, 8, 10), datetime(2021, 4, 30, 15, 30), datetime(2022, 12, 31, 12)]
+        ("simple minutes", Period.of_minutes(1), TimeAnchor.START,
+         pl.Series([
+             datetime(2020, 6, 1, 8, 10),
+             datetime(2021, 4, 30, 15, 30),
+             datetime(2022, 12, 31, 12),
+             datetime(2023, 1, 1),
+             datetime(2023, 3, 1, 0, 15)
+         ])
          ),
-        ("15 minutes", Period.of_minutes(15),
-         [datetime(2020, 6, 1, 8), datetime(2021, 4, 30, 15, 30), datetime(2022, 12, 31, 12)]
+        ("15 minutes", Period.of_minutes(15), TimeAnchor.START,
+         pl.Series([
+             datetime(2020, 6, 1, 8),
+             datetime(2021, 4, 30, 15, 30),
+             datetime(2022, 12, 31, 12),
+             datetime(2023, 1, 1),
+             datetime(2023, 3, 1, 0, 15)
+         ])
          ),
-        ("minutes with offset", Period.of_minutes(1).with_second_offset(45),
-         [datetime(2020, 6, 1, 8, 9, 45), datetime(2021, 4, 30, 15, 29, 45), datetime(2022, 12, 31, 11, 59, 45)]
+        ("minutes with offset", Period.of_minutes(1).with_second_offset(45), TimeAnchor.START,
+         pl.Series([
+             datetime(2020, 6, 1, 8, 9, 45),
+             datetime(2021, 4, 30, 15, 29, 45),
+             datetime(2022, 12, 31, 11, 59, 45),
+             datetime(2022, 12, 31, 23, 59, 45),
+             datetime(2023, 3, 1, 0, 14, 45)
+         ])
+         ),
+        ("simple minutes end anchor", Period.of_minutes(1), TimeAnchor.END,
+         pl.Series([
+             datetime(2020, 6, 1, 8, 11),
+             datetime(2021, 4, 30, 15, 31),
+             datetime(2022, 12, 31, 12),
+             datetime(2023, 1, 1),
+             datetime(2023, 3, 1, 0, 15)
+         ])
+         ),
+        ("15 minutes end anchor", Period.of_minutes(15), TimeAnchor.END,
+         pl.Series([
+             datetime(2020, 6, 1, 8, 15),
+             datetime(2021, 4, 30, 15, 45),
+             datetime(2022, 12, 31, 12),
+             datetime(2023, 1, 1),
+             datetime(2023, 3, 1, 0, 15)
+         ])
+         ),
+        ("minutes with offset end anchor", Period.of_minutes(1).with_second_offset(45), TimeAnchor.END,
+         pl.Series([
+             datetime(2020, 6, 1, 8, 10, 45),
+             datetime(2021, 4, 30, 15, 30, 45),
+             datetime(2022, 12, 31, 12, 0, 45),
+             datetime(2023, 1, 1, 0, 0, 45),
+             datetime(2023, 3, 1, 0, 15, 45)
+         ])
          )
     ])
-    def test_truncate_to_minute_period(self, _, period, expected):
+    def test_truncate_to_minute_period(self, _, period, anchor, expected):
         """ Test that truncating a time series to a given minute period works as expected.
         """
-        result = truncate_to_period(self.df["time"],period)
-        assert_series_equal(result, pl.Series("time", expected))
+        result = truncate_to_period(self.dt, period, anchor)
+        assert_series_equal(result, pl.Series(expected))
 
     @parameterized.expand([
-        ("simple seconds", Period.of_seconds(1),
-         [datetime(2020, 6, 1, 8, 10, 5), datetime(2021, 4, 30, 15, 30, 10), datetime(2022, 12, 31, 12)]
+        ("simple seconds", Period.of_seconds(1), TimeAnchor.START,
+         pl.Series([
+             datetime(2020, 6, 1, 8, 10, 5),
+             datetime(2021, 4, 30, 15, 30, 10),
+             datetime(2022, 12, 31, 12),
+             datetime(2023, 1, 1),
+             datetime(2023, 3, 1, 0, 15)
+         ])
          ),
-        ("3 seconds", Period.of_seconds(3),
-         [datetime(2020, 6, 1, 8, 10, 3), datetime(2021, 4, 30, 15, 30, 9), datetime(2022, 12, 31, 12)]
-         )
+        ("3 seconds", Period.of_seconds(3), TimeAnchor.START,
+         pl.Series([
+             datetime(2020, 6, 1, 8, 10, 3),
+             datetime(2021, 4, 30, 15, 30, 9),
+             datetime(2022, 12, 31, 12),
+             datetime(2023, 1, 1),
+             datetime(2023, 3, 1, 0, 15)
+         ])
+         ),
+        ("seconds with offset", Period.of_seconds(1).with_microsecond_offset(5000), TimeAnchor.START,
+         pl.Series([
+             datetime(2020, 6, 1, 8, 10, 4, 5000),
+             datetime(2021, 4, 30, 15, 30, 9, 5000),
+             datetime(2022, 12, 31, 11, 59, 59, 5000),
+             datetime(2022, 12, 31, 23, 59, 59, 5000),
+             datetime(2023, 3, 1, 0, 14, 59, 5000)
+         ])
+         ),
+        ("simple seconds end anchor", Period.of_seconds(1), TimeAnchor.END,
+         pl.Series([
+             datetime(2020, 6, 1, 8, 10, 6),
+             datetime(2021, 4, 30, 15, 30, 11),
+             datetime(2022, 12, 31, 12),
+             datetime(2023, 1, 1),
+             datetime(2023, 3, 1, 0, 15)
+         ])
+         ),
+        ("3 seconds end anchor", Period.of_seconds(3), TimeAnchor.END,
+         pl.Series([
+             datetime(2020, 6, 1, 8, 10, 6),
+             datetime(2021, 4, 30, 15, 30, 12),
+             datetime(2022, 12, 31, 12),
+             datetime(2023, 1, 1),
+             datetime(2023, 3, 1, 0, 15)
+         ])
+         ),
+         ("seconds with offset end anchor", Period.of_seconds(1).with_microsecond_offset(5000), TimeAnchor.END,
+          pl.Series([
+              datetime(2020, 6, 1, 8, 10, 5, 5000),
+              datetime(2021, 4, 30, 15, 30, 10, 5000),
+              datetime(2022, 12, 31, 12, 0, 0, 5000),
+              datetime(2023, 1, 1, 0, 0, 0, 5000),
+              datetime(2023, 3, 1, 0, 15, 0, 5000)
+          ])
+          ),
     ])
-    def test_truncate_to_second_period(self, _, period, expected):
+    def test_truncate_to_second_period(self, _, period, anchor, expected):
         """ Test that truncating a time series to a given second period works as expected.
         """
-        result = truncate_to_period(self.df["time"],period)
-        assert_series_equal(result, pl.Series("time", expected))
+        result = truncate_to_period(self.dt, period, anchor)
+        assert_series_equal(result, pl.Series(expected))
 
     @parameterized.expand([
-        ("simple microseconds", Period.of_microseconds(200),
-         [datetime(2020, 6, 1, 8, 10, 5, 2000), datetime(2021, 4, 30, 15, 30, 10, 200), datetime(2022, 12, 31, 12)]
+        ("simple microseconds", Period.of_microseconds(250), TimeAnchor.START,
+         pl.Series([
+             datetime(2020, 6, 1, 8, 10, 5, 2000),
+             datetime(2021, 4, 30, 15, 30, 10, 250),
+             datetime(2022, 12, 31, 12),
+             datetime(2023, 1, 1),
+             datetime(2023, 3, 1, 0, 15)
+         ])
+         ),
+        ("simple microseconds end anchor", Period.of_microseconds(250), TimeAnchor.END,
+         pl.Series([
+             datetime(2020, 6, 1, 8, 10, 5, 2250),
+             datetime(2021, 4, 30, 15, 30, 10, 250),
+             datetime(2022, 12, 31, 12),
+             datetime(2023, 1, 1),
+             datetime(2023, 3, 1, 0, 15)
+         ])
          ),
     ])
-    def test_truncate_to_microsecond_period(self, _, period, expected):
+    def test_truncate_to_microsecond_period(self, _, period, anchor, expected):
         """ Test that truncating a time series to a given microsecond period works as expected.
         """
-        result = truncate_to_period(self.df["time"],period)
-        assert_series_equal(result, pl.Series("time", expected))
+        result = truncate_to_period(self.dt, period, anchor)
+        assert_series_equal(result, pl.Series(expected))
 
 
 class TestPadTime(unittest.TestCase):

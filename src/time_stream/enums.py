@@ -93,3 +93,24 @@ class ClosedInterval(Enum):
     LEFT = "left"
     RIGHT = "right"
     NONE = "none"
+
+
+class TimeAnchor(Enum):
+    """Enum representing how time is anchored at the measured point and therefore over which period of time
+    a value is valid for.
+
+    In the descriptions below, "x" is the time value, "r" stands for a single unit of the resolution of the data
+    (15-minute, 1-hour, 1-day, etc.).
+
+    Attributes:
+        POINT: The time stamp is anchored for the instant of time "x".
+               A value at "x" is considered valid only for the instant of time "x".
+        START: The time stamp is anchored starting at "x".
+               A value at "x" is considered valid starting at "x" (inclusive) and ending at "x+r" (exclusive).
+        END: The time stamp is anchored ending at "x".
+             A value at "x" is considered valid starting at "x-r" (exclusive) and ending at "x" (inclusive).
+    """
+
+    POINT = "point"
+    START = "start"
+    END = "end"
