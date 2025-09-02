@@ -17,6 +17,7 @@ from time_stream.exceptions import (
     UnknownAggregationError,
 )
 
+
 def generate_time_series(resolution: Period, periodicity: Period, length: int, missing_data: bool=False) -> TimeSeries:
     """Helper function to generate a TimeSeries object for test purposes.
 
@@ -573,45 +574,18 @@ class TestPaddedAggregations(unittest.TestCase):
         self.values = [1, 2, 3, 4, 5, 6]
         self.df = pl.DataFrame({"timestamp": self.timestamps, "values": self.values})
 
-    def test_padded_result(self):
-        """ Test that the aggregation result is padded if the original time series was padded
+    @parameterized.expand([True, False])
+    def test_padded_result(self, pad):
+        """ Test that the aggregation result is as expected if the original time series was padded (or not)
         """
         ts = TimeSeries(
             df=self.df,
             time_name="timestamp",
             resolution=Period.of_days(1),
-            periodicity=Period.of_days(1),
-            pad=True
+            periodicity=Period.of_days(1)
         )
-
-        expected_df = pl.DataFrame({
-            "timestamp": [datetime(2020, 1, 1), datetime(2020, 2, 1), datetime(2020, 3, 1)],
-            "mean_values": [2., None, 5.],
-            "count_values": [3, None, 3],
-            "expected_count_timestamp": [31, None, 31],
-            "valid_values": [True, None, True],
-        })
-
-        expected_ts = TimeSeries(
-            df=expected_df,
-            time_name="timestamp",
-            resolution=Period.of_months(1),
-            periodicity=Period.of_months(1)
-        )
-
-        result = ts.aggregate(Period.of_months(1), "mean", "values")
-        self.assertEqual(result, expected_ts)
-
-    def test_not_padded_result(self):
-        """ Test that the aggregation result isn't padded if the original time series wasn't padded
-        """
-        ts = TimeSeries(
-            df=self.df,
-            time_name="timestamp",
-            resolution=Period.of_days(1),
-            periodicity=Period.of_days(1),
-            pad=False
-        )
+        if pad:
+            ts.pad()
 
         expected_df = pl.DataFrame({
             "timestamp": [datetime(2020, 1, 1), datetime(2020, 3, 1)],

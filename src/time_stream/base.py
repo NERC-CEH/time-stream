@@ -617,7 +617,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
             # Otherwise, look for name within columns
             if name == self.time_name:
                 # If the attribute name matches the time column, return the PrimaryTimeColumn
-                return self.time_columnon_duplicates
+                return self.time_column
             elif name in self.columns:
                 # If the attribute name matches a column in the DataFrame (excluding the time column),
                 # select that Column

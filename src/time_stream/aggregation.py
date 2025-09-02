@@ -185,7 +185,6 @@ class AggregationFunction(ABC):
             resolution=aggregation_period,
             periodicity=aggregation_period,
             metadata=self.ts._metadata,
-            pad=self.ts._pad,
         )
 
     def _validate_aggregation_period(self, ts: TimeSeries, period: Period) -> None:
