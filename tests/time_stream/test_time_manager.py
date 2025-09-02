@@ -1,10 +1,247 @@
 import unittest
 from datetime import datetime
 
-from parameterized import parameterized
-from polars.testing import assert_series_equal, assert_frame_equal
+import polars as pl
+from polars.testing import assert_frame_equal
 
+from time_stream import Period
+from time_stream.enums import DuplicateOption, TimeAnchor
+from time_stream.exceptions import (
+    ColumnNotFoundError,
+    ColumnTypeError,
+    DuplicateTimeError,
+    PeriodicityError,
+    ResolutionError
+)
 from time_stream.time_manager import TimeManager
 
 
+class TestValidateResolution(unittest.TestCase):
+    """Test the _validate_resolution method. Note the main functionality is more thoroughly tested in the
+    utils function `check_resolution`.
+    """
 
+    def test_validate_resolution_success(self):
+        """ Test that a correct resolution to time series passes the validation.
+        """
+        tm = object.__new__(TimeManager)  # skips __init__
+        tm._resolution = Period.of_years(1)
+        tm._time_anchor = TimeAnchor.START
+
+        times = pl.Series([datetime(2020, 1, 1), datetime(2021, 1, 1), datetime(2022, 1, 1)])
+        tm._validate_resolution(times)
+
+    def test_validate_resolution_fails(self):
+        """ Test that an incorrect resolution to time series fails the validation.
+        """
+        tm = object.__new__(TimeManager)  # skips __init__
+        tm._resolution = Period.of_years(1)
+        tm._time_anchor = TimeAnchor.START
+
+        times = pl.Series([datetime(2020, 1, 1), datetime(2021, 6, 1), datetime(2022, 1, 1)])
+
+        with self.assertRaises(ResolutionError) as err:
+            tm._validate_resolution(times)
+        self.assertEqual(f'Time values are not aligned to resolution: {tm._resolution}', str(err.exception))
+
+
+class TestValidatePeriodicity(unittest.TestCase):
+    """Test the _validate_periodicity method. Note the main functionality is more thoroughly tested in the
+    utils function `check_periodicity`.
+    """
+
+    def test_validate_periodicity_success(self):
+        """ Test that a correct periodicity to time series passes the validation.
+        """
+        tm = object.__new__(TimeManager)  # skips __init__
+        tm._periodicity = Period.of_years(1)
+        tm._time_anchor = TimeAnchor.START
+
+        times = pl.Series([datetime(2020, 1, 1), datetime(2021, 1, 1), datetime(2022, 1, 1)])
+        tm._validate_periodicity(times)
+
+    def test_validate_periodicity_fails(self):
+        """ Test that an incorrect periodicity to time series fails the validation.
+        """
+        tm = object.__new__(TimeManager)  # skips __init__
+        tm._periodicity = Period.of_years(1)
+        tm._time_anchor = TimeAnchor.START
+
+        times = pl.Series([datetime(2020, 1, 1), datetime(2020, 6, 1), datetime(2022, 1, 1)])
+
+        with self.assertRaises(PeriodicityError) as err:
+            tm._validate_periodicity(times)
+        self.assertEqual(f'Time values do not conform to periodicity: {tm._periodicity}', str(err.exception))
+
+
+class TestValidateTimeColumn(unittest.TestCase):
+    df = pl.DataFrame({
+        "time": [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)],
+        "data_column": [1, 2, 3]
+    })
+
+    def test_validate_missing_time_column(self):
+        """Test error raised if DataFrame is missing the time column"""
+        invalid_df = pl.DataFrame(self.df["data_column"])
+
+        tm = object.__new__(TimeManager)  # skips __init__
+        tm._time_name = "time"
+
+        with self.assertRaises(ColumnNotFoundError) as err:
+            tm._validate_time_column(invalid_df)
+        self.assertEqual(
+            f"Time column 'time' not found in DataFrame. Available columns: {list(invalid_df.columns)}",
+            str(err.exception)
+        )
+
+    def test_validate_time_column_not_temporal(self):
+        """Test error raised if time column is not temporal."""
+        invalid_df = pl.DataFrame(self.df["data_column"])
+
+        tm = object.__new__(TimeManager)  # skips __init__
+        tm._time_name = "data_column"
+
+        with self.assertRaises(ColumnTypeError) as err:
+            tm._validate_time_column(invalid_df)
+        self.assertEqual(
+            f"Time column 'data_column' must be datetime type, got 'Int64'",
+            str(err.exception)
+        )
+
+
+class TestHandleTimeDuplicates(unittest.TestCase):
+    def setUp(self):
+        # A dataframe with some duplicate times
+        self.df = pl.DataFrame({
+            "time": [
+                datetime(2024, 1, 1),
+                datetime(2024, 1, 1),
+                datetime(2024, 1, 2),
+                datetime(2024, 1, 3),
+                datetime(2024, 1, 4),
+                datetime(2024, 1, 5),
+                datetime(2024, 1, 6),
+                datetime(2024, 1, 7),
+                datetime(2024, 1, 8),
+                datetime(2024, 1, 8),
+                datetime(2024, 1, 8),
+                datetime(2024, 1, 9),
+                datetime(2024, 1, 10)
+            ],
+            "colA": [1, None, 2, 3, 4, 5, 6, 7, None, 8, 8, 9, 10],
+            "colB": [None, 1, 2, 3, 4, 5, 6, 7, 9, None, 9, 9, 10],
+            "colC": [None, 2, 2, 3, 4, 5, 6, 7, 8, 9, None, 9, 10],
+        })
+        self.new_df = pl.DataFrame()
+
+        self.tm = object.__new__(TimeManager)  # skips __init__
+        self.tm._get_df = lambda: self.df
+        self.tm._set_df = self.update_df
+        self.tm._time_name = "time"
+
+    def update_df(self, new_df):
+        self.new_df = new_df
+
+    def test_error(self):
+        """ Test that the error strategy works as expected
+        """
+        with self.assertRaises(DuplicateTimeError) as err:
+            self.tm._handle_time_duplicates(DuplicateOption.ERROR)
+
+    def test_keep_first(self):
+        """ Test that the keep first strategy works as expected
+        """
+        self.tm._handle_time_duplicates(DuplicateOption.KEEP_FIRST)
+
+        expected = pl.DataFrame({
+            "time": [
+                datetime(2024, 1, 1),
+                datetime(2024, 1, 2),
+                datetime(2024, 1, 3),
+                datetime(2024, 1, 4),
+                datetime(2024, 1, 5),
+                datetime(2024, 1, 6),
+                datetime(2024, 1, 7),
+                datetime(2024, 1, 8),
+                datetime(2024, 1, 9),
+                datetime(2024, 1, 10)
+            ],
+            "colA": [1, 2, 3, 4, 5, 6, 7, None, 9, 10],
+            "colB": [None, 2, 3, 4, 5, 6, 7, 9, 9, 10],
+            "colC": [None, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+        })
+
+        assert_frame_equal(self.new_df, expected)
+
+    def test_keep_last(self):
+        """ Test that the keep last strategy works as expected
+        """
+        self.tm._handle_time_duplicates(DuplicateOption.KEEP_LAST)
+
+        expected = pl.DataFrame({
+            "time": [
+                datetime(2024, 1, 1),
+                datetime(2024, 1, 2),
+                datetime(2024, 1, 3),
+                datetime(2024, 1, 4),
+                datetime(2024, 1, 5),
+                datetime(2024, 1, 6),
+                datetime(2024, 1, 7),
+                datetime(2024, 1, 8),
+                datetime(2024, 1, 9),
+                datetime(2024, 1, 10)
+            ],
+            "colA": [None, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+            "colB": [1, 2, 3, 4, 5, 6, 7, 9, 9, 10],
+            "colC": [2, 2, 3, 4, 5, 6, 7, None, 9, 10],
+        })
+
+        assert_frame_equal(self.new_df, expected)
+
+    def test_drop(self):
+        """ Test that the drop strategy works as expected
+        """
+        self.tm._handle_time_duplicates(DuplicateOption.DROP)
+
+        expected = pl.DataFrame({
+            "time": [
+                datetime(2024, 1, 2),
+                datetime(2024, 1, 3),
+                datetime(2024, 1, 4),
+                datetime(2024, 1, 5),
+                datetime(2024, 1, 6),
+                datetime(2024, 1, 7),
+                datetime(2024, 1, 9),
+                datetime(2024, 1, 10)
+            ],
+            "colA": [2, 3, 4, 5, 6, 7, 9, 10],
+            "colB": [2, 3, 4, 5, 6, 7, 9, 10],
+            "colC": [2, 3, 4, 5, 6, 7, 9, 10],
+        })
+
+        assert_frame_equal(self.new_df, expected)
+
+    def test_merge(self):
+        """ Test that the merge strategy works as expected
+        """
+        self.tm._handle_time_duplicates(DuplicateOption.MERGE)
+
+        expected = pl.DataFrame({
+            "time": [
+                datetime(2024, 1, 1),
+                datetime(2024, 1, 2),
+                datetime(2024, 1, 3),
+                datetime(2024, 1, 4),
+                datetime(2024, 1, 5),
+                datetime(2024, 1, 6),
+                datetime(2024, 1, 7),
+                datetime(2024, 1, 8),
+                datetime(2024, 1, 9),
+                datetime(2024, 1, 10)
+            ],
+            "colA": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+            "colB": [1, 2, 3, 4, 5, 6, 7, 9, 9, 10],
+            "colC": [2, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+        })
+
+        assert_frame_equal(self.new_df, expected)

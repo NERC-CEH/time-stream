@@ -17,8 +17,7 @@ from time_stream.utils import (
     check_periodicity,
     check_resolution,
     configure_period_object,
-    handle_duplicates,
-    truncate_to_period,
+    handle_duplicates
 )
 
 
@@ -146,7 +145,7 @@ class TimeManager:
         Raises:
             PeriodicityError: If the datetimes do not conform to the periodicity.
         """
-        periodicity_check = check_periodicity(dt, self.resolution, self.time_anchor)
+        periodicity_check = check_periodicity(dt, self.periodicity, self.time_anchor)
         if not periodicity_check:
             raise PeriodicityError(f"Time values do not conform to periodicity: {self.periodicity}")
 
@@ -163,13 +162,13 @@ class TimeManager:
         # Validate that the time column actually exists
         if self.time_name not in df.columns:
             raise ColumnNotFoundError(
-                f"Time column {self.time_name} not found in DataFrame. Available columns: {list(df.columns)}"
+                f"Time column '{self.time_name}' not found in DataFrame. Available columns: {list(df.columns)}"
             )
 
         # Validate time column type
         dtype = df[self.time_name].dtype
         if not dtype.is_temporal():
-            raise ColumnTypeError(f"Time column {self.time_name} must be datetime type, got {dtype}")
+            raise ColumnTypeError(f"Time column '{self.time_name}' must be datetime type, got '{dtype}'")
 
     def check_time_integrity(self, old_df: pl.DataFrame, new_df: pl.DataFrame) -> None:
         """Raise an error if the time values change between old and new DataFrames.
@@ -191,7 +190,7 @@ class TimeManager:
         if not old_ts.sort().equals(new_ts.sort()):
             raise TimeMutatedError(old_timestamps=old_ts, new_timestamps=new_ts)
 
-    def handle_time_duplicates(self, on_duplicates: DuplicateOption | str | None = None) -> None:
+    def _handle_time_duplicates(self, on_duplicates: DuplicateOption | str | None = None) -> None:
         """Handle duplicate values in the time column based on a specified strategy.
 
         Args:
@@ -200,7 +199,8 @@ class TimeManager:
                             - "keep_first": Keep the first row of any duplicate groups.
                             - "keep_last": Keep the last row of any duplicate groups.
                             - "drop": Drop all duplicate rows.
-                            - "merge": Merge duplicate rows using "coalesce" (the first non-null value for each column takes precedence).
+                            - "merge": Merge duplicate rows using "coalesce" (the first non-null value
+                                        for each column takes precedence).
 
         Raises:
             DuplicateTimeError: If there are duplicate timestamps and the "error" strategy is being used.

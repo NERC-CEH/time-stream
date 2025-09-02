@@ -53,8 +53,8 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         self._df = df
 
         self._time_manager = TimeManager(
-            get_df=lambda: self._df,
-            set_df=lambda new_df: self._update_df(new_df),
+            get_df=lambda: self.df,
+            set_df=self._update_df,
             time_name=time_name,
             resolution=resolution,
             periodicity=periodicity,
@@ -95,7 +95,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         self._setup_columns(supplementary_columns, flag_columns, column_metadata)
         self._setup_metadata(metadata)
 
-        self._time_manager.handle_time_duplicates()
+        self._time_manager._handle_time_duplicates()
         self._time_manager.validate()
         self.sort_time()
 
@@ -322,7 +322,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
             flag_systems=new_flag_systems,
             column_metadata=new_metadata,
             metadata=self._metadata,
-            on_duplicates=self._on_duplicates,
+            on_duplicates=self._time_manager._on_duplicates,
         )
 
     def init_supplementary_column(

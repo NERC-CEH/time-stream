@@ -14,7 +14,8 @@ from time_stream.utils import (
     truncate_to_period,
     pad_time,
     check_periodicity,
-    check_resolution
+    check_resolution,
+    epoch_check
 )
 
 
@@ -1219,3 +1220,31 @@ class TestCheckPeriodicity(unittest.TestCase):
         """ Test that a microsecond based time series that doesn't conform to the given periodicity fails the check.
         """
         self._check_failure(times, periodicity, time_anchor)
+
+
+class TestEpochCheck(unittest.TestCase):
+    @parameterized.expand([
+        Period.of_years(2), Period.of_years(7), Period.of_years(10),
+        Period.of_months(5), Period.of_months(7), Period.of_months(9), Period.of_months(10), Period.of_months(11),
+        Period.of_months(13),
+        Period.of_days(2), Period.of_days(7), Period.of_days(65),
+        Period.of_hours(5), Period.of_hours(7), Period.of_hours(9), Period.of_hours(11), Period.of_hours(25),
+        Period.of_minutes(7), Period.of_minutes(11), Period.of_minutes(50), Period.of_minutes(61),
+    ])
+    def test_non_epoch_agnostic_period_fails(self, period):
+        """ Test that non epoch agnostic Periods fail the epoch check.
+        """
+        with self.assertRaises(NotImplementedError):
+            epoch_check(period)
+
+    @parameterized.expand([
+        Period.of_years(1),
+        Period.of_months(1), Period.of_months(2), Period.of_months(3), Period.of_months(4), Period.of_months(6),
+        Period.of_days(1),
+        Period.of_hours(1), Period.of_hours(2), Period.of_hours(3), Period.of_hours(4), Period.of_hours(24),
+        Period.of_minutes(1), Period.of_minutes(2), Period.of_minutes(15), Period.of_minutes(30), Period.of_minutes(60),
+    ])
+    def test_epoch_agnostic_period_passes(self, period):
+        """ Test that epoch agnostic Periods pass the epoch check.
+        """
+        epoch_check(period)

@@ -238,7 +238,8 @@ def handle_duplicates(df, column, on_duplicates) -> pl.DataFrame:
 
         case DuplicateOption.MERGE:
             # Coalesce by first non-null per column
-            return df.group_by(column).agg([pl.col(col).drop_nulls().first().alias(col) for col in df.columns])
+            merge_cols = [c for c in df.columns if c != column]
+            return df.group_by(column).agg([pl.col(col).drop_nulls().first().alias(col) for col in merge_cols])
 
         case DuplicateOption.DROP:
             return df.filter(~duplicate_mask)
