@@ -902,6 +902,10 @@ class TestCheckPeriodicity(unittest.TestCase):
          [datetime(2020, 1, 1), datetime(2021, 1, 1), datetime(2022, 1, 1)],
          Period.of_years(1), TimeAnchor.START),
 
+        ("simple yearly end anchor",
+         [datetime(2020, 1, 1), datetime(2021, 1, 1), datetime(2022, 1, 1)],
+         Period.of_years(1), TimeAnchor.END),
+
         ("days within yearly",
          [datetime(2021, 1, 1), datetime(2022, 10, 5), datetime(2023, 2, 17)],
          Period.of_years(1), TimeAnchor.START),
@@ -917,6 +921,10 @@ class TestCheckPeriodicity(unittest.TestCase):
         ("water year before/after Oct 1 9am",
          [datetime(2006, 10, 1, 8, 59), datetime(2006, 10, 1, 9)],
          Period.of_years(1).with_month_offset(9).with_hour_offset(9), TimeAnchor.START),
+
+        ("yearly end anchor",
+         [datetime(2020, 1, 1), datetime(2020, 1, 2), datetime(2022, 1, 1)],
+         Period.of_years(1), TimeAnchor.END),
     ])
     def test_check_year_periodicity_success(self, _, times, periodicity, time_anchor):
         """ Test that a year based time series that does conform to the given periodicity passes the check.
@@ -931,6 +939,14 @@ class TestCheckPeriodicity(unittest.TestCase):
         ("simple water year",
          [datetime(2005, 1, 1), datetime(2005, 5, 1), datetime(2006, 12, 1), datetime(2007, 10, 10)],
          Period.of_years(1).with_month_offset(9).with_hour_offset(9), TimeAnchor.START),
+
+        ("water year end anchor",
+         [datetime(2006, 10, 1, 8, 59), datetime(2006, 10, 1, 9)],
+         Period.of_years(1).with_month_offset(9).with_hour_offset(9), TimeAnchor.END),
+
+        ("yearly end anchor",
+         [datetime(2020, 1, 1), datetime(2020, 1, 2), datetime(2021, 1, 1)],
+         Period.of_years(1), TimeAnchor.END),
     ])
     def test_check_year_periodicity_failure(self, _, times, periodicity, time_anchor):
         """ Test that a year based time series that doesn't conform to the given periodicity fails the check.
@@ -961,6 +977,14 @@ class TestCheckPeriodicity(unittest.TestCase):
         ("water months before/after 9am",
          [datetime(2024, 1, 1, 8, 59), datetime(2024, 1, 1, 9)],
          Period.of_months(1).with_hour_offset(9), TimeAnchor.START),
+
+        ("monthly end anchor",
+         [datetime(2024, 1, 1), datetime(2024, 1, 15), datetime(2024, 3, 25)],
+         Period.of_months(1), TimeAnchor.END),
+
+        ("water months end anchor",
+         [datetime(2024, 1, 1, 8), datetime(2024, 1, 1, 10), datetime(2024, 2, 1, 10, 15)],
+         Period.of_months(1).with_hour_offset(9), TimeAnchor.END),
     ])
     def test_check_month_periodicity_success(self, _, times, periodicity, time_anchor):
         """ Test that a month based time series that does conform to the given periodicity passes the check.
@@ -972,9 +996,17 @@ class TestCheckPeriodicity(unittest.TestCase):
          [datetime(2024, 1, 1), datetime(2024, 1, 31), datetime(2024, 2, 1)],
          Period.of_months(1), TimeAnchor.START),
 
+        ("simple monthly end anchor",
+         [datetime(2024, 1, 2), datetime(2024, 2, 1), datetime(2024, 3, 1)],
+         Period.of_months(1), TimeAnchor.END),
+
         ("simple water months",
          [datetime(2024, 1, 1, 10), datetime(2024, 2, 1, 8, 59), datetime(2024, 5, 1, 10, 15)],
          Period.of_months(1).with_hour_offset(9), TimeAnchor.START),
+
+        ("water months end anchor",
+         [datetime(2024, 1, 1, 8, 59), datetime(2024, 1, 1, 9)],
+         Period.of_months(1).with_hour_offset(9), TimeAnchor.END),
     ])
     def test_check_month_periodicity_failure(self, _, times, periodicity, time_anchor):
         """ Test that a month based time series that doesn't conform to the given periodicity fails the check.
@@ -1001,6 +1033,14 @@ class TestCheckPeriodicity(unittest.TestCase):
         ("daily across leap year feb",
          [datetime(2024, 2, 28, 15), datetime(2024, 2, 29, 23, 59), datetime(2024, 3, 1)],
          Period.of_days(1), TimeAnchor.START),
+
+        ("simple daily end anchor",
+         [datetime(2024, 1, 1), datetime(2024, 1, 1, 0, 1), datetime(2024, 1, 3)],
+         Period.of_days(1), TimeAnchor.END),
+
+        ("water days end anchor",
+         [datetime(2024, 1, 1, 9), datetime(2024, 1, 1, 9, 1)],
+         Period.of_days(1).with_hour_offset(9), TimeAnchor.END),
     ])
     def test_check_day_periodicity_success(self, _, times, periodicity, time_anchor):
         """ Test that a day based time series that does conform to the given periodicity passes the check.
@@ -1012,9 +1052,17 @@ class TestCheckPeriodicity(unittest.TestCase):
          [datetime(2024, 1, 1), datetime(2024, 1, 1, 23, 59), datetime(2024, 1, 3)],
          Period.of_days(1), TimeAnchor.START),
 
+        ("simple daily end anchor",
+         [datetime(2024, 1, 1), datetime(2024, 1, 1, 23, 59), datetime(2024, 1, 2)],
+         Period.of_days(1), TimeAnchor.END),
+
         ("simple water days",
          [datetime(2024, 1, 1, 9), datetime(2024, 1, 2, 8, 59, 59), datetime(2024, 1, 3, 9)],
          Period.of_days(1).with_hour_offset(9), TimeAnchor.START),
+
+        ("water days end anchor",
+         [datetime(2024, 1, 1, 8, 59), datetime(2024, 1, 1, 9)],
+         Period.of_days(1).with_hour_offset(9), TimeAnchor.END),
     ])
     def test_check_day_periodicity_failure(self, _, times, periodicity, time_anchor):
         """ Test that a day based time series that doesn't conform to the given periodicity fails the check.
@@ -1025,6 +1073,10 @@ class TestCheckPeriodicity(unittest.TestCase):
         ("simple hourly",
          [datetime(2024, 1, 1, 1, 15), datetime(2024, 1, 1, 2, 59), datetime(2024, 1, 1, 3, 1)],
          Period.of_hours(1), TimeAnchor.START),
+
+        ("simple hourly end anchor",
+         [datetime(2024, 1, 1, 1, 0), datetime(2024, 1, 1, 1, 1), datetime(2024, 1, 1, 2, 15)],
+         Period.of_hours(1), TimeAnchor.END),
 
         ("every 12 hours",
          [datetime(2024, 1, 1, 4, 30), datetime(2024, 1, 1, 12, 5), datetime(2024, 1, 2), datetime(2024, 1, 2, 23, 59)],
@@ -1047,6 +1099,10 @@ class TestCheckPeriodicity(unittest.TestCase):
         ("simple hourly",
          [datetime(2024, 1, 1, 1, 15), datetime(2024, 1, 1, 1, 16), datetime(2024, 1, 1, 3, 1)],
          Period.of_hours(1), TimeAnchor.START),
+
+        ("simple hourly end anchor",
+         [datetime(2024, 1, 1, 10), datetime(2024, 1, 1, 11), datetime(2024, 1, 1, 12, 1), datetime(2024, 1, 1, 13)],
+         Period.of_hours(1), TimeAnchor.END),
     ])
     def test_check_hour_periodicity_failure(self, _, times, periodicity, time_anchor):
         """ Test that an hour based time series that doesn't conform to the given periodicity fails the check.
@@ -1057,6 +1113,10 @@ class TestCheckPeriodicity(unittest.TestCase):
         ("simple minute",
          [datetime(2024, 1, 1, 1, 1), datetime(2024, 1, 1, 1, 2), datetime(2024, 1, 1, 1, 3)],
          Period.of_minutes(1), TimeAnchor.START),
+
+        ("simple minute end anchor",
+         [datetime(2024, 1, 1, 1, 1), datetime(2024, 1, 1, 1, 1, 10), datetime(2024, 1, 1, 1, 3)],
+         Period.of_minutes(1), TimeAnchor.END),
 
         ("every 15 minutes",
          [datetime(2024, 1, 1, 1, 15), datetime(2024, 1, 1, 1, 35), datetime(2024, 1, 1, 1, 59)],
@@ -1079,6 +1139,10 @@ class TestCheckPeriodicity(unittest.TestCase):
         ("simple minute",
          [datetime(2024, 1, 1, 1, 1), datetime(2024, 1, 1, 1, 2), datetime(2024, 1, 1, 1, 2, 1)],
          Period.of_minutes(1), TimeAnchor.START),
+
+        ("simple minute end anchor",
+         [datetime(2024, 1, 1, 0, 59, 59), datetime(2024, 1, 1, 1)],
+         Period.of_minutes(1), TimeAnchor.END),
     ])
     def test_check_minute_periodicity_failure(self, _, times, periodicity, time_anchor):
         """ Test that a minute based time series that doesn't conform to the given periodicity fails the check.
@@ -1089,6 +1153,10 @@ class TestCheckPeriodicity(unittest.TestCase):
         ("simple seconds",
          [datetime(2024, 1, 1, 1, 1, 1, 1500), datetime(2024, 1, 1, 1, 1, 2), datetime(2024, 1, 1, 1, 1, 3, 40000)],
          Period.of_seconds(1), TimeAnchor.START),
+
+        ("simple seconds end anchor",
+         [datetime(2024, 1, 1, 1, 1, 1), datetime(2024, 1, 1, 1, 1, 1, 1500)],
+         Period.of_seconds(1), TimeAnchor.END),
 
         ("every 5 seconds",
          [datetime(2024, 1, 1, 1, 1, 0), datetime(2024, 1, 1, 1, 1, 7), datetime(2024, 1, 1, 1, 1, 14)],
@@ -1111,6 +1179,10 @@ class TestCheckPeriodicity(unittest.TestCase):
         ("simple seconds",
          [datetime(2024, 1, 1, 1, 1, 1, 1500), datetime(2024, 1, 1, 1, 1, 1, 15001), datetime(2024, 1, 1, 1, 1, 3)],
          Period.of_seconds(1), TimeAnchor.START),
+
+        ("simple seconds end anchor",
+         [datetime(2024, 1, 1, 1, 1, 1, 1500), datetime(2024, 1, 1, 1, 1, 2)],
+         Period.of_seconds(1), TimeAnchor.END),
     ])
     def test_check_second_periodicity_failure(self, _, times, periodicity, time_anchor):
         """ Test that a second based time series that doesn't conform to the given periodicity fails the check.
