@@ -14,6 +14,7 @@ from time_stream.exceptions import (
     MissingCriteriaError,
     UnknownAggregationError,
 )
+from time_stream.utils import check_columns_in_dataframe
 
 # Registry for built-in aggregations
 _AGGREGATION_REGISTRY = {}
@@ -176,14 +177,12 @@ class AggregationPipeline:
         Returns:
             The aggregated dataframe
         """
+        check_columns_in_dataframe(self.ctx.df, self.columns)
         self._validate_period_compatibility()
-
-        # Remove NULL rows
-        df = self.ctx.df.drop_nulls(subset=self.columns)
 
         # Group by the aggregation period - taking into account the time anchor of the time series
         label, closed = self._get_label_closed()
-        grouper = df.group_by_dynamic(
+        grouper = self.ctx.df.group_by_dynamic(
             index_column=self.ctx.time_name,
             every=self.aggregation_period.pl_interval,
             offset=self.aggregation_period.pl_offset,
@@ -257,7 +256,7 @@ class AggregationPipeline:
         # For example, when aggregating 15-minute data over a day, the expected count is always 96.
         count = self.ctx.periodicity.count(self.aggregation_period)
         if count > 0:
-            return pl.lit(count).alias(expected_count_name)
+            expr = pl.lit(count)
 
         # Variable length periods need dynamic calculation, based on the start and end of a period interval
         label, closed = self._get_label_closed()
@@ -273,7 +272,7 @@ class AggregationPipeline:
             # 1. If the data we are aggregating is not monthly, then each interval we are aggregating has
             #    a constant length, so (end - start) / interval will be the expected count.
             micros = self.ctx.periodicity.timedelta // timedelta(microseconds=1)
-            return ((end_expr - start_expr).dt.total_microseconds() // micros).alias(expected_count_name)
+            expr = ((end_expr - start_expr).dt.total_microseconds() // micros)
 
         else:
             # 2. If the data we are aggregating is month-based, then there is no simple way to do the calculation,
@@ -283,11 +282,12 @@ class AggregationPipeline:
             #    period is large, it consumes too much memory and causes performance problems. For example, aggregating
             #    1 microsecond data over a calendar year involves the creation length
             #    1000_000 * 60 * 60 * 24 * 365 arrays which will probably fail with an out-of-memory error.
-            return (
+            expr = (
                 pl.datetime_ranges(start_expr, end_expr, interval=self.ctx.periodicity.pl_interval, closed=closed)
                 .list.len()
-                .alias(expected_count_name)
             )
+
+        return expr.cast(pl.UInt32).alias(expected_count_name)
 
     def _missing_data_expr(self) -> list[pl.Expr]:
         """Convert missing criteria to a Polars expression for validation.
@@ -329,7 +329,8 @@ class AggregationPipeline:
                 expr = pl.col(f"count_{col}") >= threshold
 
             else:
-                expr = pl.lit(True)
+                # Default to check that the actual count found in the column is above 0.
+                expr = pl.col(f"count_{col}") > 0
 
             expr = expr.alias(f"valid_{col}")
             expressions.append(expr)
