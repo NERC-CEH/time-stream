@@ -174,3 +174,7 @@ class FlagSystemTypeError(FlagSystemError):
 
 class FlagSystemNotFoundError(FlagSystemError):
     """Raised when a flag system can't be found."""
+
+
+class DuplicateRegistryKeyError(TimeStreamError):
+    """Raised when a registry key already exists."""

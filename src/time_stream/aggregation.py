@@ -11,6 +11,7 @@ from time_stream.enums import MissingCriteria, TimeAnchor
 from time_stream.exceptions import (
     AggregationPeriodError,
     AggregationTypeError,
+    DuplicateRegistryKeyError,
     MissingCriteriaError,
     UnknownAggregationError
 )
@@ -29,7 +30,12 @@ def register_aggregation(cls: Type["AggregationFunction"]) -> Type["AggregationF
     Returns:
         The decorated class.
     """
-    _AGGREGATION_REGISTRY[cls.name] = cls
+    # Normalise key to lowercase
+    key = cls.name.lower()
+    if key in _AGGREGATION_REGISTRY:
+        raise DuplicateRegistryKeyError(f"Aggregation key: '{key}' already registered")
+
+    _AGGREGATION_REGISTRY[key] = cls
     return cls
 
 
@@ -46,11 +52,7 @@ class AggregationCtx:
 class AggregationFunction(ABC):
     """Base class for aggregation functions."""
 
-    @property
-    @abstractmethod
-    def name(self) -> str:
-        """Return the name of the aggregation function."""
-        pass
+    name: str
 
     @staticmethod
     @abstractmethod
@@ -97,7 +99,7 @@ class AggregationFunction(ABC):
         # If it's a string, look it up in the registry
         elif isinstance(aggregation, str):
             try:
-                return _AGGREGATION_REGISTRY[aggregation]()
+                return _AGGREGATION_REGISTRY[aggregation.lower()]()
             except KeyError:
                 raise UnknownAggregationError(
                     f"Unknown aggregation '{aggregation}'. Available aggregations: {list(_AGGREGATION_REGISTRY.keys())}"
@@ -201,14 +203,16 @@ class AggregationPipeline:
         # Build expressions to go in the .with_columns method.
         #   Note: - Order is important here. Expressions may have dependencies on the results of earlier expressions.
         #         - Doing separate .with_columns calls to group expressions together and take advantage of the Polars
-        #           internal planning.
+        #           internal planning where possible.
 
         # Add expected count
         df = df.with_columns(self._expected_count_expr())
-        # Add missing data validation
-        df = df.with_columns(self._missing_data_expr())
-        # Execute post-aggregation expressions
-        df = df.with_columns(self.agg_func.post_expr(self.ctx, self.columns))
+
+        # Add missing-data flags, and any post-agg columns in one plan. Both may require results of the expected count.
+        df = df.with_columns([
+            *self._missing_data_expr(),
+            *self.agg_func.post_expr(self.ctx, self.columns),
+        ])
 
         return df
 
@@ -375,7 +379,10 @@ class MeanSum(AggregationFunction):
 
     def post_expr(self, ctx: AggregationCtx, columns: list[str]) -> list[pl.Expr]:
         """Multiply the mean by the expected count to get the mean sum."""
-        return [(pl.col(f"mean_sum_{col}") * pl.col(f"expected_count_{ctx.time_name}")) for col in columns]
+        return [
+            (pl.col(f"mean_sum_{col}") * pl.col(f"expected_count_{ctx.time_name}")).alias(f"mean_sum_{col}")
+            for col in columns
+        ]
 
 
 @register_aggregation

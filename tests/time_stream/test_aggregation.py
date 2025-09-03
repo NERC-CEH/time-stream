@@ -203,7 +203,7 @@ class TestAggregationFunction(unittest.TestCase):
         self.assertIsInstance(agg, expected)
 
     @parameterized.expand([
-        "Mean", "MIN", "mAx", "123", "meansum", "sUm"
+        "meen", "MINIMUM", "123", "mean-sum",
     ])
     def test_get_with_invalid_string(self, get_input):
         """Test AggregationFunction.get() with invalid string."""
@@ -365,8 +365,9 @@ class TestSimpleAggregations(unittest.TestCase):
         """Test that multi-column aggregations work as expected when each column has different null values."""
 
         # Set null values for each column
+        df = input_ts.df.clone()
         for idx, col in enumerate(column):
-            input_ts.df = input_ts.df.with_columns([
+            df = df.with_columns([
                 pl.when(pl.arange(0, input_ts.df.height) == idx).then(None).otherwise(pl.col(col)).alias(col),
             ])
 
@@ -374,7 +375,7 @@ class TestSimpleAggregations(unittest.TestCase):
             timestamps, aggregator, column, values, expected_counts, actual_counts, timestamps_of
         )
         result = aggregator().apply(
-            input_ts.df, input_ts.time_name, input_ts.time_anchor, input_ts.periodicity, target_period, column
+            df, input_ts.time_name, input_ts.time_anchor, input_ts.periodicity, target_period, column
         )
         assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False)
 
