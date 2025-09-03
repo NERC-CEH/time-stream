@@ -144,7 +144,7 @@ class TimeManager:
         if not periodicity_check:
             raise PeriodicityError(f"Time values do not conform to periodicity: {self.periodicity}")
 
-    def _validate_time_column(self, df) -> None:
+    def _validate_time_column(self, df: pl.DataFrame) -> None:
         """Validate that the DataFrame contains the required time column with time data.
 
         Args:

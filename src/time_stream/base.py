@@ -289,7 +289,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         """Sort the TimeSeries DataFrame by the time column."""
         self._df = self.df.sort(self.time_name)
 
-    def pad(self):
+    def pad(self) -> None:
         """Pad the time series with missing datetime rows, filling in NULLs for missing values."""
         self._df = pad_time(self.df, self.time_name, self.periodicity, self.time_anchor)
         self.sort_time()

@@ -219,7 +219,29 @@ def epoch_check(period: Period) -> Period:
         return period
 
 
-def handle_duplicates(df, column, on_duplicates) -> pl.DataFrame:
+def handle_duplicates(
+    df: pl.DataFrame,
+    column: str,
+    on_duplicates: DuplicateOption,
+) -> pl.DataFrame:
+    """Handle duplicate values in a DataFrame column according to the specified option.
+
+    Args:
+        df: The Polars DataFrame to operate on.
+        column: The name of the column to check for duplicates.
+        on_duplicates: Strategy for handling duplicates:
+            - ERROR: Raise a DuplicateValueError.
+            - KEEP_FIRST: Keep the first occurrence of each duplicate.
+            - KEEP_LAST: Keep the last occurrence of each duplicate.
+            - MERGE: Merge duplicate rows by coalescing (taking the first non-null) values.
+            - DROP: Drop all rows containing duplicates in the specified column.
+
+    Returns:
+        A new Polars DataFrame with duplicates handled according to the chosen option.
+
+    Raises:
+        DuplicateValueError: If on_duplicates is set to ERROR and duplicates exist.
+    """
     duplicate_mask = df[column].is_duplicated()
 
     if not duplicate_mask.any():

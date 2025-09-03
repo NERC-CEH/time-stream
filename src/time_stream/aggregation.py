@@ -14,10 +14,9 @@ Key Components:
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import timedelta
-from typing import Type
+from typing import ClassVar, Literal
 
 import polars as pl
-from polars._typing import ClosedInterval, Label
 
 from time_stream import Period
 from time_stream.enums import MissingCriteria, TimeAnchor
@@ -27,15 +26,18 @@ from time_stream.exceptions import (
     AggregationTypeError,
     DuplicateRegistryKeyError,
     MissingCriteriaError,
-    UnknownAggregationError
+    UnknownAggregationError,
 )
 from time_stream.utils import check_columns_in_dataframe
 
+Label = Literal["left", "right"]
+ClosedInterval = Literal["left", "right", "both", "none"]
+
 # Registry for built-in aggregations
-_AGGREGATION_REGISTRY = {}
+_AGGREGATION_REGISTRY: dict[str, type["AggregationFunction"]] = {}
 
 
-def register_aggregation(cls: Type["AggregationFunction"]) -> Type["AggregationFunction"]:
+def register_aggregation(cls: type["AggregationFunction"]) -> type["AggregationFunction"]:
     """Decorator to register aggregation classes using their name attribute.
 
     Args:
@@ -71,7 +73,7 @@ class AggregationCtx:
 class AggregationFunction(ABC):
     """Base class for aggregation functions."""
 
-    name: str
+    name: ClassVar[str]
 
     @abstractmethod
     def expr(self, _ctx: AggregationCtx, _columns: list[str]) -> list[pl.Expr]:
@@ -83,7 +85,7 @@ class AggregationFunction(ABC):
         return []
 
     @classmethod
-    def get(cls, aggregation: "str | Type[AggregationFunction] | AggregationFunction") -> "AggregationFunction":
+    def get(cls, aggregation: "str | type[AggregationFunction] | AggregationFunction") -> "AggregationFunction":
         """Factory method to get an aggregation function instance from string names, class types, or existing instances.
 
         Args:
@@ -225,13 +227,15 @@ class AggregationPipeline:
         df = df.with_columns(self._expected_count_expr())
 
         # Add missing-data flags, and any post-agg columns in one plan. Both may require results of the expected count.
-        df = df.with_columns([
-            *self._missing_data_expr(),
-            *self.agg_func.post_expr(self.ctx, self.columns),
-        ])
+        df = df.with_columns(
+            [
+                *self._missing_data_expr(),
+                *self.agg_func.post_expr(self.ctx, self.columns),
+            ]
+        )
 
         return df
-    
+
     def _validate(self) -> None:
         """Carry out validation that the aggregation can actually be carried out."""
         if self.ctx.df.is_empty():
@@ -300,7 +304,7 @@ class AggregationPipeline:
                 # 1. If the data we are aggregating is not monthly, then each interval we are aggregating has
                 #    a constant length, so (end - start) / interval will be the expected count.
                 micros = self.ctx.periodicity.timedelta // timedelta(microseconds=1)
-                expr = ((end_expr - start_expr).dt.total_microseconds() // micros)
+                expr = (end_expr - start_expr).dt.total_microseconds() // micros
 
             else:
                 # 2. If the data we are aggregating is month-based, then there is no simple way to do the calculation,
@@ -310,10 +314,9 @@ class AggregationPipeline:
                 #    aggregation period is large, it consumes too much memory and causes performance problems.
                 #    For example, aggregating 1 microsecond data over a calendar year involves the creation length
                 #    1000_000 * 60 * 60 * 24 * 365 arrays which will probably fail with an out-of-memory error.
-                expr = (
-                    pl.datetime_ranges(start_expr, end_expr, interval=self.ctx.periodicity.pl_interval, closed=closed)
-                    .list.len()
-                )
+                expr = pl.datetime_ranges(
+                    start_expr, end_expr, interval=self.ctx.periodicity.pl_interval, closed=closed
+                ).list.len()
 
         return expr.cast(pl.UInt32).alias(expected_count_name)
 
@@ -372,7 +375,7 @@ class Mean(AggregationFunction):
 
     name = "mean"
 
-    def expr(self, _, columns: list[str]) -> list[pl.Expr]:
+    def expr(self, ctx: AggregationCtx, columns: list[str]) -> list[pl.Expr]:
         """Return the `Polars` expression for calculating the mean in an aggregation period."""
         return [pl.col(col).mean().alias(f"mean_{col}") for col in columns]
 
@@ -383,19 +386,19 @@ class Sum(AggregationFunction):
 
     name = "sum"
 
-    def expr(self, _, columns: list[str]) -> list[pl.Expr]:
-        """Return the `Polars` expression for calculating the mean in an aggregation period."""
+    def expr(self, ctx: AggregationCtx, columns: list[str]) -> list[pl.Expr]:
+        """Return the `Polars` expression for calculating the sum in an aggregation period."""
         return [pl.col(col).sum().alias(f"sum_{col}") for col in columns]
 
 
 @register_aggregation
 class MeanSum(AggregationFunction):
     """An aggregation class to calculate the mean sum (averaged total) of values within each aggregation period.
-    This will estimate the sum when values are missing according how many values are expected in the period."""
+    This will estimate the sum when values are missing according to how many values are expected in the period."""
 
     name = "mean_sum"
 
-    def expr(self, _, columns: list[str]) -> list[pl.Expr]:
+    def expr(self, ctx: AggregationCtx, columns: list[str]) -> list[pl.Expr]:
         """To calculate the mean sum the expression must return the mean, and be multiplied by the expected
         counts, which is calculated after in the post_expr method."""
         return [pl.col(col).mean().alias(f"mean_sum_{col}") for col in columns]
