@@ -12,7 +12,7 @@ from time_stream.exceptions import (
     AggregationPeriodError,
     AggregationTypeError,
     MissingCriteriaError,
-    UnknownAggregationError,
+    UnknownAggregationError
 )
 from time_stream.utils import check_columns_in_dataframe
 
@@ -80,15 +80,15 @@ class AggregationFunction(ABC):
             UnknownAggregationError: If a string name is not registered as an aggregation function.
             AggregationTypeError: If the input type is not supported or class doesn't inherit from AggregationFunction.
 
-        Examples:
-            >>> # From string
-            >>> agg = AggregationFunction.get("mean")
-            >>>
-            >>> # From class
-            >>> agg = AggregationFunction.get(Mean)
-            >>>
-            >>> # From instance
-            >>> agg = AggregationFunction.get(Mean())
+        Examples::
+            # From string
+            agg = AggregationFunction.get("mean")
+
+            # From class
+            agg = AggregationFunction.get(Mean)
+
+            # From instance
+            agg = AggregationFunction.get(Mean())
         """
         # If it's already an instance, return it
         if isinstance(aggregation, AggregationFunction):
@@ -165,12 +165,12 @@ class AggregationPipeline:
         self.missing_criteria = missing_criteria
 
     def execute(self) -> pl.DataFrame:
-        """The general `Polars` method used for aggregating data is:
+        """The general `Polars` method used for aggregating data is::
 
-        >>> output_dataframe = input_dataframe
-        >>>     .group_by_dynamic(...)  # Group the time series into groups of values based on the chosen period
-        >>>     .agg(...)               # Apply the chosen aggregation function (e.g., mean, min, max)
-        >>>     .with_columns(...)      # Apply additional logic that requires the results of the aggregation
+        output_dataframe = input_dataframe
+            .group_by_dynamic(...)  # Group the time series into groups of values based on the chosen period
+            .agg(...)               # Apply the chosen aggregation function (e.g., mean, min, max)
+            .with_columns(...)      # Apply additional logic that requires the results of the aggregation
 
         This method fills in the various stages using pre-defined expressions.
 
@@ -258,34 +258,35 @@ class AggregationPipeline:
         if count > 0:
             expr = pl.lit(count)
 
-        # Variable length periods need dynamic calculation, based on the start and end of a period interval
-        label, closed = self._get_label_closed()
-        if self.ctx.time_anchor == TimeAnchor.END:
-            start_expr = pl.col(self.ctx.time_name).dt.offset_by("-" + self.aggregation_period.pl_interval)
-            end_expr = pl.col(self.ctx.time_name)
-        else:  # TimeAnchor.START, TimeAnchor.POINT
-            start_expr = pl.col(self.ctx.time_name)
-            end_expr = pl.col(self.ctx.time_name).dt.offset_by(self.aggregation_period.pl_interval)
-
-        # This contains 2 cases:
-        if self.ctx.periodicity.timedelta:
-            # 1. If the data we are aggregating is not monthly, then each interval we are aggregating has
-            #    a constant length, so (end - start) / interval will be the expected count.
-            micros = self.ctx.periodicity.timedelta // timedelta(microseconds=1)
-            expr = ((end_expr - start_expr).dt.total_microseconds() // micros)
-
         else:
-            # 2. If the data we are aggregating is month-based, then there is no simple way to do the calculation,
-            #    so use Polars to create a Series of date ranges lists and get the length of each list.
-            #
-            #    Note: This method will work for above use cases also, but if periodicity is small and the aggregation
-            #    period is large, it consumes too much memory and causes performance problems. For example, aggregating
-            #    1 microsecond data over a calendar year involves the creation length
-            #    1000_000 * 60 * 60 * 24 * 365 arrays which will probably fail with an out-of-memory error.
-            expr = (
-                pl.datetime_ranges(start_expr, end_expr, interval=self.ctx.periodicity.pl_interval, closed=closed)
-                .list.len()
-            )
+            # Variable length periods need dynamic calculation, based on the start and end of a period interval
+            label, closed = self._get_label_closed()
+            if self.ctx.time_anchor == TimeAnchor.END:
+                start_expr = pl.col(self.ctx.time_name).dt.offset_by("-" + self.aggregation_period.pl_interval)
+                end_expr = pl.col(self.ctx.time_name)
+            else:  # TimeAnchor.START, TimeAnchor.POINT
+                start_expr = pl.col(self.ctx.time_name)
+                end_expr = pl.col(self.ctx.time_name).dt.offset_by(self.aggregation_period.pl_interval)
+
+            # This contains 2 cases:
+            if self.ctx.periodicity.timedelta:
+                # 1. If the data we are aggregating is not monthly, then each interval we are aggregating has
+                #    a constant length, so (end - start) / interval will be the expected count.
+                micros = self.ctx.periodicity.timedelta // timedelta(microseconds=1)
+                expr = ((end_expr - start_expr).dt.total_microseconds() // micros)
+
+            else:
+                # 2. If the data we are aggregating is month-based, then there is no simple way to do the calculation,
+                #    so use Polars to create a Series of date ranges lists and get the length of each list.
+                #
+                #    Note: This method will work for above use cases also, but if periodicity is small and the
+                #    aggregation period is large, it consumes too much memory and causes performance problems.
+                #    For example, aggregating 1 microsecond data over a calendar year involves the creation length
+                #    1000_000 * 60 * 60 * 24 * 365 arrays which will probably fail with an out-of-memory error.
+                expr = (
+                    pl.datetime_ranges(start_expr, end_expr, interval=self.ctx.periodicity.pl_interval, closed=closed)
+                    .list.len()
+                )
 
         return expr.cast(pl.UInt32).alias(expected_count_name)
 

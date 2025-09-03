@@ -353,6 +353,31 @@ class TestSimpleAggregations(unittest.TestCase):
         )
         assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False)
 
+    @parameterized.expand([
+        ("multi_column_mean", ts_PT1H_2days, Mean, P1D, ["value", "value_plus1", "value_times2"],
+         [datetime(2025, 1, 1), datetime(2025, 1, 2)], [24, 24], [23, 24],
+         {"value": [12., 35.5], "value_plus1": [12.9565, 36.5], "value_times2": [23.8261, 71]}, None),
+    ])
+    def test_multi_column_with_nulls(
+            self, _, input_ts, aggregator, target_period, column, timestamps, expected_counts, actual_counts,
+            values, timestamps_of
+    ):
+        """Test that multi-column aggregations work as expected when each column has different null values."""
+
+        # Set null values for each column
+        for idx, col in enumerate(column):
+            input_ts.df = input_ts.df.with_columns([
+                pl.when(pl.arange(0, input_ts.df.height) == idx).then(None).otherwise(pl.col(col)).alias(col),
+            ])
+
+        expected_df = generate_expected_df(
+            timestamps, aggregator, column, values, expected_counts, actual_counts, timestamps_of
+        )
+        result = aggregator().apply(
+            input_ts.df, input_ts.time_name, input_ts.time_anchor, input_ts.periodicity, target_period, column
+        )
+        assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False)
+
 
 class TestComplexPeriodicityAggregations(unittest.TestCase):
     """Tests for more complex aggregation cases, where the input time series and/or target aggregation period
