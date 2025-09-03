@@ -7,7 +7,7 @@ import polars as pl
 from parameterized import parameterized
 from polars.testing import assert_frame_equal
 
-from time_stream.aggregation import _AGGREGATION_REGISTRY, AggregationCtx, AggregationPipeline, AggregationFunction, Max, Mean, Min, MeanSum, Sum
+from time_stream.aggregation import available_aggregations, AggregationCtx, AggregationPipeline, AggregationFunction, Max, Mean, Min, MeanSum, Sum
 from time_stream.base import TimeSeries
 from time_stream.enums import TimeAnchor
 from time_stream.period import Period
@@ -210,7 +210,7 @@ class TestAggregationFunction(unittest.TestCase):
         with self.assertRaises(UnknownAggregationError) as err:
             AggregationFunction.get(get_input)
         self.assertEqual(
-            f"Unknown aggregation '{get_input}'. Available aggregations: {list(_AGGREGATION_REGISTRY.keys())}",
+            f"Unknown aggregation '{get_input}'. Available aggregations: {available_aggregations()}.",
             str(err.exception)
         )
 

@@ -1,3 +1,16 @@
+"""
+Time Series Aggregation Module
+
+This module provides a flexible framework for aggregating time series data using Polars.
+It supports various aggregation functions (mean, sum, min, max, etc.) with configurable
+missing data handling and period-based grouping.
+
+Key Components:
+- AggregationFunction: Base class for all aggregation implementations
+- AggregationPipeline: Handles the aggregation execution logic
+- Registry system: For dynamic aggregation function discovery
+"""
+
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import timedelta
@@ -9,6 +22,7 @@ from polars._typing import ClosedInterval, Label
 from time_stream import Period
 from time_stream.enums import MissingCriteria, TimeAnchor
 from time_stream.exceptions import (
+    AggregationError,
     AggregationPeriodError,
     AggregationTypeError,
     DuplicateRegistryKeyError,
@@ -39,6 +53,11 @@ def register_aggregation(cls: Type["AggregationFunction"]) -> Type["AggregationF
     return cls
 
 
+def available_aggregations() -> list[str]:
+    """Return a sorted list of available aggregation names."""
+    return sorted(_AGGREGATION_REGISTRY.keys())
+
+
 @dataclass(frozen=True)
 class AggregationCtx:
     """Immutable context passed to aggregations."""
@@ -54,14 +73,12 @@ class AggregationFunction(ABC):
 
     name: str
 
-    @staticmethod
     @abstractmethod
-    def expr(_ctx: AggregationCtx, _columns: list[str]) -> list[pl.Expr]:
+    def expr(self, _ctx: AggregationCtx, _columns: list[str]) -> list[pl.Expr]:
         """Return the Polars expressions for this aggregation."""
         raise NotImplementedError
 
-    @staticmethod
-    def post_expr(_ctx: AggregationCtx, _columns: list[str]) -> list[pl.Expr]:
+    def post_expr(self, _ctx: AggregationCtx, _columns: list[str]) -> list[pl.Expr]:
         """Return additional Polars expressions to be applied after the aggregation."""
         return []
 
@@ -102,7 +119,7 @@ class AggregationFunction(ABC):
                 return _AGGREGATION_REGISTRY[aggregation.lower()]()
             except KeyError:
                 raise UnknownAggregationError(
-                    f"Unknown aggregation '{aggregation}'. Available aggregations: {list(_AGGREGATION_REGISTRY.keys())}"
+                    f"Unknown aggregation '{aggregation}'. Available aggregations: {available_aggregations()}."
                 )
 
         # If it's a class, instantiate it
@@ -179,8 +196,7 @@ class AggregationPipeline:
         Returns:
             The aggregated dataframe
         """
-        check_columns_in_dataframe(self.ctx.df, self.columns)
-        self._validate_period_compatibility()
+        self._validate()
 
         # Group by the aggregation period - taking into account the time anchor of the time series
         label, closed = self._get_label_closed()
@@ -215,6 +231,13 @@ class AggregationPipeline:
         ])
 
         return df
+    
+    def _validate(self) -> None:
+        """Carry out validation that the aggregation can actually be carried out."""
+        if self.ctx.df.is_empty():
+            raise AggregationError("Cannot aggregate an empty DataFrame.")
+        check_columns_in_dataframe(self.ctx.df, self.columns + [self.ctx.time_name])
+        self._validate_period_compatibility()
 
     def _validate_period_compatibility(self) -> None:
         """Validate that the aggregation period is compatible with the time series periodicity."""
