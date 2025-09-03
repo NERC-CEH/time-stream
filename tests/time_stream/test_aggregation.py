@@ -9,6 +9,7 @@ from polars.testing import assert_frame_equal
 
 from time_stream.aggregation import _AGGREGATION_REGISTRY, AggregationCtx, AggregationPipeline, AggregationFunction, Max, Mean, Min, MeanSum, Sum
 from time_stream.base import TimeSeries
+from time_stream.enums import TimeAnchor
 from time_stream.period import Period
 from time_stream.exceptions import (
     AggregationTypeError,
@@ -17,7 +18,12 @@ from time_stream.exceptions import (
 )
 
 
-def generate_time_series(resolution: Period, periodicity: Period, length: int, missing_data: bool=False) -> TimeSeries:
+def generate_time_series(
+        resolution: Period,
+        periodicity: Period,
+        length: int,
+        missing_data: bool=False
+) -> TimeSeries:
     """Helper function to generate a TimeSeries object for test purposes.
 
     Args:
@@ -46,7 +52,7 @@ def generate_time_series(resolution: Period, periodicity: Period, length: int, m
         df=df,
         time_name="timestamp",
         resolution=resolution,
-        periodicity=periodicity,
+        periodicity=periodicity
     )
     return ts
 
@@ -272,10 +278,10 @@ class TestSimpleAggregations(unittest.TestCase):
 
         ("hourly_to_monthly_min", ts_PT1H_2month, Min, P1M, "value", [datetime(2025, 1, 1), datetime(2025, 2, 1)],
          [744, 672], {"value": [0, 744]}, [datetime(2025, 1, 1), datetime(2025, 2, 1)]),
-        
+
         ("hourly_to_monthly_mean_sum", ts_PT1H_2month, MeanSum, P1M, "value", [datetime(2025, 1, 1), datetime(2025, 2, 1)],
          [744, 672], {"value": [276396, 725424]}, None),
-        
+
         ("hourly_to_monthly_sum", ts_PT1H_2month, Sum, P1M, "value", [datetime(2025, 1, 1), datetime(2025, 2, 1)],
          [744, 672], {"value": [276396, 725424]}, None),
     ])
@@ -448,6 +454,46 @@ class TestComplexPeriodicityAggregations(unittest.TestCase):
         )
         result = aggregator().apply(
             input_ts.df, input_ts.time_name, input_ts.time_anchor, input_ts.periodicity, target_period, column
+        )
+        assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False)
+
+
+class TestEndAnchorAggregations(unittest.TestCase):
+    """Tests for aggregation cases where the time series has an end anchor."""
+
+    @parameterized.expand([
+        ("hourly_to_daily_mean", ts_PT1H_2days, Mean, P1D, "value",
+         [datetime(2025, 1, 1), datetime(2025, 1, 2), datetime(2025, 1, 3)],
+         [24, 24, 24], [1, 24, 23], {"value": [0., 12.5, 36.]}, None),
+
+        ("hourly_to_daily_max", ts_PT1H_2days, Max, P1D, "value",
+         [datetime(2025, 1, 1), datetime(2025, 1, 2), datetime(2025, 1, 3)],
+         [24, 24, 24], [1, 24, 23], {"value": [0, 24, 47]},
+         [datetime(2025, 1, 1), datetime(2025, 1, 2), datetime(2025, 1, 2, 23)]),
+
+        ("hourly_to_daily_min", ts_PT1H_2days, Min, P1D, "value",
+         [datetime(2025, 1, 1), datetime(2025, 1, 2), datetime(2025, 1, 3)],
+         [24, 24, 24], [1, 24, 23], {"value": [0, 1, 25]},
+         [datetime(2025, 1, 1), datetime(2025, 1, 1, 1), datetime(2025, 1, 2, 1)]),
+
+        ("daily_offset_to_month_offset_max", ts_P1D_OFF_2month, Max, P1M_OFF, "value",
+         [datetime(2025, 1, 1, 9), datetime(2025, 2, 1, 9), datetime(2025, 3, 1, 9)],
+         [31, 31, 28], [2, 31, 26], {"value": [1, 32, 58]},
+         [datetime(2025, 1, 1, 9), datetime(2025, 2, 1, 9), datetime(2025, 2, 27, 9)]),
+
+        ("month_offset_to_month_offset_mean", ts_P1M_OFF_2years, Mean, P1Y_OFF, "value",
+         [datetime(2025, 10, 1, 9), datetime(2026, 10, 1, 9), datetime(2027, 10, 1, 9)],
+         [12, 12, 12], [11, 12, 1], {"value": [5., 16.5, 23.0]}, None),
+
+    ])
+    def test_end_anchor_aggregations(
+            self, _, input_ts, aggregator, target_period, column, timestamps, expected_counts, actual_counts,
+            values, timestamps_of
+    ):
+        expected_df = generate_expected_df(timestamps, aggregator, column, values,
+                                           expected_counts, actual_counts, timestamps_of)
+        result = aggregator().apply(
+            input_ts.df, input_ts.time_name, TimeAnchor.END, input_ts.periodicity, target_period, column
         )
         assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False)
 
