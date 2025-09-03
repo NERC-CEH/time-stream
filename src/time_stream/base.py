@@ -4,11 +4,10 @@ from typing import TYPE_CHECKING, Any, Iterable, Iterator, Sequence, Type
 
 import polars as pl
 
-from time_stream.aggregation import AggregationCtx, AggregationFunction
+from time_stream.aggregation import AggregationFunction
 from time_stream.columns import DataColumn, FlagColumn, PrimaryTimeColumn, SupplementaryColumn, TimeSeriesColumn
 from time_stream.enums import DuplicateOption, TimeAnchor
 from time_stream.exceptions import (
-    AggregationPeriodError,
     ColumnNotFoundError,
     ColumnTypeError,
     DuplicateColumnError,
@@ -395,21 +394,11 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         Returns:
             A TimeSeries containing the aggregated data.
         """
-        if not aggregation_period.is_epoch_agnostic():
-            raise AggregationPeriodError(
-                f"Non-epoch agnostic aggregation periods are not supported: '{aggregation_period}'."
-            )
-
-        if not self.periodicity.is_subperiod_of(aggregation_period):
-            raise AggregationPeriodError(
-                f"Incompatible aggregation period '{aggregation_period}' with TimeSeries periodicity "
-                f"'{self.periodicity}'. TimeSeries periodicity must be a subperiod of the aggregation period."
-            )
-
         # Get the aggregation function instance and run the apply method
-        ctx = AggregationCtx(self.df, self.time_name, self.time_anchor, self.periodicity)
-        agg_instance = AggregationFunction.get(aggregation_function)
-        agg_df = agg_instance.apply(ctx, aggregation_period, columns, missing_criteria)
+        agg_func = AggregationFunction.get(aggregation_function)
+        agg_df = agg_func.apply(
+            self.df, self.time_name, self.time_anchor, self.periodicity, aggregation_period, columns, missing_criteria
+        )
 
         return TimeSeries(
             df=agg_df,

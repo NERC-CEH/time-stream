@@ -326,37 +326,33 @@ class TestAddNewColumns(unittest.TestCase):
         "time": [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)],
         "col1": [1, 2, 3], "col2": [4, 5, 6], "col3": [7, 8, 9]
     })
+    ts = TimeSeries(df, time_name="time")
 
     def test_add_new_columns(self):
         """Test that new columns are correctly added as DataColumns."""
-        ts = TimeSeries(self.df, time_name="time")
         new_df = self.df.with_columns(pl.Series("col4", [1.1, 2.2, 3.3]))
-
         with patch.object(TimeSeriesColumn, "_validate_name", lambda *args, **kwargs: None):
-            ts._add_new_columns(ts._df, new_df)
+            self.ts._add_new_columns(self.ts._df, new_df)
 
-        self.assertIn("col4", ts.columns)
-        self.assertIsInstance(ts.col4, DataColumn)
+        self.assertIn("col4", self.ts.columns)
+        self.assertIsInstance(self.ts.col4, DataColumn)
 
     def test_no_changes_when_no_new_columns(self):
         """Test that does nothing if there are no new columns."""
-        ts = TimeSeries(self.df, time_name="time")
-        original_columns = ts._columns.copy()
-        ts._add_new_columns(ts._df, self.df)
+        original_columns = self.ts._columns.copy()
+        self.ts._add_new_columns(self.ts._df, self.df)
 
-        self.assertEqual(original_columns, ts._columns)
+        self.assertEqual(original_columns, self.ts._columns)
 
     def test_columns_added_to_relationship_manager(self):
         """Test that new columns are initialised in the relationship manager, with no relationships"""
-        ts = TimeSeries(self.df, time_name="time")
         new_df = self.df.with_columns(pl.Series("col4", [1.1, 2.2, 3.3]))
-
         with patch.object(TimeSeriesColumn, "_validate_name", lambda *args, **kwargs: None):
-            ts._add_new_columns(ts._df, new_df)
+            self.ts._add_new_columns(self.ts._df, new_df)
 
-        self.assertIn("col4", ts.columns)
-        self.assertIn("col4", ts._relationship_manager._relationships)
-        self.assertEqual(ts._relationship_manager._relationships["col4"], set())
+        self.assertIn("col4", self.ts.columns)
+        self.assertIn("col4", self.ts._relationship_manager._relationships)
+        self.assertEqual(self.ts._relationship_manager._relationships["col4"], set())
 
 
 class TestSelectColumns(unittest.TestCase):

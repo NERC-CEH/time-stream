@@ -7,7 +7,7 @@ import polars as pl
 from parameterized import parameterized
 from polars.testing import assert_frame_equal
 
-from time_stream.aggregation import _AGGREGATION_REGISTRY, AggregationCtx, AggregationFunction, Max, Mean, Min, MeanSum, Sum
+from time_stream.aggregation import _AGGREGATION_REGISTRY, AggregationCtx, AggregationPipeline, AggregationFunction, Max, Mean, Min, MeanSum, Sum
 from time_stream.base import TimeSeries
 from time_stream.period import Period
 from time_stream.exceptions import (
@@ -125,6 +125,45 @@ ts_P1D_OFF_2month = generate_time_series(P1D_OFF, P1D_OFF, 59)  # 2 months (Jan,
 ts_P1M_OFF_2years = generate_time_series(P1M_OFF, P1M_OFF, 24)  # 2 years of 1-month-offset data
 
 
+class TestAggregationPipeline(unittest.TestCase):
+    def setUp(self):
+        """Set up test fixtures."""
+        self.ctx = Mock(spec=AggregationCtx)
+        self.ctx.time_name = "time"
+        self.columns = ["values"]
+        self.agg_func = Mock(spec=AggregationFunction)
+        self.period = Mock()
+
+    @parameterized.expand([
+        ("percent", 50),
+        ("percent", 40.8),
+        ("missing", 5),
+        ("available", 10),
+        ("na", 0),
+    ])
+    def test_missing_data_expr_validation_pass(self, criteria, threshold):
+        """Test missing data expression validation that should pass."""
+        ap = AggregationPipeline(self.agg_func, self.ctx, self.period, self.columns, (criteria, threshold))
+
+        expressions = ap._missing_data_expr()
+        self.assertIsInstance(expressions, list)
+
+    @parameterized.expand([
+        ("percent", 101),
+        ("percent", -1),
+        ("missing", -1),
+        ("available", -1),
+        ("missing", 10.5),
+        ("available", 10.5),
+    ])
+    def test_missing_data_expr_validation_fail(self, criteria, threshold):
+        """Test missing data expression validations that should fail."""
+        ap = AggregationPipeline(self.agg_func, self.ctx, self.period, self.columns, (criteria, threshold))
+
+        with self.assertRaises(MissingCriteriaError):
+            ap._missing_data_expr()
+
+
 class TestAggregationFunction(unittest.TestCase):
     """Test the base AggregationFunction class."""
 
@@ -191,31 +230,6 @@ class TestAggregationFunction(unittest.TestCase):
             str(err.exception)
         )
 
-    @parameterized.expand([
-        ("percent", 50),
-        ("percent", 40.8),
-        ("missing", 5),
-        ("available", 10),
-        ("na", 0),
-    ])
-    def test_missing_data_expr_validation_pass(self, criteria, threshold):
-        """Test missing data expression validation that should pass."""
-        expressions = Mean()._missing_data_expr(self.mock_ts, ["value"], (criteria, threshold))
-        self.assertIsInstance(expressions, list)
-
-    @parameterized.expand([
-        ("percent", 101),
-        ("percent", -1),
-        ("missing", -1),
-        ("available", -1),
-        ("missing", 10.5),
-        ("available", 10.5),
-    ])
-    def test_missing_data_expr_validation_fail(self, criteria, threshold):
-        """Test missing data expression validations that should fail."""
-        with self.assertRaises(MissingCriteriaError):
-            Mean()._missing_data_expr(self.mock_ts, ["value"], (criteria, threshold))
-
 
 class TestSimpleAggregations(unittest.TestCase):
     """Tests for simple aggregation cases, where the input time series has a simple resolution/periodicity and there is
@@ -244,8 +258,9 @@ class TestSimpleAggregations(unittest.TestCase):
         """Test aggregations of microsecond-based (i.e., 1 day or less) resolution data, to another
         microsecond-based resolution."""
         expected_df = generate_expected_df(timestamps, aggregator, column, values, counts, counts, timestamps_of)
-        ctx = AggregationCtx(input_ts.df, input_ts.time_name, input_ts.time_anchor, input_ts.periodicity)
-        result = aggregator().apply(ctx, target_period, column)
+        result = aggregator().apply(
+            input_ts.df, input_ts.time_name, input_ts.time_anchor, input_ts.periodicity, target_period, column
+        )
         assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False)
 
     @parameterized.expand([
@@ -269,8 +284,9 @@ class TestSimpleAggregations(unittest.TestCase):
     ):
         """Test aggregations of microsecond-based (i.e., 1-day or less) resolution data, to a month-based resolution."""
         expected_df = generate_expected_df(timestamps, aggregator, column, values, counts, counts, timestamps_of)
-        ctx = AggregationCtx(input_ts.df, input_ts.time_name, input_ts.time_anchor, input_ts.periodicity)
-        result = aggregator().apply(ctx, target_period, column)
+        result = aggregator().apply(
+            input_ts.df, input_ts.time_name, input_ts.time_anchor, input_ts.periodicity, target_period, column
+        )
         assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False)
 
     @parameterized.expand([
@@ -294,8 +310,9 @@ class TestSimpleAggregations(unittest.TestCase):
     ):
         """Test aggregations of month-based resolution data, to a month-based resolution."""
         expected_df = generate_expected_df(timestamps, aggregator, column, values, counts, counts, timestamps_of)
-        ctx = AggregationCtx(input_ts.df, input_ts.time_name, input_ts.time_anchor, input_ts.periodicity)
-        result = aggregator().apply(ctx, target_period, column)
+        result = aggregator().apply(
+            input_ts.df, input_ts.time_name, input_ts.time_anchor, input_ts.periodicity, target_period, column
+        )
         assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False)
 
     @parameterized.expand([
@@ -325,8 +342,9 @@ class TestSimpleAggregations(unittest.TestCase):
             self, _, input_ts, aggregator, target_period, column, timestamps, counts, values, timestamps_of
     ):
         expected_df = generate_expected_df(timestamps, aggregator, column, values, counts, counts, timestamps_of)
-        ctx = AggregationCtx(input_ts.df, input_ts.time_name, input_ts.time_anchor, input_ts.periodicity)
-        result = aggregator().apply(ctx, target_period, column)
+        result = aggregator().apply(
+            input_ts.df, input_ts.time_name, input_ts.time_anchor, input_ts.periodicity, target_period, column
+        )
         assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False)
 
 
@@ -356,8 +374,9 @@ class TestComplexPeriodicityAggregations(unittest.TestCase):
         expected_df = generate_expected_df(
             timestamps, aggregator, column, values, expected_counts, actual_counts, timestamps_of
         )
-        ctx = AggregationCtx(input_ts.df, input_ts.time_name, input_ts.time_anchor, input_ts.periodicity)
-        result = aggregator().apply(ctx, target_period, column)
+        result = aggregator().apply(
+            input_ts.df, input_ts.time_name, input_ts.time_anchor, input_ts.periodicity, target_period, column
+        )
         assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False)
 
     @parameterized.expand([
@@ -379,8 +398,9 @@ class TestComplexPeriodicityAggregations(unittest.TestCase):
         expected_df = generate_expected_df(
             timestamps, aggregator, column, values, expected_counts, actual_counts, timestamps_of
         )
-        ctx = AggregationCtx(input_ts.df, input_ts.time_name, input_ts.time_anchor, input_ts.periodicity)
-        result = aggregator().apply(ctx, target_period, column)
+        result = aggregator().apply(
+            input_ts.df, input_ts.time_name, input_ts.time_anchor, input_ts.periodicity, target_period, column
+        )
         assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False)
 
     @parameterized.expand([
@@ -402,8 +422,9 @@ class TestComplexPeriodicityAggregations(unittest.TestCase):
         expected_df = generate_expected_df(
             timestamps, aggregator, column, values, expected_counts, actual_counts, timestamps_of
         )
-        ctx = AggregationCtx(input_ts.df, input_ts.time_name, input_ts.time_anchor, input_ts.periodicity)
-        result = aggregator().apply(ctx, target_period, column)
+        result = aggregator().apply(
+            input_ts.df, input_ts.time_name, input_ts.time_anchor, input_ts.periodicity, target_period, column
+        )
         assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False)
 
     @parameterized.expand([
@@ -425,8 +446,9 @@ class TestComplexPeriodicityAggregations(unittest.TestCase):
         expected_df = generate_expected_df(
             timestamps, aggregator, column, values, expected_counts, actual_counts, timestamps_of
         )
-        ctx = AggregationCtx(input_ts.df, input_ts.time_name, input_ts.time_anchor, input_ts.periodicity)
-        result = aggregator().apply(ctx, target_period, column)
+        result = aggregator().apply(
+            input_ts.df, input_ts.time_name, input_ts.time_anchor, input_ts.periodicity, target_period, column
+        )
         assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False)
 
 
@@ -453,10 +475,12 @@ class TestMissingCriteriaAggregations(unittest.TestCase):
             self.timestamps, self.aggregator, self.column, self.values, self.expected_counts,
             self.actual_counts, valid=valid
         )
-        ctx = AggregationCtx(
-            self.input_ts.df, self.input_ts.time_name, self.input_ts.time_anchor, self.input_ts.periodicity
+
+        result = self.aggregator().apply(
+            self.input_ts.df, self.input_ts.time_name, self.input_ts.time_anchor, self.input_ts.periodicity,
+            self.target_period, self.column
         )
-        result = self.aggregator().apply(ctx, self.target_period, self.column)
+
         assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False, check_exact=False)
 
     @parameterized.expand([
@@ -472,10 +496,12 @@ class TestMissingCriteriaAggregations(unittest.TestCase):
             self.timestamps, self.aggregator, self.column, self.values, self.expected_counts,
             self.actual_counts, valid=valid
         )
-        ctx = AggregationCtx(
-            self.input_ts.df, self.input_ts.time_name, self.input_ts.time_anchor, self.input_ts.periodicity
+
+        result = self.aggregator().apply(
+            self.input_ts.df, self.input_ts.time_name, self.input_ts.time_anchor, self.input_ts.periodicity,
+            self.target_period, self.column, criteria
         )
-        result = self.aggregator().apply(ctx, self.target_period, self.column, criteria)
+
         assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False, check_exact=False)
 
     @parameterized.expand([
@@ -491,10 +517,12 @@ class TestMissingCriteriaAggregations(unittest.TestCase):
             self.timestamps, self.aggregator, self.column, self.values, self.expected_counts,
             self.actual_counts, valid=valid
         )
-        ctx = AggregationCtx(
-            self.input_ts.df, self.input_ts.time_name, self.input_ts.time_anchor, self.input_ts.periodicity
+
+        result = self.aggregator().apply(
+            self.input_ts.df, self.input_ts.time_name, self.input_ts.time_anchor, self.input_ts.periodicity,
+            self.target_period, self.column, criteria
         )
-        result = self.aggregator().apply(ctx, self.target_period, self.column, criteria)
+
         assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False, check_exact=False)
 
     @parameterized.expand([
@@ -510,10 +538,12 @@ class TestMissingCriteriaAggregations(unittest.TestCase):
             self.timestamps, self.aggregator, self.column, self.values, self.expected_counts,
             self.actual_counts, valid=valid
         )
-        ctx = AggregationCtx(
-            self.input_ts.df, self.input_ts.time_name, self.input_ts.time_anchor, self.input_ts.periodicity
+
+        result = self.aggregator().apply(
+            self.input_ts.df, self.input_ts.time_name, self.input_ts.time_anchor, self.input_ts.periodicity,
+            self.target_period, self.column, criteria
         )
-        result = self.aggregator().apply(ctx, self.target_period, self.column, criteria)
+
         assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False, check_exact=False)
 
 
@@ -534,10 +564,12 @@ class TestMeanSumWithMissingData(unittest.TestCase):
             self.timestamps, MeanSum, self.column, self.values, self.expected_counts,
             self.actual_counts
         )
-        ctx = AggregationCtx(
-            self.input_ts.df, self.input_ts.time_name, self.input_ts.time_anchor, self.input_ts.periodicity
+
+        result = MeanSum().apply(
+            self.input_ts.df, self.input_ts.time_name, self.input_ts.time_anchor, self.input_ts.periodicity,
+            self.target_period, self.column
         )
-        result = MeanSum().apply(ctx, self.target_period, self.column)
+
         assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False, check_exact=False)
 
 
@@ -606,7 +638,6 @@ class TestAggregationWithMetadata(unittest.TestCase):
 
         result = ts.aggregate(Period.of_months(1), "mean", "value")
         self.assertEqual(result.metadata(), self.metadata)
-
 
     def test_with_no_metadata(self):
         """ Test that the aggregation result metadata is empty if input time series metadata is empty
