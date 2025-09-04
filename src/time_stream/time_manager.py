@@ -71,7 +71,21 @@ class TimeManager:
                                         (from 09:00 am on the 1st of October up to, but including, 09:00 am on
                                         the 1st of the following year).
             on_duplicates: What to do if duplicate rows are found in the data. Default to ERROR.
+                           DROP: Raise an error if duplicate rows are found.
+                           KEEP_FIRST: Keep the first row of any duplicate groups.
+                           KEEP_LAST: Keep the last row of any duplicate groups.
+                           DROP: Drop all duplicate rows.
+                           MERGE: Merge duplicate rows using "coalesce"
+                                  (the first non-null value for each column takes precedence).
             time_anchor: The time anchor to which the date/times conform to.
+                         In the descriptions below, "x" is the time value, "r" stands for a single unit of the
+                         resolution of the data (15-minute, 1-hour, 1-day, etc.)::
+                         POINT: The time stamp is anchored for the instant of time "x".
+                                A value at "x" is considered valid only for the instant of time "x".
+                         START: The time stamp is anchored starting at "x". A value at "x" is considered valid
+                                starting at "x" (inclusive) and ending at "x+r" (exclusive).
+                         END: The time stamp is anchored ending at "x". A value at "x" is considered valid
+                              starting at "x-r" (exclusive) and ending at "x" (inclusive).
         """
         self._get_df = get_df
         self._set_df = set_df

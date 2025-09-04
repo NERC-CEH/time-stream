@@ -33,6 +33,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         time_name: str,
         resolution: Period | str | None = None,
         periodicity: Period | str | None = None,
+        time_anchor: TimeAnchor | str | None = None,
         supplementary_columns: list | None = None,
         flag_systems: dict[str, dict] | dict[str, Type[Enum]] | None = None,
         flag_columns: dict[str, str] | None = None,
@@ -47,6 +48,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
             time_name: The name of the time column in the DataFrame.
             resolution: The resolution of the time series.
             periodicity: The periodicity of the time series.
+            time_anchor: The time anchor to which the date/times of the time series conform to.
             supplementary_columns: Columns within the dataframe that are considered supplementary.
             flag_systems: A dictionary defining the flagging systems that can be used for flag columns.
             flag_columns: Columns within the dataframe that are considered flag columns.
@@ -64,6 +66,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
             resolution=resolution,
             periodicity=periodicity,
             on_duplicates=on_duplicates,
+            time_anchor=time_anchor,
         )
 
         self._flag_manager = TimeSeriesFlagManager(self, flag_systems)
@@ -322,6 +325,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
             time_name=self.time_name,
             resolution=self.resolution,
             periodicity=self.periodicity,
+            time_anchor=self.time_anchor,
             supplementary_columns=new_supplementary_columns,
             flag_columns=new_flag_columns,
             flag_systems=new_flag_systems,
@@ -405,6 +409,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
             time_name=self.time_name,
             resolution=aggregation_period,
             periodicity=aggregation_period,
+            time_anchor=self.time_anchor,
             metadata=self._metadata.copy(),
         )
 
@@ -698,6 +703,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
             f"time_name={self.time_name}, "
             f"resolution={self.resolution}, "
             f"periodicity={self.periodicity}, "
+            f"time_anchor={self.time_anchor}, "
             f"data_columns={list(self.data_columns.keys())}, "
             f"supplementary_columns={list(self.supplementary_columns.keys())}, "
             f"flag_columns={list(self.flag_columns.keys())}, "
