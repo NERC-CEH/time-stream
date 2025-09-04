@@ -136,22 +136,20 @@ class TestHandleTimeDuplicates(unittest.TestCase):
 
         self.tm = object.__new__(TimeManager)  # skips __init__
         self.tm._get_df = lambda: self.df
-        self.tm._set_df = self.update_df
         self.tm._time_name = "time"
-
-    def update_df(self, new_df):
-        self.new_df = new_df
 
     def test_error(self):
         """ Test that the error strategy works as expected
         """
-        with self.assertRaises(DuplicateTimeError) as err:
-            self.tm._handle_time_duplicates(DuplicateOption.ERROR)
+        with self.assertRaises(DuplicateTimeError):
+            self.tm._on_duplicates = DuplicateOption.ERROR
+            self.tm._handle_time_duplicates()
 
     def test_keep_first(self):
         """ Test that the keep first strategy works as expected
         """
-        self.tm._handle_time_duplicates(DuplicateOption.KEEP_FIRST)
+        self.tm._on_duplicates = DuplicateOption.KEEP_FIRST
+        result = self.tm._handle_time_duplicates()
 
         expected = pl.DataFrame({
             "time": [
@@ -171,12 +169,13 @@ class TestHandleTimeDuplicates(unittest.TestCase):
             "colC": [None, 2, 3, 4, 5, 6, 7, 8, 9, 10],
         })
 
-        assert_frame_equal(self.new_df, expected)
+        assert_frame_equal(result, expected)
 
     def test_keep_last(self):
         """ Test that the keep last strategy works as expected
         """
-        self.tm._handle_time_duplicates(DuplicateOption.KEEP_LAST)
+        self.tm._on_duplicates = DuplicateOption.KEEP_LAST
+        result = self.tm._handle_time_duplicates()
 
         expected = pl.DataFrame({
             "time": [
@@ -196,12 +195,13 @@ class TestHandleTimeDuplicates(unittest.TestCase):
             "colC": [2, 2, 3, 4, 5, 6, 7, None, 9, 10],
         })
 
-        assert_frame_equal(self.new_df, expected)
+        assert_frame_equal(result, expected)
 
     def test_drop(self):
         """ Test that the drop strategy works as expected
         """
-        self.tm._handle_time_duplicates(DuplicateOption.DROP)
+        self.tm._on_duplicates = DuplicateOption.DROP
+        result = self.tm._handle_time_duplicates()
 
         expected = pl.DataFrame({
             "time": [
@@ -219,12 +219,13 @@ class TestHandleTimeDuplicates(unittest.TestCase):
             "colC": [2, 3, 4, 5, 6, 7, 9, 10],
         })
 
-        assert_frame_equal(self.new_df, expected)
+        assert_frame_equal(result, expected)
 
     def test_merge(self):
         """ Test that the merge strategy works as expected
         """
-        self.tm._handle_time_duplicates(DuplicateOption.MERGE)
+        self.tm._on_duplicates = DuplicateOption.MERGE
+        result = self.tm._handle_time_duplicates()
 
         expected = pl.DataFrame({
             "time": [
@@ -244,4 +245,4 @@ class TestHandleTimeDuplicates(unittest.TestCase):
             "colC": [2, 2, 3, 4, 5, 6, 7, 8, 9, 10],
         })
 
-        assert_frame_equal(self.new_df, expected)
+        assert_frame_equal(result, expected)
