@@ -1,12 +1,11 @@
 from collections.abc import Iterable
 from datetime import datetime
-from typing import assert_never
 
 import polars as pl
 
 from time_stream import Period
 from time_stream.enums import DuplicateOption, TimeAnchor
-from time_stream.exceptions import ColumnNotFoundError, DuplicateValueError
+from time_stream.exceptions import ColumnNotFoundError, DuplicateValueError, UnhandledEnumError
 
 
 def get_date_filter(time_name: str, observation_interval: datetime | tuple[datetime, datetime | None]) -> pl.Expr:
@@ -248,27 +247,27 @@ def handle_duplicates(
         # Nothing to do!
         return df
 
-    match on_duplicates:
-        case DuplicateOption.ERROR:
-            raise DuplicateValueError()
+    if on_duplicates == DuplicateOption.ERROR:
+        raise DuplicateValueError()
 
-        case DuplicateOption.KEEP_FIRST:
-            return df.unique(subset=column, keep="first")
+    elif on_duplicates == DuplicateOption.KEEP_FIRST:
+        new_df = df.unique(subset=column, keep="first")
 
-        case DuplicateOption.KEEP_LAST:
-            return df.unique(subset=column, keep="last")
+    elif on_duplicates == DuplicateOption.KEEP_LAST:
+        new_df = df.unique(subset=column, keep="last")
 
-        case DuplicateOption.MERGE:
-            # Coalesce by first non-null per column
-            merge_cols = [c for c in df.columns if c != column]
-            return df.group_by(column).agg([pl.col(col).drop_nulls().first().alias(col) for col in merge_cols])
+    elif on_duplicates == DuplicateOption.MERGE:
+        merge_cols = [c for c in df.columns if c != column]
+        new_df = df.group_by(column).agg([pl.col(col).drop_nulls().first().alias(col) for col in merge_cols])
 
-        case DuplicateOption.DROP:
-            return df.filter(~duplicate_mask)
+    elif on_duplicates == DuplicateOption.DROP:
+        new_df = df.filter(~duplicate_mask)
 
-        case _ as unreachable:
-            # Should never reach here, unless a new enum value is added in the future and logic has not been added here
-            assert_never(unreachable)
+    else:
+        # Should never reach here, unless a new enum value is added in the future and logic has not been added here
+        raise UnhandledEnumError(f"Unhandled duplicates option: {on_duplicates}")
+
+    return new_df
 
 
 def check_resolution(date_times: pl.Series, resolution: Period, time_anchor: TimeAnchor) -> bool:

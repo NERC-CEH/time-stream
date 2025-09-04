@@ -178,3 +178,7 @@ class FlagSystemNotFoundError(FlagSystemError):
 
 class DuplicateRegistryKeyError(TimeStreamError):
     """Raised when a registry key already exists."""
+
+
+class UnhandledEnumError(TimeStreamError):
+    """Base class for unhandled enumeration related errors."""

@@ -33,7 +33,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         time_name: str,
         resolution: Period | str | None = None,
         periodicity: Period | str | None = None,
-        time_anchor: TimeAnchor | str | None = None,
+        time_anchor: TimeAnchor | str = TimeAnchor.START,
         supplementary_columns: list | None = None,
         flag_systems: dict[str, dict] | dict[str, Type[Enum]] | None = None,
         flag_columns: dict[str, str] | None = None,
@@ -61,7 +61,6 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
 
         self._time_manager = TimeManager(
             get_df=lambda: self.df,
-            set_df=self._update_df,
             time_name=time_name,
             resolution=resolution,
             periodicity=periodicity,
@@ -103,7 +102,10 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         self._setup_columns(supplementary_columns, flag_columns, column_metadata)
         self._setup_metadata(metadata)
 
-        self._time_manager._handle_time_duplicates()
+        # NOTE: Set _df directly, otherwise the df setter will complain that the time column is mutated.
+        #       In this instance, we are happy as we know we are mutating the time values to handle duplicate values.
+        self._df = self._time_manager._handle_time_duplicates()
+
         self._time_manager.validate()
         self.sort_time()
 
@@ -217,7 +219,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
             new_df: The new Polars DataFrame to set as the time series data.
         """
         old_df = self._df.clone()
-        self._time_manager.check_time_integrity(old_df, new_df)
+        self._time_manager._check_time_integrity(old_df, new_df)
         self._df = new_df  # Set this before removing columns so that recursive removals via relationship manager works.
         self._remove_missing_columns(old_df, new_df)
         self._add_new_columns(old_df, new_df)

@@ -22,7 +22,6 @@ class TimeManager:
     def __init__(
         self,
         get_df: Callable[[], pl.DataFrame],
-        set_df: Callable[[pl.DataFrame], None],
         time_name: str,
         resolution: str | Period | None = None,
         periodicity: str | Period | None = None,
@@ -34,7 +33,6 @@ class TimeManager:
         Args:
             get_df: A callback to access the current dataframe, so it never has to hold a direct
                     reference to the parent TimeSeries to avoid circular dependencies.
-            set_df: A callback to set a new dataframe object in the parent TimeSeries.
             time_name: The name of the time column of the parent TimeSeries.
             resolution: Resolution defines how "precise" the datetimes are, i.e., to what precision of time unit
                         should each datetime in the time series match to.
@@ -88,7 +86,6 @@ class TimeManager:
                               starting at "x-r" (exclusive) and ending at "x" (inclusive).
         """
         self._get_df = get_df
-        self._set_df = set_df
         self._time_name = time_name
         self._resolution = configure_period_object(resolution)
         self._periodicity = configure_period_object(periodicity)
@@ -179,7 +176,7 @@ class TimeManager:
         if not dtype.is_temporal():
             raise ColumnTypeError(f"Time column '{self.time_name}' must be datetime type, got '{dtype}'")
 
-    def check_time_integrity(self, old_df: pl.DataFrame, new_df: pl.DataFrame) -> None:
+    def _check_time_integrity(self, old_df: pl.DataFrame, new_df: pl.DataFrame) -> None:
         """Raise an error if the time values change between old and new DataFrames.
 
         Args:
@@ -199,29 +196,20 @@ class TimeManager:
         if not old_ts.sort().equals(new_ts.sort()):
             raise TimeMutatedError(old_timestamps=old_ts, new_timestamps=new_ts)
 
-    def _handle_time_duplicates(self, on_duplicates: DuplicateOption | str | None = None) -> None:
+    def _handle_time_duplicates(self) -> pl.DataFrame:
         """Handle duplicate values in the time column based on a specified strategy.
 
-        Args:
-            on_duplicates: The strategy to use to handle duplicate timestamps. Current options:
-                            - "error": Raise an error if duplicate rows are found.
-                            - "keep_first": Keep the first row of any duplicate groups.
-                            - "keep_last": Keep the last row of any duplicate groups.
-                            - "drop": Drop all duplicate rows.
-                            - "merge": Merge duplicate rows using "coalesce" (the first non-null value
-                                        for each column takes precedence).
+        Returns:
+            Dataframe with duplicate values handled based on specified strategy.
 
         Raises:
             DuplicateTimeError: If there are duplicate timestamps and the "error" strategy is being used.
         """
-        if on_duplicates is None:
-            on_duplicates = DuplicateOption.ERROR
-
         try:
-            new_df = handle_duplicates(self._get_df(), self._time_name, DuplicateOption(on_duplicates))
+            new_df = handle_duplicates(self._get_df(), self._time_name, DuplicateOption(self._on_duplicates))
         except DuplicateValueError:
             raise DuplicateTimeError()
 
         # Polars aggregate methods can change the order due to how it optimises the functionality, so sort times after
         new_df = new_df.sort(self._time_name)
-        self._set_df(new_df)
+        return new_df
