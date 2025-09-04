@@ -5,7 +5,7 @@ import polars as pl
 
 from time_stream import TimeSeries, Period
 # [end_block_1]
-from utils import suppress_output
+from time_stream.examples.utils import suppress_output
 
 
 def create_df():

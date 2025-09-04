@@ -3,9 +3,7 @@ from datetime import datetime, date, timedelta, time
 import polars as pl
 
 from time_stream import TimeSeries
-
-
-from utils import suppress_output
+from time_stream.examples.utils import suppress_output
 
 
 def create_simple_time_series():
