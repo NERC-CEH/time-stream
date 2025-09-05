@@ -17,7 +17,7 @@ from time_stream.flag_manager import TimeSeriesFlagManager
 from time_stream.period import Period
 from time_stream.relationships import RelationshipManager
 from time_stream.time_manager import TimeManager
-from time_stream.utils import check_columns_in_dataframe, pad_time
+from time_stream.utils import check_columns_in_dataframe, configure_period_object, pad_time
 
 if TYPE_CHECKING:
     from time_stream.infill import InfillMethod
@@ -383,7 +383,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
 
     def aggregate(
         self,
-        aggregation_period: Period,
+        aggregation_period: Period | str,
         aggregation_function: str | Type[AggregationFunction] | AggregationFunction,
         columns: str | list[str],
         missing_criteria: tuple[str, float | int] | None = None,
@@ -402,6 +402,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         """
         # Get the aggregation function instance and run the apply method
         agg_func = AggregationFunction.get(aggregation_function)
+        aggregation_period = configure_period_object(aggregation_period)
         agg_df = agg_func.apply(
             self.df, self.time_name, self.time_anchor, self.periodicity, aggregation_period, columns, missing_criteria
         )
