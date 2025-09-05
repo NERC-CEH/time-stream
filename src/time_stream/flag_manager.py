@@ -44,7 +44,7 @@ class TimeSeriesFlagManager:
         for name, flag_system in flag_systems.items():
             self.add_flag_system(name, flag_system)
 
-    def add_flag_system(self, name: str, flag_system: dict[str, dict[str, int] | Type[enum.Enum]]) -> None:
+    def add_flag_system(self, name: str, flag_system: dict[str, int] | Type[enum.Enum]) -> None:
         """Adds a flag system to the flag manager, which contains flag values and their meanings.
 
         A flag system can be used to create flag columns that are specific to a particular type of flag.

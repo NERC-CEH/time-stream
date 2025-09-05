@@ -346,7 +346,7 @@ class PrimaryTimeColumn(TimeSeriesColumn):
     This column is immutable and cannot be converted to other column types.
     """
 
-    def set_as_supplementary(self, *args, **kwargs) -> None:
+    def set_as_supplementary(self, *args, **kwargs) -> "TimeSeriesColumn":
         """Raises an error because the primary time column cannot be converted to a supplementary column.
 
         Raises:
@@ -354,7 +354,7 @@ class PrimaryTimeColumn(TimeSeriesColumn):
         """
         raise NotImplementedError("Primary time column cannot be converted to a supplementary column.")
 
-    def set_as_flag(self, *args, **kwargs) -> None:
+    def set_as_flag(self, *args, **kwargs) -> "TimeSeriesColumn":
         """Raises an error because the primary time column cannot be converted to a flag column.
 
         Raises:
@@ -362,7 +362,7 @@ class PrimaryTimeColumn(TimeSeriesColumn):
         """
         raise NotImplementedError("Primary time column cannot be converted to a flag column.")
 
-    def unset(self, *args, **kwargs) -> None:
+    def unset(self, *args, **kwargs) -> "TimeSeriesColumn":
         """Raises an error because the primary time column cannot be unset.
 
         Raises:
