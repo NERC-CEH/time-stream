@@ -13,7 +13,13 @@ from time_stream.exceptions import (
     ResolutionError,
     TimeMutatedError,
 )
-from time_stream.utils import check_periodicity, check_resolution, configure_period_object, handle_duplicates
+from time_stream.utils import (
+    check_periodicity,
+    check_resolution,
+    configure_period_object,
+    epoch_check,
+    handle_duplicates,
+)
 
 
 class TimeManager:
@@ -138,6 +144,7 @@ class TimeManager:
         Raises:
             ResolutionError: If the datetimes are not aligned to the resolution.
         """
+        epoch_check(self.resolution)
         resolution_check = check_resolution(dt, self.resolution, self.time_anchor)
         if not resolution_check:
             raise ResolutionError(f"Time values are not aligned to resolution: {self.resolution}")
@@ -151,6 +158,7 @@ class TimeManager:
         Raises:
             PeriodicityError: If the datetimes do not conform to the periodicity.
         """
+        epoch_check(self.periodicity)
         periodicity_check = check_periodicity(dt, self.periodicity, self.time_anchor)
         if not periodicity_check:
             raise PeriodicityError(f"Time values do not conform to periodicity: {self.periodicity}")

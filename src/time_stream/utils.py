@@ -162,7 +162,7 @@ def check_columns_in_dataframe(df: pl.DataFrame, columns: str | Iterable[str]) -
 def configure_period_object(period: str | Period | None) -> Period:
     """Configure a time-stream Period object.
 
-    Converts strings to Period objects (if required) and checks that the Period can be used within time-stream.
+    Converts strings to Period objects (if required).
 
     Args:
           period: The period to configure.
@@ -178,11 +178,10 @@ def configure_period_object(period: str | Period | None) -> Period:
     if isinstance(period, str):
         period = Period.of_duration(period)
 
-    # Check the epoch agnostic nature of the period
-    return epoch_check(period)
+    return period
 
 
-def epoch_check(period: Period) -> Period:
+def epoch_check(period: Period) -> None:
     """Check if the period is epoch-agnostic.
 
     A period is considered "epoch agnostic" if it divides the timeline into consistent intervals regardless of the
@@ -206,16 +205,12 @@ def epoch_check(period: Period) -> Period:
     Args:
         period: The period to check.
 
-    Returns:
-        The period object if it passes the check.
     Raises:
         NotImplementedError: If the period is not epoch-agnostic.
     """
     if not period.is_epoch_agnostic():
         # E.g., 5 hours, 7 days, 9 months, etc.
-        raise NotImplementedError("Not available for non-epoch agnostic periodicity")
-    else:
-        return period
+        raise NotImplementedError(f"Non-epoch agnostic  periods are not supported: {period}")
 
 
 def handle_duplicates(
