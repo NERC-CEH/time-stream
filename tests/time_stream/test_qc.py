@@ -18,8 +18,8 @@ from time_stream.qc import QCCheck, ComparisonCheck, SpikeCheck, RangeCheck
 class MockQC(QCCheck):
     name = "Mock"
 
-    def expr(self, check_column):
-        return pl.col(check_column)
+    def expr(self, column):
+        return pl.col(column)
 
 class TestQCCheck(unittest.TestCase):
     """Test the base QCCheck class."""

@@ -1,13 +1,19 @@
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from datetime import date, datetime, time
-from typing import Type
+from typing import ClassVar, Type
 
 import polars as pl
 
-from time_stream import TimeSeries
 from time_stream.enums import ClosedInterval
-from time_stream.exceptions import ColumnNotFoundError, QcTypeError, QcUnknownOperatorError, UnknownQcError
-from time_stream.utils import get_date_filter
+from time_stream.exceptions import (
+    DuplicateRegistryKeyError,
+    QcError,
+    QcTypeError,
+    QcUnknownOperatorError,
+    UnknownQcError,
+)
+from time_stream.utils import check_columns_in_dataframe, get_date_filter
 
 # Registry for built-in QC checks
 _QC_REGISTRY = {}
@@ -22,37 +28,35 @@ def register_qc_check(cls: Type["QCCheck"]) -> Type["QCCheck"]:
     Returns:
         The decorated class.
     """
-    _QC_REGISTRY[cls.name] = cls
+    key = cls.name.lower()
+    if key in _QC_REGISTRY:
+        raise DuplicateRegistryKeyError(f"QC check key: '{key}' already registered")
+
+    _QC_REGISTRY[key] = cls
     return cls
+
+
+def available_qc_checks() -> list[str]:
+    """Return a sorted list of available qc check names."""
+    return sorted(_QC_REGISTRY.keys())
+
+
+@dataclass(frozen=True)
+class QcCtx:
+    """Immutable context passed to QC checks."""
+
+    df: pl.DataFrame
+    time_name: str
 
 
 class QCCheck(ABC):
     """Base class for quality control checks."""
 
-    _ts = None
-
-    @property
-    def ts(self) -> TimeSeries:
-        if self._ts is None:
-            raise AttributeError("TimeSeries has not been initialised for this QC check.")
-        return self._ts
-
-    @property
-    @abstractmethod
-    def name(self) -> str:
-        """Return the name of the QC check."""
-        pass
+    name: ClassVar[str]
 
     @abstractmethod
-    def expr(self, check_column: str) -> pl.Expr:
-        """Return the Polars expression for this QC check.
-
-        Args:
-            check_column: The column to apply the check to.
-
-        Returns:
-            Boolean expression where True indicates values that should be flagged.
-        """
+    def expr(self, _ctx: QcCtx, _column: str) -> pl.Expr:
+        """Return the boolean Polars expression for this QC check (result of True == Value failed the QC check)"""
         pass
 
     @classmethod
@@ -71,18 +75,18 @@ class QCCheck(ABC):
             An instance of the appropriate QCCheck subclass.
 
         Raises:
-            KeyError: If a string name is not registered as a QC check.
-            TypeError: If the input type is not supported or a class doesn't inherit from QCCheck.
+            UnknownQcError: If a string name is not registered as a QC check.
+            QcTypeError: If the input type is not supported or a class doesn't inherit from QCCheck.
 
-        Examples:
-            >>> # From string
-            >>> qc = QCCheck.get("threshold")
-            >>>
-            >>> # From class
-            >>> qc = QCCheck.get(ThresholdCheck)
-            >>>
-            >>> # From instance
-            >>> qc = QCCheck.get(ThresholdCheck(arg1, arg2))
+        Examples::
+            # From string
+            qc = QCCheck.get("threshold")
+
+            # From class
+            qc = QCCheck.get(ThresholdCheck)
+
+            # From instance
+            qc = QCCheck.get(ThresholdCheck(arg1, arg2))
         """
         # If it's already an instance, return it
         if isinstance(check, QCCheck):
@@ -91,9 +95,9 @@ class QCCheck(ABC):
         # If it's a string, look it up in the registry
         if isinstance(check, str):
             try:
-                return _QC_REGISTRY[check](**kwargs)
+                return _QC_REGISTRY[check.lower()](**kwargs)
             except KeyError:
-                raise UnknownQcError(f"Unknown QC check '{check}'. Available methods: {list(_QC_REGISTRY.keys())}")
+                raise UnknownQcError(f"Unknown QC check '{check}'. Available methods: {available_qc_checks()}")
 
         # If it's a class, check the subclass type and return
         elif isinstance(check, type):
@@ -107,41 +111,70 @@ class QCCheck(ABC):
 
     def apply(
         self,
-        ts: TimeSeries,
+        df: pl.DataFrame,
+        time_name: str,
         check_column: str,
         observation_interval: datetime | tuple[datetime, datetime | None] | None = None,
     ) -> pl.Series:
-        """Apply the QC check to the TimeSeries.
+        """Apply the QC check to the data.
 
         Args:
-            ts: The TimeSeries to check.
+            df: The Polars DataFrame containing the time series data to quality control
+            time_name: Name of the time column in the dataframe
             check_column: The column to perform the check on.
             observation_interval: Optional time interval to limit the check to.
 
         Returns:
-            pl.Series: Boolean series of the resolved expression on the TimeSeries.
+            pl.Series: Boolean series of the resolved expression.
         """
-        # Validate column exists
-        if check_column not in ts.columns and check_column != ts.time_name:
-            raise ColumnNotFoundError(f"Check column '{check_column}' not found in TimeSeries.")
+        ctx = QcCtx(df, time_name)
+        pipeline = QcCheckPipeline(self, ctx, check_column, observation_interval)
+        return pipeline.execute()
 
-        # Set the timeseries property, in case class expr method needs access to properties in the object
-        self._ts = ts
+
+class QcCheckPipeline:
+    """Encapsulates the logic for the QC pipeline steps."""
+
+    def __init__(
+        self,
+        qc_check: QCCheck,
+        ctx: QcCtx,
+        column: str,
+        observation_interval: datetime | tuple[datetime, datetime | None] | None = None,
+    ):
+        self.qc_check = qc_check
+        self.ctx = ctx
+        self.column = column
+        self.observation_interval = observation_interval
+
+    def execute(self) -> pl.Series:
+        """Execute the quality control check pipeline
+
+        Returns:
+
+        """
+        self._validate()
 
         # Get the check expression
-        check_expr = self.expr(check_column)
+        check_expr = self.qc_check.expr(self.ctx, self.column)
 
         # Apply observation interval filter if specified
-        if observation_interval:
-            date_filter = get_date_filter(ts.time_name, observation_interval)
+        if self.observation_interval:
+            date_filter = get_date_filter(self.ctx.time_name, self.observation_interval)
             check_expr = check_expr & date_filter
 
         # Evaluate and return the result of the QC check
-        #   Naming the series to an empty string so as not to cause confusion.
-        #   Up to user if they want to name it and add on to the TimeSeries dataframe.
-        result = ts.df.select(check_expr).to_series().alias("")
+        #   Name as empty string to avoid accidental collisions.
+        #   Up to user if they want to name it and add on to the dataframe.
+        result = self.ctx.df.select(check_expr.alias("")).to_series()
 
         return result
+
+    def _validate(self) -> None:
+        """Carry out validation that the QC check can actually be carried out."""
+        if self.ctx.df.is_empty():
+            raise QcError("Cannot perform QC check on an empty DataFrame.")
+        check_columns_in_dataframe(self.ctx.df, [self.column, self.ctx.time_name])
 
 
 @register_qc_check
@@ -162,16 +195,16 @@ class ComparisonCheck(QCCheck):
         self.operator = operator
         self.flag_na = flag_na
 
-    def expr(self, check_column: str) -> pl.Expr:
+    def expr(self, ctx: QcCtx, column: str) -> pl.Expr:
         """Return the Polars expression for threshold checking."""
         operator_map = {
-            ">": pl.col(check_column) > self.compare_to,
-            ">=": pl.col(check_column) >= self.compare_to,
-            "<": pl.col(check_column) < self.compare_to,
-            "<=": pl.col(check_column) <= self.compare_to,
-            "==": pl.col(check_column) == self.compare_to,
-            "!=": pl.col(check_column) != self.compare_to,
-            "is_in": pl.col(check_column).is_in(self.compare_to),
+            ">": pl.col(column) > self.compare_to,
+            ">=": pl.col(column) >= self.compare_to,
+            "<": pl.col(column) < self.compare_to,
+            "<=": pl.col(column) <= self.compare_to,
+            "==": pl.col(column) == self.compare_to,
+            "!=": pl.col(column) != self.compare_to,
+            "is_in": pl.col(column).is_in(self.compare_to),
         }
 
         if self.operator not in operator_map:
@@ -179,7 +212,7 @@ class ComparisonCheck(QCCheck):
 
         operator_expr = operator_map[self.operator]
         if self.flag_na:
-            operator_expr = operator_expr | pl.col(check_column).is_null()
+            operator_expr = operator_expr | pl.col(column).is_null()
 
         return operator_expr
 
@@ -211,7 +244,7 @@ class RangeCheck(QCCheck):
         self.closed = ClosedInterval(closed)
         self.within = within
 
-    def expr(self, check_column: str) -> pl.Expr:
+    def expr(self, ctx: QcCtx, column: str) -> pl.Expr:
         """Return the Polars expression for range checking."""
         if type(self.min_value) is not type(self.max_value):
             raise TypeError("'min_value' and 'max_value' must be of same type")
@@ -220,7 +253,7 @@ class RangeCheck(QCCheck):
 
         # Check if we're doing a time-based range check
         if check_type is time:
-            check_column = pl.col(check_column).dt.time()
+            col_expr = pl.col(column).dt.time()
 
             # Consider ranges that cross midnight, e.g. min_value = 11:00, max_value = 01:00
             if self.min_value > self.max_value:
@@ -239,13 +272,13 @@ class RangeCheck(QCCheck):
 
         elif check_type is date:
             # For datetime.date objects (NOT datetime.datetime!), we want to consider the whole date part of the column
-            check_column = pl.col(check_column).dt.date()
+            col_expr = pl.col(column).dt.date()
 
         else:
             # This should handle numeric objects and datetime.datetime objects
-            check_column = pl.col(check_column)
+            col_expr = pl.col(column)
 
-        in_range = check_column.is_between(
+        in_range = col_expr.is_between(
             self.min_value,
             self.max_value,
             closed=self.closed.value,  # type: ignore[arg-type] ignore Literal typing as the enum constrains the values
@@ -270,8 +303,8 @@ class TimeRangeCheck(RangeCheck):
 
     name = "time_range"
 
-    def expr(self, _: str) -> pl.Expr:
-        return super().expr(self.ts.time_name)
+    def expr(self, ctx: QcCtx, column: str) -> pl.Expr:
+        return super().expr(ctx, ctx.time_name)
 
 
 @register_qc_check
@@ -288,7 +321,7 @@ class SpikeCheck(QCCheck):
         """
         self.threshold = threshold
 
-    def expr(self, check_column: str) -> pl.Expr:
+    def expr(self, ctx: QcCtx, column: str) -> pl.Expr:
         """Return the Polars expression for spike detection.
 
         The algorithm:
@@ -297,11 +330,11 @@ class SpikeCheck(QCCheck):
         3. Flag where (total_difference - skew) > threshold * 2
         """
         # Calculate differences with temporal neighbors
-        prev_val = pl.col(check_column).shift(1)
-        next_val = pl.col(check_column).shift(-1)
+        prev_val = pl.col(column).shift(1)
+        next_val = pl.col(column).shift(-1)
 
-        diff_prev = pl.col(check_column) - prev_val
-        diff_next = next_val - pl.col(check_column)
+        diff_prev = pl.col(column) - prev_val
+        diff_next = next_val - pl.col(column)
 
         # Calculate total difference and skew
         d = (diff_prev - diff_next).abs()

@@ -15,13 +15,13 @@ from time_stream.exceptions import (
 )
 from time_stream.flag_manager import TimeSeriesFlagManager
 from time_stream.period import Period
+from time_stream.qc import QCCheck
 from time_stream.relationships import RelationshipManager
 from time_stream.time_manager import TimeManager
 from time_stream.utils import check_columns_in_dataframe, configure_period_object, pad_time
 
 if TYPE_CHECKING:
     from time_stream.infill import InfillMethod
-    from time_stream.qc import QCCheck
 
 
 class TimeSeries:  # noqa: PLW1641 ignore hash warning
@@ -419,40 +419,62 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
     def qc_check(
         self,
         check: "str | Type[QCCheck] | QCCheck",
-        check_column: str,
+        column: str,
         observation_interval: tuple[datetime, datetime | None] | None = None,
+        into: str | bool = False,
         **kwargs,
-    ) -> pl.Series:
+    ) -> "TimeSeries | pl.Series":
         """Apply a quality control check to the TimeSeries.
 
         Args:
             check: The QC check to apply.
-            check_column: The column to perform the check on.
+            column: The column to perform the check on.
             observation_interval: Optional time interval to limit the check to.
+            into: Whether to add the result of the QC to the TimeSeries dataframe (True | string name of column to add),
+                  or just return a boolean Series of the QC result (False).
             **kwargs: Parameters specific to the check type.
 
         Returns:
-            pl.Series: Boolean series of the resolved expression on the TimeSeries.
+            Result of the QC check, either as a boolean Series or added to the TimeSeries dataframe
 
         Examples:
-            >>> # Threshold check
-            >>> ts_flagged = ts.qc_check("comparison", "battery_voltage", compare_to=12.0, operator="<")
-            >>>
-            >>> # Range check
-            >>> ts_flagged = ts.qc_check("range", "temperature", min_value=-50, max_value=50)
-            >>>
-            >>> # Spike check
-            >>> ts_flagged = ts.qc_check("spike", "wind_speed", threshold=5.0)
-            >>>
-            >>> # Value check for error codes
-            >>> ts_flagged = ts.qc_check("comparison", "status_code", compare_to=[99, -999, "ERROR"])
-        """
-        # Import at runtime to avoid circular import
-        from time_stream.qc import QCCheck  # noqa: PLC0415
+            # Threshold check
+            ts_flagged = ts.qc_check("comparison", "battery_voltage", compare_to=12.0, operator="<")
 
+            # Range check
+            ts_flagged = ts.qc_check("range", "temperature", min_value=-50, max_value=50)
+
+            # Spike check
+            ts_flagged = ts.qc_check("spike", "wind_speed", threshold=5.0)
+
+            # Value check for error codes
+            ts_flagged = ts.qc_check("comparison", "status_code", compare_to=[99, -999, "ERROR"])
+        """
         # Get the QC check instance and run the apply method
         check_instance = QCCheck.get(check, **kwargs)
-        return check_instance.apply(self, check_column, observation_interval)
+        qc_result = check_instance.apply(self.df, self.time_name, column, observation_interval)
+
+        # Return the boolean series, if requested
+        if not into:
+            return qc_result
+
+        # Determine the name of the column for the QC result
+        if isinstance(into, str):
+            qc_result_col_name = into
+        else:
+            qc_result_col_name = f"__qc__{column}__{check_instance.name}"
+
+        if qc_result_col_name in self.df.columns:
+            # Auto-suffix the column name to avoid accidental overwrite
+            i, base = 2, qc_result_col_name
+            while f"{base}__{i}" in self.df.columns:
+                i += 1
+            qc_result_col_name = f"{base}__{i}"
+
+        # Create a copy of the current TimeSeries, and update the dataframe with the QC result
+        ts = self.select([*self.data_columns.keys(), *self.supplementary_columns.keys(), *self.flag_columns.keys()])
+        ts.df = self.df.with_columns(pl.Series(qc_result_col_name, qc_result))
+        return ts
 
     def infill(
         self,
