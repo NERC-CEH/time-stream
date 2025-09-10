@@ -387,6 +387,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         aggregation_function: str | Type[AggregationFunction] | AggregationFunction,
         columns: str | list[str],
         missing_criteria: tuple[str, float | int] | None = None,
+        aggregation_time_anchor: TimeAnchor | None = None,
     ) -> "TimeSeries":
         """Apply an aggregation function to a column in this TimeSeries, check the aggregation satisfies user
         requirements and return a new derived TimeSeries containing the aggregated data.
@@ -396,6 +397,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
             aggregation_function: The aggregation function to apply
             columns: The column(s) containing the data to be aggregated
             missing_criteria: How the aggregation handles missing data
+            aggregation_time_anchor: The time anchor for the aggregation result.
 
         Returns:
             A TimeSeries containing the aggregated data.
@@ -403,8 +405,17 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         # Get the aggregation function instance and run the apply method
         agg_func = AggregationFunction.get(aggregation_function)
         aggregation_period = configure_period_object(aggregation_period)
+        aggregation_time_anchor = TimeAnchor(aggregation_time_anchor) if aggregation_time_anchor else self.time_anchor
+
         agg_df = agg_func.apply(
-            self.df, self.time_name, self.time_anchor, self.periodicity, aggregation_period, columns, missing_criteria
+            self.df,
+            self.time_name,
+            self.time_anchor,
+            self.periodicity,
+            aggregation_period,
+            columns,
+            missing_criteria=missing_criteria,
+            aggregation_time_anchor=aggregation_time_anchor,
         )
 
         return TimeSeries(
@@ -412,7 +423,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
             time_name=self.time_name,
             resolution=aggregation_period,
             periodicity=aggregation_period,
-            time_anchor=self.time_anchor,
+            time_anchor=aggregation_time_anchor,
             metadata=self._metadata.copy(),
         )
 
