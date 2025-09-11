@@ -77,7 +77,7 @@ def pad_time(
     This method ensures a complete time series by adding rows for any missing timestamps within the range of
     the original DataFrame's time column. The process:
 
-    1. Truncates existing timestamps to align with the start of their periodicity interval
+    1. Truncates existing timestamps to align with the boundary of their periodicity interval
     2. Finds the minimum and maximum timestamps in the dataset
     3. Generates a complete series of timestamps at the correct periodicity between min and max
     4. Identifies which expected timestamps are missing from the actual data
