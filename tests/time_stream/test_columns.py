@@ -2,6 +2,7 @@ import unittest
 from datetime import datetime
 
 import polars as pl
+from parameterized import parameterized
 from polars.testing import assert_series_equal
 
 from time_stream.base import TimeSeries
@@ -12,90 +13,96 @@ from time_stream.exceptions import (
     ColumnNotFoundError,
     ColumnRelationshipError,
     ColumnTypeError,
-    MetadataError
+    MetadataError,
 )
-from time_stream.relationships import Relationship, RelationshipType, DeletionPolicy
+from time_stream.relationships import DeletionPolicy, Relationship, RelationshipType
 
 
 class BaseTimeSeriesTest(unittest.TestCase):
     @classmethod
-    def setUpClass(cls):
+    def setUpClass(cls) -> None:
         """Set up a mock TimeSeries instance for all test classes."""
-        cls.df = pl.DataFrame({
-            "time": [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)],
-            "data_col1": [1, 2, 3],
-            "data_col2": [4, 5, 6],
-            "supp_col": ["a", "b", "c"],
-            "flag_col": [0, 0, 0],
-            "flag_col2": [2, 2, 2],
-        })
+        cls.df = pl.DataFrame(
+            {
+                "time": [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)],
+                "data_col1": [1, 2, 3],
+                "data_col2": [4, 5, 6],
+                "supp_col": ["a", "b", "c"],
+                "flag_col": [0, 0, 0],
+                "flag_col2": [2, 2, 2],
+            }
+        )
         cls.metadata = {
             "data_col1": {"key1": "1", "key2": "10", "key3": "100"},
             "data_col2": {"key1": "2", "key2": "20", "key3": "200"},
             "supp_col": {"key1": "3", "key2": "30", "key3": "300"},
         }
-        cls.flag_systems = {"example_flag_system": {"OK": 1, "WARNING": 2, "ERROR": 4},
-                            "example_flag_system2": {"A": 8, "B": 16, "C": 32}}
+        cls.flag_systems = {
+            "example_flag_system": {"OK": 1, "WARNING": 2, "ERROR": 4},
+            "example_flag_system2": {"A": 8, "B": 16, "C": 32},
+        }
 
-        cls.ts = TimeSeries(df=cls.df,
-                            time_name="time",
-                            supplementary_columns=["supp_col"],
-                            flag_columns={"flag_col": "example_flag_system"},
-                            flag_systems=cls.flag_systems,
-                            column_metadata=cls.metadata)
+        cls.ts = TimeSeries(
+            df=cls.df,
+            time_name="time",
+            supplementary_columns=["supp_col"],
+            flag_columns={"flag_col": "example_flag_system"},
+            flag_systems=cls.flag_systems,
+            column_metadata=cls.metadata,
+        )
 
 
 class TestMetadata(BaseTimeSeriesTest):
-    def setUp(self):
+    def setUp(self) -> None:
         self.column = DataColumn("data_col1", self.ts, self.metadata["data_col1"])
 
-    def test_retrieve_all_metadata(self):
+    def test_retrieve_all_metadata(self) -> None:
         """Test retrieving all metadata for a column"""
         result = self.column.metadata()
         expected = {"key1": "1", "key2": "10", "key3": "100"}
         self.assertEqual(result, expected)
 
-    def test_retrieve_metadata_for_specific_key(self):
+    def test_retrieve_metadata_for_specific_key(self) -> None:
         """Test retrieving a specific metadata key."""
         result = self.column.metadata("key1")
         expected = {"key1": "1"}
         self.assertEqual(result, expected)
 
-    def test_retrieve_metadata_for_multiple_keys(self):
+    def test_retrieve_metadata_for_multiple_keys(self) -> None:
         """Test retrieving multiple metadata keys."""
         result = self.column.metadata(["key1", "key3"])
         expected = {"key1": "1", "key3": "100"}
         self.assertEqual(result, expected)
 
-    def test_retrieve_metadata_for_nonexistent_key(self):
+    def test_retrieve_metadata_for_nonexistent_key(self) -> None:
         """Test that error raised when requesting a non-existent metadata key"""
         with self.assertRaises(MetadataError):
             self.column.metadata("nonexistent_key")
 
-    def test_retrieve_metadata_for_nonexistent_key_strict_false(self):
+    def test_retrieve_metadata_for_nonexistent_key_strict_false(self) -> None:
         """Test that an empty result is returned when strict is false for non-existent key."""
-        expected = {'nonexistent_key': None}
+        expected = {"nonexistent_key": None}
         result = self.column.metadata("nonexistent_key", strict=False)
         self.assertEqual(result, expected)
 
 
 class TestRemoveMetadata(BaseTimeSeriesTest):
-    def setUp(self):
+    def setUp(self) -> None:
         self.column = DataColumn("data_col1", self.ts, self.metadata["data_col1"])
 
-    def test_remove_all_metadata(self):
+    def test_remove_all_metadata(self) -> None:
         """Test removing all metadata from a column"""
         self.column.remove_metadata()
         expected = {}
         self.assertEqual(self.column.metadata(), expected)
 
-    def test_remove_single_metadata(self):
+    def test_remove_single_metadata(self) -> None:
         """Test removing single metadata key from a column"""
         self.column.remove_metadata("key1")
         expected = {"key2": "10", "key3": "100"}
         self.assertEqual(self.column.metadata(), expected)
 
-    def test_remove_multiple_metadata(self):
+    def test_remove_multiple_metadata(self) -> None:
         """Test removing multiple metadata keys from a column"""
         self.column.remove_metadata(["key1", "key2"])
         expected = {"key3": "100"}
@@ -103,47 +110,50 @@ class TestRemoveMetadata(BaseTimeSeriesTest):
 
 
 class TestSetAs(BaseTimeSeriesTest):
-    def setUp(self):
+    def setUp(self) -> None:
         """Ensure ts is reset before each test."""
         super().setUpClass()
 
-    def test_conversion_adds_relationships(self):
-        """ Test that column conversion adds specified new relationships. """
+    def test_conversion_adds_relationships(self) -> None:
+        """Test that column conversion adds specified new relationships."""
         self.assertEqual(len(self.ts.data_col1.get_relationships()), 0)
         self.assertEqual(len(self.ts.supp_col.get_relationships()), 0)
 
         rels = ["data_col2"]
-        column = self.ts.data_col1._set_as(SupplementaryColumn, rels, self.ts.data_col1.name, self.ts.data_col1._ts,
-                                           self.ts.data_col1.metadata())
+        column = self.ts.data_col1._set_as(
+            SupplementaryColumn, rels, self.ts.data_col1.name, self.ts.data_col1._ts, self.ts.data_col1.metadata()
+        )
 
         self.assertIsInstance(column, SupplementaryColumn)
         self.assertEqual(len(self.ts.data_col1.get_relationships()), 1)
         self.assertEqual(len(self.ts.data_col2.get_relationships()), 1)
 
-    def test_conversion_removes_relationships(self):
-        """ Test that column conversion removes existing relationships. """
+    def test_conversion_removes_relationships(self) -> None:
+        """Test that column conversion removes existing relationships."""
         self.ts.data_col1.add_relationship(self.ts.supp_col)
 
         self.assertEqual(len(self.ts.data_col1.get_relationships()), 1)
         self.assertEqual(len(self.ts.supp_col.get_relationships()), 1)
 
-        column = self.ts.data_col1._set_as(SupplementaryColumn, None, self.ts.data_col1.name, self.ts.data_col1._ts,
-                                           self.ts.data_col1.metadata())
+        column = self.ts.data_col1._set_as(
+            SupplementaryColumn, None, self.ts.data_col1.name, self.ts.data_col1._ts, self.ts.data_col1.metadata()
+        )
 
         self.assertIsInstance(column, SupplementaryColumn)
         self.assertEqual(len(self.ts.data_col1.get_relationships()), 0)
         self.assertEqual(len(self.ts.supp_col.get_relationships()), 0)
 
-    def test_conversion_removes_relationships_and_adds_new_ones(self):
-        """ Test that column conversion removes existing relationships and adds new ones """
+    def test_conversion_removes_relationships_and_adds_new_ones(self) -> None:
+        """Test that column conversion removes existing relationships and adds new ones"""
         self.ts.data_col1.add_relationship(self.ts.supp_col)
 
         self.assertEqual(len(self.ts.data_col1.get_relationships()), 1)
         self.assertEqual(len(self.ts.supp_col.get_relationships()), 1)
 
         rels = ["data_col2"]
-        column = self.ts.data_col1._set_as(SupplementaryColumn, rels, self.ts.data_col1.name, self.ts.data_col1._ts,
-                                           self.ts.data_col1.metadata())
+        column = self.ts.data_col1._set_as(
+            SupplementaryColumn, rels, self.ts.data_col1.name, self.ts.data_col1._ts, self.ts.data_col1.metadata()
+        )
 
         self.assertIsInstance(column, SupplementaryColumn)
         self.assertEqual(len(self.ts.data_col1.get_relationships()), 1)
@@ -152,84 +162,56 @@ class TestSetAs(BaseTimeSeriesTest):
 
 
 class TestSetAsSupplementary(BaseTimeSeriesTest):
-    def setUp(self):
+    def setUp(self) -> None:
         """Ensure ts is reset before each test."""
         super().setUpClass()
 
-    def test_data_to_supplementary(self):
-        """ Test that a data column gets converted to a supplementary column. """
-        column = self.ts.data_col1.set_as_supplementary()
+    @parameterized.expand([("data_to_supplementary", "data_col1"), ("flag_to_supplementary", "flag_col")])
+    def test_to_supplementary(self, _: str, col: str) -> None:
+        """Test that a non-supplementary column gets converted to a supplementary column."""
+        column = self.ts.columns[col].set_as_supplementary()
 
         self.assertIsInstance(column, SupplementaryColumn)
         self.assertIn(column.name, self.ts.supplementary_columns)
         self.assertNotIn(column.name, self.ts.data_columns)
         self.assertNotIn(column.name, self.ts.flag_columns)
-
-
-    def test_flag_to_supplementary(self):
-        """ Test that a flag column gets converted to a supplementary column. """
-        column = self.ts.flag_col.set_as_supplementary()
-
-        self.assertIsInstance(column, SupplementaryColumn)
-        self.assertIn(column.name, self.ts.supplementary_columns)
-        self.assertNotIn(column.name, self.ts.flag_columns)
-        self.assertNotIn(column.name, self.ts.data_columns)
 
 
 class TestSetAsFlag(BaseTimeSeriesTest):
-    def test_data_to_flag(self):
-        """ Test that a data column gets converted to a flag column"""
-        column = DataColumn("data_col1", self.ts, self.metadata["data_col1"])
+    def setUp(self) -> None:
+        """Ensure ts is reset before each test."""
+        super().setUpClass()
 
-        column = column.set_as_flag("example_flag_system")
+    @parameterized.expand([("data_to_flag", "data_col1"), ("supplementary_to_flag", "supp_col")])
+    def test_to_flag(self, _: str, col: str) -> None:
+        """Test that a non-flag column gets converted to a flag column."""
+        column = self.ts.columns[col].set_as_flag("example_flag_system")
+
         self.assertIsInstance(column, FlagColumn)
         self.assertIn(column.name, self.ts.flag_columns)
         self.assertNotIn(column.name, self.ts.data_columns)
         self.assertNotIn(column.name, self.ts.supplementary_columns)
 
-    def test_supplementary_to_flag(self):
-        """ Test that a supplementary column gets converted to a flag column"""
-        column = SupplementaryColumn("supp_col", self.ts, self.metadata["supp_col"])
-
-        column = column.set_as_flag("example_flag_system")
-        self.assertIsInstance(column, FlagColumn)
-        self.assertIn(column.name, self.ts.flag_columns)
-        self.assertNotIn(column.name, self.ts.supplementary_columns)
-        self.assertNotIn(column.name, self.ts.data_columns)
 
 class TestUnset(BaseTimeSeriesTest):
-    def test_unset_data_column(self):
-        """ Test that unsetting a data column remains the same"""
-        column = DataColumn("data_col1", self.ts, self.metadata["data_col1"])
+    def setUp(self) -> None:
+        """Ensure ts is reset before each test."""
+        super().setUpClass()
 
-        column = column.unset()
+    @parameterized.expand(
+        [("unset_data_col", "data_col1"), ("unset_supplementary_col", "supp_col"), ("unset_flag_col", "flag_col")]
+    )
+    def test_unset_column(self, _: str, col: str) -> None:
+        """Test unsetting a column converts (or remains as) a data column"""
+        column = self.ts.columns[col].unset()
+
         self.assertIsInstance(column, DataColumn)
         self.assertIn(column.name, self.ts.data_columns)
         self.assertNotIn(column.name, self.ts.supplementary_columns)
         self.assertNotIn(column.name, self.ts.flag_columns)
 
-    def test_unset_supplementary_column(self):
-        """ Test that unsetting a supplementary column converts it to a data column"""
-        column = SupplementaryColumn("supp_col", self.ts, self.metadata["supp_col"])
-
-        column = column.unset()
-        self.assertIsInstance(column, DataColumn)
-        self.assertIn(column.name, self.ts.data_columns)
-        self.assertNotIn(column.name, self.ts.supplementary_columns)
-        self.assertNotIn(column.name, self.ts.flag_columns)
-
-    def test_unset_flag_column(self):
-        """ Test that unsetting a flag column converts it to a data column"""
-        column = FlagColumn("flag_col", self.ts, "example_flag_system", {})
-
-        column = column.unset()
-        self.assertIsInstance(column, DataColumn)
-        self.assertIn(column.name, self.ts.data_columns)
-        self.assertNotIn(column.name, self.ts.supplementary_columns)
-        self.assertNotIn(column.name, self.ts.flag_columns)
-
-    def test_unset_handles_relationships(self):
-        """ Test that unsetting a column handles relationships with other columns"""
+    def test_unset_handles_relationships(self) -> None:
+        """Test that unsetting a column handles relationships with other columns"""
         column = SupplementaryColumn("supp_col", self.ts)
         other = DataColumn("data_col1", self.ts)
         column.add_relationship(other)
@@ -244,12 +226,12 @@ class TestUnset(BaseTimeSeriesTest):
 
 
 class TestRemove(BaseTimeSeriesTest):
-    def setUp(self):
+    def setUp(self) -> None:
         """Ensure ts is reset before each test."""
         super().setUpClass()
 
-    def test_remove_data_column(self):
-        """ Test that removing a data column works as expected"""
+    def test_remove_data_column(self) -> None:
+        """Test that removing a data column works as expected"""
         column = DataColumn("data_col1", self.ts, self.metadata["data_col1"])
         column.remove()
 
@@ -258,8 +240,8 @@ class TestRemove(BaseTimeSeriesTest):
         self.assertNotIn(column.name, self.ts.data_columns)
         self.assertNotIn(column.name, self.ts.df.columns)
 
-    def test_remove_supplementary_column(self):
-        """ Test that removing a supplementary column works as expected"""
+    def test_remove_supplementary_column(self) -> None:
+        """Test that removing a supplementary column works as expected"""
         column = SupplementaryColumn("supp_col", self.ts, self.metadata["supp_col"])
         column.remove()
 
@@ -268,8 +250,8 @@ class TestRemove(BaseTimeSeriesTest):
         self.assertNotIn(column.name, self.ts.data_columns)
         self.assertNotIn(column.name, self.ts.df.columns)
 
-    def test_remove_flag_column(self):
-        """ Test that removing a flag column works as expected"""
+    def test_remove_flag_column(self) -> None:
+        """Test that removing a flag column works as expected"""
         column = FlagColumn("flag_col", self.ts, "example_flag_system", {})
         column.remove()
 
@@ -278,8 +260,8 @@ class TestRemove(BaseTimeSeriesTest):
         self.assertNotIn(column.name, self.ts.data_columns)
         self.assertNotIn(column.name, self.ts.df.columns)
 
-    def test_remove_with_cascade(self):
-        """ Test that removing a column that is linked to another column with CASCADE deletion policy removes
+    def test_remove_with_cascade(self) -> None:
+        """Test that removing a column that is linked to another column with CASCADE deletion policy removes
         both columns
         """
         col_a = self.ts.data_col1
@@ -295,8 +277,8 @@ class TestRemove(BaseTimeSeriesTest):
         self.assertNotIn(col_a.name, self.ts.df.columns)
         self.assertNotIn(col_b.name, self.ts.df.columns)
 
-    def test_remove_with_multiple_cascade(self):
-        """ Test that removing a column that is linked to multiple columns with CASCADE deletion policy removes
+    def test_remove_with_multiple_cascade(self) -> None:
+        """Test that removing a column that is linked to multiple columns with CASCADE deletion policy removes
         both columns
         """
         col_a = self.ts.data_col1
@@ -317,36 +299,14 @@ class TestRemove(BaseTimeSeriesTest):
         self.assertNotIn(col_b.name, self.ts.df.columns)
         self.assertNotIn(col_c.name, self.ts.df.columns)
 
-    def test_remove_with_downstream_cascade(self):
-        """ Test that removing a column that is linked a column, linked to a column with CASCADE deletion policy removes
-        all columns
-        """
-        col_a = self.ts.data_col1
-        col_b = self.ts.flag_col
-        col_c = self.ts.flag_col2
-
-        relationship1 = Relationship(col_a, col_b, RelationshipType.MANY_TO_MANY, DeletionPolicy.CASCADE)
-        self.ts._relationship_manager._add(relationship1)
-        relationship2 = Relationship(col_b, col_c, RelationshipType.MANY_TO_MANY, DeletionPolicy.CASCADE)
-        self.ts._relationship_manager._add(relationship2)
-
-        col_a.remove()
-
-        self.assertNotIn(col_a.name, self.ts.columns)
-        self.assertNotIn(col_b.name, self.ts.columns)
-        self.assertNotIn(col_c.name, self.ts.columns)
-        self.assertNotIn(col_a.name, self.ts.df.columns)
-        self.assertNotIn(col_b.name, self.ts.df.columns)
-        self.assertNotIn(col_c.name, self.ts.df.columns)
-
 
 class TestAddFlag(BaseTimeSeriesTest):
-    def setUp(self):
+    def setUp(self) -> None:
         """Ensure ts is reset before each test."""
         super().setUpClass()
 
-    def test_add_flag_to_flag_column_no_expr(self):
-        """ Test that adding a flag to a valid flag column with no expression sets all values in the
+    def test_add_flag_to_flag_column_no_expr(self) -> None:
+        """Test that adding a flag to a valid flag column with no expression sets all values in the
         column to that flag"""
         column = FlagColumn("flag_col", self.ts, "example_flag_system", {})
 
@@ -356,8 +316,8 @@ class TestAddFlag(BaseTimeSeriesTest):
 
         assert_series_equal(result, expected)
 
-    def test_add_flag_to_flag_column_with_expr(self):
-        """ Test that adding a flag to a valid flag column with an expression sets all values in the
+    def test_add_flag_to_flag_column_with_expr(self) -> None:
+        """Test that adding a flag to a valid flag column with an expression sets all values in the
         column that match that expression to that flag"""
         column = FlagColumn("flag_col", self.ts, "example_flag_system", {})
 
@@ -367,8 +327,8 @@ class TestAddFlag(BaseTimeSeriesTest):
 
         assert_series_equal(result, expected)
 
-    def test_add_flag_by_name_to_flag_column(self):
-        """ Test that adding a flag to a valid flag column using the flag name (rather than value)
+    def test_add_flag_by_name_to_flag_column(self) -> None:
+        """Test that adding a flag to a valid flag column using the flag name (rather than value)
         sets all values in the column that match that expression to the correct flag value"""
         column = FlagColumn("flag_col", self.ts, "example_flag_system", {})
 
@@ -378,26 +338,26 @@ class TestAddFlag(BaseTimeSeriesTest):
 
         assert_series_equal(result, expected)
 
-    def test_adding_non_existent_flag_to_flag_column_raises_error(self):
-        """ Test that trying to add an invalid flag to a valid flag column raises error"""
+    def test_adding_non_existent_flag_to_flag_column_raises_error(self) -> None:
+        """Test that trying to add an invalid flag to a valid flag column raises error"""
         column = FlagColumn("flag_col", self.ts, "example_flag_system", {})
         with self.assertRaises(BitwiseFlagUnknownError):
             column.add_flag(10)
 
-    def test_add_flag_to_data_column_raises_error(self):
-        """ Test that trying to add a flag to a data column raises error"""
+    def test_add_flag_to_data_column_raises_error(self) -> None:
+        """Test that trying to add a flag to a data column raises error"""
         column = DataColumn("data_col1", self.ts)
         with self.assertRaises(ColumnTypeError):
             column.add_flag(1)
 
-    def test_add_flag_to_supplementary_column_raises_error(self):
-        """ Test that trying to add a flag to a supplementary column raises error"""
+    def test_add_flag_to_supplementary_column_raises_error(self) -> None:
+        """Test that trying to add a flag to a supplementary column raises error"""
         column = SupplementaryColumn("supp_col", self.ts)
         with self.assertRaises(ColumnTypeError):
             column.add_flag(1)
 
-    def test_add_flag_twice(self):
-        """ Test that adding a flag twice uses the bitwise math, so doesn't actually add the value twice"""
+    def test_add_flag_twice(self) -> None:
+        """Test that adding a flag twice uses the bitwise math, so doesn't actually add the value twice"""
         column = FlagColumn("flag_col", self.ts, "example_flag_system", {})
 
         column.add_flag(1)
@@ -413,12 +373,12 @@ class TestAddFlag(BaseTimeSeriesTest):
 
 
 class TestRemoveFlag(BaseTimeSeriesTest):
-    def setUp(self):
+    def setUp(self) -> None:
         """Ensure ts is reset before each test."""
         super().setUpClass()
 
-    def test_remove_flag_from_flag_column_no_expr(self):
-        """ Test that removing a flag from a valid flag column with no expression works as expected"""
+    def test_remove_flag_from_flag_column_no_expr(self) -> None:
+        """Test that removing a flag from a valid flag column with no expression works as expected"""
         column = FlagColumn("flag_col", self.ts, "example_flag_system", {})
         self.ts.df = self.ts.df.with_columns(pl.Series("flag_col", [1, 1, 1]))
 
@@ -428,8 +388,8 @@ class TestRemoveFlag(BaseTimeSeriesTest):
 
         assert_series_equal(result, expected)
 
-    def test_remove_flag_from_flag_column_with_combined_flag_values(self):
-        """ Test that removing a flag from a valid flag column where the rows have combined flag values
+    def test_remove_flag_from_flag_column_with_combined_flag_values(self) -> None:
+        """Test that removing a flag from a valid flag column where the rows have combined flag values
         works as expected"""
         column = FlagColumn("flag_col", self.ts, "example_flag_system", {})
         self.ts.df = self.ts.df.with_columns(pl.Series("flag_col", [1, 3, 7]))
@@ -440,8 +400,8 @@ class TestRemoveFlag(BaseTimeSeriesTest):
 
         assert_series_equal(result, expected)
 
-    def test_remove_flag_twice(self):
-        """ Test that removing a flag twice uses the bitwise math, so doesn't actually remove the value twice"""
+    def test_remove_flag_twice(self) -> None:
+        """Test that removing a flag twice uses the bitwise math, so doesn't actually remove the value twice"""
         column = FlagColumn("flag_col", self.ts, "example_flag_system", {})
         self.ts.df = self.ts.df.with_columns(pl.Series("flag_col", [3, 3, 3]))
 
@@ -456,8 +416,8 @@ class TestRemoveFlag(BaseTimeSeriesTest):
         expected = pl.Series("flag_col", [2, 2, 2])
         assert_series_equal(result, expected)
 
-    def test_remove_flag_from_flag_column_with_expr(self):
-        """ Test that removing a flag from a valid flag column with an expression removes flag from only those rows"""
+    def test_remove_flag_from_flag_column_with_expr(self) -> None:
+        """Test that removing a flag from a valid flag column with an expression removes flag from only those rows"""
         column = FlagColumn("flag_col", self.ts, "example_flag_system", {})
         self.ts.df = self.ts.df.with_columns(pl.Series("flag_col", [1, 1, 1]))
 
@@ -467,8 +427,8 @@ class TestRemoveFlag(BaseTimeSeriesTest):
 
         assert_series_equal(result, expected)
 
-    def test_remove_flag_by_name_from_flag_column(self):
-        """ Test that removing a flag from a valid flag column using the flag name (rather than value) works as
+    def test_remove_flag_by_name_from_flag_column(self) -> None:
+        """Test that removing a flag from a valid flag column using the flag name (rather than value) works as
         expected"""
         column = FlagColumn("flag_col", self.ts, "example_flag_system", {})
         self.ts.df = self.ts.df.with_columns(pl.Series("flag_col", [1, 4, 1]))
@@ -479,27 +439,27 @@ class TestRemoveFlag(BaseTimeSeriesTest):
 
         assert_series_equal(result, expected)
 
-    def test_removing_non_existent_flag_from_flag_column_raises_error(self):
-        """ Test that trying to remove an invalid flag to a valid flag column raises error"""
+    def test_removing_non_existent_flag_from_flag_column_raises_error(self) -> None:
+        """Test that trying to remove an invalid flag to a valid flag column raises error"""
         column = FlagColumn("flag_col", self.ts, "example_flag_system", {})
         with self.assertRaises(BitwiseFlagUnknownError):
             column.remove_flag(10)
 
-    def test_remove_flag_from_data_column_raises_error(self):
-        """ Test that trying to remove a flag to a data column raises error"""
+    def test_remove_flag_from_data_column_raises_error(self) -> None:
+        """Test that trying to remove a flag to a data column raises error"""
         column = DataColumn("data_col1", self.ts)
         with self.assertRaises(ColumnTypeError):
             column.remove_flag(1)
 
-    def test_remove_flag_from_supplementary_column_raises_error(self):
-        """ Test that trying to remove a flag to a supplementary column raises error"""
+    def test_remove_flag_from_supplementary_column_raises_error(self) -> None:
+        """Test that trying to remove a flag to a supplementary column raises error"""
         column = SupplementaryColumn("supp_col", self.ts)
         with self.assertRaises(ColumnTypeError):
             column.remove_flag(1)
 
 
 class TestAsTimeSeries(BaseTimeSeriesTest):
-    def test_as_timeseries(self):
+    def test_as_timeseries(self) -> None:
         column = DataColumn("data_col1", self.ts)
         ts = column.as_timeseries()
         self.assertIsInstance(ts, TimeSeries)
@@ -507,14 +467,14 @@ class TestAsTimeSeries(BaseTimeSeriesTest):
 
 
 class TestGetattr(BaseTimeSeriesTest):
-    def test_access_metadata_key(self):
+    def test_access_metadata_key(self) -> None:
         """Test accessing metadata key for a column."""
         column = DataColumn("data_col1", self.ts, self.metadata["data_col1"])
         result = column.key1
         expected = "1"
         self.assertEqual(result, expected)
 
-    def test_access_nonexistent_attribute(self):
+    def test_access_nonexistent_attribute(self) -> None:
         """Test accessing metadata key that doesn't exist"""
         column = DataColumn("data_col1", self.ts, self.metadata["data_col1"])
         with self.assertRaises(MetadataError):
@@ -522,94 +482,94 @@ class TestGetattr(BaseTimeSeriesTest):
 
 
 class TestPrimaryTimeColumn(BaseTimeSeriesTest):
-    def test_set_as_supplementary_not_allowed(self):
+    def test_set_as_supplementary_not_allowed(self) -> None:
         column = self.ts.time_column
         with self.assertRaises(NotImplementedError):
             column.set_as_supplementary()
 
-    def test_set_as_flag_not_allowed(self):
+    def test_set_as_flag_not_allowed(self) -> None:
         column = self.ts.time_column
         with self.assertRaises(NotImplementedError):
             column.set_as_flag("example_flag_system")
 
-    def test_unset_not_allowed(self):
+    def test_unset_not_allowed(self) -> None:
         column = self.ts.time_column
         with self.assertRaises(NotImplementedError):
             column.unset()
 
-    def test_remove_relationship_not_allowed(self):
+    def test_remove_relationship_not_allowed(self) -> None:
         column = self.ts.time_column
         with self.assertRaises(NotImplementedError):
             column.remove_relationship()
 
-    def test_add_relationship_not_allowed(self):
+    def test_add_relationship_not_allowed(self) -> None:
         column = self.ts.time_column
         with self.assertRaises(NotImplementedError):
             column.add_relationship()
 
 
 class TestEq(BaseTimeSeriesTest):
-    def test_data_columns_are_equal(self):
+    def test_data_columns_are_equal(self) -> None:
         column1 = DataColumn("data_col1", self.ts, self.metadata["data_col1"])
         column2 = DataColumn("data_col1", self.ts, self.metadata["data_col1"])
         self.assertEqual(column1, column2)
 
-    def test_data_columns_are_not_equal(self):
+    def test_data_columns_are_not_equal(self) -> None:
         column1 = DataColumn("data_col1", self.ts, self.metadata["data_col1"])
         column2 = DataColumn("data_col2", self.ts, self.metadata["data_col2"])
         self.assertNotEqual(column1, column2)
 
-    def test_supplementary_columns_are_equal(self):
+    def test_supplementary_columns_are_equal(self) -> None:
         column1 = SupplementaryColumn("supp_col", self.ts, self.metadata["supp_col"])
         column2 = SupplementaryColumn("supp_col", self.ts, self.metadata["supp_col"])
         self.assertEqual(column1, column2)
 
-    def test_supplementary_columns_are_not_equal(self):
+    def test_supplementary_columns_are_not_equal(self) -> None:
         column1 = SupplementaryColumn("supp_col", self.ts, self.metadata["supp_col"])
         column2 = SupplementaryColumn("data_col1", self.ts, self.metadata["data_col1"])
         self.assertNotEqual(column1, column2)
 
-    def test_flag_columns_are_equal(self):
+    def test_flag_columns_are_equal(self) -> None:
         column1 = FlagColumn("flag_col", self.ts, "example_flag_system", {})
         column2 = FlagColumn("flag_col", self.ts, "example_flag_system", {})
         self.assertEqual(column1, column2)
 
-    def test_flag_columns_are_not_equal(self):
+    def test_flag_columns_are_not_equal(self) -> None:
         column1 = FlagColumn("flag_col", self.ts, "example_flag_system", {})
         column2 = FlagColumn("data_col1", self.ts, "example_flag_system", {})
         self.assertNotEqual(column1, column2)
 
-    def test_flag_columns_different_flag_systems_are_not_equal(self):
+    def test_flag_columns_different_flag_systems_are_not_equal(self) -> None:
         column1 = FlagColumn("flag_col", self.ts, "example_flag_system", {})
         column2 = FlagColumn("flag_col", self.ts, "example_flag_system2", {})
         self.assertNotEqual(column1, column2)
 
-    def test_flag_columns_different_types_are_not_equal(self):
+    def test_flag_columns_different_types_are_not_equal(self) -> None:
         column1 = DataColumn("data_col1", self.ts, self.metadata["data_col1"])
         column2 = SupplementaryColumn("data_col1", self.ts, self.metadata["data_col1"])
         self.assertNotEqual(column1, column2)
 
 
 class TestAddRelationship(BaseTimeSeriesTest):
-    def setUp(self):
+    def setUp(self) -> None:
         """Ensure ts is reset before each test."""
         super().setUpClass()
 
-    def test_add_relationship_by_object(self):
+    def test_add_relationship_by_object(self) -> None:
         """Test that can add a relationship using column object."""
         self.ts.data_col1.add_relationship(self.ts.supp_col)
 
         self.assertEqual(len(self.ts.data_col1.get_relationships()), 1)
         self.assertEqual(len(self.ts.supp_col.get_relationships()), 1)
 
-    def test_add_relationship_by_str(self):
+    def test_add_relationship_by_str(self) -> None:
         """Test that can add a relationship using column string name."""
         self.ts.data_col1.add_relationship("supp_col")
 
         self.assertEqual(len(self.ts.data_col1.get_relationships()), 1)
         self.assertEqual(len(self.ts.supp_col.get_relationships()), 1)
 
-    def test_add_multiple_relationships(self):
+    def test_add_multiple_relationships(self) -> None:
         """Test adding multiple relationships."""
         self.ts.data_col1.add_relationship(["supp_col", "flag_col"])
 
@@ -617,46 +577,47 @@ class TestAddRelationship(BaseTimeSeriesTest):
         self.assertEqual(len(self.ts.supp_col.get_relationships()), 1)
         self.assertEqual(len(self.ts.flag_col.get_relationships()), 1)
 
-    def test_add_data_rel_to_data_column_raises_error(self):
-        """ Test that can't set relationship between two data columns"""
+    def test_add_data_rel_to_data_column_raises_error(self) -> None:
+        """Test that can't set relationship between two data columns"""
         with self.assertRaises(ColumnTypeError):
             self.ts.data_col1.add_relationship("data_col2")
 
-    def test_add_supp_rel_to_flag_column_raises_error(self):
-        """ Test that can't set relationship between supplementary and flag columns"""
+    def test_add_supp_rel_to_flag_column_raises_error(self) -> None:
+        """Test that can't set relationship between supplementary and flag columns"""
         with self.assertRaises(ColumnTypeError):
             self.ts.supp_col.add_relationship("flag_col")
 
-    def test_add_flag_rel_to_supp_column_raises_error(self):
-        """ Test that can't set relationship between flag and supplementary columns"""
+    def test_add_flag_rel_to_supp_column_raises_error(self) -> None:
+        """Test that can't set relationship between flag and supplementary columns"""
         with self.assertRaises(ColumnTypeError):
             self.ts.flag_col.add_relationship("supp_col")
 
-    def test_flag_column_only_allowed_one_relationship(self):
+    def test_flag_column_only_allowed_one_relationship(self) -> None:
         self.ts.flag_col.add_relationship("data_col1")
         with self.assertRaises(ColumnRelationshipError):
             self.ts.flag_col.add_relationship("data_col2")
 
+
 class TestRemoveRelationship(BaseTimeSeriesTest):
-    def setUp(self):
+    def setUp(self) -> None:
         """Ensure ts is reset before each test."""
         super().setUpClass()
 
-    def test_remove_relationship_by_object(self):
+    def test_remove_relationship_by_object(self) -> None:
         """Test that can remove a relationship using column object, and it removes it from both directions."""
         self.ts.data_col1.add_relationship("supp_col")
         self.ts.data_col1.remove_relationship(self.ts.supp_col)
         self.assertEqual(self.ts.data_col1.get_relationships(), [])
         self.assertEqual(self.ts.supp_col.get_relationships(), [])
 
-    def test_remove_relationship_by_str(self):
+    def test_remove_relationship_by_str(self) -> None:
         """Test that can remove a relationship using column string name, and it removes it from both directions."""
         self.ts.data_col1.add_relationship("supp_col")
         self.ts.data_col1.remove_relationship("supp_col")
         self.assertEqual(self.ts.data_col1.get_relationships(), [])
         self.assertEqual(self.ts.supp_col.get_relationships(), [])
 
-    def test_remove_relationship_leaves_other_relationships(self):
+    def test_remove_relationship_leaves_other_relationships(self) -> None:
         """Test that removing one relationship maintains other relationships."""
         self.ts.data_col1.add_relationship(["supp_col", "flag_col"])
         self.ts.data_col1.remove_relationship("supp_col")
@@ -668,14 +629,14 @@ class TestRemoveRelationship(BaseTimeSeriesTest):
 
 
 class TestGetFlagSystemColumn(BaseTimeSeriesTest):
-    def setUp(self):
+    def setUp(self) -> None:
         """Ensure ts is reset before each test."""
         super().setUpClass()
 
         # Add a flag column relationship
         self.ts.data_col1.add_relationship(["flag_col"])
 
-    def test_no_matches_because_not_a_flag_system(self):
+    def test_no_matches_because_not_a_flag_system(self) -> None:
         """Test that None return when there are no matches because the flag system provided doesn't exist"""
         flag_system = "Non_Exist"
         result = self.ts.data_col1.get_flag_system_column(flag_system)
@@ -684,7 +645,7 @@ class TestGetFlagSystemColumn(BaseTimeSeriesTest):
         # So there can be no linked columns...
         self.assertIsNone(result)
 
-    def test_no_matches_because_no_linked_flag_column(self):
+    def test_no_matches_because_no_linked_flag_column(self) -> None:
         """Test that None return when there are no matches because there are no related flag columns using
         the given flag system
         """
@@ -695,23 +656,22 @@ class TestGetFlagSystemColumn(BaseTimeSeriesTest):
         # But there are no linked columns...
         self.assertIsNone(result)
 
-    def test_valid_match(self):
+    def test_valid_match(self) -> None:
         """Test that expected column returned for matching flag system"""
         flag_system = "example_flag_system"
         expected = self.ts.flag_col
         result = self.ts.data_col1.get_flag_system_column(flag_system)
         self.assertEqual(result, expected)
 
-    def test_error_with_multiple_matches(self):
-        """" Test error raised when more than one matching FlagColumn is present"""
+    def test_error_with_multiple_matches(self) -> None:
+        """ " Test error raised when more than one matching FlagColumn is present"""
         flag_system = "example_flag_system"
 
         # Add a relationship to another column that uses the same flag system
         self.ts.set_flag_column(flag_system, "flag_col2")
-        relationship = Relationship(self.ts.data_col1,
-                                    self.ts.flag_col2,
-                                    RelationshipType.ONE_TO_MANY,
-                                    DeletionPolicy.CASCADE)
+        relationship = Relationship(
+            self.ts.data_col1, self.ts.flag_col2, RelationshipType.ONE_TO_MANY, DeletionPolicy.CASCADE
+        )
         self.ts._relationship_manager._add(relationship)
 
         with self.assertRaises(ColumnNotFoundError):

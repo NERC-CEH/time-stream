@@ -67,7 +67,7 @@ class InfillMethod(ABC):
         pass
 
     @classmethod
-    def get(cls, method: str | Type["InfillMethod"], **kwargs) -> "InfillMethod":
+    def get(cls, method: "str | InfillMethod | Type[InfillMethod]", **kwargs) -> "InfillMethod":
         """Factory method to get an infill method class instance from string names or class type.
 
         Args:
