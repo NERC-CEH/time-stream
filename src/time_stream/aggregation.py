@@ -1,23 +1,40 @@
+"""
+Time Series Aggregation Module
+
+This module provides a flexible framework for aggregating time series data using Polars.
+It supports various aggregation functions (mean, sum, min, max, etc.) with configurable
+missing data handling and period-based grouping.
+
+Key Components:
+- AggregationFunction: Base class for all aggregation implementations
+- AggregationPipeline: Handles the aggregation execution logic
+- Registry system: For dynamic aggregation function discovery
+"""
+
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from datetime import timedelta
-from typing import Type
+from typing import ClassVar
 
 import polars as pl
 
-from time_stream import Period, TimeSeries
-from time_stream.enums import MissingCriteria
+from time_stream import Period
+from time_stream.enums import MissingCriteria, TimeAnchor
 from time_stream.exceptions import (
+    AggregationError,
     AggregationPeriodError,
     AggregationTypeError,
+    DuplicateRegistryKeyError,
     MissingCriteriaError,
     UnknownAggregationError,
 )
+from time_stream.utils import check_columns_in_dataframe
 
 # Registry for built-in aggregations
-_AGGREGATION_REGISTRY = {}
+_AGGREGATION_REGISTRY: dict[str, type["AggregationFunction"]] = {}
 
 
-def register_aggregation(cls: Type["AggregationFunction"]) -> Type["AggregationFunction"]:
+def register_aggregation(cls: type["AggregationFunction"]) -> type["AggregationFunction"]:
     """Decorator to register aggregation classes using their name attribute.
 
     Args:
@@ -26,38 +43,46 @@ def register_aggregation(cls: Type["AggregationFunction"]) -> Type["AggregationF
     Returns:
         The decorated class.
     """
-    _AGGREGATION_REGISTRY[cls.name] = cls
+    # Normalise key to lowercase
+    key = cls.name.lower()
+    if key in _AGGREGATION_REGISTRY:
+        raise DuplicateRegistryKeyError(f"Aggregation key: '{key}' already registered")
+
+    _AGGREGATION_REGISTRY[key] = cls
     return cls
+
+
+def available_aggregations() -> list[str]:
+    """Return a sorted list of available aggregation names."""
+    return sorted(_AGGREGATION_REGISTRY.keys())
+
+
+@dataclass(frozen=True)
+class AggregationCtx:
+    """Immutable context passed to aggregations."""
+
+    df: pl.DataFrame
+    time_name: str
+    time_anchor: TimeAnchor
+    periodicity: Period
 
 
 class AggregationFunction(ABC):
     """Base class for aggregation functions."""
 
-    _ts = None
-
-    @property
-    def ts(self) -> TimeSeries:
-        if self._ts is None:
-            raise AttributeError("TimeSeries has not been initialised for this aggregation method.")
-        return self._ts
-
-    @property
-    @abstractmethod
-    def name(self) -> str:
-        """Return the name of the aggregation function."""
-        pass
+    name: ClassVar[str]
 
     @abstractmethod
-    def expr(self, columns: list[str]) -> list[pl.Expr]:
+    def expr(self, _ctx: AggregationCtx, _columns: list[str]) -> list[pl.Expr]:
         """Return the Polars expressions for this aggregation."""
-        pass
+        raise NotImplementedError
 
-    def post_expr(self, columns: list[str]) -> list[pl.Expr]:
+    def post_expr(self, _ctx: AggregationCtx, _columns: list[str]) -> list[pl.Expr]:
         """Return additional Polars expressions to be applied after the aggregation."""
         return []
 
     @classmethod
-    def get(cls, aggregation: "str | Type[AggregationFunction] | AggregationFunction") -> "AggregationFunction":
+    def get(cls, aggregation: "str | type[AggregationFunction] | AggregationFunction") -> "AggregationFunction":
         """Factory method to get an aggregation function instance from string names, class types, or existing instances.
 
         Args:
@@ -73,15 +98,15 @@ class AggregationFunction(ABC):
             UnknownAggregationError: If a string name is not registered as an aggregation function.
             AggregationTypeError: If the input type is not supported or class doesn't inherit from AggregationFunction.
 
-        Examples:
-            >>> # From string
-            >>> agg = AggregationFunction.get("mean")
-            >>>
-            >>> # From class
-            >>> agg = AggregationFunction.get(Mean)
-            >>>
-            >>> # From instance
-            >>> agg = AggregationFunction.get(Mean())
+        Examples::
+            # From string
+            agg = AggregationFunction.get("mean")
+
+            # From class
+            agg = AggregationFunction.get(Mean)
+
+            # From instance
+            agg = AggregationFunction.get(Mean())
         """
         # If it's already an instance, return it
         if isinstance(aggregation, AggregationFunction):
@@ -90,10 +115,10 @@ class AggregationFunction(ABC):
         # If it's a string, look it up in the registry
         elif isinstance(aggregation, str):
             try:
-                return _AGGREGATION_REGISTRY[aggregation]()
+                return _AGGREGATION_REGISTRY[aggregation.lower()]()
             except KeyError:
                 raise UnknownAggregationError(
-                    f"Unknown aggregation '{aggregation}'. Available aggregations: {list(_AGGREGATION_REGISTRY.keys())}"
+                    f"Unknown aggregation '{aggregation}'. Available aggregations: {available_aggregations()}."
                 )
 
         # If it's a class, instantiate it
@@ -113,181 +138,209 @@ class AggregationFunction(ABC):
 
     def apply(
         self,
-        ts: TimeSeries,
+        df: pl.DataFrame,
+        time_name: str,
+        time_anchor: TimeAnchor,
+        periodicity: Period,
         aggregation_period: Period,
         columns: str | list[str],
+        aggregation_time_anchor: TimeAnchor,
         missing_criteria: tuple[str, float | int] | None = None,
-    ) -> TimeSeries:
-        """Run the aggregation.
+    ) -> pl.DataFrame:
+        """Run the aggregation pipeline.
 
-        The general `Polars` method used for aggregating data is:
+        Args:
+            df: The Polars DataFrame containing the time series data to aggregate
+            time_name: Name of the time column in the dataframe
+            time_anchor: Time anchor of the time series
+            periodicity: Periodicity of the time series
+            aggregation_period: Period over which to aggregate the data
+            columns: Column(s) containing the data to be aggregated
+            aggregation_time_anchor: The time anchor for the aggregation result.
+            missing_criteria: How the aggregation handles missing data
 
-        >>> output_dataframe = input_dataframe
-        >>>     .group_by_dynamic(...)  # Group the time series into groups of values based on the chosen period
-        >>>     .agg(...)               # Apply the chosen aggregation function (e.g., mean, min, max)
-        >>>     .with_columns(...)      # Apply additional logic that requires the results of the aggregation
+
+        Returns:
+            The aggregated dataframe
+        """
+        ctx = AggregationCtx(df, time_name, time_anchor, periodicity)
+        pipeline = AggregationPipeline(
+            self, ctx, aggregation_period, columns, aggregation_time_anchor, missing_criteria
+        )
+        return pipeline.execute()
+
+
+class AggregationPipeline:
+    """Encapsulates the logic for the aggregation pipeline steps."""
+
+    def __init__(
+        self,
+        agg_func: AggregationFunction,
+        ctx: AggregationCtx,
+        aggregation_period: Period,
+        columns: str | list[str],
+        aggregation_time_anchor: TimeAnchor,
+        missing_criteria: tuple[str, float | int] | None = None,
+    ):
+        self.agg_func = agg_func
+        self.ctx = ctx
+        self.aggregation_period = aggregation_period
+        self.aggregation_time_anchor = aggregation_time_anchor
+        self.columns = [columns] if isinstance(columns, str) else columns
+        self.missing_criteria = missing_criteria
+
+    def execute(self) -> pl.DataFrame:
+        """The general `Polars` method used for aggregating data is::
+
+        output_dataframe = input_dataframe
+            .group_by_dynamic(...)  # Group the time series into groups of values based on the chosen period
+            .agg(...)               # Apply the chosen aggregation function (e.g., mean, min, max)
+            .with_columns(...)      # Apply additional logic that requires the results of the aggregation
 
         This method fills in the various stages using pre-defined expressions.
 
-        Args:
-            ts: The time series to aggregate.
-            aggregation_period: The period over which to aggregate the data
-            columns: The column(s) containing the data to be aggregated
-            missing_criteria: How the aggregation handles missing data.  Tuple of (criteria name, value).
-
         Returns:
-            TimeSeries: The aggregated time series
+            The aggregated dataframe
         """
-        # Validate that we can carry out the aggregation
-        self._validate_aggregation_period(ts, aggregation_period)
+        self._validate()
 
-        # Set the timeseries property
-        self._ts = ts
-
-        # Handle multiple columns
-        if isinstance(columns, str):
-            columns = [columns]
-
-        # Remove NULL rows
-        df = self.ts.df.drop_nulls(subset=columns)
-
-        # Group by the aggregation period
-        grouper = df.group_by_dynamic(
-            index_column=self.ts.time_name,
-            every=aggregation_period.pl_interval,
-            offset=aggregation_period.pl_offset,
-            closed="left",
+        # Group by the aggregation period - taking into account the time anchor of the time series
+        label, closed = self._get_label_closed()
+        grouper = self.ctx.df.group_by_dynamic(
+            index_column=self.ctx.time_name,
+            every=self.aggregation_period.pl_interval,
+            offset=self.aggregation_period.pl_offset,
+            closed=closed,
+            label=label,
         )
 
         # Build expressions to go in the .agg method
         agg_expressions = []
-        agg_expressions.extend(self.expr(columns))
-        agg_expressions.extend(self._actual_count_expr(columns))
+        agg_expressions.extend(self.agg_func.expr(self.ctx, self.columns))
+        agg_expressions.extend(self._actual_count_expr())
 
         # Do the aggregation function
         df = grouper.agg(agg_expressions)
 
         # Build expressions to go in the .with_columns method.
-        #   Note: Order is important here. Expressions may have dependencies on the results of earlier expressions.
-        with_columns_expressions = []
-        with_columns_expressions.append(self._expected_count_expr(self.ts, aggregation_period))
-        with_columns_expressions.extend(self._missing_data_expr(self.ts, columns, missing_criteria))
-        with_columns_expressions.extend(self.post_expr(columns))
+        #   Note: - Order is important here. Expressions may have dependencies on the results of earlier expressions.
+        #         - Doing separate .with_columns calls to group expressions together and take advantage of the Polars
+        #           internal planning where possible.
 
-        # Do the with_column methods
-        for with_column in with_columns_expressions:
-            df = df.with_columns(with_column)
+        # Add expected count
+        df = df.with_columns(self._expected_count_expr())
 
-        # Create result TimeSeries
-        return TimeSeries(
-            df=df,
-            time_name=self.ts.time_name,
-            resolution=aggregation_period,
-            periodicity=aggregation_period,
-            metadata=self.ts._metadata,
-            pad=self.ts._pad,
+        # Add missing-data flags, and any post-agg columns in one plan. Both may require results of the expected count.
+        df = df.with_columns(
+            [
+                *self._missing_data_expr(),
+                *self.agg_func.post_expr(self.ctx, self.columns),
+            ]
         )
 
-    def _validate_aggregation_period(self, ts: TimeSeries, period: Period) -> None:
-        """Validate that the aggregation period is suitable based on the period of the TimeSeries.
+        return df
 
-        Args:
-            ts: The TimeSeries object that the aggregation will be done on
-            period: The aggregation period to check
+    def _validate(self) -> None:
+        """Carry out validation that the aggregation can actually be carried out."""
+        if self.ctx.df.is_empty():
+            raise AggregationError("Cannot aggregate an empty DataFrame.")
+        check_columns_in_dataframe(self.ctx.df, self.columns + [self.ctx.time_name])
+        self._validate_period_compatibility()
 
-        Raises:
-            AggregationPeriodError: If period type is not supported or aggregation period incompatible with TimeSeries
-        """
-        if not period.is_epoch_agnostic():
-            raise AggregationPeriodError(f"Non-epoch agnostic aggregation periods are not supported: '{period}'.")
-
-        if not ts.periodicity.is_subperiod_of(period):
+    def _validate_period_compatibility(self) -> None:
+        """Validate that the aggregation period is compatible with the time series periodicity."""
+        if not self.aggregation_period.is_epoch_agnostic():
             raise AggregationPeriodError(
-                f"Incompatible aggregation period '{period}' with TimeSeries periodicity '{ts.periodicity}'."
-                f"TimeSeries periodicity must be a subperiod of the aggregation period."
+                f"Non-epoch agnostic aggregation periods are not supported: '{self.aggregation_period}'."
             )
 
-    @staticmethod
-    def _actual_count_expr(columns: list[str]) -> list[pl.Expr]:
-        """A `Polars` expression to generate the actual count of values in a TimeSeries found in each period.
+        if not self.ctx.periodicity.is_subperiod_of(self.aggregation_period):
+            raise AggregationPeriodError(
+                f"Incompatible aggregation period '{self.aggregation_period}' with TimeSeries periodicity "
+                f"'{self.ctx.periodicity}'. TimeSeries periodicity must be a subperiod of the aggregation period."
+            )
 
-        Args:
-            columns: The name of the value column(s) to count occurrences of
+    def _get_label_closed(self) -> tuple[str, str]:
+        """Map TimeAnchor to Polars label/closed semantics.
+
+        Returns:
+            Tuple of (label, closed) values to use in Polars operations
+        """
+        label = "right" if self.aggregation_time_anchor == TimeAnchor.END else "left"
+        closed = "right" if self.ctx.time_anchor == TimeAnchor.END else "left"
+        return label, closed
+
+    def _actual_count_expr(self) -> list[pl.Expr]:
+        """A `Polars` expression to generate the actual count of values in a TimeSeries found in each period.
 
         Returns:
             List of `Polars` expressions that can be used to generate actual counts for each column
         """
-        return [pl.col(col).len().alias(f"count_{col}") for col in columns]
+        return [pl.col(col).count().alias(f"count_{col}") for col in self.columns]
 
-    @staticmethod
-    def _expected_count_expr(ts: TimeSeries, period: Period) -> pl.Expr:
+    def _expected_count_expr(self) -> pl.Expr:
         """A `Polars` expression to generate the expected count of values in a TimeSeries found in each
         period (if there were no missing values).
-
-        Args:
-            ts: The TimeSeries object on which to calculate expected counts
-            period: The Period over which to calculate expected counts
 
         Returns:
             pl.Expr: Polars expression that can be used to generate expected count on a DataFrame
         """
-        expected_count_name = f"expected_count_{ts.time_name}"
+        expected_count_name = f"expected_count_{self.ctx.time_name}"
         # For some aggregations, the expected count is a constant so use that if possible.
         # For example, when aggregating 15-minute data over a day, the expected count is always 96.
-        count = ts.periodicity.count(period)
+        count = self.ctx.periodicity.count(self.aggregation_period)
         if count > 0:
-            return pl.lit(count).alias(expected_count_name)
-
-        # Variable length periods need dynamic calculation, based on the start and end of a period interval
-        start_expr = pl.col(ts.time_name)
-        end_expr = pl.col(ts.time_name).dt.offset_by(period.pl_interval)
-
-        # This contains 2 cases:
-        if ts.periodicity.timedelta:
-            # 1. If the data we are aggregating is not monthly, then each interval we are aggregating has
-            #    a constant length, so (end - start) / interval will be the expected count.
-            micros = ts.periodicity.timedelta // timedelta(microseconds=1)
-            return ((end_expr - start_expr).dt.total_microseconds() // micros).alias(expected_count_name)
+            expr = pl.lit(count)
 
         else:
-            # 2. If the data we are aggregating is month-based, then there is no simple way to do the calculation,
-            #    so use Polars to create a Series of date ranges lists and get the length of each list.
-            #
-            #    Note: This method will work for above use cases also, but if periodicity is small and the aggregation
-            #    period is large, it consumes too much memory and causes performance problems. For example, aggregating
-            #    1 microsecond data over a calendar year involves the creation length
-            #    1000_000 * 60 * 60 * 24 * 365 arrays which will probably fail with an out-of-memory error.
-            return (
-                pl.datetime_ranges(start_expr, end_expr, interval=ts.periodicity.pl_interval, closed="right")
-                .list.len()
-                .alias(expected_count_name)
-            )
+            # Variable length periods need dynamic calculation, based on the start and end of a period interval
+            label, closed = self._get_label_closed()
+            if label == "right":
+                start_expr = pl.col(self.ctx.time_name).dt.offset_by("-" + self.aggregation_period.pl_interval)
+                end_expr = pl.col(self.ctx.time_name)
+            else:
+                start_expr = pl.col(self.ctx.time_name)
+                end_expr = pl.col(self.ctx.time_name).dt.offset_by(self.aggregation_period.pl_interval)
 
-    @staticmethod
-    def _missing_data_expr(
-        ts: TimeSeries, columns: list[str], missing_criteria: tuple[str, float | int] | None = None
-    ) -> list[pl.Expr]:
+            # This contains 2 cases:
+            if self.ctx.periodicity.timedelta:
+                # 1. If the data we are aggregating is not monthly, then each interval we are aggregating has
+                #    a constant length, so (end - start) / interval will be the expected count.
+                micros = self.ctx.periodicity.timedelta // timedelta(microseconds=1)
+                expr = (end_expr - start_expr).dt.total_microseconds() // micros
+
+            else:
+                # 2. If the data we are aggregating is month-based, then there is no simple way to do the calculation,
+                #    so use Polars to create a Series of date ranges lists and get the length of each list.
+                #
+                #    Note: This method will work for above use cases also, but if periodicity is small and the
+                #    aggregation period is large, it consumes too much memory and causes performance problems.
+                #    For example, aggregating 1 microsecond data over a calendar year involves the creation length
+                #    1_000_000 * 60 * 60 * 24 * 365 arrays which will probably fail with an out-of-memory error.
+                expr = pl.datetime_ranges(
+                    start_expr, end_expr, interval=self.ctx.periodicity.pl_interval, closed=closed
+                ).list.len()
+
+        return expr.cast(pl.UInt32).alias(expected_count_name)
+
+    def _missing_data_expr(self) -> list[pl.Expr]:
         """Convert missing criteria to a Polars expression for validation.
-
-        Args:
-            ts: The TimeSeries object on which to calculate missing data
-            columns: The name of the value column(s) to count occurrences of
-            missing_criteria: The missing criteria to use
 
         Returns:
             List of `Polars` expressions that can be used to generate missing data validation columns
         """
         # Do some checks that the missing criteria is valid
         try:
-            if missing_criteria is None:
+            if self.missing_criteria is None:
                 criteria, threshold = MissingCriteria.NA, 0
             else:
-                criteria, threshold = missing_criteria
+                criteria, threshold = self.missing_criteria
 
             criteria = MissingCriteria(criteria)
         except ValueError:
             raise MissingCriteriaError(
-                f"Unknown missing criteria: {missing_criteria}. Available criteria: {[c.name for c in MissingCriteria]}"
+                f"Unknown missing criteria: {self.missing_criteria}. "
+                f"Available criteria: {[c.name for c in MissingCriteria]}"
             )
 
         if criteria == MissingCriteria.PERCENT:
@@ -299,18 +352,19 @@ class AggregationFunction(ABC):
 
         # Build the expression based on the specified criteria
         expressions = []
-        for col in columns:
+        for col in self.columns:
             if criteria == MissingCriteria.PERCENT:
-                expr = ((pl.col(f"count_{col}") / pl.col(f"expected_count_{ts.time_name}")) * 100) > threshold
+                expr = ((pl.col(f"count_{col}") / pl.col(f"expected_count_{self.ctx.time_name}")) * 100) > threshold
 
             elif criteria == MissingCriteria.MISSING:
-                expr = (pl.col(f"expected_count_{ts.time_name}") - pl.col(f"count_{col}")) <= threshold
+                expr = (pl.col(f"expected_count_{self.ctx.time_name}") - pl.col(f"count_{col}")) <= threshold
 
             elif criteria == MissingCriteria.AVAILABLE:
                 expr = pl.col(f"count_{col}") >= threshold
 
             else:
-                expr = pl.lit(True)
+                # Default to check that the actual count found in the column is above 0.
+                expr = pl.col(f"count_{col}") > 0
 
             expr = expr.alias(f"valid_{col}")
             expressions.append(expr)
@@ -324,7 +378,7 @@ class Mean(AggregationFunction):
 
     name = "mean"
 
-    def expr(self, columns: list[str]) -> list[pl.Expr]:
+    def expr(self, ctx: AggregationCtx, columns: list[str]) -> list[pl.Expr]:
         """Return the `Polars` expression for calculating the mean in an aggregation period."""
         return [pl.col(col).mean().alias(f"mean_{col}") for col in columns]
 
@@ -335,26 +389,29 @@ class Sum(AggregationFunction):
 
     name = "sum"
 
-    def expr(self, columns: list[str]) -> list[pl.Expr]:
-        """Return the `Polars` expression for calculating the mean in an aggregation period."""
+    def expr(self, ctx: AggregationCtx, columns: list[str]) -> list[pl.Expr]:
+        """Return the `Polars` expression for calculating the sum in an aggregation period."""
         return [pl.col(col).sum().alias(f"sum_{col}") for col in columns]
 
 
 @register_aggregation
 class MeanSum(AggregationFunction):
     """An aggregation class to calculate the mean sum (averaged total) of values within each aggregation period.
-    This will estimate the sum when values are missing according how many values are expected in the period."""
+    This will estimate the sum when values are missing according to how many values are expected in the period."""
 
     name = "mean_sum"
 
-    def expr(self, columns: list[str]) -> list[pl.Expr]:
+    def expr(self, ctx: AggregationCtx, columns: list[str]) -> list[pl.Expr]:
         """To calculate the mean sum the expression must return the mean, and be multiplied by the expected
         counts, which is calculated after in the post_expr method."""
         return [pl.col(col).mean().alias(f"mean_sum_{col}") for col in columns]
 
-    def post_expr(self, columns: list[str]) -> list[pl.Expr]:
+    def post_expr(self, ctx: AggregationCtx, columns: list[str]) -> list[pl.Expr]:
         """Multiply the mean by the expected count to get the mean sum."""
-        return [(pl.col(f"mean_sum_{col}") * pl.col(f"expected_count_{self.ts.time_name}")) for col in columns]
+        return [
+            (pl.col(f"mean_sum_{col}") * pl.col(f"expected_count_{ctx.time_name}")).alias(f"mean_sum_{col}")
+            for col in columns
+        ]
 
 
 @register_aggregation
@@ -363,7 +420,7 @@ class Min(AggregationFunction):
 
     name = "min"
 
-    def expr(self, columns: list[str]) -> list[pl.Expr]:
+    def expr(self, ctx: AggregationCtx, columns: list[str]) -> list[pl.Expr]:
         """Return the `Polars` expression for calculating the minimum in an aggregation period.
         This expression also returns a column that holds the datetime that the minimum value occurred on.
         """
@@ -372,12 +429,7 @@ class Min(AggregationFunction):
             expressions.extend(
                 [
                     pl.col(col).min().alias(f"{self.name}_{col}"),
-                    # Define a struct, to be able to extract the datetime on which the min occurred
-                    pl.struct([self.ts.time_name, col])
-                    .sort_by(col)
-                    .first()
-                    .struct.field(self.ts.time_name)
-                    .alias(f"{self.ts.time_name}_of_{self.name}_{col}"),
+                    pl.col(ctx.time_name).get(pl.col(col).arg_min()).alias(f"{ctx.time_name}_of_{self.name}_{col}"),
                 ]
             )
         return expressions
@@ -389,7 +441,7 @@ class Max(AggregationFunction):
 
     name = "max"
 
-    def expr(self, columns: str) -> list[pl.Expr]:
+    def expr(self, ctx: AggregationCtx, columns: list[str]) -> list[pl.Expr]:
         """Return the `Polars` expression for calculating the maximum in an aggregation period.
         This expression also returns a column that holds the datetime that the maximum value occurred on.
         """
@@ -398,12 +450,7 @@ class Max(AggregationFunction):
             expressions.extend(
                 [
                     pl.col(col).max().alias(f"{self.name}_{col}"),
-                    # Define a struct, to be able to extract the datetime on which the max occurred
-                    pl.struct([self.ts.time_name, col])
-                    .sort_by(col)
-                    .last()
-                    .struct.field(self.ts.time_name)
-                    .alias(f"{self.ts.time_name}_of_{self.name}_{col}"),
+                    pl.col(ctx.time_name).get(pl.col(col).arg_max()).alias(f"{ctx.time_name}_of_{self.name}_{col}"),
                 ]
             )
         return expressions

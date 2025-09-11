@@ -10,7 +10,7 @@ from time_stream.exceptions import DuplicateTimeError, PeriodicityError, Resolut
 
 import numpy as np
 
-from utils import suppress_output
+from time_stream.examples.utils import suppress_output
 
 
 def create_simple_time_series():
@@ -687,9 +687,10 @@ def pad_timeseries():
         df=df,
         time_name="timestamp",
         resolution=Period.of_days(1),
-        periodicity=Period.of_days(1),
-        pad=True  # Enable padding
+        periodicity=Period.of_days(1)
     )
+
+    ts.pad()  # Pad missing rows with nulls
 
     print(ts)
     # [end_block_34]
@@ -726,8 +727,9 @@ def pad_timeseries_water_year():
         time_name="timestamp",
         resolution=Period.of_minutes(15),
         periodicity=Period.of_years(1).with_month_offset(9).with_hour_offset(9),
-        pad=True  # Enable padding
     )
+
+    ts.pad()  # Pad missing rows with nulls
 
     print(ts)
     # [end_block_36]

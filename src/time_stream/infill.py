@@ -212,7 +212,7 @@ class InfillMethod(ABC):
 
         # Create result TimeSeries
         #   Need to do this as the time column might have changed due to the padding/adding of infilled rows.
-        return TimeSeries(
+        ts = TimeSeries(
             df=df_infilled,
             time_name=self.ts.time_name,
             resolution=ts.resolution,
@@ -222,8 +222,9 @@ class InfillMethod(ABC):
             supplementary_columns=list(ts.supplementary_columns.keys()),
             flag_systems=ts.flag_systems,
             flag_columns={name: col.flag_system.name for name, col in ts.flag_columns.items()},
-            pad=True,
         )
+        ts.pad()
+        return ts
 
 
 class ScipyInterpolation(InfillMethod, ABC):

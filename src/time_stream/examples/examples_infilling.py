@@ -6,7 +6,7 @@ import polars as pl
 
 from time_stream import Period, TimeSeries
 
-from utils import suppress_output
+from time_stream.examples.utils import suppress_output
 
 
 def create_simple_time_series_with_gaps():
@@ -33,9 +33,11 @@ def create_simple_time_series_with_gaps():
         df=df,
         time_name="timestamp",
         resolution=Period.of_days(1),
-        periodicity=Period.of_days(1),
-        pad=True
+        periodicity=Period.of_days(1)
     )
+
+    # Pad missing rows in the time series with nulls
+    ts.pad()
     # [end_block_1]
     with pl.Config(tbl_rows=-1):
         print(ts)
