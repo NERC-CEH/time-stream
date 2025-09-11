@@ -137,6 +137,7 @@ class TestAggregationPipeline(unittest.TestCase):
         """Set up test fixtures."""
         self.ctx = Mock(spec=AggregationCtx)
         self.ctx.time_name = "time"
+        self.ctx.time_anchor = TimeAnchor.START
         self.columns = ["values"]
         self.agg_func = Mock(spec=AggregationFunction)
         self.period = Mock()
