@@ -14,7 +14,7 @@ Key Components:
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import timedelta
-from typing import ClassVar, Literal
+from typing import ClassVar
 
 import polars as pl
 
@@ -29,9 +29,6 @@ from time_stream.exceptions import (
     UnknownAggregationError,
 )
 from time_stream.utils import check_columns_in_dataframe
-
-Label = Literal["left", "right"]
-ClosedInterval = Literal["left", "right", "both", "none"]
 
 # Registry for built-in aggregations
 _AGGREGATION_REGISTRY: dict[str, type["AggregationFunction"]] = {}
@@ -147,6 +144,7 @@ class AggregationFunction(ABC):
         periodicity: Period,
         aggregation_period: Period,
         columns: str | list[str],
+        aggregation_time_anchor: TimeAnchor,
         missing_criteria: tuple[str, float | int] | None = None,
     ) -> pl.DataFrame:
         """Run the aggregation pipeline.
@@ -158,13 +156,17 @@ class AggregationFunction(ABC):
             periodicity: Periodicity of the time series
             aggregation_period: Period over which to aggregate the data
             columns: Column(s) containing the data to be aggregated
+            aggregation_time_anchor: The time anchor for the aggregation result.
             missing_criteria: How the aggregation handles missing data
+
 
         Returns:
             The aggregated dataframe
         """
         ctx = AggregationCtx(df, time_name, time_anchor, periodicity)
-        pipeline = AggregationPipeline(self, ctx, aggregation_period, columns, missing_criteria)
+        pipeline = AggregationPipeline(
+            self, ctx, aggregation_period, columns, aggregation_time_anchor, missing_criteria
+        )
         return pipeline.execute()
 
 
@@ -177,11 +179,13 @@ class AggregationPipeline:
         ctx: AggregationCtx,
         aggregation_period: Period,
         columns: str | list[str],
+        aggregation_time_anchor: TimeAnchor,
         missing_criteria: tuple[str, float | int] | None = None,
     ):
         self.agg_func = agg_func
         self.ctx = ctx
         self.aggregation_period = aggregation_period
+        self.aggregation_time_anchor = aggregation_time_anchor
         self.columns = [columns] if isinstance(columns, str) else columns
         self.missing_criteria = missing_criteria
 
@@ -256,16 +260,15 @@ class AggregationPipeline:
                 f"'{self.ctx.periodicity}'. TimeSeries periodicity must be a subperiod of the aggregation period."
             )
 
-    def _get_label_closed(self) -> tuple[Label, ClosedInterval]:
+    def _get_label_closed(self) -> tuple[str, str]:
         """Map TimeAnchor to Polars label/closed semantics.
 
         Returns:
             Tuple of (label, closed) values to use in Polars operations
         """
-        if self.ctx.time_anchor == TimeAnchor.END:
-            return "right", "right"
-        else:  # TimeAnchor.START, TimeAnchor.POINT
-            return "left", "left"
+        label = "right" if self.aggregation_time_anchor == TimeAnchor.END else "left"
+        closed = "right" if self.ctx.time_anchor == TimeAnchor.END else "left"
+        return label, closed
 
     def _actual_count_expr(self) -> list[pl.Expr]:
         """A `Polars` expression to generate the actual count of values in a TimeSeries found in each period.
@@ -292,10 +295,10 @@ class AggregationPipeline:
         else:
             # Variable length periods need dynamic calculation, based on the start and end of a period interval
             label, closed = self._get_label_closed()
-            if self.ctx.time_anchor == TimeAnchor.END:
+            if label == "right":
                 start_expr = pl.col(self.ctx.time_name).dt.offset_by("-" + self.aggregation_period.pl_interval)
                 end_expr = pl.col(self.ctx.time_name)
-            else:  # TimeAnchor.START, TimeAnchor.POINT
+            else:
                 start_expr = pl.col(self.ctx.time_name)
                 end_expr = pl.col(self.ctx.time_name).dt.offset_by(self.aggregation_period.pl_interval)
 
@@ -313,7 +316,7 @@ class AggregationPipeline:
                 #    Note: This method will work for above use cases also, but if periodicity is small and the
                 #    aggregation period is large, it consumes too much memory and causes performance problems.
                 #    For example, aggregating 1 microsecond data over a calendar year involves the creation length
-                #    1000_000 * 60 * 60 * 24 * 365 arrays which will probably fail with an out-of-memory error.
+                #    1_000_000 * 60 * 60 * 24 * 365 arrays which will probably fail with an out-of-memory error.
                 expr = pl.datetime_ranges(
                     start_expr, end_expr, interval=self.ctx.periodicity.pl_interval, closed=closed
                 ).list.len()

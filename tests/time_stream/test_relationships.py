@@ -1,39 +1,41 @@
-import unittest
 import itertools
+import unittest
 from datetime import datetime
 from unittest.mock import patch
 
-from parameterized import parameterized
 import polars as pl
+from parameterized import parameterized
 
 from time_stream import TimeSeries
-from time_stream.relationships import Relationship, RelationshipManager, RelationshipType, DeletionPolicy
 from time_stream.exceptions import ColumnRelationshipError
+from time_stream.relationships import DeletionPolicy, Relationship, RelationshipManager, RelationshipType
 
 
 class BaseRelationshipTest(unittest.TestCase):
     """Base class for setting up test fixtures for these tests."""
 
     @classmethod
-    def setUpClass(cls):
+    def setUpClass(cls) -> None:
         """Set up a mock TimeSeries testing."""
-        cls.df = pl.DataFrame({
-            "time": [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)],
-            "colA": [1, 2, 3],
-            "colB": [10, 20, 30],
-            "colC": [100, 200, 300],
-        })
+        cls.df = pl.DataFrame(
+            {
+                "time": [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)],
+                "colA": [1, 2, 3],
+                "colB": [10, 20, 30],
+                "colC": [100, 200, 300],
+            }
+        )
         cls.ts = TimeSeries(df=cls.df, time_name="time")
 
     @classmethod
-    def get_cols(cls):
+    def get_cols(cls) -> dict:
         return cls.ts.columns
 
+
 def get_enum_combos(
-        not_relationship_type: RelationshipType=None,
-        not_deletion_policy: DeletionPolicy=None
+    not_relationship_type: RelationshipType = None, not_deletion_policy: DeletionPolicy = None
 ) -> list[tuple[str, RelationshipType, DeletionPolicy]]:
-    """ Generates a list of all possible combinations of RelationshipType and DeletionPolicy, filtering out those
+    """Generates a list of all possible combinations of RelationshipType and DeletionPolicy, filtering out those
     that match the specified exceptions.
 
     Args:
@@ -44,35 +46,42 @@ def get_enum_combos(
         list: A list of tuples where each tuple represents a combination containing the formatted string,
             the RelationshipType, and the DeletionPolicy.
     """
-    combos = [(f"{t}_{d}", t, d) for t, d in itertools.product(RelationshipType, DeletionPolicy)
-              if not t is not_relationship_type and not d is not_deletion_policy]
+    combos = [
+        (f"{t}_{d}", t, d)
+        for t, d in itertools.product(RelationshipType, DeletionPolicy)
+        if t is not not_relationship_type and d is not not_deletion_policy
+    ]
     return combos
 
 
 class TestRelationshipHash(BaseRelationshipTest):
     @parameterized.expand(get_enum_combos())
-    def test_identical_hash(self, _, relationship_type, deletion_policy):
-        """ Test that two relationships with identical attributes have the same hash. """
+    def test_identical_hash(self, _: str, relationship_type: RelationshipType, deletion_policy: DeletionPolicy) -> None:
+        """Test that two relationships with identical attributes have the same hash."""
         rel1 = Relationship(self.ts.colA, self.ts.colB, relationship_type, deletion_policy)
         rel2 = Relationship(self.ts.colA, self.ts.colB, relationship_type, deletion_policy)
         self.assertEqual(rel1.__hash__(), rel2.__hash__())
 
     @parameterized.expand(get_enum_combos(not_relationship_type=RelationshipType.ONE_TO_ONE))
-    def test_non_identical_relationship_type_hash(self, _, relationship_type, deletion_policy):
-        """ Test that two relationships with different relationship types don't have the same hash. """
+    def test_non_identical_relationship_type_hash(
+        self, _: str, relationship_type: RelationshipType, deletion_policy: DeletionPolicy
+    ) -> None:
+        """Test that two relationships with different relationship types don't have the same hash."""
         rel1 = Relationship(self.ts.colA, self.ts.colB, RelationshipType.ONE_TO_ONE, deletion_policy)
         rel2 = Relationship(self.ts.colA, self.ts.colB, relationship_type, deletion_policy)
         self.assertNotEqual(rel1.__hash__(), rel2.__hash__())
 
     @parameterized.expand(get_enum_combos(not_deletion_policy=DeletionPolicy.CASCADE))
-    def test_non_identical_deletion_policy_hash(self, _, relationship_type, deletion_policy):
-        """ Test that two relationships with different deletion policies don't have the same hash. """
+    def test_non_identical_deletion_policy_hash(
+        self, _: str, relationship_type: RelationshipType, deletion_policy: DeletionPolicy
+    ) -> None:
+        """Test that two relationships with different deletion policies don't have the same hash."""
         rel1 = Relationship(self.ts.colA, self.ts.colB, relationship_type, DeletionPolicy.CASCADE)
         rel2 = Relationship(self.ts.colA, self.ts.colB, relationship_type, deletion_policy)
         self.assertNotEqual(rel1.__hash__(), rel2.__hash__())
 
-    def test_non_identical_column_hash(self):
-        """ Test that two relationships with different columns don't have the same hash. """
+    def test_non_identical_column_hash(self) -> None:
+        """Test that two relationships with different columns don't have the same hash."""
         rel1 = Relationship(self.ts.colA, self.ts.colB, RelationshipType.ONE_TO_MANY, DeletionPolicy.CASCADE)
         rel2 = Relationship(self.ts.colB, self.ts.colA, RelationshipType.ONE_TO_MANY, DeletionPolicy.CASCADE)
         self.assertNotEqual(rel1.__hash__(), rel2.__hash__())
@@ -80,31 +89,37 @@ class TestRelationshipHash(BaseRelationshipTest):
 
 class TestRelationshipEq(BaseRelationshipTest):
     @parameterized.expand(get_enum_combos())
-    def test_identical_are_eq(self, _, relationship_type, deletion_policy):
-        """ Test that two relationships with identical attributes are considered equal. """
+    def test_identical_are_eq(
+        self, _: str, relationship_type: RelationshipType, deletion_policy: DeletionPolicy
+    ) -> None:
+        """Test that two relationships with identical attributes are considered equal."""
         rel1 = Relationship(self.ts.colA, self.ts.colB, relationship_type, deletion_policy)
         rel2 = Relationship(self.ts.colA, self.ts.colB, relationship_type, deletion_policy)
         self.assertTrue(rel1 == rel2)
         self.assertFalse(rel1 != rel2)
 
     @parameterized.expand(get_enum_combos(not_relationship_type=RelationshipType.ONE_TO_ONE))
-    def test_non_identical_relationship_type_noteq(self, _, relationship_type, deletion_policy):
-        """ Test that two relationships with different relationship types are not considered equal."""
+    def test_non_identical_relationship_type_not_eq(
+        self, _: str, relationship_type: RelationshipType, deletion_policy: DeletionPolicy
+    ) -> None:
+        """Test that two relationships with different relationship types are not considered equal."""
         rel1 = Relationship(self.ts.colA, self.ts.colB, RelationshipType.ONE_TO_ONE, deletion_policy)
         rel2 = Relationship(self.ts.colA, self.ts.colB, relationship_type, deletion_policy)
         self.assertFalse(rel1 == rel2)
         self.assertTrue(rel1 != rel2)
 
     @parameterized.expand(get_enum_combos(not_deletion_policy=DeletionPolicy.CASCADE))
-    def test_non_identical_deletion_policy_noteq(self, _, relationship_type, deletion_policy):
-        """ Test that two relationships with different deletion policies are not considered equal."""
+    def test_non_identical_deletion_policy_not_eq(
+        self, _: str, relationship_type: RelationshipType, deletion_policy: DeletionPolicy
+    ) -> None:
+        """Test that two relationships with different deletion policies are not considered equal."""
         rel1 = Relationship(self.ts.colA, self.ts.colB, relationship_type, DeletionPolicy.CASCADE)
         rel2 = Relationship(self.ts.colA, self.ts.colB, relationship_type, deletion_policy)
         self.assertFalse(rel1 == rel2)
         self.assertTrue(rel1 != rel2)
 
-    def test_non_identical_column_noteq(self):
-        """ Test that two relationships with different columns are not considered equal."""
+    def test_non_identical_column_not_eq(self) -> None:
+        """Test that two relationships with different columns are not considered equal."""
         rel1 = Relationship(self.ts.colA, self.ts.colB, RelationshipType.ONE_TO_MANY, DeletionPolicy.CASCADE)
         rel2 = Relationship(self.ts.colB, self.ts.colA, RelationshipType.ONE_TO_MANY, DeletionPolicy.CASCADE)
         self.assertFalse(rel1 == rel2)
@@ -112,15 +127,17 @@ class TestRelationshipEq(BaseRelationshipTest):
 
 
 class TestRelationshipManagerAdd(BaseRelationshipTest):
-    def setUp(self):
+    def setUp(self) -> None:
         self.relationship_manager = RelationshipManager(self.ts)
 
     @parameterized.expand(get_enum_combos())
-    def test_add_relationship(self, _, relationship_type, deletion_policy):
+    def test_add_relationship(
+        self, _: str, relationship_type: RelationshipType, deletion_policy: DeletionPolicy
+    ) -> None:
         """Test adding a Relationship with all combos of relationship type and deletion policies to the manager"""
         relationship = Relationship(self.ts.colA, self.ts.colB, relationship_type, deletion_policy)
         self.relationship_manager._add(relationship)
-        
+
         primary_col_relationships = self.relationship_manager._get_relationships(self.ts.colA)
         self.assertEqual(len(primary_col_relationships), 1)
         self.assertIn(relationship, primary_col_relationships)
@@ -130,7 +147,7 @@ class TestRelationshipManagerAdd(BaseRelationshipTest):
         self.assertIn(relationship, other_col_relationships)
 
     @parameterized.expand([(str(d), d) for d in DeletionPolicy])
-    def test_add_multiple_one_to_one_failure(self, _, deletion_policy):
+    def test_add_multiple_one_to_one_failure(self, _: str, deletion_policy: DeletionPolicy) -> None:
         """Test adding a second one-to-one Relationship for the same primary column raises an error"""
         relationship1 = Relationship(self.ts.colA, self.ts.colB, RelationshipType.ONE_TO_ONE, deletion_policy)
         self.relationship_manager._add(relationship1)
@@ -140,7 +157,7 @@ class TestRelationshipManagerAdd(BaseRelationshipTest):
             self.relationship_manager._add(relationship2)
 
     @parameterized.expand([(str(d), d) for d in DeletionPolicy])
-    def test_add_multiple_many_to_one_failure(self, _, deletion_policy):
+    def test_add_multiple_many_to_one_failure(self, _: str, deletion_policy: DeletionPolicy) -> None:
         """Test adding a second many-to-one Relationship for the same primary column raises an error"""
         relationship1 = Relationship(self.ts.colA, self.ts.colB, RelationshipType.MANY_TO_ONE, deletion_policy)
         self.relationship_manager._add(relationship1)
@@ -150,7 +167,7 @@ class TestRelationshipManagerAdd(BaseRelationshipTest):
             self.relationship_manager._add(relationship2)
 
     @parameterized.expand([(str(d), d) for d in DeletionPolicy])
-    def test_add_multiple_many_to_many_success(self, _, deletion_policy):
+    def test_add_multiple_many_to_many_success(self, _: str, deletion_policy: DeletionPolicy) -> None:
         """Test adding multiple many-to-many Relationships for the same primary column is successful"""
         relationship1 = Relationship(self.ts.colA, self.ts.colB, RelationshipType.MANY_TO_MANY, deletion_policy)
         relationship2 = Relationship(self.ts.colA, self.ts.colC, RelationshipType.MANY_TO_MANY, deletion_policy)
@@ -172,7 +189,7 @@ class TestRelationshipManagerAdd(BaseRelationshipTest):
         self.assertIn(relationship2, other_col_relationships)
 
     @parameterized.expand([(str(d), d) for d in DeletionPolicy])
-    def test_add_multiple_one_to_many_success(self, _, deletion_policy):
+    def test_add_multiple_one_to_many_success(self, _: str, deletion_policy: DeletionPolicy) -> None:
         """Test adding multiple one-to-many Relationships for the same primary column is successful"""
         relationship1 = Relationship(self.ts.colA, self.ts.colB, RelationshipType.ONE_TO_MANY, deletion_policy)
         relationship2 = Relationship(self.ts.colA, self.ts.colC, RelationshipType.ONE_TO_MANY, deletion_policy)
@@ -180,20 +197,20 @@ class TestRelationshipManagerAdd(BaseRelationshipTest):
         self.relationship_manager._add(relationship1)
         self.relationship_manager._add(relationship2)
 
-        colA_relationships = self.relationship_manager._get_relationships(self.ts.colA)
-        colB_relationships = self.relationship_manager._get_relationships(self.ts.colB)
-        colC_relationships = self.relationship_manager._get_relationships(self.ts.colC)
+        col_a_relationships = self.relationship_manager._get_relationships(self.ts.colA)
+        col_b_relationships = self.relationship_manager._get_relationships(self.ts.colB)
+        col_c_relationships = self.relationship_manager._get_relationships(self.ts.colC)
 
-        self.assertEqual(len(colA_relationships), 2)
-        self.assertEqual(len(colB_relationships), 1)
-        self.assertEqual(len(colC_relationships), 1)
-        self.assertIn(relationship1, colA_relationships)
-        self.assertIn(relationship2, colA_relationships)
-        self.assertIn(relationship1, colB_relationships)
-        self.assertIn(relationship2, colC_relationships)
+        self.assertEqual(len(col_a_relationships), 2)
+        self.assertEqual(len(col_b_relationships), 1)
+        self.assertEqual(len(col_c_relationships), 1)
+        self.assertIn(relationship1, col_a_relationships)
+        self.assertIn(relationship2, col_a_relationships)
+        self.assertIn(relationship1, col_b_relationships)
+        self.assertIn(relationship2, col_c_relationships)
 
     @parameterized.expand([(str(d), d) for d in DeletionPolicy])
-    def test_add_relationship_to_existing_one_to_many_fails(self, _, deletion_policy):
+    def test_add_relationship_to_existing_one_to_many_fails(self, _: str, deletion_policy: DeletionPolicy) -> None:
         """Test adding another Relationship to a column that has a ONE-TO-MANY Relationship already raises error."""
         relationship1 = Relationship(self.ts.colA, self.ts.colB, RelationshipType.ONE_TO_MANY, deletion_policy)
         relationship2 = Relationship(self.ts.colB, self.ts.colC, RelationshipType.MANY_TO_MANY, deletion_policy)
@@ -204,11 +221,11 @@ class TestRelationshipManagerAdd(BaseRelationshipTest):
 
 
 class TestRelationshipManagerRemove(BaseRelationshipTest):
-    def setUp(self):
+    def setUp(self) -> None:
         self.relationship_manager = RelationshipManager(self.ts)
 
     @parameterized.expand(get_enum_combos())
-    def test_remove(self, _, relationship_type, deletion_policy):
+    def test_remove(self, _: str, relationship_type: RelationshipType, deletion_policy: DeletionPolicy) -> None:
         """Test that removing a relationship removes it from both directions."""
         relationship = Relationship(self.ts.colA, self.ts.colB, relationship_type, deletion_policy)
         self.relationship_manager._add(relationship)
@@ -221,11 +238,11 @@ class TestRelationshipManagerRemove(BaseRelationshipTest):
 
 
 class TestRelationshipManagerGetRelationships(BaseRelationshipTest):
-    def setUp(self):
+    def setUp(self) -> None:
         self.relationship_manager = RelationshipManager(self.ts)
 
     @parameterized.expand([(str(d), d) for d in DeletionPolicy])
-    def test_get_relationships(self, _, deletion_policy):
+    def test_get_relationships(self, _: str, deletion_policy: DeletionPolicy) -> None:
         """Test getting relationships."""
         relationship1 = Relationship(self.ts.colA, self.ts.colB, RelationshipType.MANY_TO_MANY, deletion_policy)
         relationship2 = Relationship(self.ts.colA, self.ts.colC, RelationshipType.MANY_TO_MANY, deletion_policy)
@@ -245,7 +262,7 @@ class TestRelationshipManagerGetRelationships(BaseRelationshipTest):
         self.assertEqual(len(result), 1)
         self.assertIn(relationship2, result)
 
-    def test_get_relationships_empty(self):
+    def test_get_relationships_empty(self) -> None:
         """Test getting relationships when there are none for a column."""
         for _, col in self.ts.columns.items():
             result = self.relationship_manager._get_relationships(col)
@@ -253,12 +270,11 @@ class TestRelationshipManagerGetRelationships(BaseRelationshipTest):
 
 
 class TestRelationshipManagerHandleDeletion(BaseRelationshipTest):
-    def setUp(self):
+    def setUp(self) -> None:
         self.ts = TimeSeries(df=self.df, time_name="time")
 
-    def test_cascade(self):
-        """Test deletion handling with CASCADE policy. Deleting colA should cascade and remove colB.
-        """
+    def test_cascade(self) -> None:
+        """Test deletion handling with CASCADE policy. Deleting colA should cascade and remove colB."""
         relationship = Relationship(self.ts.colA, self.ts.colB, RelationshipType.ONE_TO_ONE, DeletionPolicy.CASCADE)
         self.ts._relationship_manager._add(relationship)
 
@@ -272,9 +288,8 @@ class TestRelationshipManagerHandleDeletion(BaseRelationshipTest):
         self.assertNotIn(col_b.name, self.ts.columns)
         self.assertNotIn(col_b.name, self.ts.df.columns)
 
-    def test_multiple_cascade(self):
-        """Test deletion handling with CASCADE policy, where the second column also has a CASCADE relationship.
-        """
+    def test_multiple_cascade(self) -> None:
+        """Test deletion handling with CASCADE policy, where the second column also has a CASCADE relationship."""
         relationship1 = Relationship(self.ts.colA, self.ts.colB, RelationshipType.MANY_TO_MANY, DeletionPolicy.CASCADE)
         relationship2 = Relationship(self.ts.colB, self.ts.colC, RelationshipType.MANY_TO_MANY, DeletionPolicy.CASCADE)
         self.ts._relationship_manager._add(relationship1)
@@ -294,7 +309,7 @@ class TestRelationshipManagerHandleDeletion(BaseRelationshipTest):
         self.assertNotIn(col_b.name, self.ts.df.columns)
         self.assertNotIn(col_c.name, self.ts.df.columns)
 
-    def test_unlink(self):
+    def test_unlink(self) -> None:
         """Test deletion handling with UNLINK policy. Deleting colA should unlink the relationship with colB,
         but not delete colB
         """
@@ -310,9 +325,8 @@ class TestRelationshipManagerHandleDeletion(BaseRelationshipTest):
         self.assertEqual([], self.ts._relationship_manager._get_relationships(col_b))
         self.assertIn(col_b.name, self.ts.columns)
 
-    def test_multiple_unlink(self):
-        """Test deletion handling with UNLINK policy, where second column has other relationships.
-        """
+    def test_multiple_unlink(self) -> None:
+        """Test deletion handling with UNLINK policy, where second column has other relationships."""
         relationship1 = Relationship(self.ts.colA, self.ts.colB, RelationshipType.MANY_TO_MANY, DeletionPolicy.UNLINK)
         relationship2 = Relationship(self.ts.colB, self.ts.colC, RelationshipType.MANY_TO_MANY, DeletionPolicy.UNLINK)
         self.ts._relationship_manager._add(relationship1)
@@ -329,9 +343,8 @@ class TestRelationshipManagerHandleDeletion(BaseRelationshipTest):
         self.assertIn(col_b.name, self.ts.columns)
         self.assertIn(col_c.name, self.ts.columns)
 
-    def test_restrict(self):
-        """Test deletion handling with RESTRICT policy.  Should raise error.
-        """
+    def test_restrict(self) -> None:
+        """Test deletion handling with RESTRICT policy.  Should raise error."""
         relationship = Relationship(self.ts.colA, self.ts.colB, RelationshipType.ONE_TO_ONE, DeletionPolicy.RESTRICT)
         self.ts._relationship_manager._add(relationship)
 
@@ -343,28 +356,38 @@ class TestRelationshipManagerHandleDeletion(BaseRelationshipTest):
 
 
 class TestRelationshipManagerSetupRelationships(BaseRelationshipTest):
-    def setUp(self):
+    def setUp(self) -> None:
         self.ts = TimeSeries(df=self.df, time_name="time")
 
-    def test_empty_columns(self):
+    def test_empty_columns(self) -> None:
         """Test that no relationships are created when TimeSeries has no columns."""
-        ts = TimeSeries(df=pl.DataFrame({
-            "time": [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)],
-        }), time_name="time")
+        ts = TimeSeries(
+            df=pl.DataFrame(
+                {
+                    "time": [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)],
+                }
+            ),
+            time_name="time",
+        )
 
-        with patch.object(RelationshipManager, '_setup_relationships'):
+        with patch.object(RelationshipManager, "_setup_relationships"):
             rm = RelationshipManager(ts)
             rm._setup_relationships()
             self.assertEqual(rm._relationships, {})
 
-    def test_single_column(self):
+    def test_single_column(self) -> None:
         """Test that a single column creates one entry with an empty set."""
-        ts = TimeSeries(df=pl.DataFrame({
-            "time": [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)],
-            "colA": [1, 2, 3],
-        }), time_name="time")
+        ts = TimeSeries(
+            df=pl.DataFrame(
+                {
+                    "time": [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)],
+                    "colA": [1, 2, 3],
+                }
+            ),
+            time_name="time",
+        )
 
-        with patch.object(RelationshipManager, '_setup_relationships'):
+        with patch.object(RelationshipManager, "_setup_relationships"):
             # skip the function on init
             rm = RelationshipManager(ts)
 
@@ -372,9 +395,9 @@ class TestRelationshipManagerSetupRelationships(BaseRelationshipTest):
         self.assertIn("colA", rm._relationships)
         self.assertEqual(rm._relationships["colA"], set())
 
-    def test_multiple_columns(self):
+    def test_multiple_columns(self) -> None:
         """Test that multiple columns create one entry each with an empty set."""
-        with patch.object(RelationshipManager, '_setup_relationships'):
+        with patch.object(RelationshipManager, "_setup_relationships"):
             # skip the function on init
             rm = RelationshipManager(self.ts)
         rm._setup_relationships()
