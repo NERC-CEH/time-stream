@@ -7,17 +7,11 @@ import polars as pl
 from time_stream.aggregation import AggregationFunction
 from time_stream.columns import DataColumn, FlagColumn, PrimaryTimeColumn, SupplementaryColumn, TimeSeriesColumn
 from time_stream.enums import DuplicateOption, TimeAnchor
-from time_stream.exceptions import (
-    ColumnNotFoundError,
-    ColumnTypeError,
-    DuplicateColumnError,
-    MetadataError,
-)
+from time_stream.exceptions import ColumnNotFoundError, DuplicateColumnError, MetadataError
 from time_stream.flag_manager import TimeSeriesFlagManager
 from time_stream.infill import InfillMethod
 from time_stream.period import Period
 from time_stream.qc import QCCheck
-from time_stream.relationships import RelationshipManager
 from time_stream.time_manager import TimeManager
 from time_stream.utils import check_columns_in_dataframe, configure_period_object, pad_time
 
@@ -69,7 +63,6 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         self._flag_manager = TimeSeriesFlagManager(self, flag_systems)
         self._columns: dict[str, TimeSeriesColumn] = {}
         self._metadata = {}
-        self._relationship_manager = RelationshipManager(self)
 
         self._setup(supplementary_columns or [], flag_columns or {}, column_metadata or {}, metadata or {})
 
@@ -160,9 +153,6 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
                 data_col = DataColumn(col_name, self, col_metadata)
                 self._columns[col_name] = data_col
 
-        # Add columns to the relationship manager
-        self._relationship_manager._setup_relationships()
-
     def _setup_metadata(self, metadata: dict[str, Any]) -> None:
         """Configure metadata for the Time Series instance.
 
@@ -218,7 +208,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         """
         old_df = self._df.clone()
         self._time_manager._check_time_integrity(old_df, new_df)
-        self._df = new_df  # Set this before removing columns so that recursive removals via relationship manager works.
+        self._df = new_df
         self._remove_missing_columns(old_df, new_df)
         self._add_new_columns(old_df, new_df)
 
@@ -231,7 +221,6 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         """
         removed_columns = list(set(old_df.columns) - set(new_df.columns))
         for col_name in removed_columns:
-            self._relationship_manager._handle_deletion(self._columns[col_name])
             self._columns.pop(col_name, None)
 
     def _add_new_columns(self, old_df: pl.DataFrame, new_df: pl.DataFrame) -> None:
@@ -251,9 +240,6 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
             # Now add the actual column.
             data_col = DataColumn(col_name, self, {})
             self._columns[col_name] = data_col
-
-        # ensure new columns are initialised in the relationship manager
-        self._relationship_manager._setup_relationships()
 
     @property
     def time_column(self) -> PrimaryTimeColumn:
@@ -583,55 +569,6 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
 
         return result
 
-    def add_column_relationship(self, primary: str, other: str | list[str]) -> None:
-        """Adds a relationship between the primary column and other column(s).
-
-        Args:
-            primary: The primary column in the relationship.
-            other: Other column(s) to associate.
-        """
-        if isinstance(other, str):
-            other = [other]
-
-        primary = self.columns[primary]
-        primary.add_relationship(other)
-
-    def remove_column_relationship(self, primary: str, other: str | list[str]) -> None:
-        """Removes a relationship between the primary column and other column(s).
-
-        Args:
-            primary: The primary column in the relationship.
-            other: Other column(s) to remove association.
-        """
-        if isinstance(other, str):
-            other = [other]
-
-        primary = self.columns[primary]
-        for other_column in other:
-            primary.remove_relationship(other_column)
-
-    def get_flag_system_column(self, data_column: str | TimeSeriesColumn, flag_system: str) -> TimeSeriesColumn | None:
-        """Retrieves the flag system column corresponding to the given data column and flag system.
-
-        Args:
-            data_column: The data column identifier. This can either be the name of the column or an instance
-                            of TimeSeriesColumn.
-            flag_system: The name of the flag system.
-
-        Returns:
-            The matching flag column if exactly one match is found, or None if no matching column is found.
-        """
-        if isinstance(data_column, str):
-            error_msg = f"Data Column '{data_column}' not found."
-            data_column = self.columns.get(data_column, None)
-            if data_column is None:
-                raise ColumnNotFoundError(error_msg)
-
-        if type(data_column) is not DataColumn:
-            raise ColumnTypeError(f"Column '{data_column.name}' is type {type(data_column)}. Should be a data column.")
-
-        return data_column.get_flag_system_column(flag_system)
-
     def __getattr__(self, name: str) -> Any:
         """Dynamically handle attribute access for the TimeSeries object.
 
@@ -656,13 +593,13 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
             AttributeError: If attribute does not match a column or the time column or a metadata key.
 
         Examples:
-            >>> ts.timestamp  # Access the time column (assumed time_name set to "timestamp")
+            ts.timestamp  # Access the time column (assumed time_name set to "timestamp")
             <Polars Series: "timestamp">
 
-            >>> ts.temperature  # Access a column named "temperature"
+            ts.temperature  # Access a column named "temperature"
             <TimeSeries object, filtered to only contain the "temperature" data column>
 
-            >>> ts.site_id
+            ts.site_id
             <Metadata value for the given key>
         """
         try:
@@ -704,13 +641,13 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
             - If `key` is the time column name: The PrimaryTimeColumn object.
 
         Examples:
-            >>> ts["timestamp"]  # Access the time column (assumed time_name set to "timestamp")
+            ts["timestamp"]  # Access the time column (assumed time_name set to "timestamp")
             <Polars Series: "timestamp">
 
-            >>> ts["temperature"]  # Access a single column
+            ts["temperature"]  # Access a single column
             <TimeSeries object, filtered to only contain the "temperature" data column>
 
-            >>> ts[["temperature", "pressure"]]  # Access multiple columns
+            ts[["temperature", "pressure"]]  # Access multiple columns
             <TimeSeries object, filtered to only contain the "temperature" and "pressure" data columns>
         """
         if key == self.time_name:

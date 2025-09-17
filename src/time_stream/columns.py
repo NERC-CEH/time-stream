@@ -1,11 +1,10 @@
 import copy
-from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any, Sequence, Type
+from abc import ABC
+from typing import TYPE_CHECKING, Any, Self, Sequence, Type
 
 import polars as pl
 
 from time_stream.exceptions import ColumnNotFoundError, ColumnTypeError, MetadataError
-from time_stream.relationships import DeletionPolicy, Relationship, RelationshipType
 
 if TYPE_CHECKING:
     # Import is for type hinting only.  Make sure there is no runtime import, to avoid recursion.
@@ -84,18 +83,11 @@ class TimeSeriesColumn(ABC):  # noqa: PLW1641 ignore hash warning
         else:
             self._metadata = {k: v for k, v in self.metadata().items() if k not in key}
 
-    def _set_as(
-        self,
-        column_type: Type["TimeSeriesColumn"],
-        related_columns: "str | TimeSeriesColumn | list[TimeSeriesColumn | str] | None" = None,
-        *args,
-        **kwargs,
-    ) -> "TimeSeriesColumn":
+    def _set_as(self, column_type: Type[Self], *args, **kwargs) -> Self:
         """Converts the column to a specified column type while preserving metadata.
 
         Args:
             column_type: Type of TimeSeriesColumn to convert to.
-            related_columns: Optional column(s) to relate to this converted column
             args: Arguments passed to column_type init.
             kwargs: Keyword arguments passed to column_type init.
 
@@ -108,52 +100,34 @@ class TimeSeriesColumn(ABC):  # noqa: PLW1641 ignore hash warning
         column = column_type(*args, **kwargs)
         self._ts._columns[self.name] = column
 
-        # Remove existing relationships from related columns
-        for relationship in self.get_relationships():
-            self.remove_relationship(relationship.other_column)
-
-        # Add new relationships as specified by the user
-        if related_columns:
-            column.add_relationship(related_columns)
-
         return column
 
-    def set_as_supplementary(
-        self, related_columns: "str | TimeSeriesColumn | list[TimeSeriesColumn | str] | None" = None
-    ) -> "TimeSeriesColumn":
+    def set_as_supplementary(self) -> Self:
         """Converts the column to a SupplementaryColumn while preserving metadata.
 
         If the column is already a SupplementaryColumn, no changes are made.
 
-        Args:
-            related_columns: Column(s) to be given a relationship with the new supplementary column.
-
         Returns:
             The supplementary column object.
         """
-        column = self._set_as(SupplementaryColumn, related_columns, self.name, self._ts, self.metadata())
+        column = self._set_as(SupplementaryColumn, self.name, self._ts, self.metadata())
         return column
 
-    def set_as_flag(
-        self,
-        flag_system: str,
-        related_columns: "str | TimeSeriesColumn | list[TimeSeriesColumn | str] | None" = None,
-    ) -> "TimeSeriesColumn":
+    def set_as_flag(self, flag_system: str) -> Self:
         """Converts the column to a FlagColumn while preserving metadata.
 
         If the column is already a FlagColumn, no changes are made.
 
         Args:
             flag_system: The name of the flag system used for flagging.
-            related_columns: Column(s) to be given a relationship with the new flag column.
 
         Returns:
             The flag column object.
         """
-        column = self._set_as(FlagColumn, related_columns, self.name, self._ts, flag_system, self.metadata())
+        column = self._set_as(FlagColumn, self.name, self._ts, flag_system, self.metadata())
         return column
 
-    def unset(self) -> "TimeSeriesColumn":
+    def unset(self) -> Self:
         """Converts the column back into a normal DataColumn while preserving metadata.
 
         If the column is already a DataColumn, no changes are made.
@@ -161,7 +135,7 @@ class TimeSeriesColumn(ABC):  # noqa: PLW1641 ignore hash warning
         Returns:
             The data column object.
         """
-        column = self._set_as(DataColumn, None, self.name, self._ts, self.metadata())
+        column = self._set_as(DataColumn, self.name, self._ts, self.metadata())
         return column
 
     def remove(self) -> None:
@@ -229,36 +203,6 @@ class TimeSeriesColumn(ABC):  # noqa: PLW1641 ignore hash warning
 
         return self._ts.select([self.name])
 
-    @abstractmethod
-    def add_relationship(self, other: "str | TimeSeriesColumn | list[TimeSeriesColumn | str]") -> None:
-        """Defines relationships between columns.
-
-        Args:
-            other: Column(s) to establish a relationship with.
-        """
-        pass
-
-    def remove_relationship(self, other: "TimeSeriesColumn | str") -> None:
-        """Remove relationships between columns.
-
-        Args:
-            other: Column(s) to remove relationship from.
-        """
-        if isinstance(other, str):
-            other = self._ts.columns[other]
-
-        for relationship in self.get_relationships():
-            if relationship.other_column == other:
-                self._ts._relationship_manager._remove(relationship)
-
-    def get_relationships(self) -> list["Relationship"]:
-        """Retrieves all relationships associated with this column.
-
-        Returns:
-            The list of Relationship objects for this column.
-        """
-        return self._ts._relationship_manager._get_relationships(self)
-
     def __str__(self) -> str:
         """Return the string representation of the Column."""
         return str(self.data)
@@ -283,20 +227,6 @@ class TimeSeriesColumn(ABC):  # noqa: PLW1641 ignore hash warning
             return self.metadata(name, strict=True)[name]
         except KeyError:
             raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
-
-    def __dir__(self) -> list[str]:
-        """Return a list of attributes associated with the TimeSeries class.
-
-        This method extends the default attributes of the TimeSeries class by including the metadata keys of this
-        Column. This allows for dynamic attribute access using dot notation or introspection tools like `dir()`.
-
-        Returns:
-            A sorted list of attributes, combining the Default attributes of the class along with the names of the
-            Column's metadata keys.
-        """
-        default_attrs = list(super().__dir__())
-        custom_attrs = default_attrs + list(self._metadata.keys())
-        return sorted(set(custom_attrs))
 
     def __eq__(self, other: object) -> bool:
         """Check equality between two TimeSeriesColumn instances.
@@ -329,24 +259,13 @@ class TimeSeriesColumn(ABC):  # noqa: PLW1641 ignore hash warning
 
         return True
 
-    def __ne__(self, other: object) -> bool:
-        """Checks if two TimeSeriesColumn instances are not equal.
-
-        Args:
-            other: The object to compare.
-
-        Returns:
-            bool: True if the TimeSeriesColumn instances are not equal, False otherwise.
-        """
-        return not self.__eq__(other)
-
 
 class PrimaryTimeColumn(TimeSeriesColumn):
     """Represents the primary datetime column that controls the Time Series.
     This column is immutable and cannot be converted to other column types.
     """
 
-    def set_as_supplementary(self, *args, **kwargs) -> "TimeSeriesColumn":
+    def set_as_supplementary(self, *args, **kwargs) -> Self:
         """Raises an error because the primary time column cannot be converted to a supplementary column.
 
         Raises:
@@ -354,7 +273,7 @@ class PrimaryTimeColumn(TimeSeriesColumn):
         """
         raise NotImplementedError("Primary time column cannot be converted to a supplementary column.")
 
-    def set_as_flag(self, *args, **kwargs) -> "TimeSeriesColumn":
+    def set_as_flag(self, *args, **kwargs) -> Self:
         """Raises an error because the primary time column cannot be converted to a flag column.
 
         Raises:
@@ -362,29 +281,13 @@ class PrimaryTimeColumn(TimeSeriesColumn):
         """
         raise NotImplementedError("Primary time column cannot be converted to a flag column.")
 
-    def unset(self, *args, **kwargs) -> "TimeSeriesColumn":
+    def unset(self, *args, **kwargs) -> Self:
         """Raises an error because the primary time column cannot be unset.
 
         Raises:
             NotImplementedError: Always raised because time columns are immutable.
         """
         raise NotImplementedError("Primary time column cannot be unset.")
-
-    def add_relationship(self, *args, **kwargs) -> None:
-        """Raises an error because the primary time column cannot set related columns.
-
-        Raises:
-            NotImplementedError: Always raised because time columns are immutable.
-        """
-        raise NotImplementedError("Primary time column cannot set related columns.")
-
-    def remove_relationship(self, *args, **kwargs) -> None:
-        """Raises an error because the primary time column cannot have other column relationships.
-
-        Raises:
-            NotImplementedError: Always raised because time columns are immutable.
-        """
-        raise NotImplementedError("Primary time column cannot unset related columns.")
 
     @property
     def data(self) -> pl.Series:
@@ -399,82 +302,9 @@ class PrimaryTimeColumn(TimeSeriesColumn):
 class DataColumn(TimeSeriesColumn):
     """Represents primary data columns."""
 
-    def add_relationship(self, other: "str | TimeSeriesColumn | list[TimeSeriesColumn | str]") -> None:
-        """Adds a relationship between this data column and supplementary or flag column(s).
-
-        Args:
-            other: Supplementary or flag column(s) to associate.
-
-        Raises:
-            ColumnTypeError: If any other column is not supplementary or flag.
-        """
-        if not isinstance(other, list):
-            other = [other]
-
-        other = [self._ts.columns[col] if isinstance(col, str) else col for col in other]
-
-        for col in other:
-            if type(col) is SupplementaryColumn:
-                relationship = Relationship(self, col, RelationshipType.MANY_TO_MANY, DeletionPolicy.UNLINK)
-            elif type(col) is FlagColumn:
-                relationship = Relationship(self, col, RelationshipType.ONE_TO_MANY, DeletionPolicy.CASCADE)
-            else:
-                raise ColumnTypeError(f"Related column must be supplementary or flag: {col.name}:{type(col)}")
-
-            self._ts._relationship_manager._add(relationship)
-
-    def get_flag_system_column(self, flag_system: str) -> "TimeSeriesColumn | None":
-        """Retrieves the flag column linked to this data column that corresponds to the specified flag system.
-
-        Args:
-            flag_system: The name of the flag system.
-
-        Raises:
-            ColumnNotFoundError: If more than one flag column is found matching the given flag system.
-
-        Returns:
-            The matching flag column if exactly one match is found, or None if no matching column is found.
-        """
-        relationships = self.get_relationships()
-        flag_system = self._ts._flag_manager.flag_systems.get(flag_system, None)
-        matches = []
-        for relationship in relationships:
-            if type(relationship.other_column) is FlagColumn and relationship.other_column.flag_system == flag_system:
-                matches.append(relationship.other_column)
-
-        if len(matches) > 1:
-            # Should only be one (or no) matches.  Something gone wrong further upstream if this has happened!
-            raise ColumnNotFoundError(f"More than one column matches found for flag system {flag_system}: {matches}")
-        elif len(matches) == 1:
-            return matches[0]
-        else:
-            return None
-
 
 class SupplementaryColumn(TimeSeriesColumn):
     """Represents supplementary columns (e.g., metadata, extra information)."""
-
-    def add_relationship(self, other: "str | TimeSeriesColumn | list[TimeSeriesColumn | str]") -> None:
-        """Adds a relationship between this supplementary column and data column(s).
-
-        Args:
-            other: Data column(s) to associate.
-
-        Raises:
-            ColumnTypeError: If any other column is not data.
-        """
-        if not isinstance(other, list):
-            other = [other]
-
-        other = [self._ts.columns[col] if isinstance(col, str) else col for col in other]
-
-        for col in other:
-            if type(col) is DataColumn:
-                relationship = Relationship(col, self, RelationshipType.MANY_TO_MANY, DeletionPolicy.UNLINK)
-            else:
-                raise ColumnTypeError(f"Related column must be data: {col.name}:{type(col)}")
-
-            self._ts._relationship_manager._add(relationship)
 
 
 class FlagColumn(SupplementaryColumn):
@@ -496,28 +326,6 @@ class FlagColumn(SupplementaryColumn):
         """
         super().__init__(name, ts, metadata)
         self.flag_system = self._ts.flag_systems[flag_system]
-
-    def add_relationship(self, other: "str | TimeSeriesColumn | list[TimeSeriesColumn | str]") -> None:
-        """Adds a relationship between this flag column and data column(s).
-
-        Args:
-            other: Data column(s) to associate.
-
-        Raises:
-            ColumnTypeError: If any other column is not data.
-        """
-        if not isinstance(other, list):
-            other = [other]
-
-        other = [self._ts.columns[col] if isinstance(col, str) else col for col in other]
-
-        for col in other:
-            if type(col) is DataColumn:
-                relationship = Relationship(col, self, RelationshipType.ONE_TO_MANY, DeletionPolicy.CASCADE)
-            else:
-                raise ColumnTypeError(f"Related column must be data: {col.name}:{type(col)}")
-
-            self._ts._relationship_manager._add(relationship)
 
     def add_flag(self, flag: int | str, expr: pl.Expr = pl.lit(True)) -> None:
         """Adds a flag value to this FlagColumn using a bitwise OR operation.
