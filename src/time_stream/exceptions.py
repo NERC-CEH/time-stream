@@ -76,14 +76,6 @@ class AggregationError(TimeStreamError):
     """Base class for aggregation-related errors"""
 
 
-class UnknownAggregationError(AggregationError):
-    """Raised when an unknown aggregation is requested."""
-
-
-class AggregationTypeError(AggregationError):
-    """Raised when an invalid aggregation type is provided."""
-
-
 class AggregationPeriodError(AggregationError):
     """Raised when an aggregation period is invalid."""
 
@@ -116,28 +108,12 @@ class QcError(TimeStreamError):
     """Base class for qc-related errors"""
 
 
-class UnknownQcError(QcError):
-    """Raised when an unknown QC method is requested."""
-
-
-class QcTypeError(QcError):
-    """Raised when an invalid QC method type is provided."""
-
-
 class QcUnknownOperatorError(QcError):
     """Raised when an invalid operator is passed to a QC check."""
 
 
 class InfillError(TimeStreamError):
     """Base class for infill-related errors"""
-
-
-class UnknownInfillError(InfillError):
-    """Raised when an unknown infill method is requested."""
-
-
-class InfillTypeError(InfillError):
-    """Raised when an invalid infill method type is provided."""
 
 
 class InfillInsufficientValuesError(InfillError):
