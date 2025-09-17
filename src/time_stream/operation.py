@@ -1,19 +1,18 @@
 """
 Operation Base Class
 
-This module defines the `Operation` abstract base class, which provides a  pattern for any class system that provides
-an operation on the time series data. It enables flexible instantiation of operations from strings, types, or existing
-instances, and enforces implementation of an `apply()` method in concrete subclasses.
+This module defines the `Operation` abstract base class, which provides a pattern for any class system that provides
+an "operation" on the time series data. It enables flexible instantiation of operations from strings, types, or
+existing instances with a class registry system.
 
 Key features:
 - Centralised registry with per-subclass isolation.
 - Class decorator (`@Operation.register`) to add new operations.
 - Factory method (`Operation.get`) for resolving operations by name, class, or instance.
-- Abstract `apply()` method that all subclasses must implement.
 """
 
-from abc import ABC, abstractmethod
-from typing import Any, ClassVar, Self
+from abc import ABC
+from typing import ClassVar, Self
 
 from time_stream.exceptions import DuplicateRegistryKeyError, RegistryKeyTypeError, UnknownRegistryKeyError
 
@@ -112,7 +111,3 @@ class Operation(ABC):
             raise RegistryKeyTypeError(
                 f"Check object must be a string, {cls.__name__} class, or instance. Got {type(spec).__name__}."
             )
-
-    @abstractmethod
-    def apply(self, *args, **kwargs) -> Any:
-        """A method to apply the operation that subclasses must implement"""
