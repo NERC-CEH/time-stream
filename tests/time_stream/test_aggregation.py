@@ -16,14 +16,13 @@ from time_stream.aggregation import (
     MeanSum,
     Min,
     Sum,
-    available_aggregations,
 )
 from time_stream.base import TimeSeries
 from time_stream.enums import TimeAnchor
 from time_stream.exceptions import (
-    AggregationTypeError,
     MissingCriteriaError,
-    UnknownAggregationError,
+    RegistryKeyTypeError,
+    UnknownRegistryKeyError,
 )
 from time_stream.period import Period
 
@@ -216,10 +215,11 @@ class TestAggregationFunction(unittest.TestCase):
     )
     def test_get_with_invalid_string(self, get_input: str) -> None:
         """Test AggregationFunction.get() with invalid string."""
-        with self.assertRaises(UnknownAggregationError) as err:
+        with self.assertRaises(UnknownRegistryKeyError) as err:
             AggregationFunction.get(get_input)
         self.assertEqual(
-            f"Unknown aggregation '{get_input}'. Available aggregations: {available_aggregations()}.",
+            f"Unknown name '{get_input}' for class type 'AggregationFunction'. "
+            f"Available: {AggregationFunction.available()}.",
             str(err.exception),
         )
 
@@ -229,17 +229,17 @@ class TestAggregationFunction(unittest.TestCase):
         class InvalidClass:
             pass
 
-        with self.assertRaises(AggregationTypeError) as err:
+        with self.assertRaises(RegistryKeyTypeError) as err:
             AggregationFunction.get(InvalidClass)  # noqa - expecting type warning
-        self.assertEqual("Aggregation class 'InvalidClass' must inherit from AggregationFunction.", str(err.exception))
+        self.assertEqual("Class 'InvalidClass' must inherit from 'AggregationFunction'.", str(err.exception))
 
     @parameterized.expand([(123,), ([Mean, Max],), ({Min},)])
     def test_get_with_invalid_type(self, get_input: Any) -> None:
         """Test AggregationFunction.get() with invalid type."""
-        with self.assertRaises(AggregationTypeError) as err:
+        with self.assertRaises(RegistryKeyTypeError) as err:
             AggregationFunction.get(get_input)
         self.assertEqual(
-            f"Aggregation must be a string, AggregationFunction class, or instance. Got {type(get_input).__name__}.",
+            f"Check object must be a string, AggregationFunction class, or instance. Got {type(get_input).__name__}.",
             str(err.exception),
         )
 

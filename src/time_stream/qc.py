@@ -1,44 +1,26 @@
+"""
+Time Series Quality Control (QC) Module
+
+This module provides a framework for applying quality control checks to time data using Polars. QC checks are
+implemented as subclasses of ``QCCheck`` and can be registered and instantiated by name, class, or instance.
+
+It supports various QC checks including:
+- ComparisonCheck: Compare values against thresholds or sets.
+- RangeCheck: Verify values fall within or outside a given range.
+- TimeRangeCheck: Apply range checks directly to the time column.
+- SpikeCheck: Detect sudden spikes based on differences with neighbors.
+"""
+
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import date, datetime, time
-from typing import ClassVar, Type
 
 import polars as pl
 
 from time_stream.enums import ClosedInterval
-from time_stream.exceptions import (
-    DuplicateRegistryKeyError,
-    QcError,
-    QcTypeError,
-    QcUnknownOperatorError,
-    UnknownQcError,
-)
+from time_stream.exceptions import QcError, QcUnknownOperatorError
+from time_stream.operation import Operation
 from time_stream.utils import check_columns_in_dataframe, get_date_filter
-
-# Registry for built-in QC checks
-_QC_REGISTRY = {}
-
-
-def register_qc_check(cls: Type["QCCheck"]) -> Type["QCCheck"]:
-    """Decorator to register quality control check classes using their name attribute.
-
-    Args:
-        cls: The quality control class to register.
-
-    Returns:
-        The decorated class.
-    """
-    key = cls.name.lower()
-    if key in _QC_REGISTRY:
-        raise DuplicateRegistryKeyError(f"QC check key: '{key}' already registered")
-
-    _QC_REGISTRY[key] = cls
-    return cls
-
-
-def available_qc_checks() -> list[str]:
-    """Return a sorted list of available qc check names."""
-    return sorted(_QC_REGISTRY.keys())
 
 
 @dataclass(frozen=True)
@@ -49,65 +31,13 @@ class QcCtx:
     time_name: str
 
 
-class QCCheck(ABC):
+class QCCheck(Operation, ABC):
     """Base class for quality control checks."""
-
-    name: ClassVar[str]
 
     @abstractmethod
     def expr(self, _ctx: QcCtx, _column: str) -> pl.Expr:
         """Return the boolean Polars expression for this QC check (result of True == Value failed the QC check)"""
         pass
-
-    @classmethod
-    def get(cls, check: "str | QCCheck | Type[QCCheck]", **kwargs) -> "QCCheck":
-        """Factory method to get a QC check instance from string names or class type.
-
-        Args:
-            check: The QC check specification, which can be:
-                - A string name: e.g. "threshold", "range", "spike"
-                - A class type: ThresholdCheck, RangeCheck, etc.
-                - An instance: ThresholdCheck(), or any QCCheck instance
-            **kwargs: Parameters specific to the check type, used to initialise the class object.
-                      Ignored if check is already an instance of the class.
-
-        Returns:
-            An instance of the appropriate QCCheck subclass.
-
-        Raises:
-            UnknownQcError: If a string name is not registered as a QC check.
-            QcTypeError: If the input type is not supported or a class doesn't inherit from QCCheck.
-
-        Examples::
-            # From string
-            qc = QCCheck.get("threshold")
-
-            # From class
-            qc = QCCheck.get(ThresholdCheck)
-
-            # From instance
-            qc = QCCheck.get(ThresholdCheck(arg1, arg2))
-        """
-        # If it's already an instance, return it
-        if isinstance(check, QCCheck):
-            return check
-
-        # If it's a string, look it up in the registry
-        if isinstance(check, str):
-            try:
-                return _QC_REGISTRY[check.lower()](**kwargs)
-            except KeyError:
-                raise UnknownQcError(f"Unknown QC check '{check}'. Available methods: {available_qc_checks()}")
-
-        # If it's a class, check the subclass type and return
-        elif isinstance(check, type):
-            if issubclass(check, QCCheck):
-                return check(**kwargs)  # type: ignore[misc]
-            else:
-                raise QcTypeError(f"QC check class '{check.__name__}' must inherit from QCCheck")
-
-        else:
-            raise QcTypeError(f"QC check must be a string or a QCCheck class. Got '{type(check).__name__}'")
 
     def apply(
         self,
@@ -177,7 +107,7 @@ class QcCheckPipeline:
         check_columns_in_dataframe(self.ctx.df, [self.column, self.ctx.time_name])
 
 
-@register_qc_check
+@QCCheck.register
 class ComparisonCheck(QCCheck):
     """Compares values against a given value using a comparison operator."""
 
@@ -217,7 +147,7 @@ class ComparisonCheck(QCCheck):
         return operator_expr
 
 
-@register_qc_check
+@QCCheck.register
 class RangeCheck(QCCheck):
     """Check that values fall within an acceptable range."""
 
@@ -286,7 +216,7 @@ class RangeCheck(QCCheck):
         return in_range if self.within else ~in_range
 
 
-@register_qc_check
+@QCCheck.register
 class TimeRangeCheck(RangeCheck):
     """Flag rows where the primary time column of the time series fall within an acceptable range.
 
@@ -307,7 +237,7 @@ class TimeRangeCheck(RangeCheck):
         return super().expr(ctx, ctx.time_name)
 
 
-@register_qc_check
+@QCCheck.register
 class SpikeCheck(QCCheck):
     """Detect spikes by assessing differences with neighboring values."""
 

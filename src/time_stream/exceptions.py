@@ -176,9 +176,21 @@ class FlagSystemNotFoundError(FlagSystemError):
     """Raised when a flag system can't be found."""
 
 
-class DuplicateRegistryKeyError(TimeStreamError):
+class UnhandledEnumError(TimeStreamError):
+    """Base class for unhandled enumeration related errors."""
+
+
+class RegistryError(TimeStreamError):
+    """Base class for registry-related errors."""
+
+
+class DuplicateRegistryKeyError(RegistryError):
     """Raised when a registry key already exists."""
 
 
-class UnhandledEnumError(TimeStreamError):
-    """Base class for unhandled enumeration related errors."""
+class UnknownRegistryKeyError(RegistryError):
+    """Raised when a registry key doesn't exist in the registry."""
+
+
+class RegistryKeyTypeError(RegistryError):
+    """Raised when a registry key is an incorrect type."""

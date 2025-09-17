@@ -477,15 +477,15 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
 
         if qc_result_col_name in self.df.columns:
             # Auto-suffix the column name to avoid accidental overwrite
-            i, base = 2, qc_result_col_name
-            while f"{base}__{i}" in self.df.columns:
-                i += 1
-            qc_result_col_name = f"{base}__{i}"
+            col_suffix = 1
+            while f"{qc_result_col_name}__{col_suffix}" in self.df.columns:
+                col_suffix += 1
+            qc_result_col_name = f"{qc_result_col_name}__{col_suffix}"
 
         # Create a copy of the current TimeSeries, and update the dataframe with the QC result
-        ts = self.select([*self.data_columns.keys(), *self.supplementary_columns.keys(), *self.flag_columns.keys()])
-        ts.df = self.df.with_columns(pl.Series(qc_result_col_name, qc_result))
-        return ts
+        new_ts = self.select([*self.data_columns.keys(), *self.supplementary_columns.keys(), *self.flag_columns.keys()])
+        new_ts.df = new_ts.df.with_columns(pl.Series(qc_result_col_name, qc_result))
+        return new_ts
 
     def infill(
         self,
