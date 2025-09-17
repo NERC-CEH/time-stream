@@ -46,11 +46,11 @@ class Operation(ABC):
         return sorted(cls._REGISTRY.keys())
 
     @classmethod
-    def register(cls, impl: type[Self]) -> type[Self]:
+    def register(cls, register_cls: type[Self]) -> type[Self]:
         """A method used as a decorator for subclasses to add to the register by its `name` attribute.
 
         Args:
-            impl: The class to register.
+            register_cls: The class to register.
 
         Returns:
             The decorated class.
@@ -58,18 +58,14 @@ class Operation(ABC):
         Raises:
             DuplicateRegistryKeyError: If the subclass `name` already exists in the registry.
         """
-        key = cls._normalize_key(impl.name)
+        key = cls._normalize_key(register_cls.name)
         if key in cls._REGISTRY:
             raise DuplicateRegistryKeyError(f"Key '{key}' already registered for {cls.__name__}")
-        cls._REGISTRY[key] = impl
-        return impl
+        cls._REGISTRY[key] = register_cls
+        return register_cls
 
     @classmethod
-    def get(
-        cls,
-        spec: str | type[Self] | Self,
-        **kwargs,
-    ) -> Self:
+    def get(cls, spec: str | type[Self] | Self, **kwargs) -> Self:
         """Resolve `spec` to an instance of `Self`:
 
         Args:

@@ -1,6 +1,6 @@
 from datetime import datetime
 from enum import Enum
-from typing import Any, Iterable, Iterator, Sequence, Type
+from typing import Any, Iterable, Iterator, Self, Sequence, Type
 
 import polars as pl
 
@@ -283,7 +283,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         self._df = pad_time(self.df, self.time_name, self.periodicity, self.time_anchor)
         self.sort_time()
 
-    def select(self, col_names: list[str]) -> "TimeSeries":
+    def select(self, col_names: list[str]) -> Self:
         """Filter TimeSeries instance to include only the specified columns.
 
         Args:
@@ -372,7 +372,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         columns: str | list[str],
         missing_criteria: tuple[str, float | int] | None = None,
         aggregation_time_anchor: TimeAnchor | None = None,
-    ) -> "TimeSeries":
+    ) -> Self:
         """Apply an aggregation function to a column in this TimeSeries, check the aggregation satisfies user
         requirements and return a new derived TimeSeries containing the aggregated data.
 
@@ -478,7 +478,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         observation_interval: tuple[datetime, datetime | None] | None = None,
         max_gap_size: int | None = None,
         **kwargs,
-    ) -> "TimeSeries":
+    ) -> Self:
         """Apply an infilling method to a column in the TimeSeries to fill in missing data.
 
         Args:
