@@ -76,7 +76,6 @@ src = ["src", "tests"]
 include = ["src/**.py", "tests/**.py"]
 line-length = 120
 exclude = [
-    "src/time_stream/examples",
     "src/time_stream/docs"
 ]
 
@@ -100,3 +99,7 @@ select = [
 
 [tool.ruff.lint.flake8-type-checking]
 strict = true
+
+[tool.ruff.lint.per-file-ignores]
+# Ignore "import not at top of file" for examples code snippets
+"src/time_stream/examples/*.py" = ["PLC0415"]

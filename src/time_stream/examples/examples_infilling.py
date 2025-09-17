@@ -5,36 +5,37 @@ import numpy as np
 import polars as pl
 
 from time_stream import Period, TimeSeries
-
 from time_stream.examples.utils import suppress_output
 
 
-def create_simple_time_series_with_gaps():
+def create_simple_time_series_with_gaps() -> TimeSeries:
     # [start_block_1]
     np.random.seed(42)
 
     # Set up a daily time series with varying gaps
     dates = [
-        datetime(2024, 1, 1), datetime(2024, 1, 2), # One-day gap,
-        datetime(2024, 1, 4), datetime(2024, 1, 5), datetime(2024, 1, 6),
-        datetime(2024, 1, 7), # Two-day gap,
-        datetime(2024, 1, 10), datetime(2024, 1, 11), datetime(2024, 1, 12),
+        datetime(2024, 1, 1),
+        datetime(2024, 1, 2),  # One-day gap,
+        datetime(2024, 1, 4),
+        datetime(2024, 1, 5),
+        datetime(2024, 1, 6),
+        datetime(2024, 1, 7),  # Two-day gap,
+        datetime(2024, 1, 10),
+        datetime(2024, 1, 11),
+        datetime(2024, 1, 12),
         # Three-day gap,
-        datetime(2024, 1, 16)
+        datetime(2024, 1, 16),
     ]
 
     # Create example random column data
-    df = pl.DataFrame({
-        "timestamp": dates,
-        "temperature": np.arange(len(dates)) * 0.5 + np.random.normal(0, 2, len(dates)),
-    })
-
-    ts = TimeSeries(
-        df=df,
-        time_name="timestamp",
-        resolution=Period.of_days(1),
-        periodicity=Period.of_days(1)
+    df = pl.DataFrame(
+        {
+            "timestamp": dates,
+            "temperature": np.arange(len(dates)) * 0.5 + np.random.normal(0, 2, len(dates)),
+        }
     )
+
+    ts = TimeSeries(df=df, time_name="timestamp", resolution=Period.of_days(1), periodicity=Period.of_days(1))
 
     # Pad missing rows in the time series with nulls
     ts.pad()
@@ -45,7 +46,7 @@ def create_simple_time_series_with_gaps():
     return ts
 
 
-def all_infills():
+def all_infills() -> pl.DataFrame:
     with suppress_output():
         ts = create_simple_time_series_with_gaps()
 
@@ -63,13 +64,13 @@ def all_infills():
     return result
 
 
-def plot_all_infills():
+def plot_all_infills() -> None:
     with suppress_output():
         df = all_infills()
 
     plt.figure(figsize=(10, 6))
 
-    datetime_col = 'timestamp'
+    datetime_col = "timestamp"
     x_values = df[datetime_col].to_list()
     for col in [col for col in df.columns if col != datetime_col]:
         y_values = df[col].to_list()
@@ -79,16 +80,16 @@ def plot_all_infills():
             plt.plot(x_values, y_values, label=col, linewidth=2)
             plt.scatter(x_values, y_values, s=30)
 
-    plt.xlabel('Date')
-    plt.ylabel('Value')
-    plt.title('Different infilling methods')
+    plt.xlabel("Date")
+    plt.ylabel("Value")
+    plt.title("Different infilling methods")
     plt.legend()
     plt.grid(True, alpha=0.3)
     plt.xticks(rotation=45)
     plt.tight_layout()
 
 
-def infill_with_max_gap():
+def infill_with_max_gap() -> None:
     with suppress_output():
         ts = create_simple_time_series_with_gaps()
 
@@ -101,7 +102,7 @@ def infill_with_max_gap():
         print(ts_infilled)
 
 
-def observation_interval_example():
+def observation_interval_example() -> None:
     with suppress_output():
         ts = create_simple_time_series_with_gaps()
 
@@ -117,7 +118,7 @@ def observation_interval_example():
         print(ts_infilled)
 
 
-def start_end_gaps_example():
+def start_end_gaps_example() -> None:
     with suppress_output():
         ts = create_simple_time_series_with_gaps()
 
