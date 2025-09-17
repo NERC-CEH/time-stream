@@ -1,53 +1,29 @@
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Type
+from typing import Any
 
 import numpy as np
 import polars as pl
 from scipy.interpolate import Akima1DInterpolator, PchipInterpolator, make_interp_spline
 
-from time_stream import TimeSeries
-from time_stream.exceptions import (
-    ColumnNotFoundError,
-    InfillInsufficientValuesError,
-    InfillTypeError,
-    UnknownInfillError,
-)
-from time_stream.utils import gap_size_count, get_date_filter, pad_time
-
-# Registry for built-in infill methods
-_INFILL_REGISTRY = {}
+from time_stream import Period
+from time_stream.exceptions import InfillError, InfillInsufficientValuesError
+from time_stream.operation import Operation
+from time_stream.utils import check_columns_in_dataframe, gap_size_count, get_date_filter, pad_time
 
 
-def register_infill_method(cls: Type["InfillMethod"]) -> Type["InfillMethod"]:
-    """Decorator to register infill method classes using their name attribute.
+@dataclass(frozen=True)
+class InfillCtx:
+    """Immutable context passed to infill methods."""
 
-    Args:
-        cls: The infill class to register.
-
-    Returns:
-        The decorated class.
-    """
-    _INFILL_REGISTRY[cls.name] = cls
-    return cls
+    df: pl.DataFrame
+    time_name: str
+    periodicity: Period
 
 
-class InfillMethod(ABC):
+class InfillMethod(Operation, ABC):
     """Base class for infill methods."""
-
-    _ts = None
-
-    @property
-    def ts(self) -> TimeSeries:
-        if self._ts is None:
-            raise AttributeError("TimeSeries has not been initialised for this infill method.")
-        return self._ts
-
-    @property
-    @abstractmethod
-    def name(self) -> str:
-        """Return the name of the infill method."""
-        pass
 
     def _infilled_column_name(self, infill_column: str) -> str:
         """Return the name of the infilled column."""
@@ -66,70 +42,97 @@ class InfillMethod(ABC):
         """
         pass
 
-    @classmethod
-    def get(cls, method: "str | InfillMethod | Type[InfillMethod]", **kwargs) -> "InfillMethod":
-        """Factory method to get an infill method class instance from string names or class type.
-
-        Args:
-            method: The infill method specification, which can be:
-                - A string name: e.g. "linear_interpolation"
-                - A class type: LinearInterpolation
-                - An instance: LinearInterpolation(), or any InfillMethod instance
-            **kwargs: Parameters specific to the infill method, used to initialise the class object.
-                      Ignored if method is already an instance of the class.
-
-        Returns:
-            An instance of the appropriate InfillMethod subclass.
-
-        Raises:
-            KeyError: If a string name is not registered as an infill method.
-            TypeError: If the input type is not supported or a class doesn't inherit from InfillMethod.
-        """
-        # If it's already an instance, return it
-        if isinstance(method, InfillMethod):
-            return method
-
-        # If it's a string, look it up in the registry
-        if isinstance(method, str):
-            try:
-                return _INFILL_REGISTRY[method](**kwargs)
-            except KeyError:
-                raise UnknownInfillError(
-                    f"Unknown infill method '{method}'. Available methods: {list(_INFILL_REGISTRY.keys())}"
-                )
-
-        # If it's a class, check the subclass type and return
-        elif isinstance(method, type):
-            if issubclass(method, InfillMethod):
-                return method(**kwargs)  # type: ignore[misc]
-            else:
-                raise InfillTypeError(f"Infill method class '{method.__name__}' must inherit from InfillMethod.")
-
-        else:
-            raise InfillTypeError(
-                f"Infill method must be a string or an InfillMethod class. Got '{type(method).__name__}'"
-            )
-
-    @classmethod
-    def infill_mask(
-        cls,
+    def apply(
+        self,
+        df: pl.DataFrame,
         time_name: str,
+        periodicity: Period,
         infill_column: str,
         observation_interval: datetime | tuple[datetime, datetime | None] | None = None,
         max_gap_size: int | None = None,
-    ) -> pl.Expr:
+    ) -> pl.DataFrame:
+        """Apply the infill method to the time series data.
+
+        Args:
+            df: The Polars DataFrame containing the time series data to infill
+            time_name: Name of the time column in the dataframe
+            infill_column: The column to infill data within.
+            periodicity: Periodicity of the time series
+            observation_interval: Optional time interval to limit the infilling to.
+            max_gap_size: The maximum size of consecutive null gaps that should be filled. Any gap larger than this
+                          will not be infilled and will remain as null.
+        Returns:
+            The infilled time series
+        """
+        ctx = InfillCtx(df, time_name, periodicity)
+        pipeline = InfillMethodPipeline(self, ctx, infill_column, observation_interval, max_gap_size)
+        return pipeline.execute()
+
+
+class InfillMethodPipeline:
+    """Encapsulates the logic for the infill pipeline steps."""
+
+    def __init__(
+        self,
+        infill_method: InfillMethod,
+        ctx: InfillCtx,
+        column: str,
+        observation_interval: datetime | tuple[datetime, datetime | None] | None = None,
+        max_gap_size: int | None = None,
+    ):
+        self.infill_method = infill_method
+        self.ctx = ctx
+        self.column = column
+        self.observation_interval = observation_interval
+        self.max_gap_size = max_gap_size
+
+    def execute(self) -> pl.DataFrame:
+        """Execute the infill pipeline"""
+        self._validate()
+
+        # We need to make sure the data is padded so that missing time steps are filled with nulls
+        df = pad_time(self.ctx.df, self.ctx.time_name, self.ctx.periodicity)
+
+        # Calculate sizes of each gap in the time series
+        df = gap_size_count(df, self.column)
+
+        # Create a mask determining which values get infilled
+        infill_mask = self._infill_mask()
+
+        # Check if there is actually anything to infill
+        if df.filter(infill_mask).is_empty():
+            # If not, return the original data
+            return self.ctx.df
+
+        # Apply the specific infill logic from the child class
+        df_infilled = self.infill_method._fill(df, self.column)
+        infilled_column = self.infill_method._infilled_column_name(self.column)
+
+        # Limit the infilled data to where the infill mask is True
+        df_infilled = df_infilled.with_columns(
+            pl.when(infill_mask).then(pl.col(infilled_column)).otherwise(pl.col(self.column)).alias(infilled_column)
+        )
+
+        # Do some tidying up of columns, leaving only the original column names
+        df_infilled = df_infilled.with_columns(
+            pl.col(infilled_column).alias(self.column)  # Rename the infilled column back to the original name
+        ).drop([infilled_column, "gap_size"], strict=False)  # Drop the temporary processing columns
+
+        return df_infilled
+
+    def _validate(self) -> None:
+        """Carry out validation that the infill method can actually be carried out."""
+        if self.ctx.df.is_empty():
+            raise InfillError("Cannot perform infilling on an empty DataFrame.")
+        check_columns_in_dataframe(self.ctx.df, [self.column, self.ctx.time_name])
+
+    def _infill_mask(self) -> pl.Expr:
         """Create a mask for determining which values in a time series to infill.
 
         Take into account:
         - Observation interval - constraining the time series to a specific datetime range
         - Maximum gap size - constraining the infilling to gaps of a maximum size
         - Start and end gaps - constraining so nulls at the beginning and end of the series remain null.
-
-        Args:
-            time_name: Name of the datetime column in the dataframe.
-            infill_column: The column to check whether anything to infill.
-            observation_interval: Optional time interval to limit the infilling to.
-            max_gap_size: The maximum size of consecutive null gaps that should be filled.
 
         Returns:
             Polars expression that can be used to determine which values to infill (True) or not (False)
@@ -138,17 +141,17 @@ class InfillMethod(ABC):
         filter_expr = pl.col("gap_size") > 0
 
         # Check for any gaps
-        if max_gap_size:
+        if self.max_gap_size:
             # If constrained, change the filter to check if there is any missing data with: 0 < gap <= max_gap_size
-            filter_expr = pl.col("gap_size").is_between(0, max_gap_size, closed="right")
+            filter_expr = pl.col("gap_size").is_between(0, self.max_gap_size, closed="right")
 
         # Apply observation interval constraint
-        if observation_interval:
+        if self.observation_interval:
             # Check if these gaps are within the specified observation interval
-            filter_expr = filter_expr & get_date_filter(time_name, observation_interval)
+            filter_expr = filter_expr & get_date_filter(self.ctx.time_name, self.observation_interval)
 
         # Make a mask to ensure that Nulls at the beginning and end of the series remain null.
-        not_null_mask = pl.col(infill_column).is_not_null()
+        not_null_mask = pl.col(self.column).is_not_null()
         row_idx = pl.arange(0, pl.count())
         filter_expr = filter_expr & row_idx.is_between(
             (row_idx.filter(not_null_mask).min()),  # first True
@@ -156,75 +159,6 @@ class InfillMethod(ABC):
         )
 
         return filter_expr
-
-    def apply(
-        self,
-        ts: TimeSeries,
-        infill_column: str,
-        observation_interval: datetime | tuple[datetime, datetime | None] | None = None,
-        max_gap_size: int | None = None,
-    ) -> "TimeSeries":
-        """Apply the infill method to the TimeSeries.
-
-        Args:
-            ts: The TimeSeries to check.
-            infill_column: The column to infill data within.
-            observation_interval: Optional time interval to limit the infilling to.
-            max_gap_size: The maximum size of consecutive null gaps that should be filled. Any gap larger than this
-                          will not be infilled and will remain as null.
-        Returns:
-            TimeSeries: The infilled time series
-        """
-        # Validate column exists
-        if infill_column not in ts.columns:
-            raise ColumnNotFoundError(f"Infill column '{infill_column}' not found in TimeSeries.")
-
-        # Set the timeseries property
-        self._ts = ts
-
-        # We need to make sure the data is padded so that missing time steps are filled with nulls
-        df = pad_time(ts.df, ts.time_name, ts.periodicity)
-
-        # Calculate sizes of each gap in the time series
-        df = gap_size_count(df, infill_column)
-
-        # Create a mask determining which values get infilled
-        infill_mask = self.infill_mask(ts.time_name, infill_column, observation_interval, max_gap_size)
-
-        # Check if there is actually anything to infill
-        if df.filter(infill_mask).is_empty():
-            # If not, return the original time series
-            return ts
-
-        # Apply the specific infill logic from the child class
-        df_infilled = self._fill(df, infill_column)
-        infilled_column = self._infilled_column_name(infill_column)
-
-        # Limit the infilled data to where the infill mask is True
-        df_infilled = df_infilled.with_columns(
-            pl.when(infill_mask).then(pl.col(infilled_column)).otherwise(pl.col(infill_column)).alias(infilled_column)
-        )
-
-        # Do some tidying up of columns, leaving only the original column names
-        df_infilled = df_infilled.with_columns(
-            pl.col(infilled_column).alias(infill_column)  # Rename the infilled column back to the original name
-        ).drop([infilled_column, "gap_size"], strict=False)  # Drop the temporary processing columns
-
-        # Create result TimeSeries
-        #   Need to do this as the time column might have changed due to the padding/adding of infilled rows.
-        ts = TimeSeries(
-            df=df_infilled,
-            time_name=self.ts.time_name,
-            resolution=ts.resolution,
-            periodicity=ts.periodicity,
-            column_metadata={name: col.metadata() for name, col in ts.columns.items()},
-            metadata=ts._metadata,
-            supplementary_columns=list(ts.supplementary_columns.keys()),
-            flag_systems=ts.flag_systems,
-            flag_columns={name: col.flag_system.name for name, col in ts.flag_columns.items()},
-        )
-        ts.pad()
-        return ts
 
 
 class ScipyInterpolation(InfillMethod, ABC):
@@ -315,7 +249,7 @@ class ScipyInterpolation(InfillMethod, ABC):
         return df.with_columns(pl.Series(self._infilled_column_name(infill_column), interpolated))
 
 
-@register_infill_method
+@InfillMethod.register
 class BSplineInterpolation(ScipyInterpolation):
     """B-spline interpolation using scipy make_interp_spline with configurable order.
     https://docs.scipy.org/doc/scipy-1.16.1/reference/generated/scipy.interpolate.make_interp_spline.html
@@ -343,7 +277,7 @@ class BSplineInterpolation(ScipyInterpolation):
         return make_interp_spline(x_valid, y_valid, k=self.order, **self.scipy_kwargs)
 
 
-@register_infill_method
+@InfillMethod.register
 class LinearInterpolation(BSplineInterpolation):
     """Linear spline interpolation (Convenience wrapper around B-spline with order=1).
     https://docs.scipy.org/doc/scipy-1.16.1/reference/generated/scipy.interpolate.make_interp_spline.html
@@ -356,7 +290,7 @@ class LinearInterpolation(BSplineInterpolation):
         super().__init__(order=1, **kwargs)
 
 
-@register_infill_method
+@InfillMethod.register
 class QuadraticInterpolation(BSplineInterpolation):
     """Quadratic spline interpolation (Convenience wrapper around B-spline with order=2).
     https://docs.scipy.org/doc/scipy-1.16.1/reference/generated/scipy.interpolate.make_interp_spline.html
@@ -369,7 +303,7 @@ class QuadraticInterpolation(BSplineInterpolation):
         super().__init__(order=2, **kwargs)
 
 
-@register_infill_method
+@InfillMethod.register
 class CubicInterpolation(BSplineInterpolation):
     """Cubic spline interpolation (Convenience wrapper around B-spline with order=3).
     https://docs.scipy.org/doc/scipy-1.16.1/reference/generated/scipy.interpolate.make_interp_spline.html
@@ -382,7 +316,7 @@ class CubicInterpolation(BSplineInterpolation):
         super().__init__(order=3, **kwargs)
 
 
-@register_infill_method
+@InfillMethod.register
 class AkimaInterpolation(ScipyInterpolation):
     """Akima interpolation using scipy (good for avoiding oscillations).
     https://docs.scipy.org/doc/scipy-1.16.1/reference/generated/scipy.interpolate.Akima1DInterpolator.html
@@ -396,7 +330,7 @@ class AkimaInterpolation(ScipyInterpolation):
         return Akima1DInterpolator(x_valid, y_valid, **self.scipy_kwargs)
 
 
-@register_infill_method
+@InfillMethod.register
 class PchipInterpolation(ScipyInterpolation):
     """PCHIP interpolation using scipy (preserves monotonicity).
     https://docs.scipy.org/doc/scipy-1.16.1/reference/generated/scipy.interpolate.PchipInterpolator.html

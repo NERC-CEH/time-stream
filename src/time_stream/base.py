@@ -1,6 +1,6 @@
 from datetime import datetime
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Iterable, Iterator, Sequence, Type
+from typing import Any, Iterable, Iterator, Sequence, Type
 
 import polars as pl
 
@@ -14,14 +14,12 @@ from time_stream.exceptions import (
     MetadataError,
 )
 from time_stream.flag_manager import TimeSeriesFlagManager
+from time_stream.infill import InfillMethod
 from time_stream.period import Period
 from time_stream.qc import QCCheck
 from time_stream.relationships import RelationshipManager
 from time_stream.time_manager import TimeManager
 from time_stream.utils import check_columns_in_dataframe, configure_period_object, pad_time
-
-if TYPE_CHECKING:
-    from time_stream.infill import InfillMethod
 
 
 class TimeSeries:  # noqa: PLW1641 ignore hash warning
@@ -429,7 +427,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
 
     def qc_check(
         self,
-        check: "str | Type[QCCheck] | QCCheck",
+        check: str | Type[QCCheck] | QCCheck,
         column: str,
         observation_interval: tuple[datetime, datetime | None] | None = None,
         into: str | bool = False,
@@ -489,7 +487,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
 
     def infill(
         self,
-        infill_method: "str | Type[InfillMethod] | InfillMethod",
+        infill_method: str | Type[InfillMethod] | InfillMethod,
         column: str,
         observation_interval: tuple[datetime, datetime | None] | None = None,
         max_gap_size: int | None = None,
@@ -508,12 +506,17 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         Returns:
             A TimeSeries containing the aggregated data.
         """
-        # Import at runtime to avoid circular import
-        from time_stream.infill import InfillMethod  # noqa: PLC0415
-
         # Get the infill method instance and run the apply method
         infill_instance = InfillMethod.get(infill_method, **kwargs)
-        return infill_instance.apply(self, column, observation_interval, max_gap_size)
+        infill_result = infill_instance.apply(
+            self.df, self.time_name, self.periodicity, column, observation_interval, max_gap_size
+        )
+
+        # Create result TimeSeries
+        # Create a copy of the current TimeSeries, and update the dataframe with the infilled data
+        new_ts = self.select([*self.data_columns.keys(), *self.supplementary_columns.keys(), *self.flag_columns.keys()])
+        new_ts.df = infill_result
+        return new_ts
 
     def metadata(self, key: str | Sequence[str] | None = None, strict: bool = True) -> dict[str, Any]:
         """Retrieve metadata for all or specific keys.

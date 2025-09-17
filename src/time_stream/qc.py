@@ -81,7 +81,7 @@ class QcCheckPipeline:
         """Execute the quality control check pipeline
 
         Returns:
-
+            Polars boolean series of the result of the QC check
         """
         self._validate()
 
