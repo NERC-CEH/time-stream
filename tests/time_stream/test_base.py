@@ -9,7 +9,7 @@ from polars.testing import assert_frame_equal, assert_series_equal
 
 from time_stream.base import TimeSeries
 from time_stream.columns import DataColumn, FlagColumn, PrimaryTimeColumn, SupplementaryColumn, TimeSeriesColumn
-from time_stream.exceptions import AggregationPeriodError, ColumnNotFoundError, ColumnTypeError, MetadataError
+from time_stream.exceptions import AggregationPeriodError, ColumnNotFoundError, MetadataError
 from time_stream.period import Period
 
 
@@ -393,16 +393,6 @@ class TestAddNewColumns(unittest.TestCase):
         self.ts._add_new_columns(self.ts._df, self.df)
 
         self.assertEqual(original_columns, self.ts._columns)
-
-    def test_columns_added_to_relationship_manager(self) -> None:
-        """Test that new columns are initialised in the relationship manager, with no relationships"""
-        new_df = self.df.with_columns(pl.Series("col4", [1.1, 2.2, 3.3]))
-        with patch.object(TimeSeriesColumn, "_validate_name", lambda *args, **kwargs: None):
-            self.ts._add_new_columns(self.ts._df, new_df)
-
-        self.assertIn("col4", self.ts.columns)
-        self.assertIn("col4", self.ts._relationship_manager._relationships)
-        self.assertEqual(self.ts._relationship_manager._relationships["col4"], set())
 
 
 class TestSelectColumns(unittest.TestCase):
@@ -921,51 +911,6 @@ class TestSetupMetadata(unittest.TestCase):
             ts = TimeSeries(self.df, time_name="time")
             ts._setup_metadata(metadata)
         self.assertEqual(ts._metadata, {})
-
-
-class TestGetFlagSystemColumn(unittest.TestCase):
-    def setUp(self) -> None:
-        df = pl.DataFrame(
-            {
-                "time": [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)],
-                "data_col": [10, 20, 30],
-                "supp_col": ["A", "B", "C"],
-                "flag_col": [1, 2, 3],
-            }
-        )
-        flag_systems = {"example_flag_system": {"OK": 1, "WARNING": 2}}
-        self.ts = TimeSeries(
-            df=df,
-            time_name="time",
-            supplementary_columns=["supp_col"],
-            flag_columns={"flag_col": "example_flag_system"},
-            flag_systems=flag_systems,
-        )
-        self.ts.data_col.add_relationship(["flag_col"])
-
-    def test_data_column_not_exist(self) -> None:
-        """Test return when the specified data column doesn't exist"""
-        data_column = "data_col_not_exist"
-        flag_system = "example_flag_system"
-        with self.assertRaises(ColumnNotFoundError) as err:
-            self.ts.get_flag_system_column(data_column, flag_system)
-        self.assertEqual("Data Column 'data_col_not_exist' not found.", str(err.exception))
-
-    @parameterized.expand([("supp_col", SupplementaryColumn), ("flag_col", FlagColumn)])
-    def test_data_column_not_a_data_column(self, data_column: str, column_type: type[TimeSeriesColumn]) -> None:
-        """Test return when the specified data column isn't actually a data column"""
-        flag_system = "example_flag_system"
-        with self.assertRaises(ColumnTypeError) as err:
-            self.ts.get_flag_system_column(data_column, flag_system)
-        self.assertEqual(f"Column '{data_column}' is type {column_type}. Should be a data column.", str(err.exception))
-
-    def test_get_expected_flag_column(self) -> None:
-        """Test expected flag column returned for valid flag system"""
-        data_column = "data_col"
-        flag_system = "example_flag_system"
-        expected = self.ts.flag_col
-        result = self.ts.get_flag_system_column(data_column, flag_system)
-        self.assertEqual(result, expected)
 
 
 class TestAggregate(unittest.TestCase):

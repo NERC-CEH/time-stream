@@ -372,60 +372,6 @@ def update_time_of_df_error() -> None:
     # [end_block_20]
 
 
-def add_column_relationships() -> TimeSeries:
-    with suppress_output():
-        ts = create_simple_time_series_with_supp_cols()
-        new_data = [12, 15, 6, 12, 10, 14, 19, 17, 16, 13]
-        ts.init_supplementary_column("battery_voltage", new_data)
-
-        flag_system = {"OUT_OF_RANGE": 1, "SPIKE": 2, "LOW_VOLTAGE": 4, "MISSING": 8}
-        ts.add_flag_system("quality_control_checks", flag_system)
-        ts.init_flag_column("quality_control_checks", "temperature_qc_flags")
-        ts.add_flag("temperature_qc_flags", "OUT_OF_RANGE", pl.col("temperature") > 40)
-
-    # [start_block_21]
-    # Starting with an example TimeSeries, with supplementary and flag columns:
-    print(ts)
-
-    print("Data columns: ", ts.data_columns)
-    print("Supplementary columns: ", ts.supplementary_columns)
-    print("Flag columns: ", ts.flag_columns)
-
-    # Create a relationship between the supplementary column and data columns (using method on the TimeSeries object)
-    ts.add_column_relationship("battery_voltage", ["temperature", "precipitation"])
-
-    # Create a relationship between temperature and its flags (using method on the Column object)
-    ts.temperature.add_relationship("temperature_qc_flags")
-
-    print("")
-    print("Temperature column relationships: ", ts.temperature.get_relationships())
-    print("Battery voltage column relationships: ", ts.battery_voltage.get_relationships())
-    # [end_block_21]
-
-    return ts
-
-
-def remove_column_relationships() -> None:
-    with suppress_output():
-        ts = add_column_relationships()
-
-    # [start_block_22]
-    ts.remove_column_relationship("temperature", "battery_voltage")
-    print("Temperature column relationships: ", ts.temperature.get_relationships())
-    # [end_block_22]
-
-
-def drop_column_with_relationships() -> None:
-    with suppress_output():
-        ts = add_column_relationships()
-
-    # [start_block_23]
-    ts.df = ts.df.drop("temperature")
-    # Note that temperature and temperature_qc_flags are removed, but battery_voltage remains.
-    print(ts)
-    # [end_block_23]
-
-
 def random_minute_temperature_data(start_date: datetime, end_date: datetime) -> np.ndarray:
     np.random.seed(42)
     # Create a year of minute-resolution timestamps

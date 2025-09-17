@@ -15,7 +15,6 @@ Key features of the ``TimeSeries`` class include:
 - Flexible options for dealing with rows with duplicate time values
 - Option to "pad" with null data for any missing timestamps, ensuring a continuous time series is available
 - Column classification (data, supplementary, flag)
-- Relationship management between columns
 - Aggregation functionality
 - Data point annotations through flagging systems
 - TimeSeries-level and column-level metadata
@@ -87,7 +86,6 @@ The package provides a flexible framework for aggregating time series data:
 - Apply different aggregation functions (mean, min, max, etc.)
 - Track data availability with count fields
 - Validate aggregation using criteria for data availability
-- Preserve relationships between columns during aggregation
 
 Flagging System
 --------------
@@ -98,19 +96,6 @@ The flagging system supports data annotation management:
 - Create flag columns linked to data columns
 - Use bitwise operations to efficiently store multiple flags
 - Query data based on flag status
-
-Relationships
-------------
-
-Columns in a time series can have different relationships with other columns:
-
-- **One-to-Many**: Common between data and flag columns, where a data column can link with multiple flag columns,
-  but a flag column can only be linked to a single data column.
-- **Many-to-Many**: Common between data and supplementary columns, where a supplementary column can link with multiple
-  data columns, and vice vera.
-
-These relationships are maintained when selecting, filtering, or aggregating data.
-
 
 Metadata
 --------

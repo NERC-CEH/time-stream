@@ -11,7 +11,6 @@ Key Features
 * **Period-based time management**: Flexible handling of time resolutions and periodicity (days, months, years, etc.)
 * **Aggregation framework**: Easily aggregate time series data over various periods
 * **Flagging system**: Built-in flagging system for data point management and provenance
-* **Column relationships**: Define and manage relationships between data and metadata
 * **Infilling routines**: Fill gaps in time series data using a variety of infilling methods
 
 Getting Started
@@ -36,7 +35,6 @@ User Guide
    user_guide/infilling
    user_guide/aggregation
    user_guide/flagging
-   user_guide/column_relationships
 
 Examples
 -------
@@ -60,7 +58,6 @@ API Reference
    api/aggregation
    api/columns
    api/flag_manager
-   api/relationships
    api/bitwise
 
 Developer Guide

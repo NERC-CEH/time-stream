@@ -501,56 +501,6 @@ Methods are available to add (or remove) flags to a Flag Column:
    import examples_timeseries_basics
    ts = examples_timeseries_basics.set_and_remove_flags()
 
-Column Relationships
-------------------
-
-You can define relationships between columns that are linked together in some way. Data columns can be given a
-relationship to both supplementary and flag columns, though supplementary and flag columns cannot be given a
-relationship to each other.
-
-
-.. literalinclude:: ../../../src/time_stream/examples/examples_timeseries_basics.py
-   :language: python
-   :start-after: [start_block_21]
-   :end-before: [end_block_21]
-   :dedent:
-
-.. jupyter-execute::
-   :hide-code:
-
-   import examples_timeseries_basics
-   ts = examples_timeseries_basics.add_column_relationships()
-
-Relationships can be removed:
-
-.. literalinclude:: ../../../src/time_stream/examples/examples_timeseries_basics.py
-   :language: python
-   :start-after: [start_block_22]
-   :end-before: [end_block_22]
-   :dedent:
-
-.. jupyter-execute::
-   :hide-code:
-
-   import examples_timeseries_basics
-   ts = examples_timeseries_basics.remove_column_relationships()
-
-The relationship also defines what happens when a column is removed.  For example, if a Data Column is dropped, then
-this will cascade to any linked Flag Columns.  Any linked Supplementary Columns are not dropped, but the relationship
-removed:
-
-.. literalinclude:: ../../../src/time_stream/examples/examples_timeseries_basics.py
-   :language: python
-   :start-after: [start_block_23]
-   :end-before: [end_block_23]
-   :dedent:
-
-.. jupyter-execute::
-   :hide-code:
-
-   import examples_timeseries_basics
-   ts = examples_timeseries_basics.drop_column_with_relationships()
-
 Aggregating Data
 --------------
 
@@ -667,8 +617,7 @@ Best Practices
    - Use data columns for core measurements
    - Use supplementary columns for metadata or context
    - Use flag columns for quality control
-3. **Define relationships** between related columns
-4. **Add metadata** to enhance understanding of your data
+3. **Add metadata** to enhance understanding of your data
 
 Next Steps
 ---------
@@ -678,4 +627,3 @@ Now that you understand the basics of the ``TimeSeries`` class, explore:
 - :doc:`periods` - Learn more about working with time periods
 - :doc:`aggregation` - Dive deeper into aggregation capabilities
 - :doc:`flagging` - Master the flagging control system
-- :doc:`column_relationships` - Understand column relationships in detail
