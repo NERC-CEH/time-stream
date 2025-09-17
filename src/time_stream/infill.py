@@ -1,3 +1,17 @@
+"""
+Time Series Infill Module
+
+This module provides a flexible framework for filling missing values (infilling) in time series data using
+Polars and SciPy. Infill methods are implemented as subclasses of ``InfillMethod`` and can be registered
+and instantiated by name, class, or instance.
+
+The infill pipeline handles:
+- Padding the time series to ensure consistent timestamps
+- Identifying gaps and their sizes
+- Applying constraints such as maximum gap size and observation intervals
+- Delegating to a specific infill method to fill missing values
+"""
+
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime
