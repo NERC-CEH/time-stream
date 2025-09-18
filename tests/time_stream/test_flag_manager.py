@@ -9,7 +9,7 @@ from time_stream import TimeSeries
 from time_stream.bitwise import BitwiseFlag
 from time_stream.columns import FlagColumn
 from time_stream.exceptions import DuplicateColumnError, DuplicateFlagSystemError, FlagSystemNotFoundError
-from time_stream.flag_manager import TimeSeriesFlagManager
+from time_stream.flag_manager import FlagManager
 
 
 class BaseFlagManagerTest(unittest.TestCase):
@@ -32,21 +32,21 @@ class BaseFlagManagerTest(unittest.TestCase):
 class TestAddFlagSystem(BaseFlagManagerTest):
     def test_add_valid_dict_flag_system(self) -> None:
         """Test adding a new valid dict based flag system."""
-        flag_manager = TimeSeriesFlagManager(self.ts, self.flag_systems)
+        flag_manager = FlagManager(self.ts, self.flag_systems)
         new_flag_system = {"FLAG_A": 1, "FLAG_B": 2, "FLAG_C": 4}
         flag_manager.add_flag_system("new_flags", new_flag_system)
         self.assertIn("new_flags", flag_manager.flag_systems)
 
     def test_add_valid_class_flag_system(self) -> None:
         """Test adding a new valid bitwise class based flag system."""
-        flag_manager = TimeSeriesFlagManager(self.ts, self.flag_systems)
+        flag_manager = FlagManager(self.ts, self.flag_systems)
         new_flag_system = BitwiseFlag("new_flags", {"FLAG_A": 1, "FLAG_B": 2, "FLAG_C": 4})
         flag_manager.add_flag_system("new_flags", new_flag_system)
         self.assertIn("new_flags", flag_manager.flag_systems)
 
     def test_add_duplicate_flag_system_raises_error(self) -> None:
         """Test adding a duplicate flag system raises error."""
-        flag_manager = TimeSeriesFlagManager(self.ts, self.flag_systems)
+        flag_manager = FlagManager(self.ts, self.flag_systems)
         new_flag_system = {"FLAG_A": 1, "FLAG_B": 2, "FLAG_C": 4}
         with self.assertRaises(DuplicateFlagSystemError):
             flag_manager.add_flag_system("quality_control", new_flag_system)
@@ -55,7 +55,7 @@ class TestAddFlagSystem(BaseFlagManagerTest):
 class TestInitFlagColumn(BaseFlagManagerTest):
     def test_init_flag_column_success(self) -> None:
         """Test initializing a flag column with a valid flag system."""
-        flag_manager = TimeSeriesFlagManager(self.ts, self.flag_systems)
+        flag_manager = FlagManager(self.ts, self.flag_systems)
         flag_manager.init_flag_column("quality_control", "flag_column")
 
         self.assertIn("flag_column", self.ts.columns)
@@ -64,19 +64,19 @@ class TestInitFlagColumn(BaseFlagManagerTest):
 
     def test_init_flag_column_invalid_flag_system_raises_error(self) -> None:
         """Test initialising a flag column with a non-existent flag system raises error."""
-        flag_manager = TimeSeriesFlagManager(self.ts, self.flag_systems)
+        flag_manager = FlagManager(self.ts, self.flag_systems)
         with self.assertRaises(FlagSystemNotFoundError):
             flag_manager.init_flag_column("bad_system", "flag_column")
 
     def test_init_flag_column_invalid_column_name_raises_error(self) -> None:
         """Test initialising a flag column with a duplicate column name raises error."""
-        flag_manager = TimeSeriesFlagManager(self.ts, self.flag_systems)
+        flag_manager = FlagManager(self.ts, self.flag_systems)
         with self.assertRaises(DuplicateColumnError):
             flag_manager.init_flag_column("quality_control", "existing_flags")
 
     def test_init_flag_column_with_nonzero_default(self) -> None:
         """Test initialising a flag column with a default nonzero value."""
-        flag_manager = TimeSeriesFlagManager(self.ts, self.flag_systems)
+        flag_manager = FlagManager(self.ts, self.flag_systems)
         flag_manager.init_flag_column("quality_control", "flag_column", data=2)
 
         expected_values = pl.Series("flag_column", [2, 2, 2], dtype=pl.Int64)
@@ -84,7 +84,7 @@ class TestInitFlagColumn(BaseFlagManagerTest):
 
     def test_init_flag_column_with_list_values(self) -> None:
         """Test initialising a flag column with a list of values."""
-        flag_manager = TimeSeriesFlagManager(self.ts, self.flag_systems)
+        flag_manager = FlagManager(self.ts, self.flag_systems)
         flag_manager.init_flag_column("quality_control", "flag_column", data=[1, 2, 4])
 
         expected_values = pl.Series("flag_column", [1, 2, 4], dtype=pl.Int64)
@@ -98,6 +98,6 @@ class TestInitFlagColumn(BaseFlagManagerTest):
     )
     def test_init_flag_column_with_list_wrong_length_raises_error(self, _: str, new_values: list) -> None:
         """Test that initialising a flag column with a list of incorrect length raises an error."""
-        flag_manager = TimeSeriesFlagManager(self.ts, self.flag_systems)
+        flag_manager = FlagManager(self.ts, self.flag_systems)
         with self.assertRaises(pl.ShapeError):
             flag_manager.init_flag_column("quality_control", "flag_column", data=new_values)
