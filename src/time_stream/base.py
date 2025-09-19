@@ -104,8 +104,21 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         """
         check_columns_in_dataframe(self.df, metadata.keys())
         ts = self.copy()
-        for column, meta in metadata.items():
-            ts._metadata_store.set_column_metadata(column, meta)
+        for column_name, meta in metadata.items():
+            ts._metadata_store.set_column_metadata(column_name, meta)
+        return ts
+
+    def with_df(self, new_df: pl.DataFrame) -> Self:
+        """Return a new TimeSeries with a new DataFrame, checking the integrity of the time values hasn't
+        been compromised between the old and new TimeSeries.
+
+        Args:
+            new_df: The new Polars DataFrame to set as the new time series data.
+        """
+        old_df = self._df.clone()
+        self._time_manager._check_time_integrity(old_df, new_df)
+        ts = self.copy()
+        ts._df = new_df
         return ts
 
     @property
@@ -128,21 +141,6 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
     @property
     def df(self) -> pl.DataFrame:
         return self._df
-
-    @df.setter
-    def df(self, new_df: pl.DataFrame) -> None:
-        self._update_df(new_df)
-
-    def _update_df(self, new_df: pl.DataFrame) -> None:
-        """Update the underlying DataFrame of the TimeSeries, checking the integrity of the time values hasn't
-        been compromised
-
-        Args:
-            new_df: The new Polars DataFrame to set as the time series data.
-        """
-        old_df = self._df.clone()
-        self._time_manager._check_time_integrity(old_df, new_df)
-        self._df = new_df
 
     @property
     def columns(self) -> list[str]:
@@ -178,15 +176,15 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         """Alias for `time_stream.metadata.MetadataStore.update_series_metadata`."""
         self._metadata_store.update_series_metadata(metadata)
 
-    def set_column_metadata(self, name: str, metadata: dict[str, Any]) -> None:
+    def set_column_metadata(self, column_name: str, metadata: dict[str, Any]) -> None:
         """Alias for `time_stream.metadata.MetadataStore.set_column_metadata`."""
-        check_columns_in_dataframe(self.df, name)
-        self._metadata_store.set_column_metadata(name, metadata)
+        check_columns_in_dataframe(self.df, column_name)
+        self._metadata_store.set_column_metadata(column_name, metadata)
 
-    def update_column_metadata(self, name: str, metadata: dict[str, Any]) -> None:
+    def update_column_metadata(self, column_name: str, metadata: dict[str, Any]) -> None:
         """Alias for `time_stream.metadata.MetadataStore.update_column_metadata`."""
-        check_columns_in_dataframe(self.df, name)
-        self._metadata_store.update_column_metadata(name, metadata)
+        check_columns_in_dataframe(self.df, column_name)
+        self._metadata_store.update_column_metadata(column_name, metadata)
 
     def metadata(self, keys: str | Sequence[str] | None = None, strict: bool = False) -> dict[str, Any]:
         """Retrieve TimeSeries-level metadata for all or specific keys.
@@ -219,7 +217,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         return result
 
     def column_metadata(
-        self, column: str, keys: str | Sequence[str] | None = None, strict: bool = False
+        self, column_name: str, keys: str | Sequence[str] | None = None, strict: bool = False
     ) -> dict[str, Any]:
         """Retrieve metadata for a given column, for all or specific keys.
 
@@ -229,15 +227,16 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
             ts.column_metadata("flow", ["unit","sensor"])  -> multiple values
 
         Args:
-            column: A specific column or sequence of columns to filter the metadata. If None, all columns are returned.
+            column_name: A specific column or sequence of columns to filter the metadata.
+                            If None, all columns are returned.
             keys: A specific key or sequence of keys to filter the metadata. If None, all metadata is returned.
             strict: If True, raises a KeyError when a key is missing.  Otherwise, missing keys return None.
 
         Returns:
             A dictionary of the requested metadata.
         """
-        check_columns_in_dataframe(self.df, column)
-        column_metadata = self._metadata_store.get_column_metadata(column)
+        check_columns_in_dataframe(self.df, column_name)
+        column_metadata = self._metadata_store.get_column_metadata(column_name)
         if keys is None:
             return column_metadata
 
@@ -248,7 +247,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         for k in keys:
             value = column_metadata.get(k)
             if strict and value is None:
-                raise MetadataError(f"Metadata key '{k}' not found for column '{column}'")
+                raise MetadataError(f"Metadata key '{k}' not found for column '{column_name}'")
             result[k] = value
         return result
 
@@ -274,29 +273,29 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         """
         return self._flag_manager.get_flag_system(name)
 
-    def register_flag_column(self, name: str, base: str, flag_system: str) -> None:
+    def register_flag_column(self, column_name: str, base: str, flag_system: str) -> None:
         """Mark the specified existing column as a flag column.
 
         This does not modify the DataFrame; it only records that ``name`` is a flag column associated with the
         value column ``base``, with values handled by the flag system ``flag_system``.
 
         Args:
-            name: A column name to mark as a flag column.
+            column_name: A column name to mark as a flag column.
             base: Name of the value/data column this flag column refers to.
             flag_system: The name of the flag system.
         """
-        check_columns_in_dataframe(self.df, [name, base])
-        self._flag_manager.register_flag_column(name, base, flag_system)
+        check_columns_in_dataframe(self.df, [column_name, base])
+        self._flag_manager.register_flag_column(column_name, base, flag_system)
 
     def init_flag_column(
-        self, base: str, flag_system: str, name: str | None = None, data: int | Sequence[int] = 0
+        self, base: str, flag_system: str, column_name: str | None = None, data: int | Sequence[int] = 0
     ) -> None:
         """ "Add a new column to the TimeSeries DataFrame, setting it as a Flag Column.
 
         Args:
             base: Name of the value/data column this flag column will refer to.
             flag_system: The name of the flag system.
-            name: Optional name for the new flag column. If omitted, a name of the
+            column_name: Optional name for the new flag column. If omitted, a name of the
                     form ``f"{base}__flag__{flag_system}"`` is used.
             data: The default value to populate the flag column with. Can be a scalar or list-like. Defaults to 0.
         """
@@ -312,46 +311,46 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
             data = pl.Series(data, dtype=pl.Int64)
 
         # Determine name of flag column
-        if not name:
-            name = f"{base}__flag__{flag_system}"
+        if not column_name:
+            column_name = f"{base}__flag__{flag_system}"
 
         # Add and register as a flag column
-        self.df = self.df.with_columns(data.alias(name))
-        self.register_flag_column(name, base, flag_system)
+        self._df = self.df.with_columns(data.alias(column_name))
+        self.register_flag_column(column_name, base, flag_system)
 
-    def get_flag_column(self, name: str) -> FlagColumn:
+    def get_flag_column(self, column_name: str) -> FlagColumn:
         """Look up a registered flag column by name.
 
         Args:
-            name: Flag column name.
+            column_name: Flag column name.
 
         Returns:
             The corresponding ``FlagColumn`` object.
         """
-        return self._flag_manager.get_flag_column(name)
+        return self._flag_manager.get_flag_column(column_name)
 
-    def add_flag(self, name: str, flag_value: int | str, expr: pl.Expr = pl.lit(True)) -> None:
+    def add_flag(self, column_name: str, flag_value: int | str, expr: pl.Expr = pl.lit(True)) -> None:
         """Add flag value (if not there) to flag column, where expression is True.
 
         Args:
-            name: The name of the flag column
+            column_name: The name of the flag column
             flag_value: The flag value to add
             expr: Polars expression for which rows to add flag to
         """
-        flag_column = self.get_flag_column(name)
-        self.df = flag_column.add_flag(self.df, flag_value, expr)
+        flag_column = self.get_flag_column(column_name)
+        self._df = flag_column.add_flag(self.df, flag_value, expr)
 
-    def remove_flag(self, name: str, flag_value: int | str, expr: pl.Expr = pl.lit(True)) -> None:
+    def remove_flag(self, column_name: str, flag_value: int | str, expr: pl.Expr = pl.lit(True)) -> None:
         """
         Remove flag value (if there) from flag column.
 
         Args:
-            name: The name of the flag column
+            column_name: The name of the flag column
             flag_value: The flag value to remove
             expr: Polars expression for which rows to remove flag from
         """
-        flag_column = self.get_flag_column(name)
-        self.df = flag_column.remove_flag(self.df, flag_value, expr)
+        flag_column = self.get_flag_column(column_name)
+        self._df = flag_column.remove_flag(self.df, flag_value, expr)
 
     def aggregate(
         self,
@@ -402,7 +401,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
     def qc_check(
         self,
         check: str | Type[QCCheck] | QCCheck,
-        column: str,
+        column_name: str,
         observation_interval: tuple[datetime, datetime | None] | None = None,
         into: str | bool = False,
         **kwargs,
@@ -411,7 +410,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
 
         Args:
             check: The QC check to apply.
-            column: The column to perform the check on.
+            column_name: The column to perform the check on.
             observation_interval: Optional time interval to limit the check to.
             into: Whether to add the result of the QC to the TimeSeries dataframe (True | string name of column to add),
                   or just return a boolean Series of the QC result (False).
@@ -435,7 +434,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         """
         # Get the QC check instance and run the apply method
         check_instance = QCCheck.get(check, **kwargs)
-        qc_result = check_instance.apply(self.df, self.time_name, column, observation_interval)
+        qc_result = check_instance.apply(self.df, self.time_name, column_name, observation_interval)
 
         # Return the boolean series, if requested
         if not into:
@@ -445,7 +444,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         if isinstance(into, str):
             qc_result_col_name = into
         else:
-            qc_result_col_name = f"__qc__{column}__{check_instance.name}"
+            qc_result_col_name = f"__qc__{column_name}__{check_instance.name}"
 
         if qc_result_col_name in self.df.columns:
             # Auto-suffix the column name to avoid accidental overwrite
@@ -455,14 +454,14 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
             qc_result_col_name = f"{qc_result_col_name}__{col_suffix}"
 
         # Create a copy of the current TimeSeries, and update the dataframe with the QC result
-        new_ts = self.copy()
-        new_ts.df = new_ts.df.with_columns(pl.Series(qc_result_col_name, qc_result))
+        new_df = self.df.with_columns(pl.Series(qc_result_col_name, qc_result))
+        new_ts = self.with_df(new_df)
         return new_ts
 
     def infill(
         self,
         infill_method: str | Type[InfillMethod] | InfillMethod,
-        column: str,
+        column_name: str,
         observation_interval: tuple[datetime, datetime | None] | None = None,
         max_gap_size: int | None = None,
         **kwargs,
@@ -471,7 +470,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
 
         Args:
             infill_method: The method to use for infilling
-            column: The column to infill
+            column_name: The column to infill
             observation_interval: Optional time interval to limit the check to.
             max_gap_size: The maximum size of consecutive null gaps that should be filled. Any gap larger than this
                           will not be infilled and will remain as null.
@@ -483,13 +482,12 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         # Get the infill method instance and run the apply method
         infill_instance = InfillMethod.get(infill_method, **kwargs)
         infill_result = infill_instance.apply(
-            self.df, self.time_name, self.periodicity, column, observation_interval, max_gap_size
+            self.df, self.time_name, self.periodicity, column_name, observation_interval, max_gap_size
         )
 
         # Create result TimeSeries
         # Create a copy of the current TimeSeries, and update the dataframe with the infilled data
-        new_ts = self.copy()
-        new_ts.df = infill_result
+        new_ts = self.with_df(infill_result)
         return new_ts
 
     def __len__(self) -> int:
