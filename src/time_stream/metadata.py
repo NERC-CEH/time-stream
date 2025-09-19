@@ -55,6 +55,18 @@ class MetadataStore:
         merged = {**current, **metadata}
         self._columns_metadata[name] = merged
 
+    def drop_column_metadata(self, name: str) -> None:
+        """Remove metadata for a specific column.
+
+        Args:
+            name: Column name (value or flag). Missing entries are ignored.
+        """
+        self._columns_metadata.pop(name, None)
+
+    def reset_column_metadata(self) -> None:
+        """Remove metadata for all columns."""
+        self._columns_metadata.clear()
+
     def get_column_metadata(self, name: str) -> dict[str, Any]:
         """Return a copy of metadata for a specific column.
 

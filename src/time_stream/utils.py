@@ -44,6 +44,10 @@ def truncate_to_period(date_times: pl.Series, period: Period, time_anchor: TimeA
     Returns:
         A `Polars` Series with the truncated date/time values.
     """
+    # Need to ensure we're dealing with datetimes rather than just "dates"
+    if date_times.dtype == pl.Date:
+        date_times = date_times.cast(pl.Datetime("us"))
+
     # 1. Remove any offset from the time series
     date_times = date_times.dt.offset_by("-" + period.pl_offset)
 
@@ -152,7 +156,7 @@ def check_columns_in_dataframe(df: pl.DataFrame, columns: str | Iterable[str]) -
         ColumnNotFoundError: If any of the columns in the list do not exist in the dataframe.
     """
     if isinstance(columns, str):
-        columns = [str]
+        columns = [columns]
 
     invalid_columns = sorted(set(columns) - set(df.columns))
     if invalid_columns:

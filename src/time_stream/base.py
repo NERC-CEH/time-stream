@@ -6,7 +6,7 @@ import polars as pl
 from time_stream.aggregation import AggregationFunction
 from time_stream.bitwise import BitwiseFlag
 from time_stream.enums import DuplicateOption, TimeAnchor
-from time_stream.exceptions import MetadataError
+from time_stream.exceptions import ColumnNotFoundError, MetadataError
 from time_stream.flag_manager import FlagColumn, FlagManager
 from time_stream.infill import InfillMethod
 from time_stream.metadata import MetadataStore
@@ -93,7 +93,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         ts._metadata_store.set_series_metadata(metadata)
         return ts
 
-    def with_column_meta(self, metadata: dict[str, dict[str, Any]]) -> Self:
+    def with_column_metadata(self, metadata: dict[str, dict[str, Any]]) -> Self:
         """Return a new ``TimeSeries`` with column-level metadata.
 
         Args:
@@ -490,6 +490,87 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         # Create a copy of the current TimeSeries, and update the dataframe with the infilled data
         new_ts = self.with_df(infill_result)
         return new_ts
+
+    def select(
+        self,
+        column_names: str | Sequence[str],
+        include_flag_columns: bool = True,
+    ) -> Self:
+        """Return a new TimeSeries instance to include only the specified columns.
+
+        By default, this:
+          - carries over **series-level metadata** unchanged,
+          - prunes **column-level metadata** to the kept columns,
+          - rebuilds the **flag manager** to include only kept flag columns.
+
+        Args:
+            column_names:  Column name(s) to retain in the updated TimeSeries.
+            include_flag_columns: If True, include any registered flag columns whose ``base`` is among the
+                                  kept value columns. If a specific flag column name is explicitly requested
+                                  in ``columns`` it is always kept.
+
+        Returns:
+             New TimeSeries instance with only selected columns.
+        """
+        if not column_names:
+            raise ColumnNotFoundError("No columns specified.")
+
+        if isinstance(column_names, str):
+            column_names = [column_names]
+        check_columns_in_dataframe(self.df, column_names)
+
+        # Include primary time column (if not already included)
+        if self.time_name not in column_names:
+            column_names.insert(0, self.time_name)
+
+        # Optionally include associated flag columns
+        if include_flag_columns:
+            for flag_name, flag_column in self._flag_manager.flag_columns.items():
+                # include if its base (value col) is being kept
+                if flag_column.base in column_names:
+                    column_names.append(flag_name)
+
+        # Build new frame
+        new_df = self.df.select(column_names)
+
+        # New time series
+        new_ts = self.with_df(new_df)
+
+        # Prune column level metadata to kept columns
+        kept_metadata = {col: self.column_metadata(col) for col in column_names}
+        new_ts._metadata_store.reset_column_metadata()
+        new_ts = new_ts.with_column_metadata(kept_metadata)
+
+        # Rebuild the flag registry for kept columns
+        new_flag_manager = FlagManager()
+        # re-register flag systems
+        for sys_name, enum_cls in self._flag_manager.flag_systems.items():
+            new_flag_manager.register_flag_system(sys_name, enum_cls)
+
+        # keep only flag columns that survived
+        for flag_name, flag_column in self._flag_manager.flag_columns.items():
+            if flag_name in column_names:
+                new_flag_manager.register_flag_column(flag_name, flag_column.base, flag_column.flag_system_name)
+
+        new_ts._flag_manager = new_flag_manager
+
+        return new_ts
+
+    def __getitem__(self, key: str | Sequence[str]) -> Self:
+        """Access columns using indexing syntax.
+
+        Args:
+            key: Column name(s) to access
+
+        Returns:
+            A new TimeSeries instance with the specified column(s) selected.
+
+        Notes:
+            This is equivalent to ``ts.select([...])``.
+        """
+        if isinstance(key, str):
+            key = [key]
+        return self.select(key, include_flag_columns=False)
 
     def __len__(self) -> int:
         """Return the number of rows in the time series."""
