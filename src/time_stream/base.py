@@ -13,7 +13,7 @@ from time_stream.metadata import MetadataStore
 from time_stream.period import Period
 from time_stream.qc import QCCheck
 from time_stream.time_manager import TimeManager
-from time_stream.utils import configure_period_object, pad_time
+from time_stream.utils import check_columns_in_dataframe, configure_period_object, pad_time
 
 
 class TimeSeries:  # noqa: PLW1641 ignore hash warning
@@ -102,6 +102,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         Returns:
             A new TimeSeries with column-level metadata has set to the provided metadata.
         """
+        check_columns_in_dataframe(self.df, metadata.keys())
         ts = self.copy()
         for column, meta in metadata.items():
             ts._metadata_store.set_column_metadata(column, meta)
@@ -170,19 +171,21 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         self.sort_time()
 
     def set_series_metadata(self, metadata: dict[str, Any] | None = None) -> None:
-        """Alias for :meth:`time_stream.metadata.MetadataStore.set_series_metadata`."""
+        """Alias for `time_stream.metadata.MetadataStore.set_series_metadata`."""
         self._metadata_store.set_series_metadata(metadata)
 
     def update_series_metadata(self, metadata: dict[str, Any] | None = None) -> None:
-        """Alias for :meth:`time_stream.metadata.MetadataStore.update_series_metadata`."""
+        """Alias for `time_stream.metadata.MetadataStore.update_series_metadata`."""
         self._metadata_store.update_series_metadata(metadata)
 
     def set_column_metadata(self, name: str, metadata: dict[str, Any]) -> None:
-        """Alias for :meth:`time_stream.metadata.MetadataStore.set_column_metadata`."""
+        """Alias for `time_stream.metadata.MetadataStore.set_column_metadata`."""
+        check_columns_in_dataframe(self.df, name)
         self._metadata_store.set_column_metadata(name, metadata)
 
     def update_column_metadata(self, name: str, metadata: dict[str, Any]) -> None:
-        """Alias for :meth:`time_stream.metadata.MetadataStore.update_column_metadata`."""
+        """Alias for `time_stream.metadata.MetadataStore.update_column_metadata`."""
+        check_columns_in_dataframe(self.df, name)
         self._metadata_store.update_column_metadata(name, metadata)
 
     def metadata(self, keys: str | Sequence[str] | None = None, strict: bool = False) -> dict[str, Any]:
@@ -233,6 +236,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         Returns:
             A dictionary of the requested metadata.
         """
+        check_columns_in_dataframe(self.df, column)
         column_metadata = self._metadata_store.get_column_metadata(column)
         if keys is None:
             return column_metadata
@@ -281,6 +285,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
             base: Name of the value/data column this flag column refers to.
             flag_system: The name of the flag system.
         """
+        check_columns_in_dataframe(self.df, [name, base])
         self._flag_manager.register_flag_column(name, base, flag_system)
 
     def init_flag_column(
@@ -295,6 +300,8 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
                     form ``f"{base}__flag__{flag_system}"`` is used.
             data: The default value to populate the flag column with. Can be a scalar or list-like. Defaults to 0.
         """
+        check_columns_in_dataframe(self.df, base)
+
         # Validate that the flag system exists
         self.get_flag_system(flag_system)
 
