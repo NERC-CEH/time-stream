@@ -136,12 +136,12 @@ class TestHandleTimeDuplicates(unittest.TestCase):
         """Test that the error strategy works as expected"""
         with self.assertRaises(DuplicateTimeError):
             self.tm._on_duplicates = DuplicateOption.ERROR
-            self.tm._handle_time_duplicates()
+            self.tm._handle_time_duplicates(self.df)
 
     def test_keep_first(self) -> None:
         """Test that the keep first strategy works as expected"""
         self.tm._on_duplicates = DuplicateOption.KEEP_FIRST
-        result = self.tm._handle_time_duplicates()
+        result = self.tm._handle_time_duplicates(self.df)
 
         expected = pl.DataFrame(
             {
@@ -168,7 +168,7 @@ class TestHandleTimeDuplicates(unittest.TestCase):
     def test_keep_last(self) -> None:
         """Test that the keep last strategy works as expected"""
         self.tm._on_duplicates = DuplicateOption.KEEP_LAST
-        result = self.tm._handle_time_duplicates()
+        result = self.tm._handle_time_duplicates(self.df)
 
         expected = pl.DataFrame(
             {
@@ -195,7 +195,7 @@ class TestHandleTimeDuplicates(unittest.TestCase):
     def test_drop(self) -> None:
         """Test that the drop strategy works as expected"""
         self.tm._on_duplicates = DuplicateOption.DROP
-        result = self.tm._handle_time_duplicates()
+        result = self.tm._handle_time_duplicates(self.df)
 
         expected = pl.DataFrame(
             {
@@ -220,7 +220,7 @@ class TestHandleTimeDuplicates(unittest.TestCase):
     def test_merge(self) -> None:
         """Test that the merge strategy works as expected"""
         self.tm._on_duplicates = DuplicateOption.MERGE
-        result = self.tm._handle_time_duplicates()
+        result = self.tm._handle_time_duplicates(self.df)
 
         expected = pl.DataFrame(
             {

@@ -397,6 +397,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
             time_anchor=aggregation_time_anchor,
         )
         new_ts.set_series_metadata(self.metadata())
+        return new_ts
 
     def qc_check(
         self,
