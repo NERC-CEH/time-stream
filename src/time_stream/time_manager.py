@@ -1,5 +1,3 @@
-from collections.abc import Callable
-
 import polars as pl
 
 from time_stream import Period
@@ -27,7 +25,6 @@ class TimeManager:
 
     def __init__(
         self,
-        get_df: Callable[[], pl.DataFrame],
         time_name: str,
         resolution: str | Period | None = None,
         periodicity: str | Period | None = None,
@@ -37,8 +34,6 @@ class TimeManager:
         """Initialise the time manager.
 
         Args:
-            get_df: A callback to access the current dataframe, so it never has to hold a direct
-                    reference to the parent TimeSeries to avoid circular dependencies.
             time_name: The name of the time column of the parent TimeSeries.
             resolution: Resolution defines how "precise" the datetimes are, i.e., to what precision of time unit
                         should each datetime in the time series match to.
@@ -91,7 +86,6 @@ class TimeManager:
                          END: The time stamp is anchored ending at "x". A value at "x" is considered valid
                               starting at "x-r" (exclusive) and ending at "x" (inclusive).
         """
-        self._get_df = get_df
         self._time_name = time_name
         self._resolution = configure_period_object(resolution)
         self._periodicity = configure_period_object(periodicity)
@@ -114,16 +108,13 @@ class TimeManager:
     def time_anchor(self) -> TimeAnchor:
         return self._time_anchor
 
-    def _time_data(self) -> pl.Series:
-        return self._get_df()[self.time_name]
-
-    def validate(self) -> None:
+    def validate(self, df: pl.DataFrame) -> None:
         """Carry out a series of validations on the temporal aspects of the TimeSeries.
-
+        Args:
+            df: Dataframe to validate against.
         Raises:
             ResolutionError: If the resolution is not a subperiod of the periodicity
         """
-        df = self._get_df()
         self._validate_time_column(df)
 
         if not self._resolution.is_subperiod_of(self._periodicity):
@@ -131,7 +122,7 @@ class TimeManager:
                 f"Resolution {self._resolution} must be a subperiod of periodicity {self._periodicity}"
             )
 
-        dt = self._time_data()
+        dt = df[self.time_name]
         self._validate_resolution(dt)
         self._validate_periodicity(dt)
 
@@ -204,8 +195,11 @@ class TimeManager:
         if not old_ts.sort().equals(new_ts.sort()):
             raise TimeMutatedError(old_timestamps=old_ts, new_timestamps=new_ts)
 
-    def _handle_time_duplicates(self) -> pl.DataFrame:
+    def _handle_time_duplicates(self, df: pl.DataFrame) -> pl.DataFrame:
         """Handle duplicate values in the time column based on a specified strategy.
+
+        Args:
+            df: Dataframe to handle duplicates from.
 
         Returns:
             Dataframe with duplicate values handled based on specified strategy.
@@ -214,7 +208,7 @@ class TimeManager:
             DuplicateTimeError: If there are duplicate timestamps and the "error" strategy is being used.
         """
         try:
-            new_df = handle_duplicates(self._get_df(), self._time_name, DuplicateOption(self._on_duplicates))
+            new_df = handle_duplicates(df, self._time_name, DuplicateOption(self._on_duplicates))
         except DuplicateValueError:
             raise DuplicateTimeError()
 

@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from enum import EnumType
+from typing import Self
 
 import polars as pl
 
@@ -15,10 +16,10 @@ from time_stream.exceptions import (
 
 @dataclass
 class FlagColumn:
-    """Metadata and helpers for a flag column in a TimeSeries.
+    """Represents a flag column in a TimeSeries.
 
-    A flag column stores bitwise flags governed by a specific flag system.
-    Each flag column is associated with a base data column.
+    A flag column stores bitwise flags governed by a specific flag system. Each flag column is associated with a base
+    data column.
 
     Attributes:
         name: Name of the flag column in the DataFrame.
@@ -29,6 +30,7 @@ class FlagColumn:
     name: str
     base: str
     flag_system: type[BitwiseFlag]
+    flag_system_name: str
 
     def add_flag(self, df: pl.DataFrame, flag: int | str, expr: pl.Expr = pl.lit(True)) -> pl.DataFrame:
         """Adds a flag value to this FlagColumn using a bitwise OR operation.
@@ -87,7 +89,7 @@ class FlagManager:
         """Registered flag columns."""
         return self._flag_columns
 
-    def register_flag_system(self, name: str, flag_system: dict[str, int] | type[BitwiseFlag]) -> None:
+    def register_flag_system(self, flag_system_name: str, flag_system: dict[str, int] | type[BitwiseFlag]) -> None:
         """Registers a flag system with the flag manager.  A flag system will contain flag values and their meanings.
 
         A flag system can be used to create flag columns that are specific to a particular type of flag.
@@ -107,20 +109,20 @@ class FlagManager:
         > flag_system = BitwiseFlag(flag_dict, name=flag_system_name)
 
         Args:
-            name: The name of the new flag system.
+            flag_system_name: The name of the new flag system.
             flag_system: The flag system containing flag values and their meanings.
 
         Raises:
             FlagSystemTypeError: If the flag system is not a valid type.
         """
-        if name in self._flag_systems:
-            raise DuplicateFlagSystemError(f"Flag system '{name}' already exists.")
+        if flag_system_name in self._flag_systems:
+            raise DuplicateFlagSystemError(f"Flag system '{flag_system_name}' already exists.")
 
         if isinstance(flag_system, EnumType):
-            self._flag_systems[name] = flag_system
+            self._flag_systems[flag_system_name] = flag_system
 
         elif isinstance(flag_system, dict):
-            self._flag_systems[name] = BitwiseFlag(name, flag_system)
+            self._flag_systems[flag_system_name] = BitwiseFlag(flag_system_name, flag_system)
 
         else:
             raise FlagSystemTypeError(
@@ -128,37 +130,38 @@ class FlagManager:
                 f"Expected dict[str, int] or a ``BitwiseFlag`` subclass."
             )
 
-    def get_flag_system(self, name: str) -> type[BitwiseFlag]:
+    def get_flag_system(self, flag_system_name: str) -> type[BitwiseFlag]:
         """Return a registered flag system.
 
         Args:
-            name: The registered flag system name
+            flag_system_name: The registered flag system name
 
         Returns:
             The ``BitwiseFlag`` enum that defines the flag system.
         """
         try:
-            return self._flag_systems[name]
+            return self._flag_systems[flag_system_name]
         except KeyError:
-            raise FlagSystemNotFoundError(f"No such flag system: '{name}'")
+            raise FlagSystemNotFoundError(f"No such flag system: '{flag_system_name}'")
 
-    def register_flag_column(self, name: str, base: str, flag_system: str) -> None:
+    def register_flag_column(self, name: str, base: str, flag_system_name: str) -> None:
         """Mark the specified existing column as a flag column.
 
         Args:
             name: A column name to mark as a flag column.
             base: Name of the value/data column this flag column refers to.
-            flag_system: The name of the flag system.
+            flag_system_name: The name of the flag system.
         """
         flag_column = self._flag_columns.get(name)
         if flag_column:
-            if flag_column.base != base or flag_column.flag_system != flag_system:
+            if flag_column.base != base or flag_column.flag_system_name != flag_system_name:
                 raise FlagSystemError(
-                    f"Flag column '{name}' already registered. Base: '{flag_column.base}'; System: '{flag_system}'."
+                    f"Flag column '{name}' already registered. "
+                    f"Base: '{flag_column.base}'; System: '{flag_system_name}'."
                 )
         else:
-            flag_system = self.get_flag_system(flag_system)
-            flag_column = FlagColumn(name, base, flag_system)
+            flag_system = self.get_flag_system(flag_system_name)
+            flag_column = FlagColumn(name, base, flag_system, flag_system_name)
             self._flag_columns[name] = flag_column
 
     def get_flag_column(self, name: str) -> FlagColumn:
@@ -173,4 +176,17 @@ class FlagManager:
         try:
             return self._flag_columns[name]
         except KeyError:
-            raise ColumnNotFoundError(f"No such flag column: '{name}'")
+            raise ColumnNotFoundError(f"No such flag column: '{name}'.")
+
+    def copy(self) -> Self:
+        out = FlagManager()
+
+        # register flag systems in the new copy under the same names as previous
+        for name, flag_system in self._flag_systems.items():
+            out.register_flag_system(name, flag_system)
+
+        # register flag columns in the new copy with their associated system names
+        for name, flag_column in self._flag_columns.items():
+            out.register_flag_column(name, flag_column.base, flag_column.flag_system_name)
+
+        return out

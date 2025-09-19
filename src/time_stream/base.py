@@ -9,6 +9,7 @@ from time_stream.enums import DuplicateOption, TimeAnchor
 from time_stream.exceptions import MetadataError
 from time_stream.flag_manager import FlagColumn, FlagManager
 from time_stream.infill import InfillMethod
+from time_stream.metadata import MetadataStore
 from time_stream.period import Period
 from time_stream.qc import QCCheck
 from time_stream.time_manager import TimeManager
@@ -20,8 +21,8 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
 
     _df: pl.DataFrame
     _time_manager: TimeManager
-    _metadata: dict
-    _flag_manager: FlagManager = FlagManager()
+    _flag_manager: FlagManager
+    _metadata_store: MetadataStore
 
     def __init__(
         self,
@@ -30,7 +31,6 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         resolution: Period | str | None = None,
         periodicity: Period | str | None = None,
         time_anchor: TimeAnchor | str = TimeAnchor.START,
-        metadata: dict[str, Any] | None = None,
         on_duplicates: DuplicateOption | str = DuplicateOption.ERROR,
     ) -> None:
         """Initialise a TimeSeries instance.
@@ -41,13 +41,9 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
             resolution: The resolution of the time series.
             periodicity: The periodicity of the time series.
             time_anchor: The time anchor to which the date/times of the time series conform to.
-            metadata: Metadata relevant to the overall time series, e.g., network, site ID, license, etc.
             on_duplicates: What to do if duplicate rows are found in the data. Default to ERROR.
         """
-        self._df = df
-
         self._time_manager = TimeManager(
-            get_df=lambda: self.df,
             time_name=time_name,
             resolution=resolution,
             periodicity=periodicity,
@@ -55,16 +51,61 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
             time_anchor=time_anchor,
         )
 
-        self._metadata = metadata
-        self._setup()
+        self._metadata_store = MetadataStore()
+        self._flag_manager = FlagManager()
 
-    def _setup(self) -> None:
-        """Performs the initial setup for the TimeSeries instance."""
-        # NOTE: Set _df directly, otherwise the df setter will complain that the time column is mutated.
-        #       In this instance, we are happy as we know we are mutating the time values to handle duplicate values.
-        self._df = self._time_manager._handle_time_duplicates()
-        self._time_manager.validate()
+        self._df = self._time_manager._handle_time_duplicates(df)
+        self._time_manager.validate(self.df)
         self.sort_time()
+
+    def copy(self, share_df: bool = True) -> Self:
+        """Return a shallow copy of this ``TimeSeries``, either sharing or cloning the underlying DataFrame.
+
+        Args:
+            share_df: If True, the copy references the same DataFrame object. If False, a cloned DataFrame is used.
+
+        Returns:
+            A copy of this TimeSeries
+        """
+        df = self.df if share_df else self.df.clone()
+        out = TimeSeries(
+            df,
+            time_name=self.time_name,
+            resolution=self.resolution,
+            periodicity=self.periodicity,
+            time_anchor=self.time_anchor,
+        )
+        out._metadata_store = self._metadata_store.copy()
+        out._flag_manager = self._flag_manager.copy()
+
+        return out
+
+    def with_series_metadata(self, metadata: dict[str, Any]) -> Self:
+        """Return a new ``TimeSeries`` with timeseries-level metadata.
+
+        Args:
+            metadata: Mapping of arbitrary keys/values describing the time series as a whole.
+
+        Returns:
+            A new TimeSeries with timeseries-level metadata has set to the provided metadata.
+        """
+        ts = self.copy()
+        ts._metadata_store.set_series_metadata(metadata)
+        return ts
+
+    def with_column_meta(self, metadata: dict[str, dict[str, Any]]) -> Self:
+        """Return a new ``TimeSeries`` with column-level metadata.
+
+        Args:
+            metadata: Mapping of column names to a dict of arbitrary keys/values describing the column.
+
+        Returns:
+            A new TimeSeries with column-level metadata has set to the provided metadata.
+        """
+        ts = self.copy()
+        for column, meta in metadata.items():
+            ts._metadata_store.set_column_metadata(column, meta)
+        return ts
 
     @property
     def time_name(self) -> str:
@@ -114,7 +155,9 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
 
     @property
     def data_columns(self) -> list[str]:
-        """Return all the data columns of the TimeSeries."""
+        """Return all the data columns of the TimeSeries (essentially any column that isn't the time column
+        or a flag column).
+        """
         return [c for c in self.columns if c not in self.flag_columns]
 
     def sort_time(self) -> None:
@@ -125,6 +168,85 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         """Pad the time series with missing datetime rows, filling in NULLs for missing values."""
         self._df = pad_time(self.df, self.time_name, self.periodicity, self.time_anchor)
         self.sort_time()
+
+    def set_series_metadata(self, metadata: dict[str, Any] | None = None) -> None:
+        """Alias for :meth:`time_stream.metadata.MetadataStore.set_series_metadata`."""
+        self._metadata_store.set_series_metadata(metadata)
+
+    def update_series_metadata(self, metadata: dict[str, Any] | None = None) -> None:
+        """Alias for :meth:`time_stream.metadata.MetadataStore.update_series_metadata`."""
+        self._metadata_store.update_series_metadata(metadata)
+
+    def set_column_metadata(self, name: str, metadata: dict[str, Any]) -> None:
+        """Alias for :meth:`time_stream.metadata.MetadataStore.set_column_metadata`."""
+        self._metadata_store.set_column_metadata(name, metadata)
+
+    def update_column_metadata(self, name: str, metadata: dict[str, Any]) -> None:
+        """Alias for :meth:`time_stream.metadata.MetadataStore.update_column_metadata`."""
+        self._metadata_store.update_column_metadata(name, metadata)
+
+    def metadata(self, keys: str | Sequence[str] | None = None, strict: bool = False) -> dict[str, Any]:
+        """Retrieve TimeSeries-level metadata for all or specific keys.
+
+        Usage:
+            ts.metadata()                          -> full series-level metadata dict
+            ts.metadata("title")                   -> single value
+            ts.metadata(["title", "source"])       -> multiple values
+
+        Args:
+            keys: A specific key or sequence of keys to filter the metadata. If None, all metadata is returned.
+            strict: If True, raises a KeyError when a key is missing.  Otherwise, missing keys return None.
+
+        Returns:
+            A dictionary of the requested metadata.
+        """
+        series_metadata = self._metadata_store.get_series_metadata()
+        if keys is None:
+            return series_metadata
+
+        if isinstance(keys, str):
+            keys = [keys]
+
+        result = {}
+        for k in keys:
+            value = series_metadata.get(k)
+            if strict and value is None:
+                raise MetadataError(f"Metadata key '{k}' not found")
+            result[k] = value
+        return result
+
+    def column_metadata(
+        self, column: str, keys: str | Sequence[str] | None = None, strict: bool = False
+    ) -> dict[str, Any]:
+        """Retrieve metadata for a given column, for all or specific keys.
+
+        Usage:
+            ts.column_metadata("flow")                     -> full dict for the column 'flow'
+            ts.column_metadata("flow", "unit")             -> single value
+            ts.column_metadata("flow", ["unit","sensor"])  -> multiple values
+
+        Args:
+            column: A specific column or sequence of columns to filter the metadata. If None, all columns are returned.
+            keys: A specific key or sequence of keys to filter the metadata. If None, all metadata is returned.
+            strict: If True, raises a KeyError when a key is missing.  Otherwise, missing keys return None.
+
+        Returns:
+            A dictionary of the requested metadata.
+        """
+        column_metadata = self._metadata_store.get_column_metadata(column)
+        if keys is None:
+            return column_metadata
+
+        if isinstance(keys, str):
+            keys = [keys]
+
+        result = {}
+        for k in keys:
+            value = column_metadata.get(k)
+            if strict and value is None:
+                raise MetadataError(f"Metadata key '{k}' not found for column '{column}'")
+            result[k] = value
+        return result
 
     def register_flag_system(self, name: str, flag_system: dict[str, int] | type[BitwiseFlag]) -> None:
         """Register a named flag system with the internal flag manager.
@@ -261,14 +383,14 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
             aggregation_time_anchor=aggregation_time_anchor,
         )
 
-        return TimeSeries(
+        new_ts = TimeSeries(
             df=agg_df,
             time_name=self.time_name,
             resolution=aggregation_period,
             periodicity=aggregation_period,
             time_anchor=aggregation_time_anchor,
-            metadata=self._metadata.copy(),
         )
+        new_ts.set_series_metadata(self.metadata())
 
     def qc_check(
         self,
@@ -326,7 +448,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
             qc_result_col_name = f"{qc_result_col_name}__{col_suffix}"
 
         # Create a copy of the current TimeSeries, and update the dataframe with the QC result
-        new_ts = self.select([*self.data_columns.keys(), *self.supplementary_columns.keys(), *self.flag_columns.keys()])
+        new_ts = self.copy()
         new_ts.df = new_ts.df.with_columns(pl.Series(qc_result_col_name, qc_result))
         return new_ts
 
@@ -359,35 +481,9 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
 
         # Create result TimeSeries
         # Create a copy of the current TimeSeries, and update the dataframe with the infilled data
-        new_ts = self.select([*self.data_columns.keys(), *self.supplementary_columns.keys(), *self.flag_columns.keys()])
+        new_ts = self.copy()
         new_ts.df = infill_result
         return new_ts
-
-    def metadata(self, key: str | Sequence[str] | None = None, strict: bool = True) -> dict[str, Any]:
-        """Retrieve metadata for all or specific keys.
-
-        Args:
-            key: A specific key or sequence of keys to filter the metadata. If None, all metadata is returned.
-            strict: If True, raises a KeyError when a key is missing.  Otherwise, missing keys return None.
-        Returns:
-            A dictionary of the requested metadata.
-
-        Raises:
-            KeyError: If the requested key(s) are not found in the metadata.
-        """
-        if not key:
-            return self._metadata
-
-        if isinstance(key, str):
-            key = [key]
-
-        result = {}
-        for k in key:
-            value = self._metadata.get(k)
-            if strict and value is None:
-                raise MetadataError(f"Metadata key '{k}' not found")
-            result[k] = value
-        return result
 
     def __len__(self) -> int:
         """Return the number of rows in the time series."""
@@ -404,6 +500,12 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
     def __repr__(self) -> str:
         """Returns the representation of the TimeSeries"""
         return self.df.__repr__()
+
+    def __copy__(self) -> Self:
+        return self.copy(share_df=True)
+
+    def __deepcopy__(self, memo: dict) -> Self:
+        return self.copy(share_df=False)
 
     def __eq__(self, other: object) -> bool:
         """Check if two TimeSeries instances are equal.
@@ -426,7 +528,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
             self.time_name != other.time_name
             or self.resolution != other.resolution
             or self.periodicity != other.periodicity
-            or self._metadata != other._metadata
+            or self.time_anchor != other.time_anchor
         ):
             return False
 
