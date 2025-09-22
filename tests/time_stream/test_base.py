@@ -4,7 +4,7 @@ from typing import Any
 
 import polars as pl
 from parameterized import parameterized
-from polars.testing import assert_frame_equal, assert_series_equal
+from polars.testing import assert_frame_equal, assert_frame_not_equal, assert_series_equal
 
 from time_stream.base import TimeSeries
 from time_stream.bitwise import BitwiseFlag
@@ -287,6 +287,12 @@ class TestInitFlagColumn(unittest.TestCase):
         )
         self.assertIn("flag_column", self.ts.flag_columns)
 
+    def test_init_column_adds_to_metadata(self) -> None:
+        """Test that a new flag column gets added to the column metadata dict."""
+        self.ts.init_flag_column("value", "quality_control", "flag_column")
+        expected = {"time": {}, "value": {}, "existing_flags": {}, "flag_column": {}}
+        self.assertEqual(self.ts.column_metadata, expected)
+
     def test_init_flag_column_with_single_value(self) -> None:
         """Test initialising a flag column with a valid flag system and a non-default single value"""
 
@@ -322,6 +328,12 @@ class TestInitFlagColumn(unittest.TestCase):
         )
         self.assertIn(default_name, self.ts.flag_columns)
 
+    def test_init_no_column_name_adds_to_metadata(self) -> None:
+        """Test that a new flag column gets added to the column metadata dict."""
+        self.ts.init_flag_column("value", "quality_control")
+        expected = {"time": {}, "value": {}, "existing_flags": {}, "value__flag__quality_control": {}}
+        self.assertEqual(self.ts.column_metadata, expected)
+
 
 class TestTimeSeriesEquality(unittest.TestCase):
     def setUp(self) -> None:
@@ -341,87 +353,253 @@ class TestTimeSeriesEquality(unittest.TestCase):
 
         self.flag_systems_1 = {"OK": 1, "WARNING": 2}
         self.flag_systems_2 = {"NOT_OK": 4, "ERROR": 8}
+        self.metadata = {"site": "DUMMY", "organisation": "UKCEH"}
 
-        self.ts_original = TimeSeries(
-            df=self.df_original,
-            time_name="time",
-            resolution=Period.of_days(1),
-            periodicity=Period.of_days(1),
-        ).with_flag_system("quality_flags", self.flag_systems_1)
+        self.ts_original = (
+            TimeSeries(
+                df=self.df_original,
+                time_name="time",
+                resolution=Period.of_days(1),
+                periodicity=Period.of_days(1),
+            )
+            .with_flag_system("quality_flags", self.flag_systems_1)
+            .with_metadata(self.metadata)
+        )
 
     def test_equal_timeseries(self) -> None:
         """Test that two identical TimeSeries objects are considered equal."""
-        ts_same = TimeSeries(
-            df=self.df_same,
-            time_name="time",
-            resolution=Period.of_days(1),
-            periodicity=Period.of_days(1),
-        ).with_flag_system("quality_flags", self.flag_systems_1)
+        ts_same = (
+            TimeSeries(
+                df=self.df_same,
+                time_name="time",
+                resolution=Period.of_days(1),
+                periodicity=Period.of_days(1),
+            )
+            .with_flag_system("quality_flags", self.flag_systems_1)
+            .with_metadata(self.metadata)
+        )
 
         self.assertEqual(self.ts_original, ts_same)
 
     def test_different_data_values(self) -> None:
         """Test that TimeSeries objects with different data values are not equal."""
-        ts_different_df = TimeSeries(
-            df=self.df_different_values,
-            time_name="time",
-            resolution=Period.of_days(1),
-            periodicity=Period.of_days(1),
-        ).with_flag_system("quality_flags", self.flag_systems_1)
+        ts_different_df = (
+            TimeSeries(
+                df=self.df_different_values,
+                time_name="time",
+                resolution=Period.of_days(1),
+                periodicity=Period.of_days(1),
+            )
+            .with_flag_system("quality_flags", self.flag_systems_1)
+            .with_metadata(self.metadata)
+        )
 
         self.assertNotEqual(self.ts_original, ts_different_df)
 
+        # Test the expected property has changed
+        assert_frame_not_equal(self.ts_original.df, ts_different_df.df)
+        self.assertEqual(self.ts_original.time_name, ts_different_df.time_name)
+        self.assertEqual(self.ts_original.resolution, ts_different_df.resolution)
+        self.assertEqual(self.ts_original.periodicity, ts_different_df.periodicity)
+        self.assertEqual(self.ts_original.time_anchor, ts_different_df.time_anchor)
+        self.assertEqual(self.ts_original._flag_manager, ts_different_df._flag_manager)
+        self.assertEqual(self.ts_original.metadata, ts_different_df.metadata)
+        self.assertEqual(self.ts_original.column_metadata, ts_different_df.column_metadata)
+
     def test_different_time_values(self) -> None:
         """Test that TimeSeries objects with different time values are not equal."""
-        ts_different_times = TimeSeries(
-            df=self.df_different_times,
-            time_name="time",
-            resolution=Period.of_days(1),
-            periodicity=Period.of_days(1),
-        ).with_flag_system("quality_flags", self.flag_systems_1)
+        ts_different_times = (
+            TimeSeries(
+                df=self.df_different_times,
+                time_name="time",
+                resolution=Period.of_days(1),
+                periodicity=Period.of_days(1),
+            )
+            .with_flag_system("quality_flags", self.flag_systems_1)
+            .with_metadata(self.metadata)
+        )
 
         self.assertNotEqual(self.ts_original, ts_different_times)
 
+        # Test the expected property has changed
+        assert_frame_not_equal(self.ts_original.df, ts_different_times.df)
+        self.assertEqual(self.ts_original.time_name, ts_different_times.time_name)
+        self.assertEqual(self.ts_original.resolution, ts_different_times.resolution)
+        self.assertEqual(self.ts_original.periodicity, ts_different_times.periodicity)
+        self.assertEqual(self.ts_original.time_anchor, ts_different_times.time_anchor)
+        self.assertEqual(self.ts_original._flag_manager, ts_different_times._flag_manager)
+        self.assertEqual(self.ts_original.metadata, ts_different_times.metadata)
+        self.assertEqual(self.ts_original.column_metadata, ts_different_times.column_metadata)
+
     def test_different_time_name(self) -> None:
         """Test that TimeSeries objects with different time column name are not equal."""
-        ts_different_time_name = TimeSeries(
-            df=self.df_original.rename({"time": "timestamp"}),
-            time_name="timestamp",
-            resolution=Period.of_days(1),
-            periodicity=Period.of_days(1),
-        ).with_flag_system("quality_flags", self.flag_systems_1)
+        ts_different_time_name = (
+            TimeSeries(
+                df=self.df_original.rename({"time": "timestamp"}),
+                time_name="timestamp",
+                resolution=Period.of_days(1),
+                periodicity=Period.of_days(1),
+            )
+            .with_flag_system("quality_flags", self.flag_systems_1)
+            .with_metadata(self.metadata)
+        )
 
         self.assertNotEqual(self.ts_original, ts_different_time_name)
 
+        # Test the expected property has changed
+        assert_frame_not_equal(self.ts_original.df, ts_different_time_name.df)
+        self.assertNotEqual(self.ts_original.time_name, ts_different_time_name.time_name)
+        self.assertEqual(self.ts_original.resolution, ts_different_time_name.resolution)
+        self.assertEqual(self.ts_original.periodicity, ts_different_time_name.periodicity)
+        self.assertEqual(self.ts_original.time_anchor, ts_different_time_name.time_anchor)
+        self.assertEqual(self.ts_original._flag_manager, ts_different_time_name._flag_manager)
+        self.assertEqual(self.ts_original.metadata, ts_different_time_name.metadata)
+        self.assertNotEqual(self.ts_original.column_metadata, ts_different_time_name.column_metadata)
+
     def test_different_periodicity(self) -> None:
         """Test that TimeSeries objects with different periodicity are not equal."""
-        ts_different_periodicity = TimeSeries(
-            df=self.df_original,
-            time_name="time",
-            resolution=Period.of_days(1),
-            periodicity=Period.of_months(1),
-        ).with_flag_system("quality_flags", self.flag_systems_1)
+        ts_different_periodicity = (
+            TimeSeries(
+                df=self.df_original,
+                time_name="time",
+                resolution=Period.of_days(1),
+                periodicity=Period.of_months(1),
+            )
+            .with_flag_system("quality_flags", self.flag_systems_1)
+            .with_metadata(self.metadata)
+        )
 
         self.assertNotEqual(self.ts_original, ts_different_periodicity)
 
+        # Test the expected property has changed
+        assert_frame_equal(self.ts_original.df, ts_different_periodicity.df)
+        self.assertEqual(self.ts_original.time_name, ts_different_periodicity.time_name)
+        self.assertEqual(self.ts_original.resolution, ts_different_periodicity.resolution)
+        self.assertNotEqual(self.ts_original.periodicity, ts_different_periodicity.periodicity)
+        self.assertEqual(self.ts_original.time_anchor, ts_different_periodicity.time_anchor)
+        self.assertEqual(self.ts_original._flag_manager, ts_different_periodicity._flag_manager)
+        self.assertEqual(self.ts_original.metadata, ts_different_periodicity.metadata)
+        self.assertEqual(self.ts_original.column_metadata, ts_different_periodicity.column_metadata)
+
     def test_different_resolution(self) -> None:
         """Test that TimeSeries objects with different resolution are not equal."""
-        ts_different_resolution = TimeSeries(
-            df=self.df_original,
-            time_name="time",
-            resolution=Period.of_seconds(1),
-            periodicity=Period.of_days(1),
-        ).with_flag_system("quality_flags", self.flag_systems_1)
+        ts_different_resolution = (
+            TimeSeries(
+                df=self.df_original,
+                time_name="time",
+                resolution=Period.of_seconds(1),
+                periodicity=Period.of_days(1),
+            )
+            .with_flag_system("quality_flags", self.flag_systems_1)
+            .with_metadata(self.metadata)
+        )
 
         self.assertNotEqual(self.ts_original, ts_different_resolution)
 
+        assert_frame_equal(self.ts_original.df, ts_different_resolution.df)
+        self.assertEqual(self.ts_original.time_name, ts_different_resolution.time_name)
+        self.assertNotEqual(self.ts_original.resolution, ts_different_resolution.resolution)
+        self.assertEqual(self.ts_original.periodicity, ts_different_resolution.periodicity)
+        self.assertEqual(self.ts_original.time_anchor, ts_different_resolution.time_anchor)
+        self.assertEqual(self.ts_original._flag_manager, ts_different_resolution._flag_manager)
+        self.assertEqual(self.ts_original.metadata, ts_different_resolution.metadata)
+        self.assertEqual(self.ts_original.column_metadata, ts_different_resolution.column_metadata)
+
+    def test_different_time_anchor(self) -> None:
+        """Test that TimeSeries objects with different time anchor are not equal."""
+        ts_different_time_anchor = (
+            TimeSeries(
+                df=self.df_original,
+                time_name="time",
+                resolution=Period.of_days(1),
+                periodicity=Period.of_days(1),
+                time_anchor="end",
+            )
+            .with_flag_system("quality_flags", self.flag_systems_1)
+            .with_metadata(self.metadata)
+        )
+
+        self.assertNotEqual(self.ts_original, ts_different_time_anchor)
+
+        # Test the expected property has changed
+        assert_frame_equal(self.ts_original.df, ts_different_time_anchor.df)
+        self.assertEqual(self.ts_original.time_name, ts_different_time_anchor.time_name)
+        self.assertEqual(self.ts_original.resolution, ts_different_time_anchor.resolution)
+        self.assertEqual(self.ts_original.periodicity, ts_different_time_anchor.periodicity)
+        self.assertNotEqual(self.ts_original.time_anchor, ts_different_time_anchor.time_anchor)
+        self.assertEqual(self.ts_original._flag_manager, ts_different_time_anchor._flag_manager)
+        self.assertEqual(self.ts_original.metadata, ts_different_time_anchor.metadata)
+        self.assertEqual(self.ts_original.column_metadata, ts_different_time_anchor.column_metadata)
+
     def test_different_flag_systems(self) -> None:
         """Test that TimeSeries objects with different flag systems are not equal."""
-        ts_different_flags = TimeSeries(
-            df=self.df_original,
-            time_name="time",
-            resolution=Period.of_days(1),
-            periodicity=Period.of_days(1),
-        ).with_flag_system("quality_flags", self.flag_systems_2)
+        ts_different_flags = (
+            TimeSeries(
+                df=self.df_original,
+                time_name="time",
+                resolution=Period.of_days(1),
+                periodicity=Period.of_days(1),
+            )
+            .with_flag_system("quality_flags", self.flag_systems_2)
+            .with_metadata(self.metadata)
+        )
 
         self.assertNotEqual(self.ts_original, ts_different_flags)
+
+        assert_frame_equal(self.ts_original.df, ts_different_flags.df)
+        self.assertEqual(self.ts_original.time_name, ts_different_flags.time_name)
+        self.assertEqual(self.ts_original.resolution, ts_different_flags.resolution)
+        self.assertEqual(self.ts_original.periodicity, ts_different_flags.periodicity)
+        self.assertEqual(self.ts_original.time_anchor, ts_different_flags.time_anchor)
+        self.assertNotEqual(self.ts_original._flag_manager, ts_different_flags._flag_manager)
+        self.assertEqual(self.ts_original.metadata, ts_different_flags.metadata)
+        self.assertEqual(self.ts_original.column_metadata, ts_different_flags.column_metadata)
+
+    def test_different_metadata(self) -> None:
+        """Test that TimeSeries objects with different metadata are not equal."""
+        ts_different_metadata = (
+            TimeSeries(
+                df=self.df_original,
+                time_name="time",
+                resolution=Period.of_days(1),
+                periodicity=Period.of_days(1),
+            )
+            .with_flag_system("quality_flags", self.flag_systems_1)
+            .with_metadata({"site": "DIFFERENT", "organisation": "UKCEH"})
+        )
+
+        self.assertNotEqual(self.ts_original, ts_different_metadata)
+
+        assert_frame_equal(self.ts_original.df, ts_different_metadata.df)
+        self.assertEqual(self.ts_original.time_name, ts_different_metadata.time_name)
+        self.assertEqual(self.ts_original.resolution, ts_different_metadata.resolution)
+        self.assertEqual(self.ts_original.periodicity, ts_different_metadata.periodicity)
+        self.assertEqual(self.ts_original.time_anchor, ts_different_metadata.time_anchor)
+        self.assertEqual(self.ts_original._flag_manager, ts_different_metadata._flag_manager)
+        self.assertNotEqual(self.ts_original.metadata, ts_different_metadata.metadata)
+        self.assertEqual(self.ts_original.column_metadata, ts_different_metadata.column_metadata)
+
+    def test_different_column_metadata(self) -> None:
+        """Test that TimeSeries objects with different metadata are not equal."""
+        ts_different_column_metadata = (
+            TimeSeries(
+                df=self.df_original,
+                time_name="time",
+                resolution=Period.of_days(1),
+                periodicity=Period.of_days(1),
+            )
+            .with_flag_system("quality_flags", self.flag_systems_1)
+            .with_metadata(self.metadata)
+            .with_column_metadata({"value": {"units": "mm"}})
+        )
+
+        self.assertNotEqual(self.ts_original, ts_different_column_metadata)
+
+        assert_frame_equal(self.ts_original.df, ts_different_column_metadata.df)
+        self.assertEqual(self.ts_original.time_name, ts_different_column_metadata.time_name)
+        self.assertEqual(self.ts_original.resolution, ts_different_column_metadata.resolution)
+        self.assertEqual(self.ts_original.periodicity, ts_different_column_metadata.periodicity)
+        self.assertEqual(self.ts_original.time_anchor, ts_different_column_metadata.time_anchor)
+        self.assertEqual(self.ts_original._flag_manager, ts_different_column_metadata._flag_manager)
+        self.assertEqual(self.ts_original.metadata, ts_different_column_metadata.metadata)
+        self.assertNotEqual(self.ts_original.column_metadata, ts_different_column_metadata.column_metadata)

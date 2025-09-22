@@ -71,3 +71,9 @@ class TestBitwiseFlag(unittest.TestCase):
         """Test that requesting a flag with an invalid type raises error."""
         with self.assertRaises(BitwiseFlagTypeError):
             Flags.get_single_flag(3.5)  # noqa - expecting wrong type
+
+    def test_to_dict(self) -> None:
+        """Test creating a dictionary from a bitwise flag."""
+        result = Flags.to_dict()
+        expected = {"FLAG_A": 1, "FLAG_B": 2, "FLAG_C": 4}
+        self.assertEqual(result, expected)

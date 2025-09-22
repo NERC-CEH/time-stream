@@ -1,9 +1,15 @@
 import copy
 import unittest
+from datetime import datetime
 from unittest.mock import Mock
 
+import polars as pl
+from polars.testing import assert_series_equal
+
+from time_stream import TimeSeries
 from time_stream.bitwise import BitwiseFlag
 from time_stream.exceptions import (
+    BitwiseFlagUnknownError,
     ColumnNotFoundError,
     DuplicateFlagSystemError,
     FlagSystemError,
@@ -134,3 +140,130 @@ class TestCopy(unittest.TestCase):
         """Test that the standard library copy module works as expected."""
         flag_manager_copy = copy.copy(self.flag_manager)
         self.assert_copy(flag_manager_copy)
+
+
+class TestAddFlag(unittest.TestCase):
+    def setUp(self) -> None:
+        self.ts = TimeSeries(
+            pl.DataFrame(
+                {"time": [datetime(2025, 1, 1), datetime(2025, 1, 2), datetime(2025, 1, 3)], "value": [1, 2, 3]}
+            ),
+            "time",
+        ).with_flag_system("system1", {"FLAG_A": 1, "FLAG_B": 2, "FLAG_C": 4})
+
+        self.ts.init_flag_column("value", "system1", "flag_col_1")
+
+    def test_add_flag_to_flag_column_no_expr(self) -> None:
+        """Test that adding a flag to a valid flag column with no expression sets all values in the
+        column to that flag"""
+        self.ts.add_flag("flag_col_1", 1)
+        result = self.ts.df["flag_col_1"]
+        expected = pl.Series("flag_col_1", [1, 1, 1])
+
+        assert_series_equal(result, expected)
+
+    def test_add_flag_to_flag_column_with_expr(self) -> None:
+        """Test that adding a flag to a valid flag column with an expression sets all values in the
+        column that match that expression to that flag"""
+        self.ts.add_flag("flag_col_1", 1, pl.col("value").gt(1))
+        result = self.ts.df["flag_col_1"]
+        expected = pl.Series("flag_col_1", [0, 1, 1])
+
+        assert_series_equal(result, expected)
+
+    def test_add_flag_by_name_to_flag_column(self) -> None:
+        """Test that adding a flag to a valid flag column using the flag name (rather than value)
+        sets all values in the column that match that expression to the correct flag value"""
+        self.ts.add_flag("flag_col_1", "FLAG_C")
+        result = self.ts.df["flag_col_1"]
+        expected = pl.Series("flag_col_1", [4, 4, 4])
+
+        assert_series_equal(result, expected)
+
+    def test_adding_non_existent_flag_to_flag_column_raises_error(self) -> None:
+        """Test that trying to add an invalid flag to a valid flag column raises error"""
+        with self.assertRaises(BitwiseFlagUnknownError):
+            self.ts.add_flag("flag_col_1", 10)
+
+    def test_add_flag_to_data_column_raises_error(self) -> None:
+        """Test that trying to add a flag to a data column raises error"""
+        with self.assertRaises(ColumnNotFoundError):
+            self.ts.add_flag("value", 1)
+
+    def test_add_flag_twice(self) -> None:
+        """Test that adding a flag twice uses the bitwise math, so doesn't actually add the value twice"""
+
+        self.ts.add_flag("flag_col_1", 1)
+        result = self.ts.df["flag_col_1"]
+        expected = pl.Series("flag_col_1", [1, 1, 1])
+        assert_series_equal(result, expected)
+
+        # adding a second time should leave it as is
+        self.ts.add_flag("flag_col_1", 1)
+        result = self.ts.df["flag_col_1"]
+        expected = pl.Series("flag_col_1", [1, 1, 1])
+        assert_series_equal(result, expected)
+
+
+class TestRemoveFlag(unittest.TestCase):
+    def setUp(self) -> None:
+        self.ts = TimeSeries(
+            pl.DataFrame(
+                {
+                    "time": [datetime(2025, 1, 1), datetime(2025, 1, 2), datetime(2025, 1, 3)],
+                    "value": [1, 2, 3],
+                    "flag_col_1": [1, 3, 7],
+                }
+            ),
+            "time",
+        ).with_flag_system("system1", {"FLAG_A": 1, "FLAG_B": 2, "FLAG_C": 4})
+
+        self.ts.register_flag_column("flag_col_1", "value", "system1")
+
+    def test_remove_flag_from_flag_column_no_expr(self) -> None:
+        """Test that removing a flag from a valid flag column with no expression works as expected"""
+        self.ts.remove_flag("flag_col_1", 1)
+        result = self.ts.df["flag_col_1"]
+        expected = pl.Series("flag_col_1", [0, 2, 6])
+
+        assert_series_equal(result, expected)
+
+    def test_remove_flag_twice(self) -> None:
+        """Test that removing a flag twice uses the bitwise math, so doesn't actually remove the value twice"""
+        self.ts.remove_flag("flag_col_1", 1)
+        result = self.ts.df["flag_col_1"]
+        expected = pl.Series("flag_col_1", [0, 2, 6])
+        assert_series_equal(result, expected)
+
+        # removing a second time should leave it as is
+        self.ts.remove_flag("flag_col_1", 1)
+        result = self.ts.df["flag_col_1"]
+        expected = pl.Series("flag_col_1", [0, 2, 6])
+        assert_series_equal(result, expected)
+
+    def test_remove_flag_from_flag_column_with_expr(self) -> None:
+        """Test that removing a flag from a valid flag column with an expression removes flag from only those rows"""
+        self.ts.remove_flag("flag_col_1", 1, pl.col("value").gt(1))
+        result = self.ts.df["flag_col_1"]
+        expected = pl.Series("flag_col_1", [1, 2, 6])
+
+        assert_series_equal(result, expected)
+
+    def test_remove_flag_by_name_from_flag_column(self) -> None:
+        """Test that removing a flag from a valid flag column using the flag name (rather than value) works as
+        expected"""
+        self.ts.remove_flag("flag_col_1", "FLAG_B")
+        result = self.ts.df["flag_col_1"]
+        expected = pl.Series("flag_col_1", [1, 1, 5])
+
+        assert_series_equal(result, expected)
+
+    def test_removing_non_existent_flag_from_flag_column_raises_error(self) -> None:
+        """Test that trying to remove an invalid flag to a valid flag column raises error"""
+        with self.assertRaises(BitwiseFlagUnknownError):
+            self.ts.add_flag("flag_col_1", 10)
+
+    def test_remove_flag_from_data_column_raises_error(self) -> None:
+        """Test that trying to remove a flag to a data column raises error"""
+        with self.assertRaises(ColumnNotFoundError):
+            self.ts.add_flag("value", 1)

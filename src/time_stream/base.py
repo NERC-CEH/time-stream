@@ -329,26 +329,26 @@ class TimeSeries:
         self.register_flag_column(column_name, base, flag_system)
         self._sync_column_metadata()
 
-    def get_flag_column(self, column_name: str) -> FlagColumn:
+    def get_flag_column(self, flag_column_name: str) -> FlagColumn:
         """Look up a registered flag column by name.
 
         Args:
-            column_name: Flag column name.
+            flag_column_name: Flag column name.
 
         Returns:
             The corresponding ``FlagColumn`` object.
         """
-        return self._flag_manager.get_flag_column(column_name)
+        return self._flag_manager.get_flag_column(flag_column_name)
 
-    def add_flag(self, column_name: str, flag_value: int | str, expr: pl.Expr = pl.lit(True)) -> None:
+    def add_flag(self, flag_column_name: str, flag_value: int | str, expr: pl.Expr = pl.lit(True)) -> None:
         """Add flag value (if not there) to flag column, where expression is True.
 
         Args:
-            column_name: The name of the flag column
+            flag_column_name: The name of the flag column
             flag_value: The flag value to add
             expr: Polars expression for which rows to add flag to
         """
-        flag_column = self.get_flag_column(column_name)
+        flag_column = self.get_flag_column(flag_column_name)
         self._df = flag_column.add_flag(self.df, flag_value, expr)
 
     def remove_flag(self, column_name: str, flag_value: int | str, expr: pl.Expr = pl.lit(True)) -> None:
