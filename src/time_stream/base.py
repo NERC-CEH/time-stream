@@ -8,7 +8,7 @@ from time_stream.aggregation import AggregationFunction
 from time_stream.bitwise import BitwiseFlag
 from time_stream.enums import DuplicateOption, TimeAnchor
 from time_stream.exceptions import ColumnNotFoundError, MetadataError
-from time_stream.flag_manager import FlagColumn, FlagManager
+from time_stream.flag_manager import FlagColumn, FlagManager, FlagSystemType
 from time_stream.infill import InfillMethod
 from time_stream.metadata import ColumnMetadataDict
 from time_stream.period import Period
@@ -17,14 +17,14 @@ from time_stream.time_manager import TimeManager
 from time_stream.utils import check_columns_in_dataframe, configure_period_object, pad_time
 
 
-class TimeSeries:  # noqa: PLW1641 ignore hash warning
+class TimeSeries:
     """A class representing a time series data model, with data held in a Polars DataFrame."""
 
     _df: pl.DataFrame
     _time_manager: TimeManager
     _flag_manager: FlagManager
     _metadata: dict[str, Any]
-    _column_metadata: dict[str, dict[str, Any]]
+    _column_metadata: ColumnMetadataDict
 
     def __init__(
         self,
@@ -54,12 +54,13 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         )
 
         self._metadata = {}
-        self._column_metadata = ColumnMetadataDict(lambda: self.columns)
+        self._column_metadata = ColumnMetadataDict(lambda: self.df.columns)
         self._flag_manager = FlagManager()
 
         self._df = self._time_manager._handle_time_duplicates(df)
         self._time_manager.validate(self.df)
         self.sort_time()
+        self._sync_column_metadata()
 
     def copy(self, share_df: bool = True) -> Self:
         """Return a shallow copy of this ``TimeSeries``, either sharing or cloning the underlying DataFrame.
@@ -97,6 +98,48 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         self._time_manager._check_time_integrity(old_df, new_df)
         ts = self.copy()
         ts._df = new_df
+        ts._sync_column_metadata()
+        return ts
+
+    def with_metadata(self, metadata: dict[str, Any]) -> Self:
+        """Return a new TimeSeries with timeseries-level metadata.
+
+        Args:
+            metadata: Mapping of arbitrary keys/values describing the time series as a whole.
+
+        Returns:
+            A new TimeSeries with timeseries-level metadata has set to the provided metadata.
+        """
+        ts = self.copy()
+        ts.metadata = metadata
+        return ts
+
+    def with_column_metadata(self, metadata: dict[str, dict[str, Any]]) -> Self:
+        """Return a new TimeSeries with column-level metadata.
+
+        Args:
+            metadata: Mapping of column names to a dict of arbitrary keys/values describing the column.
+
+        Returns:
+            A new TimeSeries with column-level metadata has set to the provided metadata.
+        """
+        ts = self.copy()
+        ts.column_metadata.update(metadata)
+        ts._sync_column_metadata()
+        return ts
+
+    def with_flag_system(self, name: str, flag_system: FlagSystemType) -> Self:
+        """Return a new TimeSeries, with a flag system registered.
+
+        Args:
+            name: Short name for the flag system
+            flag_system: The flag system to register
+
+        Returns:
+            A new TimeSeries with flag system set.
+        """
+        ts = self.copy()
+        ts.register_flag_system(name, flag_system)
         return ts
 
     @property
@@ -140,13 +183,15 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
             value: The new metadata to set.
         """
         if value is None:
-            self._column_metadata = {}
+            # Reset all the columns metadata to empty dicts
+            self._column_metadata = ColumnMetadataDict(lambda: self.df.columns)
+            self._sync_column_metadata()
         else:
             # Validate the inner mappings of the column metadata
             try:
                 for column_name, column_metadata in value.items():
                     self._column_metadata[column_name] = column_metadata
-            except MetadataError as err:
+            except (KeyError, MetadataError) as err:
                 self._column_metadata.clear()
                 raise err
 
@@ -154,6 +199,20 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
     def column_metadata(self) -> None:
         """Clear all per-column metadata."""
         self._column_metadata.clear()
+        self._sync_column_metadata()
+
+    def _sync_column_metadata(self) -> None:
+        """Ensure column_metadata keys match the DataFrame columns."""
+        df_cols = set(self.df.columns)
+        metadata_cols = set(self.column_metadata.keys())
+
+        for column in metadata_cols - df_cols:
+            # Remove metadata for column not in the dataframe
+            del self.column_metadata[column]
+
+        for column in df_cols - metadata_cols:
+            # Add empty dicts for any column in the dataframe that doesn't have a metadata entry
+            self.column_metadata[column] = {}
 
     @property
     def time_name(self) -> str:
@@ -202,7 +261,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         self._df = pad_time(self.df, self.time_name, self.periodicity, self.time_anchor)
         self.sort_time()
 
-    def register_flag_system(self, name: str, flag_system: dict[str, int] | type[BitwiseFlag]) -> None:
+    def register_flag_system(self, name: str, flag_system: FlagSystemType) -> None:
         """Register a named flag system with the internal flag manager.
 
         Args:
@@ -241,13 +300,13 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
     def init_flag_column(
         self, base: str, flag_system: str, column_name: str | None = None, data: int | Sequence[int] = 0
     ) -> None:
-        """ "Add a new column to the TimeSeries DataFrame, setting it as a Flag Column.
+        """Add a new column to the TimeSeries DataFrame, setting it as a Flag Column.
 
         Args:
             base: Name of the value/data column this flag column will refer to.
             flag_system: The name of the flag system.
             column_name: Optional name for the new flag column. If omitted, a name of the
-                    form ``f"{base}__flag__{flag_system}"`` is used.
+                    form "{base}__flag__{flag_system}" is used.
             data: The default value to populate the flag column with. Can be a scalar or list-like. Defaults to 0.
         """
         check_columns_in_dataframe(self.df, base)
@@ -268,6 +327,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         # Add and register as a flag column
         self._df = self.df.with_columns(data.alias(column_name))
         self.register_flag_column(column_name, base, flag_system)
+        self._sync_column_metadata()
 
     def get_flag_column(self, column_name: str) -> FlagColumn:
         """Look up a registered flag column by name.
@@ -450,15 +510,14 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         """Return a new TimeSeries instance to include only the specified columns.
 
         By default, this:
-          - carries over **series-level metadata** unchanged,
-          - prunes **column-level metadata** to the kept columns,
-          - rebuilds the **flag manager** to include only kept flag columns.
+          - carries over TimeSeries-level metadata,
+          - prunes column-level metadata to the kept columns,
+          - rebuilds the flag manager to include only kept flag columns.
 
         Args:
             column_names:  Column name(s) to retain in the updated TimeSeries.
-            include_flag_columns: If True, include any registered flag columns whose ``base`` is among the
-                                  kept value columns. If a specific flag column name is explicitly requested
-                                  in ``columns`` it is always kept.
+            include_flag_columns: If True, include any registered flag columns whose base is among the
+                                  kept value columns.
 
         Returns:
              New TimeSeries instance with only selected columns.
@@ -490,7 +549,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         # Prune column level metadata to kept columns
         kept_metadata = {col: self.column_metadata[col] for col in column_names}
         new_ts.column_metadata.clear()
-        new_ts = new_ts.column_metadata.update(kept_metadata)
+        new_ts.column_metadata.update(kept_metadata)
 
         # Rebuild the flag registry for kept columns
         new_flag_manager = self._flag_manager.copy()
@@ -504,7 +563,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
                 new_flag_manager.register_flag_column(flag_name, flag_column.base, flag_column.flag_system_name)
 
         new_ts._flag_manager = new_flag_manager
-
+        new_ts._sync_column_metadata()
         return new_ts
 
     def __getitem__(self, key: str | Sequence[str]) -> Self:
@@ -557,17 +616,16 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         if not isinstance(other, TimeSeries):
             return False
 
-        # Compare DataFrames
-        if not self.df.equals(other.df):
-            return False
+        return (
+            self.df.equals(other.df)
+            and self.time_name == other.time_name
+            and self.resolution == other.resolution
+            and self.periodicity == other.periodicity
+            and self.time_anchor == other.time_anchor
+            and self._flag_manager == other._flag_manager
+            and self.metadata == other.metadata
+            and self.column_metadata == other.column_metadata
+        )
 
-        # Compare core metadata attributes
-        if (
-            self.time_name != other.time_name
-            or self.resolution != other.resolution
-            or self.periodicity != other.periodicity
-            or self.time_anchor != other.time_anchor
-        ):
-            return False
-
-        return True
+    # Make class instances unhashable
+    __hash__ = None

@@ -13,6 +13,8 @@ from time_stream.exceptions import (
     FlagSystemTypeError,
 )
 
+FlagSystemType = dict[str, int] | type[BitwiseFlag]
+
 
 @dataclass
 class FlagColumn:
@@ -66,6 +68,28 @@ class FlagColumn:
             pl.when(expr).then(pl.col(self.name) & ~pl.lit(flag.value)).otherwise(pl.col(self.name)).alias(self.name)
         )
 
+    def __eq__(self, other: object) -> bool:
+        """Check if two FlagColumn instances are equal.
+
+        Args:
+            other: The object to compare.
+
+        Returns:
+            bool: True if the FlagColumn instances are equal, False otherwise.
+        """
+        if not isinstance(other, FlagColumn):
+            return False
+
+        return (
+            self.name == other.name
+            and self.base == other.base
+            and self.flag_system_name == other.flag_system_name
+            and self.flag_system == other.flag_system
+        )
+
+    # Make class instances unhashable
+    __hash__ = None
+
 
 class FlagManager:
     """Registry for flag systems and flag columns.
@@ -89,7 +113,7 @@ class FlagManager:
         """Registered flag columns."""
         return self._flag_columns
 
-    def register_flag_system(self, flag_system_name: str, flag_system: dict[str, int] | type[BitwiseFlag]) -> None:
+    def register_flag_system(self, flag_system_name: str, flag_system: FlagSystemType) -> None:
         """Registers a flag system with the flag manager.  A flag system will contain flag values and their meanings.
 
         A flag system can be used to create flag columns that are specific to a particular type of flag.
@@ -189,5 +213,22 @@ class FlagManager:
 
         return out
 
-    def __copy__(self):
+    def __copy__(self) -> Self:
         return self.copy()
+
+    def __eq__(self, other: object) -> bool:
+        """Check if two FlagManager instances are equal.
+
+        Args:
+            other: The object to compare.
+
+        Returns:
+            bool: True if the FlagManager instances are equal, False otherwise.
+        """
+        if not isinstance(other, FlagManager):
+            return False
+
+        return self._flag_systems == other._flag_systems and self._flag_columns == other._flag_columns
+
+    # Make class instances unhashable
+    __hash__ = None

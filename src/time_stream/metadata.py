@@ -9,10 +9,6 @@ class ColumnMetadataDict(dict[str, dict[str, Any]]):
     This mapping enforces two rules:
       1) The key must be an existing DataFrame column (checked via the current_columns callback).
       2) The value must be a mapping (e.g., dict[str, Any]).
-
-    It also supports auto-creation via the __missing__ method. For example, requesting:
-    ``self['column_name']`` will create and return an empty dict (carrying out usual validation that column exists).
-    This makes expressions like ``ts.column_metadata['flow']['unit'] = 'm3 s-1'`` work naturally.
     """
 
     def __init__(self, current_columns: Callable[[], list[str]]) -> None:
@@ -31,7 +27,7 @@ class ColumnMetadataDict(dict[str, dict[str, Any]]):
             key: The name of the column to validate.
         """
         if key not in self._current_columns():
-            raise MetadataError(f"Metadata column '{key}' not found in TimeSeries")
+            raise KeyError(f"Metadata column key '{key}' not found in TimeSeries")
 
     @staticmethod
     def _validate_value(value: dict[str, Any]) -> None:
@@ -42,12 +38,6 @@ class ColumnMetadataDict(dict[str, dict[str, Any]]):
         """
         if not isinstance(value, dict):
             raise MetadataError("Column metadata values must be mappings (e.g. dict)")
-
-    def setdefault(self, key: str, default: dict[str, Any] | None = None) -> dict[str, Any]:
-        """Set a default value for the given key. Carries out validation on the column existence."""
-        self._validate_key(key)
-        self._validate_value(default)
-        return super().setdefault(key, {} if default is None else default)
 
     def update(self, *args: Any, **kwargs: Any) -> None:
         """Overwrite the update method to update the mapping with key/value pairs from another mapping or iterable -
@@ -75,13 +65,3 @@ class ColumnMetadataDict(dict[str, dict[str, Any]]):
         self._validate_key(key)
         self._validate_value(value)
         super().__setitem__(key, value)
-
-    def __missing__(self, key: str) -> dict[str, Any]:
-        """Auto-create and return an empty metadata dict for an existing column.
-
-        Args:
-            key: Column to auto-create an entry for in the dict
-        """
-        self._validate_key(key)
-        super().__setitem__(key, {})
-        return super().__getitem__(key)

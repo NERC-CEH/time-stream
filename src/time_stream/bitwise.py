@@ -1,5 +1,4 @@
 from enum import EnumType, Flag
-from typing import Self
 
 from time_stream.exceptions import (
     BitwiseFlagDuplicateError,
@@ -19,7 +18,7 @@ class BitwiseMeta(EnumType):
         members = ", ".join(f"{name}={member.value}" for name, member in self.__members__.items())
         return f"<{self.name} ({members})>"
 
-    def __eq__(cls, other: Self) -> bool:
+    def __eq__(cls, other: "BitwiseMeta") -> bool:
         if not isinstance(other, BitwiseMeta):
             return False
         return (cls.__name__ == other.__name__) and (cls.__members__.items() == other.__members__.items())

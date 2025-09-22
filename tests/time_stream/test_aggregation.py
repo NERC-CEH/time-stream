@@ -1208,16 +1208,15 @@ class TestAggregationWithMetadata(unittest.TestCase):
 
     def test_with_metadata(self) -> None:
         """Test that the aggregation result includes metadata from input time series"""
-        ts = TimeSeries(
-            df=TS_PT1H_2DAYS.df, time_name="timestamp", resolution=PT1H, periodicity=PT1H
-        ).with_series_metadata(self.metadata)
+        ts = TimeSeries(df=TS_PT1H_2DAYS.df, time_name="timestamp", resolution=PT1H, periodicity=PT1H)
+        ts.metadata = self.metadata
 
         result = ts.aggregate(Period.of_months(1), "mean", "value")
-        self.assertEqual(result.metadata(), self.metadata)
+        self.assertEqual(result.metadata, self.metadata)
 
     def test_with_no_metadata(self) -> None:
         """Test that the aggregation result metadata is empty if input time series metadata is empty"""
         ts = TimeSeries(df=TS_PT1H_2DAYS.df, time_name="timestamp", resolution=PT1H, periodicity=PT1H)
 
         result = ts.aggregate(Period.of_months(1), "mean", "value")
-        self.assertEqual(result.metadata(), {})
+        self.assertEqual(result.metadata, {})
