@@ -1,4 +1,5 @@
 from enum import EnumType, Flag
+from typing import Self
 
 from time_stream.exceptions import (
     BitwiseFlagDuplicateError,
@@ -17,6 +18,14 @@ class BitwiseMeta(EnumType):
         """Return a helpful representation of the flag, listing all enum members."""
         members = ", ".join(f"{name}={member.value}" for name, member in self.__members__.items())
         return f"<{self.name} ({members})>"
+
+    def __eq__(cls, other: Self) -> bool:
+        if not isinstance(other, BitwiseMeta):
+            return False
+        return (cls.__name__ == other.__name__) and (cls.__members__.items() == other.__members__.items())
+
+    def __hash__(cls) -> int:
+        return hash((cls.__name__, tuple(sorted((n, m.value) for n, m in cls.__members__.items()))))
 
 
 class BitwiseFlag(int, Flag, metaclass=BitwiseMeta):
@@ -105,3 +114,8 @@ class BitwiseFlag(int, Flag, metaclass=BitwiseMeta):
             return cls(flag)
         else:
             raise BitwiseFlagTypeError(f"Flag value must be an integer or string, not {type(flag)}.")
+
+    @classmethod
+    def to_dict(cls) -> dict[str, int]:
+        """Return a mapping of flag names to their bit values."""
+        return {name: member.value for name, member in cls.__members__.items()}

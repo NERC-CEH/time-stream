@@ -1,3 +1,4 @@
+from copy import deepcopy
 from datetime import datetime
 from typing import Any, Iterator, Self, Sequence, Type
 
@@ -9,7 +10,7 @@ from time_stream.enums import DuplicateOption, TimeAnchor
 from time_stream.exceptions import ColumnNotFoundError, MetadataError
 from time_stream.flag_manager import FlagColumn, FlagManager
 from time_stream.infill import InfillMethod
-from time_stream.metadata import MetadataStore
+from time_stream.metadata import ColumnMetadataDict
 from time_stream.period import Period
 from time_stream.qc import QCCheck
 from time_stream.time_manager import TimeManager
@@ -22,7 +23,8 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
     _df: pl.DataFrame
     _time_manager: TimeManager
     _flag_manager: FlagManager
-    _metadata_store: MetadataStore
+    _metadata: dict[str, Any]
+    _column_metadata: dict[str, dict[str, Any]]
 
     def __init__(
         self,
@@ -51,7 +53,8 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
             time_anchor=time_anchor,
         )
 
-        self._metadata_store = MetadataStore()
+        self._metadata = {}
+        self._column_metadata = ColumnMetadataDict(lambda: self.columns)
         self._flag_manager = FlagManager()
 
         self._df = self._time_manager._handle_time_duplicates(df)
@@ -75,38 +78,13 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
             periodicity=self.periodicity,
             time_anchor=self.time_anchor,
         )
-        out._metadata_store = self._metadata_store.copy()
+
+        out.metadata = deepcopy(self._metadata)
+        out.column_metadata.update(deepcopy(self._column_metadata))
+
         out._flag_manager = self._flag_manager.copy()
 
         return out
-
-    def with_series_metadata(self, metadata: dict[str, Any]) -> Self:
-        """Return a new ``TimeSeries`` with timeseries-level metadata.
-
-        Args:
-            metadata: Mapping of arbitrary keys/values describing the time series as a whole.
-
-        Returns:
-            A new TimeSeries with timeseries-level metadata has set to the provided metadata.
-        """
-        ts = self.copy()
-        ts._metadata_store.set_series_metadata(metadata)
-        return ts
-
-    def with_column_metadata(self, metadata: dict[str, dict[str, Any]]) -> Self:
-        """Return a new ``TimeSeries`` with column-level metadata.
-
-        Args:
-            metadata: Mapping of column names to a dict of arbitrary keys/values describing the column.
-
-        Returns:
-            A new TimeSeries with column-level metadata has set to the provided metadata.
-        """
-        check_columns_in_dataframe(self.df, metadata.keys())
-        ts = self.copy()
-        for column_name, meta in metadata.items():
-            ts._metadata_store.set_column_metadata(column_name, meta)
-        return ts
 
     def with_df(self, new_df: pl.DataFrame) -> Self:
         """Return a new TimeSeries with a new DataFrame, checking the integrity of the time values hasn't
@@ -120,6 +98,62 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         ts = self.copy()
         ts._df = new_df
         return ts
+
+    @property
+    def metadata(self) -> dict[str, Any]:
+        """TimeSeries-level metadata. Allows dict interaction by the user."""
+        return self._metadata
+
+    @metadata.setter
+    def metadata(self, value: dict[str, Any] | None) -> None:
+        """Set the TimeSeries-level metadata.
+
+        This method checks type of object being set to ensure we continue to work with expected dicts.
+
+        Args:
+            value: The new metadata to set.
+        """
+        if value is None:
+            self._metadata = {}
+        elif isinstance(value, dict):
+            self._metadata = value
+        else:
+            raise MetadataError("TimeSeries-level metadata must be a dict object.")
+
+    @metadata.deleter
+    def metadata(self) -> None:
+        """Clear TimeSeries-level metadata."""
+        self._metadata.clear()
+
+    @property
+    def column_metadata(self) -> dict[str, dict[str, Any]]:
+        """Per-column metadata: {column_name: {...}}."""
+        return self._column_metadata
+
+    @column_metadata.setter
+    def column_metadata(self, value: dict[str, dict[str, Any]] | None) -> None:
+        """Set the column-level metadata.
+
+        This method checks type of object being set to ensure we continue to work with expected dicts.
+
+        Args:
+            value: The new metadata to set.
+        """
+        if value is None:
+            self._column_metadata = {}
+        else:
+            # Validate the inner mappings of the column metadata
+            try:
+                for column_name, column_metadata in value.items():
+                    self._column_metadata[column_name] = column_metadata
+            except MetadataError as err:
+                self._column_metadata.clear()
+                raise err
+
+    @column_metadata.deleter
+    def column_metadata(self) -> None:
+        """Clear all per-column metadata."""
+        self._column_metadata.clear()
 
     @property
     def time_name(self) -> str:
@@ -167,89 +201,6 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         """Pad the time series with missing datetime rows, filling in NULLs for missing values."""
         self._df = pad_time(self.df, self.time_name, self.periodicity, self.time_anchor)
         self.sort_time()
-
-    def set_series_metadata(self, metadata: dict[str, Any] | None = None) -> None:
-        """Alias for `time_stream.metadata.MetadataStore.set_series_metadata`."""
-        self._metadata_store.set_series_metadata(metadata)
-
-    def update_series_metadata(self, metadata: dict[str, Any] | None = None) -> None:
-        """Alias for `time_stream.metadata.MetadataStore.update_series_metadata`."""
-        self._metadata_store.update_series_metadata(metadata)
-
-    def set_column_metadata(self, column_name: str, metadata: dict[str, Any]) -> None:
-        """Alias for `time_stream.metadata.MetadataStore.set_column_metadata`."""
-        check_columns_in_dataframe(self.df, column_name)
-        self._metadata_store.set_column_metadata(column_name, metadata)
-
-    def update_column_metadata(self, column_name: str, metadata: dict[str, Any]) -> None:
-        """Alias for `time_stream.metadata.MetadataStore.update_column_metadata`."""
-        check_columns_in_dataframe(self.df, column_name)
-        self._metadata_store.update_column_metadata(column_name, metadata)
-
-    def metadata(self, keys: str | Sequence[str] | None = None, strict: bool = False) -> dict[str, Any]:
-        """Retrieve TimeSeries-level metadata for all or specific keys.
-
-        Usage:
-            ts.metadata()                          -> full series-level metadata dict
-            ts.metadata("title")                   -> single value
-            ts.metadata(["title", "source"])       -> multiple values
-
-        Args:
-            keys: A specific key or sequence of keys to filter the metadata. If None, all metadata is returned.
-            strict: If True, raises a KeyError when a key is missing.  Otherwise, missing keys return None.
-
-        Returns:
-            A dictionary of the requested metadata.
-        """
-        series_metadata = self._metadata_store.get_series_metadata()
-        if keys is None:
-            return series_metadata
-
-        if isinstance(keys, str):
-            keys = [keys]
-
-        result = {}
-        for k in keys:
-            value = series_metadata.get(k)
-            if strict and value is None:
-                raise MetadataError(f"Metadata key '{k}' not found")
-            result[k] = value
-        return result
-
-    def column_metadata(
-        self, column_name: str, keys: str | Sequence[str] | None = None, strict: bool = False
-    ) -> dict[str, Any]:
-        """Retrieve metadata for a given column, for all or specific keys.
-
-        Usage:
-            ts.column_metadata("flow")                     -> full dict for the column 'flow'
-            ts.column_metadata("flow", "unit")             -> single value
-            ts.column_metadata("flow", ["unit","sensor"])  -> multiple values
-
-        Args:
-            column_name: A specific column or sequence of columns to filter the metadata.
-                            If None, all columns are returned.
-            keys: A specific key or sequence of keys to filter the metadata. If None, all metadata is returned.
-            strict: If True, raises a KeyError when a key is missing.  Otherwise, missing keys return None.
-
-        Returns:
-            A dictionary of the requested metadata.
-        """
-        check_columns_in_dataframe(self.df, column_name)
-        column_metadata = self._metadata_store.get_column_metadata(column_name)
-        if keys is None:
-            return column_metadata
-
-        if isinstance(keys, str):
-            keys = [keys]
-
-        result = {}
-        for k in keys:
-            value = column_metadata.get(k)
-            if strict and value is None:
-                raise MetadataError(f"Metadata key '{k}' not found for column '{column_name}'")
-            result[k] = value
-        return result
 
     def register_flag_system(self, name: str, flag_system: dict[str, int] | type[BitwiseFlag]) -> None:
         """Register a named flag system with the internal flag manager.
@@ -396,7 +347,7 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
             periodicity=aggregation_period,
             time_anchor=aggregation_time_anchor,
         )
-        new_ts.set_series_metadata(self.metadata())
+        new_ts.metadata = deepcopy(self.metadata)
         return new_ts
 
     def qc_check(
@@ -537,15 +488,15 @@ class TimeSeries:  # noqa: PLW1641 ignore hash warning
         new_ts = self.with_df(new_df)
 
         # Prune column level metadata to kept columns
-        kept_metadata = {col: self.column_metadata(col) for col in column_names}
-        new_ts._metadata_store.reset_column_metadata()
-        new_ts = new_ts.with_column_metadata(kept_metadata)
+        kept_metadata = {col: self.column_metadata[col] for col in column_names}
+        new_ts.column_metadata.clear()
+        new_ts = new_ts.column_metadata.update(kept_metadata)
 
         # Rebuild the flag registry for kept columns
-        new_flag_manager = FlagManager()
+        new_flag_manager = self._flag_manager.copy()
         # re-register flag systems
-        for sys_name, enum_cls in self._flag_manager.flag_systems.items():
-            new_flag_manager.register_flag_system(sys_name, enum_cls)
+        for name, flag_system in self._flag_manager.flag_systems.items():
+            new_flag_manager.register_flag_system(name, flag_system.to_dict())
 
         # keep only flag columns that survived
         for flag_name, flag_column in self._flag_manager.flag_columns.items():

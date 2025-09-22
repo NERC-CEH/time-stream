@@ -154,11 +154,9 @@ class FlagManager:
         """
         flag_column = self._flag_columns.get(name)
         if flag_column:
-            if flag_column.base != base or flag_column.flag_system_name != flag_system_name:
-                raise FlagSystemError(
-                    f"Flag column '{name}' already registered. "
-                    f"Base: '{flag_column.base}'; System: '{flag_system_name}'."
-                )
+            raise FlagSystemError(
+                f"Flag column '{name}' already registered. Base: '{flag_column.base}'; System: '{flag_system_name}'."
+            )
         else:
             flag_system = self.get_flag_system(flag_system_name)
             flag_column = FlagColumn(name, base, flag_system, flag_system_name)
@@ -183,10 +181,13 @@ class FlagManager:
 
         # register flag systems in the new copy under the same names as previous
         for name, flag_system in self._flag_systems.items():
-            out.register_flag_system(name, flag_system)
+            out.register_flag_system(name, flag_system.to_dict())
 
         # register flag columns in the new copy with their associated system names
         for name, flag_column in self._flag_columns.items():
             out.register_flag_column(name, flag_column.base, flag_column.flag_system_name)
 
         return out
+
+    def __copy__(self):
+        return self.copy()
