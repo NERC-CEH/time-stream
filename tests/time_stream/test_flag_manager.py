@@ -1,9 +1,11 @@
 import copy
 import unittest
 from datetime import datetime
+from typing import Any
 from unittest.mock import Mock
 
 import polars as pl
+from parameterized import parameterized
 from polars.testing import assert_series_equal
 
 from time_stream import TimeSeries
@@ -446,3 +448,15 @@ class TestEqualityFlagColumn(unittest.TestCase):
         self.assertEqual(self.flag_column_original.name, flag_column_different.name)
         self.assertEqual(self.flag_column_original.base, flag_column_different.base)
         self.assertNotEqual(self.flag_column_original.flag_system, flag_column_different.flag_system)
+
+    @parameterized.expand(
+        [
+            ("str", "hello"),
+            ("int", 123),
+            ("dict", {"key": "value"}),
+            ("df", pl.DataFrame()),
+        ]
+    )
+    def test_different_object(self, _: str, non_fs: Any) -> None:
+        """Test that comparing against non-flag system objects are not equal."""
+        self.assertNotEqual(self.flag_column_original, non_fs)

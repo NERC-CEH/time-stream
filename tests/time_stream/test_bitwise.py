@@ -1,4 +1,8 @@
 import unittest
+from typing import Any
+
+import polars as pl
+from parameterized import parameterized
 
 from time_stream.bitwise import BitwiseFlag
 from time_stream.exceptions import (
@@ -77,3 +81,42 @@ class TestBitwiseFlag(unittest.TestCase):
         result = Flags.to_dict()
         expected = {"FLAG_A": 1, "FLAG_B": 2, "FLAG_C": 4}
         self.assertEqual(result, expected)
+
+
+class TestBitwiseFlagEquality(unittest.TestCase):
+    def test_equality(self) -> None:
+        """Test that the same bitwise flags are equal."""
+        original = BitwiseFlag("flags", {"FLAG_A": 1, "FLAG_B": 2, "FLAG_C": 4})
+        same = BitwiseFlag("flags", {"FLAG_A": 1, "FLAG_B": 2, "FLAG_C": 4})
+        self.assertEqual(original, same)
+
+    def test_different_names(self) -> None:
+        """Test that the bitwise flags with different names are not equal."""
+        original = BitwiseFlag("flags", {"FLAG_A": 1, "FLAG_B": 2, "FLAG_C": 4})
+        different = BitwiseFlag("different", {"FLAG_A": 1, "FLAG_B": 2, "FLAG_C": 4})
+        self.assertNotEqual(original, different)
+
+    def test_different_values(self) -> None:
+        """Test that the bitwise flags with different values are not equal."""
+        original = BitwiseFlag("flags", {"FLAG_A": 1, "FLAG_B": 2, "FLAG_C": 4})
+        different = BitwiseFlag("flags", {"FLAG_A": 1, "FLAG_B": 2, "FLAG_C": 8})
+        self.assertNotEqual(original, different)
+
+    def test_different_keys(self) -> None:
+        """Test that the bitwise flags with different keys are not equal."""
+        original = BitwiseFlag("flags", {"FLAG_A": 1, "FLAG_B": 2, "FLAG_C": 4})
+        different = BitwiseFlag("flags", {"FLAG_1": 1, "FLAG_2": 2, "FLAG_3": 4})
+        self.assertNotEqual(original, different)
+
+    @parameterized.expand(
+        [
+            ("str", "hello"),
+            ("int", 123),
+            ("dict", {"key": "value"}),
+            ("df", pl.DataFrame()),
+        ]
+    )
+    def test_different_object(self, _: str, non_bw: Any) -> None:
+        """Test that comparing against a non-bitwise flag objects are not equal."""
+        original = BitwiseFlag("flags", {"FLAG_A": 1, "FLAG_B": 2, "FLAG_C": 4})
+        self.assertNotEqual(original, non_bw)

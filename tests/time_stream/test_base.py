@@ -64,13 +64,14 @@ class TestSelectColumns(unittest.TestCase):
         "col3": {"key1": "3", "key2": "30", "key3": "300"},
     }
 
-    def test_select_single_column(self) -> None:
+    @parameterized.expand([("as_str", "col1"), ("as_list", ["col1"])])
+    def test_select_single_column(self, _: str, col: str | list) -> None:
         """Test selecting a single of column."""
         ts = TimeSeries(self.df, time_name="time").with_column_metadata(self.metadata)
         expected = TimeSeries(self.df.select(["time", "col1"]), time_name="time").with_column_metadata(
             {"col1": self.metadata["col1"]}
         )
-        result = ts.select(["col1"])
+        result = ts.select(col)
         self.assertEqual(result, expected)
 
     def test_select_multiple_columns(self) -> None:
@@ -125,6 +126,18 @@ class TestSelectColumns(unittest.TestCase):
         self.assertEqual(col2_ts, expected)
         assert_frame_equal(ts.df, original_df)
 
+    def test_select_column_with_flags(self) -> None:
+        ts = TimeSeries(self.df, time_name="time").with_flag_system("system", {"A": 1, "B": 2, "C": 4})
+        ts.init_flag_column("col1", "system", "flag_col")
+
+        expected = TimeSeries(self.df.select(["time", "col1"]), time_name="time").with_flag_system(
+            "system", {"A": 1, "B": 2, "C": 4}
+        )
+        expected.init_flag_column("col1", "system", "flag_col")
+
+        result = ts.select(["col1"])
+        self.assertEqual(result, expected)
+
 
 class TestGetItem(unittest.TestCase):
     df = pl.DataFrame(
@@ -176,19 +189,20 @@ class TestGetItem(unittest.TestCase):
 
 
 class TestColumnMetadata(unittest.TestCase):
-    df = pl.DataFrame(
-        {
-            "time": [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)],
-            "col1": [1, 2, 3],
-            "col2": [4, 5, 6],
-            "col3": [7, 8, 9],
+    def setUp(self) -> None:
+        self.df = pl.DataFrame(
+            {
+                "time": [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)],
+                "col1": [1, 2, 3],
+                "col2": [4, 5, 6],
+                "col3": [7, 8, 9],
+            }
+        )
+        self.metadata = {
+            "col1": {"key1": "1", "key2": "10", "key3": "100", "key4": "1000"},
+            "col2": {"key1": "2", "key2": "20", "key3": "200"},
         }
-    )
-    metadata = {
-        "col1": {"key1": "1", "key2": "10", "key3": "100", "key4": "1000"},
-        "col2": {"key1": "2", "key2": "20", "key3": "200"},
-    }
-    ts = TimeSeries(df, time_name="time").with_column_metadata(metadata)
+        self.ts = TimeSeries(self.df, time_name="time").with_column_metadata(self.metadata)
 
     def test_all_columns_have_metadata(self) -> None:
         """Test on the init that all columns get initialised with an empty dict if no metadata provided"""
@@ -224,18 +238,70 @@ class TestColumnMetadata(unittest.TestCase):
         with self.assertRaises(MetadataError):
             _ = self.ts.column_metadata["col1"] = 123  # noqa - expecting typehint error
 
+    def test_set_column_metadata(self) -> None:
+        """Test that we can set the column metadata object directly. Existing metadata should be maintained"""
+        column_metadata = {"col1": {"key": "value"}}
+        self.ts.column_metadata = column_metadata
+        column_metadata["col2"] = {"key1": "2", "key2": "20", "key3": "200"}
+        column_metadata["col3"] = {}
+        column_metadata["time"] = {}
+        self.assertEqual(self.ts.column_metadata, column_metadata)
+
+    def test_set_column_metadata_column_error(self) -> None:
+        """Test that directly setting column metadata with incorrect format raises error."""
+        column_metadata = {"missing_col": {"key": "value"}}
+        with self.assertRaises(KeyError):
+            self.ts.column_metadata = column_metadata
+
+    def test_set_column_metadata_none(self) -> None:
+        """Test that none resets column metadata to empty dicts for each column"""
+        self.ts.column_metadata = None
+        column_metadata = {"col1": {}, "col2": {}, "col3": {}, "time": {}}
+        self.assertEqual(self.ts.column_metadata, column_metadata)
+
+    @parameterized.expand(
+        [
+            ("int", 1234),
+            ("str", "network: FDRI"),
+            ("list", ["a", "b", "c"]),
+        ]
+    )
+    def test_set_column_metadata_not_dict_error(self, _: str, metadata: Any) -> None:
+        """Test that trying to set the column metadata object to not a dict raises error"""
+        with self.assertRaises(MetadataError):
+            self.ts.column_metadata = metadata
+
+    @parameterized.expand(
+        [
+            ("int", 1234),
+            ("str", "network: FDRI"),
+            ("list", ["a", "b", "c"]),
+        ]
+    )
+    def test_set_nested_column_metadata_not_dict_error(self, _: str, metadata: Any) -> None:
+        """Test that trying to set the inner column metadata object to not a dict raises error"""
+        with self.assertRaises(MetadataError):
+            self.ts.column_metadata = {"col1": metadata}
+
+    def test_clear_column_metadata(self) -> None:
+        """Test that removing the column_metadata object sets it back to an empty dicts for each column"""
+        del self.ts.column_metadata
+        column_metadata = {"col1": {}, "col2": {}, "col3": {}, "time": {}}
+        self.assertEqual(self.ts.column_metadata, column_metadata)
+
 
 class TestMetadata(unittest.TestCase):
-    df = pl.DataFrame(
-        {
-            "time": [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)],
-            "col1": [1, 2, 3],
-            "col2": [4, 5, 6],
-            "col3": [7, 8, 9],
-        }
-    )
-    metadata = {"site_id": 1234, "network": "FDRI", "some_info": {1: "a", 2: "b", 3: "c"}}
-    ts = TimeSeries(df, time_name="time").with_metadata(metadata)
+    def setUp(self) -> None:
+        self.df = pl.DataFrame(
+            {
+                "time": [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)],
+                "col1": [1, 2, 3],
+                "col2": [4, 5, 6],
+                "col3": [7, 8, 9],
+            }
+        )
+        self.metadata = {"site_id": 1234, "network": "FDRI", "some_info": {1: "a", 2: "b", 3: "c"}}
+        self.ts = TimeSeries(self.df, time_name="time").with_metadata(self.metadata)
 
     def test_retrieve_all_metadata(self) -> None:
         """Test retrieving all metadata"""
@@ -258,6 +324,34 @@ class TestMetadata(unittest.TestCase):
         """Test that an error is raised for a non-existent key."""
         with self.assertRaises(KeyError):
             _ = self.ts.metadata["nonexistent_key"]
+
+    def test_set_metadata(self) -> None:
+        """Test that we can set the metadata object directly"""
+        metadata = {"key": "value"}
+        self.ts.metadata = metadata
+        self.assertEqual(self.ts.metadata, metadata)
+
+    def test_set_metadata_none(self) -> None:
+        """Test that none sets to empty dict"""
+        self.ts.metadata = None
+        self.assertEqual(self.ts.metadata, {})
+
+    @parameterized.expand(
+        [
+            ("int", 1234),
+            ("str", "network: FDRI"),
+            ("list", ["a", "b", "c"]),
+        ]
+    )
+    def test_set_metadata_not_dict_error(self, _: str, metadata: Any) -> None:
+        """Test that trying to set the metadata object to not a dict raises error"""
+        with self.assertRaises(MetadataError):
+            self.ts.metadata = metadata
+
+    def test_clear_metadata(self) -> None:
+        """Test that removing the metadata object sets it back to an empty dict"""
+        del self.ts.metadata
+        self.assertEqual(self.ts.metadata, {})
 
 
 class TestInitFlagColumn(unittest.TestCase):
@@ -603,3 +697,15 @@ class TestTimeSeriesEquality(unittest.TestCase):
         self.assertEqual(self.ts_original._flag_manager, ts_different_column_metadata._flag_manager)
         self.assertEqual(self.ts_original.metadata, ts_different_column_metadata.metadata)
         self.assertNotEqual(self.ts_original.column_metadata, ts_different_column_metadata.column_metadata)
+
+    @parameterized.expand(
+        [
+            ("str", "hello"),
+            ("int", 123),
+            ("dict", {"key": "value"}),
+            ("df", pl.DataFrame()),
+        ]
+    )
+    def test_different_object(self, _: str, non_ts: Any) -> None:
+        """Test that comparing against a non TimeSeries objects are not equal."""
+        self.assertNotEqual(self.ts_original, non_ts)

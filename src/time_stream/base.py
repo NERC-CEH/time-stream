@@ -1,6 +1,6 @@
 from copy import deepcopy
 from datetime import datetime
-from typing import Any, Iterator, Self, Sequence, Type
+from typing import Any, Self, Sequence, Type
 
 import polars as pl
 
@@ -161,7 +161,7 @@ class TimeSeries:
         elif isinstance(value, dict):
             self._metadata = value
         else:
-            raise MetadataError("TimeSeries-level metadata must be a dict object.")
+            raise MetadataError(f"TimeSeries-level metadata must be a dict object. Got: '{type(value)}'")
 
     @metadata.deleter
     def metadata(self) -> None:
@@ -186,7 +186,8 @@ class TimeSeries:
             # Reset all the columns metadata to empty dicts
             self._column_metadata = ColumnMetadataDict(lambda: self.df.columns)
             self._sync_column_metadata()
-        else:
+
+        elif isinstance(value, dict):
             # Validate the inner mappings of the column metadata
             try:
                 for column_name, column_metadata in value.items():
@@ -194,6 +195,8 @@ class TimeSeries:
             except (KeyError, MetadataError) as err:
                 self._column_metadata.clear()
                 raise err
+        else:
+            raise MetadataError(f"Column-level metadata must be a dict object. Got: '{type(value)}'")
 
     @column_metadata.deleter
     def column_metadata(self) -> None:
@@ -552,7 +555,7 @@ class TimeSeries:
         new_ts.column_metadata.update(kept_metadata)
 
         # Rebuild the flag registry for kept columns
-        new_flag_manager = self._flag_manager.copy()
+        new_flag_manager = FlagManager()
         # re-register flag systems
         for name, flag_system in self._flag_manager.flag_systems.items():
             new_flag_manager.register_flag_system(name, flag_system.to_dict())
@@ -583,14 +586,6 @@ class TimeSeries:
         if isinstance(key, str):
             key = [key]
         return self.select(key, include_flag_columns=False)
-
-    def __len__(self) -> int:
-        """Return the number of rows in the time series."""
-        return self.df.height
-
-    def __iter__(self) -> Iterator:
-        """Return an iterator over the rows of the DataFrame."""
-        return self.df.iter_rows()
 
     def __str__(self) -> str:
         """Return the string representation of the TimeSeries dataframe."""
