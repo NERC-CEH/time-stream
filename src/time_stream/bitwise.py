@@ -1,3 +1,18 @@
+"""
+Bitwise Flag Module.
+
+This module provides a small framework for defining bitwise flag systems, including validation of flag values and
+a couple of convenience helpers for the user interface.
+
+Representing flags as single-bit integers enables efficient storage and  using bitwise operators. Enforcing
+power-of-two guarantees that each flag is singular and that combinations are unique.
+
+The ``BitwiseFlag`` class is the concrete base to use for a flag system. Validation includes:
+  - values are non-negative integers,
+  - each value is a power-of-two,
+  - each value is unique within the enum.
+"""
+
 from enum import EnumType, Flag
 
 from time_stream.exceptions import (

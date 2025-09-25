@@ -1,3 +1,9 @@
+"""
+Time Series Enumerations.
+
+This module defines several enums used throughout time_stream to standardise constants across the package.
+"""
+
 from enum import Enum
 
 

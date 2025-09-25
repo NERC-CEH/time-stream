@@ -1,3 +1,14 @@
+"""
+Time Series Metadata Management Module.
+
+This module provides helpers for dealing with metadata within a TimeSeries object. Metadata can be at the
+TimeSeries-level, or at a per-Column level. If providing per-Column metadata, validation checks whether the
+column exists in the DataFrame.
+
+The ColumnMetadataDoct class extends the built-in dict type to enforce rules on assignment and update,
+raising `MetadataError` if invalid values are provided.
+"""
+
 from typing import Any, Callable
 
 from time_stream.exceptions import MetadataError

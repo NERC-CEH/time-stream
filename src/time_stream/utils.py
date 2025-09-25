@@ -1,3 +1,9 @@
+"""
+Time Series Utility Module.
+
+This module provides helper functions used across the time_stream package for working with temporal data.
+"""
+
 from collections.abc import Iterable
 from datetime import datetime
 

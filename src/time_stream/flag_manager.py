@@ -1,3 +1,15 @@
+"""
+Flag System Management Module.
+
+This module provides a small registry for use by the TimeSeries class for bitwise flag systems and for flag columns
+bound to data columns in the TimeSeries' DataFrame.
+
+Typical use from within the TimeSeries class:
+    1) Register a flag system by name (from a dict or an existing BitwiseFlag subclass).
+    2) Register a DataFrame column as a flag column associated with that system.
+    3) Use FlagColumn.add_flag / remove_flag with Polars expressions to set/clear the flag bits.
+"""
+
 from dataclasses import dataclass
 from typing import Self
 

@@ -1,3 +1,35 @@
+"""
+Core TimeSeries Data Model.
+
+This module defines the `TimeSeries` class, the central abstraction of the time_stream package.
+A `TimeSeries` wraps a Polars DataFrame and adds functionality for handling temporal data, quality flags, metadata, and
+derived operations.
+
+Main responsibilities
+---------------------
+1. **Time management** (via `TimeManager`):
+   - Validates that the time column exists and has a temporal dtype.
+   - Enforces resolution and periodicity of the time series.
+   - Uses time anchoring to define the period over which values are valid (`POINT`, `START`, `END`).
+   - Detects duplicates and resolves them according to a strategy (`ERROR`, `KEEP_FIRST`, `KEEP_LAST`, `DROP`, `MERGE`).
+   - Prevents mutation of time values between operations.
+
+2. **Metadata management**:
+   - TimeSeries-level metadata (`.metadata`).
+   - Per-column metadata (`.column_metadata`) that stays in sync with the DataFrame.
+
+3. **Flag management** (via `FlagManager`):
+   - Register reusable flag systems (based on `BitwiseFlag` enums).
+   - Initialise flag columns linked to data columns.
+   - Add/remove flags with Polars expressions.
+
+4. **Data operations**:
+   - Aggregation: run `AggregationFunction` pipelines with support for missing-data criteria and time anchoring.
+   - Quality control: apply `QCCheck` classes to detect anomalies or enforce validation rules.
+   - Infilling: apply `InfillMethod` classes to fill missing values according to defined strategies.
+   - Column selection: return reduced TimeSeries with metadata and flags synced consistently.
+"""
+
 from copy import deepcopy
 from datetime import datetime
 from typing import Any, Self, Sequence, Type

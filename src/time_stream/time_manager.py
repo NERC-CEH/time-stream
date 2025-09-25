@@ -1,3 +1,15 @@
+"""
+Time Series Time Management Module.
+
+This module defines and enforces integrity rules for the temporal aspects of a TimeSeries object.  This includes:
+
+- Validates the presence and type of the time column.
+- Ensures datetimes align to the specified resolution (precision).
+- Ensures datetimes conform to the specified periodicity (frequency).
+- Handles duplicate timestamps according to a chosen strategy.
+- Prevents mutation of time values between DataFrame operations.
+"""
+
 import polars as pl
 
 from time_stream import Period
