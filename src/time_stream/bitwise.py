@@ -9,16 +9,12 @@ from time_stream.exceptions import (
 
 
 class BitwiseMeta(EnumType):
-    @property
-    def name(self) -> str:
-        return self.__name__
-
     def __repr__(self):
         """Return a helpful representation of the flag, listing all enum members."""
         members = ", ".join(f"{name}={member.value}" for name, member in self.__members__.items())
-        return f"<{self.name} ({members})>"
+        return f"<{self.__name__} ({members})>"
 
-    def __eq__(cls, other: "BitwiseMeta") -> bool:
+    def __eq__(cls, other: object) -> bool:
         if not isinstance(other, BitwiseMeta):
             return False
         return (cls.__name__ == other.__name__) and (cls.__members__.items() == other.__members__.items())
@@ -37,6 +33,11 @@ class BitwiseFlag(int, Flag, metaclass=BitwiseMeta):
             cls._check_type(member.value)
             cls._check_bitwise(member.value)
             cls._check_unique(member.value)
+
+    @classmethod
+    def system_name(cls) -> str:
+        """Name of this flag system (the enum class name)."""
+        return cls.__name__
 
     @staticmethod
     def _check_type(value: int) -> None:

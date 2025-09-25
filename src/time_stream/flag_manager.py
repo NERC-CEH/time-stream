@@ -1,10 +1,9 @@
 from dataclasses import dataclass
-from enum import EnumType
 from typing import Self
 
 import polars as pl
 
-from time_stream.bitwise import BitwiseFlag
+from time_stream.bitwise import BitwiseFlag, BitwiseMeta
 from time_stream.exceptions import (
     ColumnNotFoundError,
     DuplicateFlagSystemError,
@@ -32,7 +31,6 @@ class FlagColumn:
     name: str
     base: str
     flag_system: type[BitwiseFlag]
-    flag_system_name: str
 
     def add_flag(self, df: pl.DataFrame, flag: int | str, expr: pl.Expr = pl.lit(True)) -> pl.DataFrame:
         """Adds a flag value to this FlagColumn using a bitwise OR operation.
@@ -80,12 +78,7 @@ class FlagColumn:
         if not isinstance(other, FlagColumn):
             return False
 
-        return (
-            self.name == other.name
-            and self.base == other.base
-            and self.flag_system_name == other.flag_system_name
-            and self.flag_system == other.flag_system
-        )
+        return self.name == other.name and self.base == other.base and self.flag_system == other.flag_system
 
     # Make class instances unhashable
     __hash__ = None
@@ -142,7 +135,7 @@ class FlagManager:
         if flag_system_name in self._flag_systems:
             raise DuplicateFlagSystemError(f"Flag system '{flag_system_name}' already exists.")
 
-        if isinstance(flag_system, EnumType):
+        if isinstance(flag_system, BitwiseMeta):
             self._flag_systems[flag_system_name] = flag_system
 
         elif isinstance(flag_system, dict):
@@ -183,7 +176,7 @@ class FlagManager:
             )
         else:
             flag_system = self.get_flag_system(flag_system_name)
-            flag_column = FlagColumn(name, base, flag_system, flag_system_name)
+            flag_column = FlagColumn(name, base, flag_system)
             self._flag_columns[name] = flag_column
 
     def get_flag_column(self, name: str) -> FlagColumn:
@@ -201,6 +194,7 @@ class FlagManager:
             raise ColumnNotFoundError(f"No such flag column: '{name}'.")
 
     def copy(self) -> Self:
+        """Create a copy of this flag manager object."""
         out = FlagManager()
 
         # register flag systems in the new copy under the same names as previous
@@ -209,7 +203,7 @@ class FlagManager:
 
         # register flag columns in the new copy with their associated system names
         for name, flag_column in self._flag_columns.items():
-            out.register_flag_column(name, flag_column.base, flag_column.flag_system_name)
+            out.register_flag_column(name, flag_column.base, flag_column.flag_system.system_name())
 
         return out
 

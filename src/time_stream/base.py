@@ -560,7 +560,9 @@ class TimeSeries:
         # keep only flag columns that survived
         for flag_name, flag_column in self._flag_manager.flag_columns.items():
             if flag_name in column_names:
-                new_flag_manager.register_flag_column(flag_name, flag_column.base, flag_column.flag_system_name)
+                new_flag_manager.register_flag_column(
+                    flag_name, flag_column.base, flag_column.flag_system.system_name()
+                )
 
         new_ts._flag_manager = new_flag_manager
         new_ts._sync_column_metadata()

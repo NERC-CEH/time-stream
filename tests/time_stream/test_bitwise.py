@@ -26,21 +26,21 @@ class TestBitwiseFlag(unittest.TestCase):
         """Test that a non-power-of-two flag value raises error."""
         with self.assertRaises(BitwiseFlagValueError):
 
-            class _Flags(BitwiseFlag):
+            class _Flags(BitwiseFlag):  # noqa - expect class unused warning
                 INVALID_FLAG = 3
 
     def test_invalid_flag_value_negative(self) -> None:
         """Test that a negative flag value raises error."""
         with self.assertRaises(BitwiseFlagTypeError):
 
-            class _Flags(BitwiseFlag):
+            class _Flags(BitwiseFlag):  # noqa - expect class unused warning
                 INVALID_FLAG = -2
 
     def test_flag_uniqueness(self) -> None:
         """Test that duplicate flag values raise ValueError."""
         with self.assertRaises(BitwiseFlagDuplicateError):
 
-            class _Flags(BitwiseFlag):
+            class _Flags(BitwiseFlag):  # noqa - expect class unused warning
                 FLAG_A = 1
                 FLAG_B = 2
                 FLAG_C = 2

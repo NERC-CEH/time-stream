@@ -283,7 +283,7 @@ class TestInitFlagColumn(unittest.TestCase):
         self.ts.init_flag_column("value", "quality_control", "flag_column")
         self.assertEqual(
             self.ts._flag_manager._flag_columns,
-            {"flag_column": FlagColumn("flag_column", "value", self.flag_system, "quality_control")},
+            {"flag_column": FlagColumn("flag_column", "value", self.flag_system)},
         )
         self.assertIn("flag_column", self.ts.flag_columns)
 
@@ -324,7 +324,7 @@ class TestInitFlagColumn(unittest.TestCase):
 
         self.assertEqual(
             self.ts._flag_manager._flag_columns,
-            {default_name: FlagColumn(default_name, "value", self.flag_system, "quality_control")},
+            {default_name: FlagColumn(default_name, "value", self.flag_system)},
         )
         self.assertIn(default_name, self.ts.flag_columns)
 

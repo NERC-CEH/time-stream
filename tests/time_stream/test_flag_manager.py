@@ -120,7 +120,6 @@ class TestCopy(unittest.TestCase):
             copy_flag_column = flag_manager_copy.flag_columns[name]
             self.assertEqual(copy_flag_column.name, flag_column.name)
             self.assertEqual(copy_flag_column.base, flag_column.base)
-            self.assertEqual(copy_flag_column.flag_system_name, flag_column.flag_system_name)
 
         # Test that the copy created is independent of the original
         # Change the original
@@ -267,3 +266,183 @@ class TestRemoveFlag(unittest.TestCase):
         """Test that trying to remove a flag to a data column raises error"""
         with self.assertRaises(ColumnNotFoundError):
             self.ts.add_flag("value", 1)
+
+
+class TestEqualityFlagManager(unittest.TestCase):
+    def test_equal(self) -> None:
+        """Test that two identical flag manager objects are considered equal."""
+        flag_manager_original = FlagManager()
+        flag_manager_original.register_flag_system("system1", {"FLAG_A": 1, "FLAG_B": 2, "FLAG_C": 4})
+        flag_manager_original.register_flag_system("system2", {"FLAG_1": 1, "FLAG_2": 2})
+        flag_manager_original.register_flag_column(name="flag_col_1", base="base1", flag_system_name="system1")
+        flag_manager_original.register_flag_column(name="flag_col_2", base="base2", flag_system_name="system2")
+
+        flag_manager_same = FlagManager()
+        flag_manager_same.register_flag_system("system1", {"FLAG_A": 1, "FLAG_B": 2, "FLAG_C": 4})
+        flag_manager_same.register_flag_system("system2", {"FLAG_1": 1, "FLAG_2": 2})
+        flag_manager_same.register_flag_column(name="flag_col_1", base="base1", flag_system_name="system1")
+        flag_manager_same.register_flag_column(name="flag_col_2", base="base2", flag_system_name="system2")
+
+        self.assertEqual(flag_manager_original, flag_manager_same)
+
+    def test_different_system_names(self) -> None:
+        """Test that flag manager objects with different flag system names are not considered equal."""
+        flag_manager_original = FlagManager()
+        flag_manager_original.register_flag_system("system1", {"FLAG_A": 1, "FLAG_B": 2, "FLAG_C": 4})
+        flag_manager_original.register_flag_system("system2", {"FLAG_1": 1, "FLAG_2": 2})
+
+        flag_manager_different = FlagManager()
+        flag_manager_different.register_flag_system("different1", {"FLAG_A": 1, "FLAG_B": 2, "FLAG_C": 4})
+        flag_manager_different.register_flag_system("different2", {"FLAG_1": 1, "FLAG_2": 2})
+
+        self.assertNotEqual(flag_manager_original, flag_manager_different)
+
+        # Check the expected property is the difference
+        self.assertNotEqual(flag_manager_original.flag_systems, flag_manager_different.flag_systems)
+        self.assertEqual(flag_manager_original.flag_columns, flag_manager_different.flag_columns)
+
+    def test_different_system_values(self) -> None:
+        """Test that flag manager objects with different flag system values are not considered equal."""
+        flag_manager_original = FlagManager()
+        flag_manager_original.register_flag_system("system1", {"FLAG_A": 1, "FLAG_B": 2, "FLAG_C": 4})
+        flag_manager_original.register_flag_system("system2", {"FLAG_1": 1, "FLAG_2": 2})
+
+        flag_manager_different = FlagManager()
+        flag_manager_different.register_flag_system("system1", {"FLAG_A": 1, "FLAG_B": 2, "FLAG_C": 8})
+        flag_manager_different.register_flag_system("system2", {"FLAG_1": 1, "FLAG_2": 4})
+
+        self.assertNotEqual(flag_manager_original, flag_manager_different)
+
+        # Check the expected property is the difference
+        self.assertNotEqual(flag_manager_original.flag_systems, flag_manager_different.flag_systems)
+        self.assertEqual(flag_manager_original.flag_columns, flag_manager_different.flag_columns)
+
+    def test_different_system_additional(self) -> None:
+        """Test that flag manager objects with additional flag systems are not considered equal."""
+        flag_manager_original = FlagManager()
+        flag_manager_original.register_flag_system("system1", {"FLAG_A": 1, "FLAG_B": 2, "FLAG_C": 4})
+        flag_manager_original.register_flag_system("system2", {"FLAG_1": 1, "FLAG_2": 2})
+
+        flag_manager_different = FlagManager()
+        flag_manager_different.register_flag_system("system1", {"FLAG_A": 1, "FLAG_B": 2, "FLAG_C": 4})
+        flag_manager_different.register_flag_system("system2", {"FLAG_1": 1, "FLAG_2": 2})
+        flag_manager_different.register_flag_system("system3", {"FLAG_Z": 1, "FLAG_Y": 2})
+
+        self.assertNotEqual(flag_manager_original, flag_manager_different)
+
+        # Check the expected property is the difference
+        self.assertNotEqual(flag_manager_original.flag_systems, flag_manager_different.flag_systems)
+        self.assertEqual(flag_manager_original.flag_columns, flag_manager_different.flag_columns)
+
+    def test_different_column_name(self) -> None:
+        """Test that flag manager objects with different flag columns are not considered equal."""
+        flag_manager_original = FlagManager()
+        flag_manager_original.register_flag_system("system1", {"FLAG_A": 1, "FLAG_B": 2, "FLAG_C": 4})
+        flag_manager_original.register_flag_column(name="flag_col_1", base="base1", flag_system_name="system1")
+
+        flag_manager_different = FlagManager()
+        flag_manager_different.register_flag_system("system1", {"FLAG_A": 1, "FLAG_B": 2, "FLAG_C": 4})
+        flag_manager_different.register_flag_column(name="different1", base="base1", flag_system_name="system1")
+
+        self.assertNotEqual(flag_manager_original, flag_manager_different)
+
+        # Check the expected property is the difference
+        self.assertEqual(flag_manager_original.flag_systems, flag_manager_different.flag_systems)
+        self.assertNotEqual(flag_manager_original.flag_columns, flag_manager_different.flag_columns)
+
+    def test_different_column_base(self) -> None:
+        """Test that flag manager objects with different flag columns are not considered equal."""
+        flag_manager_original = FlagManager()
+        flag_manager_original.register_flag_system("system1", {"FLAG_A": 1, "FLAG_B": 2, "FLAG_C": 4})
+        flag_manager_original.register_flag_column(name="flag_col_1", base="base1", flag_system_name="system1")
+
+        flag_manager_different = FlagManager()
+        flag_manager_different.register_flag_system("system1", {"FLAG_A": 1, "FLAG_B": 2, "FLAG_C": 4})
+        flag_manager_different.register_flag_column(name="flag_col_1", base="different1", flag_system_name="system1")
+
+        self.assertNotEqual(flag_manager_original, flag_manager_different)
+
+        # Check the expected property is the difference
+        self.assertEqual(flag_manager_original.flag_systems, flag_manager_different.flag_systems)
+        self.assertNotEqual(flag_manager_original.flag_columns, flag_manager_different.flag_columns)
+
+    def test_different_column_system(self) -> None:
+        """Test that flag manager objects with different flag columns are not considered equal."""
+        flag_manager_original = FlagManager()
+        flag_manager_original.register_flag_system("system1", {"FLAG_A": 1, "FLAG_B": 2, "FLAG_C": 4})
+        flag_manager_original.register_flag_system("system2", {"FLAG_1": 1, "FLAG_2": 2})
+        flag_manager_original.register_flag_column(name="flag_col_1", base="base1", flag_system_name="system1")
+
+        flag_manager_different = FlagManager()
+        flag_manager_different.register_flag_system("system1", {"FLAG_A": 1, "FLAG_B": 2, "FLAG_C": 4})
+        flag_manager_different.register_flag_system("system2", {"FLAG_1": 1, "FLAG_2": 2})
+        flag_manager_different.register_flag_column(name="flag_col_1", base="base1", flag_system_name="system2")
+
+        self.assertNotEqual(flag_manager_original, flag_manager_different)
+
+        # Check the expected property is the difference
+        self.assertEqual(flag_manager_original.flag_systems, flag_manager_different.flag_systems)
+        self.assertNotEqual(flag_manager_original.flag_columns, flag_manager_different.flag_columns)
+
+    def test_different_column_additional(self) -> None:
+        """Test that flag manager objects with additional flag columns are not considered equal."""
+        flag_manager_original = FlagManager()
+        flag_manager_original.register_flag_system("system1", {"FLAG_A": 1, "FLAG_B": 2, "FLAG_C": 4})
+        flag_manager_original.register_flag_column(name="flag_col_1", base="base1", flag_system_name="system1")
+
+        flag_manager_different = FlagManager()
+        flag_manager_different.register_flag_system("system1", {"FLAG_A": 1, "FLAG_B": 2, "FLAG_C": 4})
+        flag_manager_different.register_flag_column(name="flag_col_1", base="base1", flag_system_name="system1")
+        flag_manager_different.register_flag_column(name="flag_col_2", base="base1", flag_system_name="system1")
+
+        self.assertNotEqual(flag_manager_original, flag_manager_different)
+
+        # Check the expected property is the difference
+        self.assertEqual(flag_manager_original.flag_systems, flag_manager_different.flag_systems)
+        self.assertNotEqual(flag_manager_original.flag_columns, flag_manager_different.flag_columns)
+
+
+class TestEqualityFlagColumn(unittest.TestCase):
+    def setUp(self) -> None:
+        self.flag_system1 = BitwiseFlag("system1", {"FLAG_A": 1, "FLAG_B": 2, "FLAG_C": 4})
+        self.flag_system2 = BitwiseFlag("system2", {"FLAG_1": 1, "FLAG_2": 2})
+        self.flag_column_original = FlagColumn("flag_col_1", "base1", self.flag_system1)
+
+    def test_equal(self) -> None:
+        """Test that two identical flag column objects are considered equal."""
+        flag_column_same = FlagColumn("flag_col_1", "base1", self.flag_system1)
+
+        self.assertEqual(self.flag_column_original, flag_column_same)
+
+    def test_different_name(self) -> None:
+        """Test that two flag column objects with different names are not considered equal."""
+        flag_column_different = FlagColumn("different1", "base1", self.flag_system1)
+
+        self.assertNotEqual(self.flag_column_original, flag_column_different)
+
+        # Check the expected property is the difference
+        self.assertNotEqual(self.flag_column_original.name, flag_column_different.name)
+        self.assertEqual(self.flag_column_original.base, flag_column_different.base)
+        self.assertEqual(self.flag_column_original.flag_system, flag_column_different.flag_system)
+
+    def test_different_base(self) -> None:
+        """Test that two flag column objects with different base columns are not considered equal."""
+        flag_column_different = FlagColumn("flag_col_1", "different1", self.flag_system1)
+
+        self.assertNotEqual(self.flag_column_original, flag_column_different)
+
+        # Check the expected property is the difference
+        self.assertEqual(self.flag_column_original.name, flag_column_different.name)
+        self.assertNotEqual(self.flag_column_original.base, flag_column_different.base)
+        self.assertEqual(self.flag_column_original.flag_system, flag_column_different.flag_system)
+
+    def test_different_system(self) -> None:
+        """Test that two flag column objects with different flag systems are not considered equal."""
+        flag_column_different = FlagColumn("flag_col_1", "base1", self.flag_system2)
+
+        self.assertNotEqual(self.flag_column_original, flag_column_different)
+
+        # Check the expected property is the difference
+        self.assertEqual(self.flag_column_original.name, flag_column_different.name)
+        self.assertEqual(self.flag_column_original.base, flag_column_different.base)
+        self.assertNotEqual(self.flag_column_original.flag_system, flag_column_different.flag_system)
