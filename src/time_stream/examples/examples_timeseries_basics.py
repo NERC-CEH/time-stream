@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 import numpy as np
 import polars as pl
 
-from time_stream import Period, TimeSeries
+from time_stream import Period, TimeFrame
 from time_stream.aggregation import Max, Mean, Min
 
 # [end_block_1]
@@ -12,7 +12,7 @@ from time_stream.examples.utils import suppress_output
 from time_stream.exceptions import DuplicateTimeError, PeriodicityError, ResolutionError, TimeMutatedError
 
 
-def create_simple_time_series() -> TimeSeries:
+def create_simple_time_series() -> TimeFrame:
     # [start_block_2]
     # Create sample data
     dates = [datetime(2023, 1, 1) + timedelta(days=i) for i in range(10)]
@@ -21,8 +21,8 @@ def create_simple_time_series() -> TimeSeries:
 
     df = pl.DataFrame({"timestamp": dates, "temperature": temperatures, "precipitation": precipitation})
 
-    # Create a simple TimeSeries
-    ts = TimeSeries(
+    # Create a simple TimeFrame
+    ts = TimeFrame(
         df=df,
         time_name="timestamp",  # Specify which column contains the primary datetime values
     )
@@ -38,7 +38,7 @@ def show_default_resolution() -> None:
     # [end_block_3]
 
 
-def create_simple_time_series_with_periods() -> TimeSeries:
+def create_simple_time_series_with_periods() -> TimeFrame:
     # Create sample data
     dates = [datetime(2023, 1, 1) + timedelta(days=i) for i in range(10)]
     temperatures = [20, 21, 19, 26, 24, 26, 28, 30, 31, 29]
@@ -47,7 +47,7 @@ def create_simple_time_series_with_periods() -> TimeSeries:
     df = pl.DataFrame({"timestamp": dates, "temperature": temperatures, "precipitation": precipitation})
 
     # [start_block_4]
-    ts = TimeSeries(
+    ts = TimeFrame(
         df=df,
         time_name="timestamp",
         resolution=Period.of_days(1),  # Each timestamp is at day precision
@@ -60,7 +60,7 @@ def create_simple_time_series_with_periods() -> TimeSeries:
     return ts
 
 
-def create_simple_time_series_with_metadata() -> TimeSeries:
+def create_simple_time_series_with_metadata() -> TimeFrame:
     # Create sample data
     dates = [datetime(2023, 1, 1) + timedelta(days=i) for i in range(10)]
     temperatures = [20, 21, 19, 26, 24, 26, 28, 30, 31, 29]
@@ -69,7 +69,7 @@ def create_simple_time_series_with_metadata() -> TimeSeries:
     df = pl.DataFrame({"timestamp": dates, "temperature": temperatures, "precipitation": precipitation})
 
     # [start_block_5]
-    # TimeSeries metadata
+    # TimeFrame metadata
     ts_metadata = {"location": "River Thames", "elevation": 100, "station_id": "ABC123"}
 
     # Column metadata
@@ -83,7 +83,7 @@ def create_simple_time_series_with_metadata() -> TimeSeries:
         },
     }
 
-    ts = TimeSeries(
+    ts = TimeFrame(
         df=df,
         time_name="timestamp",
         resolution=Period.of_days(1),
@@ -129,7 +129,7 @@ def resolution_check_fail() -> None:
 
     # This will raise an error about resolution alignment
     try:
-        TimeSeries(df=df, time_name="timestamp", resolution=Period.of_days(1))
+        TimeFrame(df=df, time_name="timestamp", resolution=Period.of_days(1))
     except ResolutionError as w:
         print(f"Warning: {w}")
     # [end_block_8]
@@ -148,7 +148,7 @@ def periodicity_check_fail() -> None:
 
     # This will raise a UserWarning about periodicity
     try:
-        TimeSeries(df=df, time_name="timestamp", periodicity=Period.of_days(1))
+        TimeFrame(df=df, time_name="timestamp", periodicity=Period.of_days(1))
     except PeriodicityError as w:
         print(f"Warning: {w}")
     # [end_block_9]
@@ -167,7 +167,7 @@ def accessing_data() -> None:
     ts.df.filter(pl.col("precipitation") > 0)
     # [end_block_11]
     # [start_block_12]
-    # Access column as a TimeSeriesColumn object
+    # Access column as a TimeFrameColumn object
     temperature_col = ts.temperature
     print("Type temperature_col: ", type(temperature_col))
 
@@ -179,12 +179,12 @@ def accessing_data() -> None:
     temperature_units = ts.temperature.units
     print("Temperature units: ", temperature_units)
 
-    # Get column as a TimeSeries
+    # Get column as a TimeFrame
     temperature_ts = ts["temperature"]
     print("Type temperature_ts: ", type(temperature_ts))
     print(temperature_ts)
 
-    # Select multiple columns as a TimeSeries
+    # Select multiple columns as a TimeFrame
     selected_ts = ts.select(["temperature", "precipitation"])
     # or
     selected_ts = ts[["temperature", "precipitation"]]
@@ -193,7 +193,7 @@ def accessing_data() -> None:
     # [end_block_12]
 
 
-def create_simple_time_series_with_supp_cols() -> TimeSeries:
+def create_simple_time_series_with_supp_cols() -> TimeFrame:
     # [start_block_13]
     # Create sample data
     dates = [datetime(2023, 1, 1) + timedelta(days=i) for i in range(10)]
@@ -221,8 +221,8 @@ def create_simple_time_series_with_supp_cols() -> TimeSeries:
         }
     )
 
-    # Create a TimeSeries
-    ts = TimeSeries(
+    # Create a TimeFrame
+    ts = TimeFrame(
         df=df,
         time_name="timestamp",
         resolution=Period.of_days(1),
@@ -237,7 +237,7 @@ def create_simple_time_series_with_supp_cols() -> TimeSeries:
     return ts
 
 
-def convert_existing_col_to_supp_col() -> TimeSeries:
+def convert_existing_col_to_supp_col() -> TimeFrame:
     with suppress_output():
         ts = create_simple_time_series_with_supp_cols()
     # [start_block_14]
@@ -264,7 +264,7 @@ def add_new_col_as_supp_col() -> None:
     # [end_block_15]
 
 
-def create_simple_time_series_with_flag_cols() -> TimeSeries:
+def create_simple_time_series_with_flag_cols() -> TimeFrame:
     # [start_block_16]
     # Create sample data
     dates = [datetime(2023, 1, 1) + timedelta(days=i) for i in range(10)]
@@ -283,8 +283,8 @@ def create_simple_time_series_with_flag_cols() -> TimeSeries:
         }
     )
 
-    # Create a TimeSeries
-    ts = TimeSeries(
+    # Create a TimeFrame
+    ts = TimeFrame(
         df=df,
         time_name="timestamp",
         resolution=Period.of_days(1),
@@ -301,7 +301,7 @@ def create_simple_time_series_with_flag_cols() -> TimeSeries:
     return ts
 
 
-def set_flag_cols_after_init() -> TimeSeries:
+def set_flag_cols_after_init() -> TimeFrame:
     # [start_block_17]
     # Create sample data
     dates = [datetime(2023, 1, 1) + timedelta(days=i) for i in range(10)]
@@ -312,8 +312,8 @@ def set_flag_cols_after_init() -> TimeSeries:
 
     df = pl.DataFrame({"timestamp": dates, "temperature": temperatures, "precipitation": precipitation})
 
-    # Create a TimeSeries
-    ts = TimeSeries(
+    # Create a TimeFrame
+    ts = TimeFrame(
         df=df,
         time_name="timestamp",
         resolution=Period.of_days(1),
@@ -394,7 +394,7 @@ def random_minute_temperature_data(start_date: datetime, end_date: datetime) -> 
     return temperatures
 
 
-def aggregation_set_up(missing_data: bool = False) -> TimeSeries:
+def aggregation_set_up(missing_data: bool = False) -> TimeFrame:
     start_date = datetime(2023, 1, 1)
     end_date = datetime(2024, 1, 1)
     minutes = int((end_date - start_date).total_seconds() / 60)
@@ -420,10 +420,10 @@ def aggregation_set_up(missing_data: bool = False) -> TimeSeries:
 
         df = df.join(pl.concat([january_data, february_data]), on="timestamp", how="anti")
 
-    ts = TimeSeries(df=df, time_name="timestamp", resolution=Period.of_minutes(1), periodicity=Period.of_minutes(1))
+    ts = TimeFrame(df=df, time_name="timestamp", resolution=Period.of_minutes(1), periodicity=Period.of_minutes(1))
 
     # [start_block_24]
-    # The following TimeSeries has 1-year's worth of 1-minute resolution random temperature data:
+    # The following TimeFrame has 1-year's worth of 1-minute resolution random temperature data:
     print(ts)
     # [end_block_24]
 
@@ -502,7 +502,7 @@ def aggregation_duplicate_row_example_error() -> None:
     # [start_block_28]
     # Raises an error if duplicate timestamps exist. This is the default if `on_duplicate` is not specified.
     try:
-        TimeSeries(df=df, time_name="timestamp", on_duplicates="error")
+        TimeFrame(df=df, time_name="timestamp", on_duplicates="error")
     except DuplicateTimeError as w:
         print(f"Warning: {w}")
     # [end_block_28]
@@ -514,7 +514,7 @@ def aggregation_duplicate_row_example_keep_first() -> None:
 
     # [start_block_29]
     # Keeps the first row found in groups of duplicate rows
-    ts = TimeSeries(df=df, time_name="timestamp", on_duplicates="keep_first")
+    ts = TimeFrame(df=df, time_name="timestamp", on_duplicates="keep_first")
 
     print(ts)
     # [end_block_29]
@@ -526,7 +526,7 @@ def aggregation_duplicate_row_example_keep_last() -> None:
 
     # [start_block_30]
     # Keeps the last row found in groups of duplicate rows
-    ts = TimeSeries(df=df, time_name="timestamp", on_duplicates="keep_last")
+    ts = TimeFrame(df=df, time_name="timestamp", on_duplicates="keep_last")
 
     print(ts)
     # [end_block_30]
@@ -538,7 +538,7 @@ def aggregation_duplicate_row_example_drop() -> None:
 
     # [start_block_31]
     # Drops all duplicate rows
-    ts = TimeSeries(df=df, time_name="timestamp", on_duplicates="drop")
+    ts = TimeFrame(df=df, time_name="timestamp", on_duplicates="drop")
 
     print(ts)
     # [end_block_31]
@@ -550,7 +550,7 @@ def aggregation_duplicate_row_example_merge() -> None:
 
     # [start_block_32]
     # Merges groups of duplicate rows
-    ts = TimeSeries(df=df, time_name="timestamp", on_duplicates="merge")
+    ts = TimeFrame(df=df, time_name="timestamp", on_duplicates="merge")
 
     print(ts)
     # [end_block_32]
@@ -576,12 +576,12 @@ def create_df_with_missing_rows() -> pl.DataFrame:
     return df
 
 
-def pad_timeseries() -> None:
+def pad_timeFrame() -> None:
     with suppress_output():
         df = create_df_with_missing_rows()
 
     # [start_block_34]
-    ts = TimeSeries(df=df, time_name="timestamp", resolution=Period.of_days(1), periodicity=Period.of_days(1))
+    ts = TimeFrame(df=df, time_name="timestamp", resolution=Period.of_days(1), periodicity=Period.of_days(1))
 
     ts.pad()  # Pad missing rows with nulls
 
@@ -612,12 +612,12 @@ def create_df_with_missing_rows_water_year() -> pl.DataFrame:
     return df
 
 
-def pad_timeseries_water_year() -> None:
+def pad_timeFrame_water_year() -> None:
     with suppress_output():
         df = create_df_with_missing_rows_water_year()
 
     # [start_block_36]
-    ts = TimeSeries(
+    ts = TimeFrame(
         df=df,
         time_name="timestamp",
         resolution=Period.of_minutes(15),

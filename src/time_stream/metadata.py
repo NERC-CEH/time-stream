@@ -1,8 +1,8 @@
 """
-Time Series Metadata Management Module.
+Metadata Management Module.
 
-This module provides helpers for dealing with metadata within a TimeSeries object. Metadata can be at the
-TimeSeries-level, or at a per-Column level. If providing per-Column metadata, validation checks whether the
+This module provides helpers for dealing with metadata within a TimeFrame object. Metadata can be at the
+TimeFrame-level, or at a per-Column level. If providing per-Column metadata, validation checks whether the
 column exists in the DataFrame.
 
 The ColumnMetadataDoct class extends the built-in dict type to enforce rules on assignment and update,
@@ -38,7 +38,7 @@ class ColumnMetadataDict(dict[str, dict[str, Any]]):
             key: The name of the column to validate.
         """
         if key not in self._current_columns():
-            raise KeyError(f"Metadata column key '{key}' not found in TimeSeries")
+            raise KeyError(f"Metadata column key '{key}' not found in TimeFrame")
 
     @staticmethod
     def _validate_value(value: dict[str, Any]) -> None:

@@ -7,7 +7,7 @@ import polars as pl
 from parameterized import parameterized
 from polars.testing import assert_series_equal
 
-from time_stream.base import TimeSeries
+from time_stream.base import TimeFrame
 from time_stream.exceptions import QcUnknownOperatorError, RegistryKeyTypeError, UnknownRegistryKeyError
 from time_stream.qc import ComparisonCheck, QCCheck, QcCtx, RangeCheck, SpikeCheck
 
@@ -24,9 +24,9 @@ class TestQCCheck(unittest.TestCase):
 
     def setUp(self) -> None:
         """Set up test fixtures."""
-        self.mock_ts = Mock()
-        self.mock_ts.time_name = "timestamp"
-        self.mock_ts.df = pl.DataFrame({"timestamp": [datetime(2025, m, 1) for m in range(1, 8)]})
+        self.mock_tf = Mock()
+        self.mock_tf.time_name = "timestamp"
+        self.mock_tf.df = pl.DataFrame({"timestamp": [datetime(2025, m, 1) for m in range(1, 8)]})
 
     @parameterized.expand(
         [
@@ -96,47 +96,47 @@ class TestComparisonCheck(unittest.TestCase):
                 "value_c": [None, 50.0, 100.0, None],
             }
         )
-        self.ts = TimeSeries(data, "time")
+        self.tf = TimeFrame(data, "time")
 
     def test_greater_than(self) -> None:
         """Test the comparison check function with '>' operator."""
         check = ComparisonCheck(10, ">")
-        result = check.apply(self.ts.df, self.ts.time_name, "value_a")
+        result = check.apply(self.tf.df, self.tf.time_name, "value_a")
         expected = pl.Series([False, False, True, True])
         assert_series_equal(result, expected)
 
     def test_greater_than_or_equal(self) -> None:
         """Test the comparison check function with '>=' operator."""
         check = ComparisonCheck(10, ">=")
-        result = check.apply(self.ts.df, self.ts.time_name, "value_a")
+        result = check.apply(self.tf.df, self.tf.time_name, "value_a")
         expected = pl.Series([False, True, True, True])
         assert_series_equal(result, expected)
 
     def test_less_than(self) -> None:
         """Test the comparison check function with '<' operator."""
         check = ComparisonCheck(10, "<")
-        result = check.apply(self.ts.df, self.ts.time_name, "value_a")
+        result = check.apply(self.tf.df, self.tf.time_name, "value_a")
         expected = pl.Series([True, False, False, False])
         assert_series_equal(result, expected)
 
     def test_less_than_or_equal(self) -> None:
         """Test the comparison check function with '<=' operator."""
         check = ComparisonCheck(10, "<=")
-        result = check.apply(self.ts.df, self.ts.time_name, "value_a")
+        result = check.apply(self.tf.df, self.tf.time_name, "value_a")
         expected = pl.Series([True, True, False, False])
         assert_series_equal(result, expected)
 
     def test_equal(self) -> None:
         """Test the comparison check function with '==' operator."""
         check = ComparisonCheck(10, "==")
-        result = check.apply(self.ts.df, self.ts.time_name, "value_a")
+        result = check.apply(self.tf.df, self.tf.time_name, "value_a")
         expected = pl.Series([False, True, False, False])
         assert_series_equal(result, expected)
 
     def test_not_equal(self) -> None:
         """Test the comparison check function with '!=' operator."""
         check = ComparisonCheck(10, "!=")
-        result = check.apply(self.ts.df, self.ts.time_name, "value_a")
+        result = check.apply(self.tf.df, self.tf.time_name, "value_a")
         expected = pl.Series([True, False, True, True])
         assert_series_equal(result, expected)
 
@@ -145,7 +145,7 @@ class TestComparisonCheck(unittest.TestCase):
         the QC check (so qc flag set in the result).
         """
         check = ComparisonCheck(10, ">", flag_na=True)
-        result = check.apply(self.ts.df, self.ts.time_name, "value_c")
+        result = check.apply(self.tf.df, self.tf.time_name, "value_c")
         expected = pl.Series([True, True, True, True])
         assert_series_equal(result, expected)
 
@@ -154,7 +154,7 @@ class TestComparisonCheck(unittest.TestCase):
         the QC check (so qc flag not set in the result).
         """
         check = ComparisonCheck(10, ">", flag_na=False)
-        result = check.apply(self.ts.df, self.ts.time_name, "value_c")
+        result = check.apply(self.tf.df, self.tf.time_name, "value_c")
         expected = pl.Series([None, True, True, None])
         assert_series_equal(result, expected)
 
@@ -162,7 +162,7 @@ class TestComparisonCheck(unittest.TestCase):
         """Test that invalid operator raises error"""
         with self.assertRaises(QcUnknownOperatorError):
             check = ComparisonCheck(10, ">>")
-            check.apply(self.ts.df, self.ts.time_name, "value_a")
+            check.apply(self.tf.df, self.tf.time_name, "value_a")
 
 
 class TestRangeCheck(unittest.TestCase):
@@ -182,8 +182,8 @@ class TestRangeCheck(unittest.TestCase):
                 "value_a": range(8),
             }
         )
-        self.ts = TimeSeries(data, "time")
-        self.ctx = QcCtx(self.ts.df, self.ts.time_name)
+        self.tf = TimeFrame(data, "time")
+        self.ctx = QcCtx(self.tf.df, self.tf.time_name)
 
     @parameterized.expand(
         [
@@ -230,7 +230,7 @@ class TestRangeCheck(unittest.TestCase):
     ) -> None:
         """Test that the range-check returns expected results"""
         check = RangeCheck(min_value, max_value, closed, within)
-        result = check.apply(self.ts.df, self.ts.time_name, "value_a")
+        result = check.apply(self.tf.df, self.tf.time_name, "value_a")
         assert_series_equal(result, pl.Series(expected))
 
     @parameterized.expand(
@@ -253,7 +253,7 @@ class TestRangeCheck(unittest.TestCase):
         in the time series.  This is intended to test the "closed" parameter.
         """
         check = RangeCheck(min_value, max_value, closed, within)
-        result = check.apply(self.ts.df, self.ts.time_name, "value_a")
+        result = check.apply(self.tf.df, self.tf.time_name, "value_a")
         assert_series_equal(result, pl.Series(expected))
 
     @parameterized.expand(
@@ -298,7 +298,7 @@ class TestRangeCheck(unittest.TestCase):
     ) -> None:
         """Test that the range check accepts time values."""
         check = RangeCheck(min_value, max_value, closed, within)
-        result = check.apply(self.ts.df, self.ts.time_name, "time")
+        result = check.apply(self.tf.df, self.tf.time_name, "time")
         assert_series_equal(result, pl.Series(expected))
 
     @parameterized.expand(
@@ -391,7 +391,7 @@ class TestRangeCheck(unittest.TestCase):
     ) -> None:
         """Test that the time range check works as expected when the range is across midnight"""
         check = RangeCheck(min_value, max_value, closed, within)
-        result = check.apply(self.ts.df, self.ts.time_name, "time")
+        result = check.apply(self.tf.df, self.tf.time_name, "time")
         assert_series_equal(result, pl.Series(expected))
 
     @parameterized.expand(
@@ -436,7 +436,7 @@ class TestRangeCheck(unittest.TestCase):
     ) -> None:
         """Test that the range check accepts datetime values."""
         check = RangeCheck(min_value, max_value, closed, within)
-        result = check.apply(self.ts.df, self.ts.time_name, "time")
+        result = check.apply(self.tf.df, self.tf.time_name, "time")
         assert_series_equal(result, pl.Series(expected))
 
     @parameterized.expand(
@@ -481,7 +481,7 @@ class TestRangeCheck(unittest.TestCase):
     ) -> None:
         """Test that the range check accepts date values."""
         check = RangeCheck(min_value, max_value, closed, within)
-        result = check.apply(self.ts.df, self.ts.time_name, "time")
+        result = check.apply(self.tf.df, self.tf.time_name, "time")
         assert_series_equal(result, pl.Series(expected))
 
 
@@ -500,22 +500,22 @@ class TestSpikeCheck(unittest.TestCase):
                 "value_a": range(6),
             }
         )
-        self.ts = TimeSeries(data, "time")
+        self.tf = TimeFrame(data, "time")
 
     def test_basic_spike(self) -> None:
         """Test that the spike check returns expected results for a simple spike in the data"""
-        df = self.ts.df.with_columns(pl.Series([1.0, 2.0, 3.0, 40.0, 5.0, 6.0]).alias("value_a"))
-        ts = self.ts.with_df(df)
+        df = self.tf.df.with_columns(pl.Series([1.0, 2.0, 3.0, 40.0, 5.0, 6.0]).alias("value_a"))
+        tf = self.tf.with_df(df)
 
         check = SpikeCheck(10)
-        result = check.apply(ts.df, ts.time_name, "value_a")
+        result = check.apply(tf.df, tf.time_name, "value_a")
         expected = pl.Series([None, False, False, True, False, None])
         assert_series_equal(result, expected)
 
     def test_no_spike(self) -> None:
         """Test that no flags are added for data with no spike"""
         check = SpikeCheck(10)
-        result = check.apply(self.ts.df, self.ts.time_name, "value_a")
+        result = check.apply(self.tf.df, self.tf.time_name, "value_a")
         expected = pl.Series([None, False, False, False, False, None])
         assert_series_equal(result, expected)
 
@@ -523,11 +523,11 @@ class TestSpikeCheck(unittest.TestCase):
         """Large spikes can cause the values around the spike to be flagged if method not working correctly.
         Check this is not the case here.
         """
-        df = self.ts.df.with_columns(pl.Series([1.0, 999.0, 3.0, 4.0, 999999999.0, 6.0]).alias("value_a"))
-        ts = self.ts.with_df(df)
+        df = self.tf.df.with_columns(pl.Series([1.0, 999.0, 3.0, 4.0, 999999999.0, 6.0]).alias("value_a"))
+        tf = self.tf.with_df(df)
 
         check = SpikeCheck(10)
-        result = check.apply(ts.df, ts.time_name, "value_a")
+        result = check.apply(tf.df, tf.time_name, "value_a")
         expected = pl.Series([None, True, False, False, True, None])
         assert_series_equal(result, expected)
 
@@ -535,12 +535,12 @@ class TestSpikeCheck(unittest.TestCase):
 class TestCheckWithDateRange(unittest.TestCase):
     def setUp(self) -> None:
         data = pl.DataFrame({"time": [datetime(2023, 8, d + 1) for d in range(10)], "value_a": range(10)})
-        self.ts = TimeSeries(data, "time")
+        self.tf = TimeFrame(data, "time")
 
     def test_no_date_range(self) -> None:
         """Test the check is applied to whole time series if no date range provided"""
         check = ComparisonCheck(1, ">")
-        result = check.apply(self.ts.df, self.ts.time_name, "value_a", observation_interval=None)
+        result = check.apply(self.tf.df, self.tf.time_name, "value_a", observation_interval=None)
         expected = pl.Series([False, False, True, True, True, True, True, True, True, True])
         assert_series_equal(result, expected)
 
@@ -548,7 +548,7 @@ class TestCheckWithDateRange(unittest.TestCase):
         """Test the check is applied to part of the time series if a date range provided"""
         check = ComparisonCheck(1, ">")
         result = check.apply(
-            self.ts.df, self.ts.time_name, "value_a", observation_interval=(datetime(2023, 8, 1), datetime(2023, 8, 5))
+            self.tf.df, self.tf.time_name, "value_a", observation_interval=(datetime(2023, 8, 1), datetime(2023, 8, 5))
         )
         expected = pl.Series([False, False, True, True, True, False, False, False, False, False])
         assert_series_equal(result, expected)
@@ -563,6 +563,6 @@ class TestCheckWithDateRange(unittest.TestCase):
     def test_with_date_range_open(self, _: str, observation_interval: tuple[datetime, datetime]) -> None:
         """Test the check is applied to part of the time series if a date range provided an open-ended end date"""
         check = ComparisonCheck(1, ">")
-        result = check.apply(self.ts.df, self.ts.time_name, "value_a", observation_interval=observation_interval)
+        result = check.apply(self.tf.df, self.tf.time_name, "value_a", observation_interval=observation_interval)
         expected = pl.Series([False, False, False, False, False, False, False, True, True, True])
         assert_series_equal(result, expected)

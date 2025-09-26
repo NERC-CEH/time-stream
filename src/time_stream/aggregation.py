@@ -163,8 +163,8 @@ class AggregationPipeline:
 
         if not self.ctx.periodicity.is_subperiod_of(self.aggregation_period):
             raise AggregationPeriodError(
-                f"Incompatible aggregation period '{self.aggregation_period}' with TimeSeries periodicity "
-                f"'{self.ctx.periodicity}'. TimeSeries periodicity must be a subperiod of the aggregation period."
+                f"Incompatible aggregation period '{self.aggregation_period}' with TimeFrame periodicity "
+                f"'{self.ctx.periodicity}'. TimeFrame periodicity must be a subperiod of the aggregation period."
             )
 
     def _get_label_closed(self) -> tuple[str, str]:
@@ -178,7 +178,7 @@ class AggregationPipeline:
         return label, closed
 
     def _actual_count_expr(self) -> list[pl.Expr]:
-        """A `Polars` expression to generate the actual count of values in a TimeSeries found in each period.
+        """A `Polars` expression to generate the actual count of values in a TimeFrame found in each period.
 
         Returns:
             List of `Polars` expressions that can be used to generate actual counts for each column
@@ -186,7 +186,7 @@ class AggregationPipeline:
         return [pl.col(col).count().alias(f"count_{col}") for col in self.columns]
 
     def _expected_count_expr(self) -> pl.Expr:
-        """A `Polars` expression to generate the expected count of values in a TimeSeries found in each
+        """A `Polars` expression to generate the expected count of values in a TimeFrame found in each
         period (if there were no missing values).
 
         Returns:

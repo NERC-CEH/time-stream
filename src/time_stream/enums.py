@@ -1,5 +1,5 @@
 """
-Time Series Enumerations.
+Time-Stream Enumerations.
 
 This module defines several enums used throughout time_stream to standardise constants across the package.
 """
@@ -8,7 +8,7 @@ from enum import Enum
 
 
 class DuplicateOption(Enum):
-    """Enum representing the options for handling duplicate timestamp rows in a TimeSeries.
+    """Enum representing the options for handling duplicate timestamp rows in a TimeFrame.
 
     Attributes:
         DROP: Raise an error if duplicate rows are found.

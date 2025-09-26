@@ -1,7 +1,7 @@
 """
-Time Series Time Management Module.
+Time Management Module.
 
-This module defines and enforces integrity rules for the temporal aspects of a TimeSeries object.  This includes:
+This module defines and enforces integrity rules for the temporal aspects of a TimeFrame object.  This includes:
 
 - Validates the presence and type of the time column.
 - Ensures datetimes align to the specified resolution (precision).
@@ -33,7 +33,7 @@ from time_stream.utils import (
 
 
 class TimeManager:
-    """Enforces integrity of the temporal aspect of the TimeSeries"""
+    """Enforces integrity of the temporal aspect of the TimeFrame"""
 
     def __init__(
         self,
@@ -46,7 +46,7 @@ class TimeManager:
         """Initialise the time manager.
 
         Args:
-            time_name: The name of the time column of the parent TimeSeries.
+            time_name: The name of the time column of the parent TimeFrame.
             resolution: Resolution defines how "precise" the datetimes are, i.e., to what precision of time unit
                         should each datetime in the time series match to.
 
@@ -121,7 +121,7 @@ class TimeManager:
         return self._time_anchor
 
     def validate(self, df: pl.DataFrame) -> None:
-        """Carry out a series of validations on the temporal aspects of the TimeSeries.
+        """Carry out a series of validations on the temporal aspects of the TimeFrame.
         Args:
             df: Dataframe to validate against.
         Raises:

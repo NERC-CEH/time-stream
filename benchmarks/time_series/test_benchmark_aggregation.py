@@ -7,13 +7,13 @@ import polars as pl
 from pytest import param
 from pytest_benchmark.fixture import BenchmarkFixture
 
-from time_stream import TimeSeries, Period
+from time_stream import TimeFrame, Period
 from time_stream.aggregation import AggregationFunction, Max, Mean, Min
 
 
 AGG_FUNCS = (Max, Mean, Min)
 
-def generate_data(resolution: Period, length_days: int) -> TimeSeries:
+def generate_data(resolution: Period, length_days: int) -> TimeFrame:
     """ Generate test data for a given resolution, across dates in given range
 
     Args:
@@ -37,13 +37,13 @@ def generate_data(resolution: Period, length_days: int) -> TimeSeries:
     values = [random.uniform(0, 1000) for _ in range(len(timestamps))]
 
     df = pl.DataFrame({"timestamp": timestamps, "data": values})
-    ts = TimeSeries(df, "timestamp", resolution, periodicity)
+    ts = TimeFrame(df, "timestamp", resolution, periodicity)
 
     return ts
 
 
 class BaseAggregationBenchmark:
-    ts: TimeSeries
+    ts: TimeFrame
 
     def run_aggregation(self,
                         benchmark: BenchmarkFixture,

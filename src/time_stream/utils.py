@@ -1,5 +1,5 @@
 """
-Time Series Utility Module.
+Time-Stream Utility Module.
 
 This module provides helper functions used across the time_stream package for working with temporal data.
 """

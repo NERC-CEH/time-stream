@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 
 import polars as pl
 
-from time_stream import Period, TimeSeries
+from time_stream import Period, TimeFrame
 
 # [end_block_1]
 from time_stream.examples.utils import suppress_output
@@ -27,7 +27,7 @@ def create_df() -> pl.DataFrame:
     return df
 
 
-def create_timeseries() -> TimeSeries:
+def create_timeFrame() -> TimeFrame:
     with suppress_output():
         df = create_df()
 
@@ -37,7 +37,7 @@ def create_timeseries() -> TimeSeries:
     periodicity = Period.of_days(1)
 
     # Build the time series object
-    ts = TimeSeries(df=df, time_name="timestamp", resolution=resolution, periodicity=periodicity)
+    ts = TimeFrame(df=df, time_name="timestamp", resolution=resolution, periodicity=periodicity)
     # [end_block_3]
     print(ts)
     return ts
@@ -45,7 +45,7 @@ def create_timeseries() -> TimeSeries:
 
 def aggregate_data() -> None:
     with suppress_output():
-        ts = create_timeseries()
+        ts = create_timeFrame()
 
     # [start_block_4]
     from time_stream.aggregation import Mean
@@ -58,21 +58,21 @@ def aggregate_data() -> None:
     print(monthly_temp)
 
 
-def create_flagging_system() -> TimeSeries:
+def create_flagging_system() -> TimeFrame:
     with suppress_output():
         df = create_df()
 
     # [start_block_5]
     quality_flags = {"MISSING": 1, "SUSPICIOUS": 2, "ESTIMATED": 4}
 
-    ts = TimeSeries(df=df, time_name="timestamp", flag_systems={"quality": quality_flags})
+    ts = TimeFrame(df=df, time_name="timestamp", flag_systems={"quality": quality_flags})
 
     print(ts.flag_systems)
     # [end_block_5]
     return ts
 
 
-def use_flagging_system() -> TimeSeries:
+def use_flagging_system() -> TimeFrame:
     with suppress_output():
         ts = create_flagging_system()
 

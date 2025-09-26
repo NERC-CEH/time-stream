@@ -4,11 +4,11 @@ import matplotlib.pyplot as plt
 import numpy as np
 import polars as pl
 
-from time_stream import Period, TimeSeries
+from time_stream import Period, TimeFrame
 from time_stream.examples.utils import suppress_output
 
 
-def create_simple_time_series_with_gaps() -> TimeSeries:
+def create_simple_time_series_with_gaps() -> TimeFrame:
     # [start_block_1]
     np.random.seed(42)
 
@@ -35,7 +35,7 @@ def create_simple_time_series_with_gaps() -> TimeSeries:
         }
     )
 
-    ts = TimeSeries(df=df, time_name="timestamp", resolution=Period.of_days(1), periodicity=Period.of_days(1))
+    ts = TimeFrame(df=df, time_name="timestamp", resolution=Period.of_days(1), periodicity=Period.of_days(1))
 
     # Pad missing rows in the time series with nulls
     ts.pad()

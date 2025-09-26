@@ -2,11 +2,11 @@ from datetime import date, datetime, time, timedelta
 
 import polars as pl
 
-from time_stream import TimeSeries
+from time_stream import TimeFrame
 from time_stream.examples.utils import suppress_output
 
 
-def create_simple_time_series() -> TimeSeries:
+def create_simple_time_series() -> TimeFrame:
     # [start_block_1]
     dates = [datetime(2023, 1, 1) + timedelta(hours=i) for i in range(10)]
     temperatures = [24, 22, -35, 26, 24, 26, 28, 50, 52, 29]
@@ -17,7 +17,7 @@ def create_simple_time_series() -> TimeSeries:
         {"timestamp": dates, "temperature": temperatures, "precipitation": precipitation, "sensor_codes": sensor_codes}
     )
 
-    ts = TimeSeries(df=df, time_name="timestamp")
+    ts = TimeFrame(df=df, time_name="timestamp")
     # [end_block_1]
     with pl.Config(tbl_rows=-1):
         print(ts)

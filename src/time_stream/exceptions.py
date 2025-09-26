@@ -33,7 +33,7 @@ class DuplicateTimeError(DuplicateValueError):
     ):
         if not msg:
             msg = (
-                f"Duplicate time values found. A TimeSeries must have unique time values. "
+                f"Duplicate time values found. A TimeFrame must have unique time values. "
                 f"Options for dealing with duplicate rows include: {[o.name for o in DuplicateOption]}."
             )
         self.duplicates = duplicates
@@ -61,7 +61,7 @@ class TimeMutatedError(TimeStreamError):
         if not msg:
             msg = (
                 "Time column has been modified. Adding, removing or modifying time rows requires creating a new "
-                "TimeSeries instance."
+                "TimeFrame instance."
             )
         self.old_timestamps = old_timestamps
         self.new_timestamps = new_timestamps

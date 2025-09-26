@@ -2,7 +2,7 @@
 Operation Base Class
 
 This module defines the `Operation` abstract base class, which provides a pattern for any class system that provides
-an "operation" on the time series data. It enables flexible instantiation of operations from strings, types, or
+an "operation" on the TimeFrame data. It enables flexible instantiation of operations from strings, types, or
 existing instances with a class registry system.
 
 Key features:

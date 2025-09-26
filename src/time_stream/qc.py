@@ -1,7 +1,7 @@
 """
 Time Series Quality Control (QC) Module
 
-This module provides a framework for applying quality control checks to time data using Polars. QC checks are
+This module provides a framework for applying quality control checks to TimeFrame using Polars. QC checks are
 implemented as subclasses of ``QCCheck`` and can be registered and instantiated by name, class, or instance.
 
 It supports various QC checks including:
