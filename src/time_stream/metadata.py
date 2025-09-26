@@ -30,6 +30,7 @@ class ColumnMetadataDict(dict[str, dict[str, Any]]):
         """
         super().__init__()
         self._current_columns = current_columns
+        self.sync()
 
     def _validate_key(self, key: str) -> None:
         """Ensure the key is the name of an existing DataFrame column.
@@ -65,6 +66,25 @@ class ColumnMetadataDict(dict[str, dict[str, Any]]):
                     self[k] = v
         for k, v in kwargs.items():
             self[k] = v
+        self.sync()
+
+    def clear(self) -> None:
+        """Override the clear method to reset to empty metadata dicts for all current DataFrame columns."""
+        super().clear()
+        self.sync()
+
+    def sync(self) -> None:
+        """Ensure column metadata keys match the DataFrame columns."""
+        df_cols = set(self._current_columns())
+        metadata_cols = set(self.keys())
+
+        for column in metadata_cols - df_cols:
+            # Remove metadata for column not in the dataframe
+            del self[column]
+
+        for column in df_cols - metadata_cols:
+            # Add empty dicts for any column in the dataframe that doesn't have a metadata entry
+            self[column] = {}
 
     def __setitem__(self, key: str, value: dict[str, Any]) -> None:
         """Assign per-column metadata after validating key and value.

@@ -28,8 +28,8 @@ class Operation(ABC):
         if "_REGISTRY" not in cls.__dict__:
             cls._REGISTRY = {}
 
-    @classmethod
-    def _normalize_key(cls, key: str) -> str:
+    @staticmethod
+    def _normalize_key(key: str) -> str:
         """Define the structure of the keys for the registry dict.
 
         Args:

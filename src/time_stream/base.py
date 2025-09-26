@@ -85,14 +85,13 @@ class TimeFrame:
             time_anchor=time_anchor,
         )
 
-        self._metadata = {}
-        self._column_metadata = ColumnMetadataDict(lambda: self.df.columns)
-        self._flag_manager = FlagManager()
-
         self._df = self._time_manager._handle_time_duplicates(df)
         self._time_manager.validate(self.df)
         self.sort_time()
-        self._sync_column_metadata()
+
+        self._metadata = {}
+        self._column_metadata = ColumnMetadataDict(lambda: self.df.columns)
+        self._flag_manager = FlagManager()
 
     def copy(self, share_df: bool = True) -> Self:
         """Return a shallow copy of this ``TimeFrame``, either sharing or cloning the underlying DataFrame.
@@ -130,7 +129,7 @@ class TimeFrame:
         self._time_manager._check_time_integrity(old_df, new_df)
         tf = self.copy()
         tf._df = new_df
-        tf._sync_column_metadata()
+        tf._column_metadata.sync()
         return tf
 
     def with_metadata(self, metadata: dict[str, Any]) -> Self:
@@ -157,7 +156,7 @@ class TimeFrame:
         """
         tf = self.copy()
         tf.column_metadata.update(metadata)
-        tf._sync_column_metadata()
+        tf._column_metadata.sync()
         return tf
 
     def with_flag_system(self, name: str, flag_system: FlagSystemType) -> Self:
@@ -217,16 +216,10 @@ class TimeFrame:
         if value is None:
             # Reset all the columns metadata to empty dicts
             self._column_metadata = ColumnMetadataDict(lambda: self.df.columns)
-            self._sync_column_metadata()
 
         elif isinstance(value, dict):
-            # Validate the inner mappings of the column metadata
-            try:
-                for column_name, column_metadata in value.items():
-                    self._column_metadata[column_name] = column_metadata
-            except (KeyError, MetadataError) as err:
-                self._column_metadata.clear()
-                raise err
+            self.column_metadata.update(value)
+
         else:
             raise MetadataError(f"Column-level metadata must be a dict object. Got: '{type(value)}'")
 
@@ -234,20 +227,6 @@ class TimeFrame:
     def column_metadata(self) -> None:
         """Clear all per-column metadata."""
         self._column_metadata.clear()
-        self._sync_column_metadata()
-
-    def _sync_column_metadata(self) -> None:
-        """Ensure column_metadata keys match the DataFrame columns."""
-        df_cols = set(self.df.columns)
-        metadata_cols = set(self.column_metadata.keys())
-
-        for column in metadata_cols - df_cols:
-            # Remove metadata for column not in the dataframe
-            del self.column_metadata[column]
-
-        for column in df_cols - metadata_cols:
-            # Add empty dicts for any column in the dataframe that doesn't have a metadata entry
-            self.column_metadata[column] = {}
 
     @property
     def time_name(self) -> str:
@@ -362,7 +341,7 @@ class TimeFrame:
         # Add and register as a flag column
         self._df = self.df.with_columns(data.alias(column_name))
         self.register_flag_column(column_name, base, flag_system)
-        self._sync_column_metadata()
+        self._column_metadata.sync()
 
     def get_flag_column(self, flag_column_name: str) -> FlagColumn:
         """Look up a registered flag column by name.
@@ -598,7 +577,7 @@ class TimeFrame:
                 )
 
         tf._flag_manager = new_flag_manager
-        tf._sync_column_metadata()
+        tf._column_metadata.sync()
         return tf
 
     def __getitem__(self, key: str | Sequence[str]) -> Self:
