@@ -1,4 +1,32 @@
-.nbinput .prompt,
-.nboutput .prompt {
-    display: none;
+.sphinx-contributors img {
+    border-radius: 50%;
+}
+
+/* Highlight cards on hover */
+.sd-card {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.sd-card:hover {
+  background-color: var(--accent-2);
+  border-color: var(--accent-9);
+}
+
+.padded-tabs .sd-tab-content {
+    padding: 1rem;
+}
+
+.sy-head-socials img {
+    height:24px;
+}
+
+.image-row {
+    display: flex;
+    justify-content: center;
+    gap: 2rem;
+}
+
+.image-item {
+    flex: 1;
+    text-align: center;
 }

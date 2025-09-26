@@ -1320,6 +1320,18 @@ wheels = [
 ]
 
 [[package]]
+name = "pygments-styles"
+version = "0.1.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pygments" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/66/38/3516e13cfa5b8ad21642b3b75729246f70edf835ba5f89688d6ac8577fbd/pygments_styles-0.1.1.tar.gz", hash = "sha256:2b6c0468ba5055d0550df77a0c7c7bac7cb21a69c73dec4517abcd16a3397ef6", size = 11711, upload-time = "2025-09-23T12:47:11.476Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/15/59/3c047bbaaf2f4a259121fe7c8eb011027930bc780fb1b5e0496d1b439cb2/pygments_styles-0.1.1-py3-none-any.whl", hash = "sha256:57dee9fb8b6956c6b8ce59210313668b8925138f249ecfac4c660fe4ebdbe66c", size = 29484, upload-time = "2025-09-23T12:47:10.065Z" },
+]
+
+[[package]]
 name = "pyparsing"
 version = "3.2.3"
 source = { registry = "https://pypi.org/simple" }
@@ -1629,6 +1641,19 @@ wheels = [
 ]
 
 [[package]]
+name = "shibuya"
+version = "2025.9.25"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pygments-styles" },
+    { name = "sphinx" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/00/f3/36435b8e126b0a2cd7efa346cb366f25769094425fa0b145ab6991d20829/shibuya-2025.9.25.tar.gz", hash = "sha256:03131beb0f8e31cf4f501a4b744cd9c3f387cf23696259476d141b9ca976156b", size = 81798, upload-time = "2025-09-25T02:54:18.744Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/15/d7/e4831122c1cdaa66cf432d50cf24b38dd161aa69187eebfa41295c3a84ec/shibuya-2025.9.25-py3-none-any.whl", hash = "sha256:93e439181167936dd1950874880c23920d551f90ff475888ce278af1d2efa4eb", size = 97695, upload-time = "2025-09-25T02:54:17.351Z" },
+]
+
+[[package]]
 name = "six"
 version = "1.17.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1683,6 +1708,18 @@ wheels = [
 ]
 
 [[package]]
+name = "sphinx-contributors"
+version = "0.2.7"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "sphinx" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/21/9d/7505ca9f128ab5a0b38fc51e57d428a54f28767596e99c05a26155ea603a/sphinx_contributors-0.2.7.tar.gz", hash = "sha256:aace731366096f2104a06eca77b9354b11768ddec149d699520c254f09cbb4f4", size = 394864, upload-time = "2023-01-10T16:43:37.53Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/9a/95/573aeae3e67ab90a4600b3758fba9d06bad9e7d68d76959e8018762c2858/sphinx_contributors-0.2.7-py3-none-any.whl", hash = "sha256:f409295eb22f05606528ff3a9b93b4ae076d93d3153de13ff47bfcdd1c792463", size = 4669, upload-time = "2023-01-10T16:43:31.775Z" },
+]
+
+[[package]]
 name = "sphinx-copybutton"
 version = "0.5.2"
 source = { registry = "https://pypi.org/simple" }
@@ -1692,6 +1729,30 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/fc/2b/a964715e7f5295f77509e59309959f4125122d648f86b4fe7d70ca1d882c/sphinx-copybutton-0.5.2.tar.gz", hash = "sha256:4cf17c82fb9646d1bc9ca92ac280813a3b605d8c421225fd9913154103ee1fbd", size = 23039, upload-time = "2023-04-14T08:10:22.998Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/9e/48/1ea60e74949eecb12cdd6ac43987f9fd331156388dcc2319b45e2ebb81bf/sphinx_copybutton-0.5.2-py3-none-any.whl", hash = "sha256:fb543fd386d917746c9a2c50360c7905b605726b9355cd26e9974857afeae06e", size = 13343, upload-time = "2023-04-14T08:10:20.844Z" },
+]
+
+[[package]]
+name = "sphinx-design"
+version = "0.6.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "sphinx" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/2b/69/b34e0cb5336f09c6866d53b4a19d76c227cdec1bbc7ac4de63ca7d58c9c7/sphinx_design-0.6.1.tar.gz", hash = "sha256:b44eea3719386d04d765c1a8257caca2b3e6f8421d7b3a5e742c0fd45f84e632", size = 2193689, upload-time = "2024-08-02T13:48:44.277Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c6/43/65c0acbd8cc6f50195a3a1fc195c404988b15c67090e73c7a41a9f57d6bd/sphinx_design-0.6.1-py3-none-any.whl", hash = "sha256:b11f37db1a802a183d61b159d9a202314d4d2fe29c163437001324fe2f19549c", size = 2215338, upload-time = "2024-08-02T13:48:42.106Z" },
+]
+
+[[package]]
+name = "sphinx-iconify"
+version = "0.2.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "sphinx" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/3b/c5/d7a62feb7e6015d924de4b1a74595045206506dbf183efe477e93cc9f036/sphinx_iconify-0.2.1.tar.gz", hash = "sha256:4720000ab51a7ab7a4c88588f5b5d96246d304238095ffd11358a142435c7c30", size = 3553, upload-time = "2025-09-23T13:29:40.982Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d7/ce/0a85b70a917b423f62e481bfbd2f5907c744a44edde749781764662d25ca/sphinx_iconify-0.2.1-py3-none-any.whl", hash = "sha256:b226b955ab273429eee38f2060de18f26e8864773d3362813cd388cd852381ff", size = 3926, upload-time = "2025-09-23T13:29:39.933Z" },
 ]
 
 [[package]]
@@ -1706,6 +1767,20 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/91/44/c97faec644d29a5ceddd3020ae2edffa69e7d00054a8c7a6021e82f20335/sphinx_rtd_theme-3.0.2.tar.gz", hash = "sha256:b7457bc25dda723b20b086a670b9953c859eab60a2a03ee8eb2bb23e176e5f85", size = 7620463, upload-time = "2024-11-13T11:06:04.545Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/85/77/46e3bac77b82b4df5bb5b61f2de98637724f246b4966cfc34bc5895d852a/sphinx_rtd_theme-3.0.2-py2.py3-none-any.whl", hash = "sha256:422ccc750c3a3a311de4ae327e82affdaf59eb695ba4936538552f3b00f4ee13", size = 7655561, upload-time = "2024-11-13T11:06:02.094Z" },
+]
+
+[[package]]
+name = "sphinx-tabs"
+version = "3.4.7"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "docutils" },
+    { name = "pygments" },
+    { name = "sphinx" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/6a/53/a9a91995cb365e589f413b77fc75f1c0e9b4ac61bfa8da52a779ad855cc0/sphinx-tabs-3.4.7.tar.gz", hash = "sha256:991ad4a424ff54119799ba1491701aa8130dd43509474aef45a81c42d889784d", size = 15891, upload-time = "2024-10-08T13:37:27.887Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/6b/c6/f47505b564b918a3ba60c1e99232d4942c4a7e44ecaae603e829e3d05dae/sphinx_tabs-3.4.7-py3-none-any.whl", hash = "sha256:c12d7a36fd413b369e9e9967a0a4015781b71a9c393575419834f19204bd1915", size = 9727, upload-time = "2024-10-08T13:37:26.192Z" },
 ]
 
 [[package]]
@@ -1815,10 +1890,15 @@ dev = [
     { name = "pytest-benchmark", extra = ["histogram"] },
     { name = "pytest-cov" },
     { name = "ruff" },
+    { name = "shibuya" },
     { name = "snowballstemmer" },
     { name = "sphinx" },
+    { name = "sphinx-contributors" },
     { name = "sphinx-copybutton" },
+    { name = "sphinx-design" },
+    { name = "sphinx-iconify" },
     { name = "sphinx-rtd-theme" },
+    { name = "sphinx-tabs" },
 ]
 docs = [
     { name = "jupyter-sphinx" },
@@ -1866,10 +1946,15 @@ dev = [
     { name = "pytest-benchmark", extras = ["histogram"] },
     { name = "pytest-cov" },
     { name = "ruff" },
+    { name = "shibuya", specifier = ">=2025.9.25" },
     { name = "snowballstemmer", specifier = "<3" },
     { name = "sphinx" },
+    { name = "sphinx-contributors", specifier = ">=0.2.7" },
     { name = "sphinx-copybutton" },
+    { name = "sphinx-design", specifier = ">=0.6.1" },
+    { name = "sphinx-iconify", specifier = ">=0.2.1" },
     { name = "sphinx-rtd-theme" },
+    { name = "sphinx-tabs", specifier = ">=3.4.7" },
 ]
 docs = [
     { name = "jupyter-sphinx" },

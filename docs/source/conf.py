@@ -29,6 +29,10 @@ extensions = [
     "sphinx_copybutton",
     'jupyter_sphinx',
     'matplotlib.sphinxext.plot_directive',
+    'sphinx_design',
+    'sphinx_tabs.tabs',
+    'sphinx_contributors',
+    'sphinx_iconify',
 ]
 
 plot_formats = ['svg']
@@ -56,7 +60,7 @@ intersphinx_mapping = {
 
 # -- Options for HTML output -------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
-html_theme = "sphinx_rtd_theme"
+html_theme = "shibuya"
 html_static_path = ["_static"]
 
 # Custom CSS
@@ -66,6 +70,11 @@ html_css_files = [
 
 html_context = {
     "license": "GNU GPL v3.0",
+}
+
+html_theme_options = {
+    "accent_color": "blue",
+    "github_url": "https://github.com/NERC-CEH/time-stream",
 }
 
 # -- Napoleon settings -------------------------------------------------------
