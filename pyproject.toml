@@ -45,6 +45,7 @@ dev = [
   "sphinx-design>=0.6.1",
   "sphinx-iconify>=0.2.1",
   "sphinx-tabs>=3.4.7",
+  "sphinxcontrib-mermaid>=1.0.0",
 ]
 
 [tool.setuptools.dynamic]

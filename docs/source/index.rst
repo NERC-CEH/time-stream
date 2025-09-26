@@ -100,4 +100,13 @@ This project is licensed under the `GNU General Public License v3.0 <https://git
    :caption: Getting started
 
    getting_started/installation
+   getting_started/quick-start
+   getting_started/concepts
 
+.. toctree::
+   :hidden:
+   :maxdepth: 2
+   :caption: Developer guide
+
+   developer/contributing
+   developer/documentation

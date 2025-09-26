@@ -33,6 +33,7 @@ extensions = [
     'sphinx_tabs.tabs',
     'sphinx_contributors',
     'sphinx_iconify',
+    'sphinxcontrib.mermaid',
 ]
 
 plot_formats = ['svg']
@@ -76,6 +77,8 @@ html_theme_options = {
     "accent_color": "blue",
     "github_url": "https://github.com/NERC-CEH/time-stream",
 }
+
+mermaid_version = "11.12.0"
 
 # -- Napoleon settings -------------------------------------------------------
 napoleon_google_docstring = True

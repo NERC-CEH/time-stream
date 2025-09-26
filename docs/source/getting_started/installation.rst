@@ -41,11 +41,6 @@ Importing
 
 To use the library, simply import into your Python script:
 
-.. tab-set::
-    :class: outline padded-tabs
+.. code-block:: python
 
-    .. tab-item:: :iconify:`devicon:python` python
-
-        .. code-block:: python
-
-            import time_stream as ts
+   import time_stream as ts
