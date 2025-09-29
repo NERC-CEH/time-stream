@@ -122,8 +122,10 @@ class TimeManager:
 
     def validate(self, df: pl.DataFrame) -> None:
         """Carry out a series of validations on the temporal aspects of the TimeFrame.
+
         Args:
             df: Dataframe to validate against.
+
         Raises:
             ResolutionError: If the resolution is not a subperiod of the periodicity
         """

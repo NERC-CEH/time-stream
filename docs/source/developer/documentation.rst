@@ -4,8 +4,9 @@
 Documentation guide
 ===================
 
-This section explains how to write documentation for the Time-Stream Package using Sphinx.
-Comprehensive documentation is crucial for helping users understand and effectively use the package.
+.. rst-class:: lead
+
+   Great docs make **Time-Stream** usable and accessible. Help us improve them.
 
 Structure
 =========
@@ -17,13 +18,13 @@ Our documentation is organized as follows:
     docs/
     ├── source/
     │   ├── _static/           # Static assets (CSS, images)
+    │   ├── developer/         # Developer guides (like this one)
     │   ├── getting_started/   # Installation and basic usage
     │   ├── user_guide/        # In-depth guides for features
-    │   ├── developer/         # Developer guides (like this one)
     │   ├── conf.py            # Sphinx configuration
     │   └── index.rst          # Main index page
-    ├── Makefile              # Build commands for Unix
-    └── make.bat              # Build commands for Windows
+    ├── make.bat              # Build commands for Windows
+    └── Makefile              # Build commands for Unix
 
 Building Documentation
 ======================

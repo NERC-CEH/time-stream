@@ -23,7 +23,7 @@ One-liner
 ---------
 
 Rolling your own aggregation functionality can get complex.
-With *Time-Stream* you express the intent directly:
+With **Time-Stream** you express the intent directly:
 
 .. code-block:: python
 
@@ -45,68 +45,202 @@ series. You might want to:
 - Keep hold of the exact timestamp that the maximum occurred on
 - Know exactly how many data points were available in each water year
 
-Here's how you might have to do this in Pandas, Polars and in Time-Stream:
+Here's how you might have to do this in `Pandas <https://pandas.pydata.org/>`_, `Polars <https://pola.rs/>`_
+and then in Time-Stream:
+
+**Input:**
+
+.. _example_input_data:
+
+15-minute river flow timeseries, including some missing data.
+
+.. jupyter-execute::
+   :hide-code:
+
+   import examples_aggregation
+   ts = examples_aggregation.get_example_df("polars")
+
+**Code:**
 
 .. tab-set::
     :class: outline padded-tabs
 
-    .. tab-item:: Pandas
+    .. tab-item:: :iconify:`devicon:pandas` Pandas
+        :sync: pandas
 
-        .. code-block:: python
+        .. literalinclude:: ../../../src/time_stream/examples/examples_aggregation.py
+           :language: python
+           :start-after: [start_block_1]
+           :end-before: [end_block_1]
+           :dedent:
 
-            import pandas as pd
+    .. tab-item:: :iconify:`simple-icons:polars` Polars
+        :sync: polars
 
-    .. tab-item:: Polars
+        .. literalinclude:: ../../../src/time_stream/examples/examples_aggregation.py
+           :language: python
+           :start-after: [start_block_2]
+           :end-before: [end_block_2]
+           :dedent:
 
-        .. code-block:: python
+    .. tab-item:: :iconify:`tdesign:time` Time-Stream
+        :sync: time_stream
 
-            import polars as pl
+        .. literalinclude:: ../../../src/time_stream/examples/examples_aggregation.py
+           :language: python
+           :start-after: [start_block_3]
+           :end-before: [end_block_3]
+           :dedent:
 
-    .. tab-item:: Time-Stream
+**Output:**
 
-        .. code-block:: python
+.. tab-set::
+    :class: outline padded-tabs
 
-            import time_stream as ts
+    .. tab-item:: :iconify:`devicon:pandas` Pandas
+        :sync: pandas
 
-            tf_amax = tf.aggregate("P1Y+9MT9H", "max", "flow")
+        .. jupyter-execute::
+           :hide-code:
+
+           import examples_aggregation
+           ts = examples_aggregation.pandas_example()
+
+    .. tab-item:: :iconify:`simple-icons:polars` Polars
+        :sync: polars
+
+        .. jupyter-execute::
+           :hide-code:
+
+           import examples_aggregation
+           ts = examples_aggregation.polars_example()
+
+    .. tab-item:: :iconify:`tdesign:time` Time-Stream
+        :sync: time_stream
+
+        .. jupyter-execute::
+           :hide-code:
+
+           import examples_aggregation
+           ts = examples_aggregation.time_stream_example()
 
 Key benefits
 ------------
 
-- **Less boilerplate**
-  No need to wrangle custom datetime columns or write manual offset logic.
+- **Less boilerplate**: No need to wrangle custom datetime columns or write manual offset logic.
+- **Fewer mistakes**: Periodicity, alignment, and anchor semantics are enforced for you.
+- **Domain-ready**: Express hydrological conventions directly: daily at 09:00, or water year from October.
+- **Readable & reproducible**: Your code is self-explanatory to collaborators and reviewers.
 
-- **Fewer mistakes**
-  Periodicity, alignment, and anchor semantics are enforced for you.
+In more detail
+==============
 
-- **Domain-ready**
-  Express hydrological conventions directly: daily at 09:00, or water year from October.
+The :meth:`~time_stream.TimeFrame.aggregate` method is the entry point for performing aggregations with
+timeseries data in **Time-Stream**. It combines **Polars performance** with **TimeFrame semantics**
+(resolution, periodicity, anchor).
 
-- **Readable & reproducible**
-  Your code is self-explanatory to collaborators and reviewers.
+Aggregation period
+------------------
 
-In more detail: :meth:`~time_stream.TimeFrame.aggregate`
-========================================================
+The time window you want to aggregate **into**. This can be specified as an ISO-8601 duration string, with optional
+modification to specify a custom *offset* to the period.
 
-to do
+Common examples:
+
+- ``"P1D"`` – calendar day
+- ``"P1M"`` – calendar month
+- ``"P1Y"`` – calendar year
+- ``"P1Y+9MT9H"`` – **water year** starting **1 Oct 09:00**
+- ``"PT15M"`` – 15-minute buckets
+
+.. note::
+   The resulting :class:`~time_stream.TimeFrame` will have its resolution and periodicity set to this value.
 
 Aggregation methods
 -------------------
 
-to do
+Choose how values inside each window are summarised. Pass a **string** corresponding to one of the built-in functions:
+
+- ``"sum"`` - **Add up all values in each period.**
+
+  Use this for quantities that accumulate over time, such as precipitation.
+
+- ``"mean"`` - **Average of all values in each period.**
+
+  Useful for variables like temperature or concentration, where the average represents the period well.
+
+- ``"min"`` - **Smallest value observed in the period.**
+
+  Often used to track minimum daily temperature, or low flows in rivers.
+
+- ``"max"`` - **Largest value observed in the period.**
+
+  Common in hydrology for annual maxima (AMAX) or flood frequency analysis.
 
 Column selection
 ----------------
 
-to do
+Specify which columns to aggregate; only these will be used by the aggregation function. This can be a single
+column name, a list of columns, or if not provided - the method will use *all* columns in the timeseries.
+
 
 Missing criteria
 ----------------
 
-to do
+Control whether a window is considered **"complete enough"** to produce a value by specifying a specific
+*missing criteria policy* and associated *threshold*.
+
+The policies you can specify are:
+
+- ``available``:
+  Requires at least "n" points within the aggregation window.
+
+- ``percent``:
+  Requires at least "n"% of points within the aggregation window.
+
+- ``missing``:
+  No more than "n" points can be missing within the aggregation window.
+
+**Examples**
+
+Using the :ref:`15-minute flow example data <example_input_data>`:
+
+.. code-block:: python
+
+    # Require at least 2,400 values present (25 days of 15 minute data)
+    tf_agg = tf.aggregate("P1M", "mean", "flow", missing_criteria=("available", 25 * 96))
+
+    # Require at least 75% of data to be present
+    tf_agg = tf.aggregate("P1M", "mean", "flow", missing_criteria=("percent", 75))
+
+    # Allow at most 150 missing values
+    tf_agg = tf.aggregate("P1M", "mean", "flow", missing_criteria=("missing", 150))
+
+The resulting :class:`~time_stream.TimeFrame` object will contain metadata columns that provide detail about
+the completeness of the aggregation windows, and whether an aggregated data point is considered valid:
+
+- ``count_<column>``: The number of points found in each aggregation window
+- ``expected_count_<time>``: The number of points expected if the aggregation window was full
+- ``valid_<column>``: Whether the individual aggregated data points are valid or not,
+  based on the missing criteria specified.
+
+.. jupyter-execute::
+   :hide-code:
+
+   import examples_aggregation
+   examples_aggregation.aggregation_missing_criteria_example()
+
 
 Time anchoring
 --------------
 
-to do
+Choose the time anchor of the aggregated TimeFrame, which you may want to be different than the input TimeFrame.
+For example, meteorological observations are often considered as **end** anchored - where the value is considered valid
+*up to* the given timestamp. When producing a daily mean from this data, it may make more sense for the result
+to use a **start** anchor - indicating the value is valid *from* the start of the day to the end of the day.
 
+See the :doc:`concepts page </getting_started/concepts>` page for more information about time anchors.
+
+.. note::
+
+    If omitted, the aggregation uses the input TimeFrame's time anchor

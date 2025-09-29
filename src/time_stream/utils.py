@@ -114,7 +114,13 @@ def pad_time(
     max_datetime = existing_datetimes.max()
 
     # Generate a series of the datetimes we would expect with a full time series between the start and end date
-    expected_datetimes = pl.datetime_range(min_datetime, max_datetime, interval=periodicity.pl_interval, eager=True)
+    expected_datetimes = pl.datetime_range(
+        min_datetime,
+        max_datetime,
+        interval=periodicity.pl_interval,
+        eager=True,
+        time_unit=df[time_name].dtype.time_unit,
+    )
 
     # Find any missing datetimes between expected and existing
     missing_datetimes = expected_datetimes.filter(~expected_datetimes.is_in(existing_datetimes))

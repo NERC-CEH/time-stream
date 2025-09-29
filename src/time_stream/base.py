@@ -381,7 +381,7 @@ class TimeFrame:
         self,
         aggregation_period: Period | str,
         aggregation_function: str | Type[AggregationFunction] | AggregationFunction,
-        columns: str | list[str],
+        columns: str | list[str] | None = None,
         missing_criteria: tuple[str, float | int] | None = None,
         aggregation_time_anchor: TimeAnchor | None = None,
     ) -> Self:
@@ -391,7 +391,7 @@ class TimeFrame:
         Args:
             aggregation_period: The period over which to aggregate the data
             aggregation_function: The aggregation function to apply
-            columns: The column(s) containing the data to be aggregated
+            columns: The column(s) containing the data to be aggregated. If omitted, will use all data columns.
             missing_criteria: How the aggregation handles missing data
             aggregation_time_anchor: The time anchor for the aggregation result.
 
@@ -402,6 +402,9 @@ class TimeFrame:
         agg_func = AggregationFunction.get(aggregation_function)
         aggregation_period = configure_period_object(aggregation_period)
         aggregation_time_anchor = TimeAnchor(aggregation_time_anchor) if aggregation_time_anchor else self.time_anchor
+
+        if not columns:
+            columns = self.data_columns
 
         agg_df = agg_func.apply(
             self.df,

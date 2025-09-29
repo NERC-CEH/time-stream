@@ -4,9 +4,12 @@
 Contributing
 =============
 
-We welcome any contributions from the community to help make Time-Stream useful and up-to-date.
+.. rst-class:: lead
 
-**Ways to contribute**
+    Contributions welcome - big or small, they all move **Time-Stream** forward.
+
+Ways to contribute
+==================
 
 - Reporting bugs
 - Suggesting new features

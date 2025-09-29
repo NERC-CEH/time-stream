@@ -4,14 +4,13 @@
 Quick start
 ============
 
-This quick start guide will walk you through creating and working with timeseries data using the Time-Stream package.
+.. rst-class:: lead
 
-We follow the import pattern:
+    Create and work with timeseries data using the **Time-Stream** package.
 
 .. code-block:: python
 
    import time_stream as ts
-
 
 Create a TimeFrame
 ==================
@@ -57,7 +56,7 @@ account for any set of datetime values.  The time anchor property is set to **st
    :hide-code:
 
    import examples_timeseries_basics
-   ts = examples_timeseries_basics.show_default_resolution()
+   examples_timeseries_basics.show_default_resolution()
 
 
 Although the default of 1 microsecond will account for any datetime values, for more control over certain
@@ -78,7 +77,7 @@ Again, more detail can be found on the :doc:`concepts page <concepts>` page abou
    :hide-code:
 
    import examples_timeseries_basics
-   ts = examples_timeseries_basics.create_simple_time_series_with_periods()
+   examples_timeseries_basics.create_simple_time_series_with_periods()
 
 Duplicate Detection
 -------------------
@@ -91,7 +90,7 @@ Consider this DataFrame with duplicate time values:
    :hide-code:
 
    import examples_timeseries_basics
-   ts = examples_timeseries_basics.create_df_with_duplicate_rows()
+   examples_timeseries_basics.create_df_with_duplicate_rows()
 
 The following strategies are available to use with the ``on_duplicate`` argument:
 
@@ -109,7 +108,7 @@ Raises an error when duplicate rows are found. This is the default behavior to e
    :hide-code:
 
    import examples_timeseries_basics
-   ts = examples_timeseries_basics.duplicate_row_example_error()
+   examples_timeseries_basics.duplicate_row_example_error()
 
 2. **Keep First:** ``on_duplicate="keep_first"``
 
@@ -125,7 +124,7 @@ For a given group of rows with the same time value, keeps only the first row and
    :hide-code:
 
    import examples_timeseries_basics
-   ts = examples_timeseries_basics.duplicate_row_example_keep_first()
+   examples_timeseries_basics.duplicate_row_example_keep_first()
 
 3. **Keep Last:** ``on_duplicate="keep_last"``
 
@@ -141,7 +140,7 @@ For a given group of rows with the same time value, keeps only the last row and 
    :hide-code:
 
    import examples_timeseries_basics
-   ts = examples_timeseries_basics.duplicate_row_example_keep_last()
+   examples_timeseries_basics.duplicate_row_example_keep_last()
 
 4. **Drop**: ``on_duplicate="drop"``
 
@@ -158,7 +157,7 @@ duplicate rows and only want unique, unambiguous data.
    :hide-code:
 
    import examples_timeseries_basics
-   ts = examples_timeseries_basics.duplicate_row_example_drop()
+   examples_timeseries_basics.duplicate_row_example_drop()
 
 5. **Merge**: ``on_duplicate="merge"``
 
@@ -175,7 +174,7 @@ approach that preserves the first non-null value for each column.
    :hide-code:
 
    import examples_timeseries_basics
-   ts = examples_timeseries_basics.duplicate_row_example_merge()
+   examples_timeseries_basics.duplicate_row_example_merge()
 
 With Metadata
 =============
@@ -214,7 +213,7 @@ and :attr:`~time_stream.TimeFrame.column_metadata` (column-level) attributes:
     :hide-code:
 
     import examples_timeseries_basics
-    ts = examples_timeseries_basics.show_time_series_metadata()
+    examples_timeseries_basics.show_time_series_metadata()
 
 Data Access and Update
 ======================
@@ -241,7 +240,7 @@ You can create new :class:`~time_stream.TimeFrame` objects as a selection, using
    :hide-code:
 
    import examples_timeseries_basics
-   ts = examples_timeseries_basics.accessing_data()
+   examples_timeseries_basics.accessing_data()
 
 
 .. note::
@@ -263,6 +262,5 @@ returns a new :class:`~time_stream.TimeFrame` object with the updated data.
 
 .. jupyter-execute::
    :hide-code:
-
    import examples_timeseries_basics
-   ts = examples_timeseries_basics.add_new_column_to_df()
+   examples_timeseries_basics.add_new_column_to_df()
