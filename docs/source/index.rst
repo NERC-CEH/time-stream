@@ -113,6 +113,13 @@ This project is licensed under the `GNU General Public License v3.0 <https://git
     user_guide/infilling
     user_guide/quality_control
 
+.. toctree::
+    :hidden:
+    :maxdepth: 1
+    :caption: API reference
+
+    api/time_frame
+
 
 .. toctree::
     :hidden:

@@ -20,11 +20,10 @@ version = release
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
 extensions = [
     "sphinx.ext.autodoc",
+    "sphinx.ext.autosummary",
     "sphinx.ext.napoleon",
     "sphinx.ext.viewcode",
     "sphinx.ext.intersphinx",
-    "sphinx_rtd_theme",
-    "sphinx.ext.autosummary",
     "sphinx.ext.mathjax",
     "sphinx_copybutton",
     'jupyter_sphinx',
@@ -34,6 +33,7 @@ extensions = [
     'sphinx_contributors',
     'sphinx_iconify',
     'sphinxcontrib.mermaid',
+    "sphinx_autodoc_typehints",
 ]
 
 plot_formats = ['svg']
@@ -49,15 +49,9 @@ templates_path = ["_templates"]
 exclude_patterns = ["_build", "Thumbs.db", ".DS_Store", "**.ipynb_checkpoints"]
 
 # -- Options for autodoc -----------------------------------------------------
-autodoc_member_order = "bysource"
+autosummary_generate = True
 autodoc_typehints = "description"
-autoclass_content = "both"
-
-# -- Options for intersphinx -------------------------------------------------
-intersphinx_mapping = {
-    "python": ("https://docs.python.org/3", None),
-    "polars": ("https://pola-rs.github.io/polars/py-polars/html/", None),
-}
+autoclass_content = "class"
 
 # -- Options for HTML output -------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
@@ -83,16 +77,8 @@ mermaid_version = "11.12.0"
 # -- Napoleon settings -------------------------------------------------------
 napoleon_google_docstring = True
 napoleon_numpy_docstring = False
-napoleon_include_init_with_doc = True
-napoleon_include_private_with_doc = False
-napoleon_include_special_with_doc = True
-napoleon_use_admonition_for_examples = True
-napoleon_use_admonition_for_notes = True
-napoleon_use_admonition_for_references = True
-napoleon_use_ivar = False
 napoleon_use_param = True
-napoleon_use_rtype = True
-napoleon_preprocess_types = True
+napoleon_use_rtype = False
 
 # -- Jupyter-sphinx settings -------------------------------------------------------
 # Add examples path to Python's path

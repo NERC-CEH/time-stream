@@ -50,7 +50,16 @@ from time_stream.utils import check_columns_in_dataframe, configure_period_objec
 
 
 class TimeFrame:
-    """A class representing a time series data model, with data held in a Polars DataFrame."""
+    """A class representing a time series data model, with data held in a Polars DataFrame.
+
+    Args:
+        df: The ``Polars`` DataFrame containing the time series data.
+        time_name: The name of the time column in the DataFrame.
+        resolution: The resolution of the time series.
+        periodicity: The periodicity of the time series.
+        time_anchor: The time anchor to which the date/times of the time series conform to.
+        on_duplicates: What to do if duplicate rows are found in the data. Default to ERROR.
+    """
 
     _df: pl.DataFrame
     _time_manager: TimeManager
@@ -67,16 +76,6 @@ class TimeFrame:
         time_anchor: TimeAnchor | str = TimeAnchor.START,
         on_duplicates: DuplicateOption | str = DuplicateOption.ERROR,
     ) -> None:
-        """Initialise a TimeFrame instance.
-
-        Args:
-            df: The `Polars` DataFrame containing the time series data.
-            time_name: The name of the time column in the DataFrame.
-            resolution: The resolution of the time series.
-            periodicity: The periodicity of the time series.
-            time_anchor: The time anchor to which the date/times of the time series conform to.
-            on_duplicates: What to do if duplicate rows are found in the data. Default to ERROR.
-        """
         self._time_manager = TimeManager(
             time_name=time_name,
             resolution=resolution,
@@ -175,7 +174,7 @@ class TimeFrame:
 
     @property
     def metadata(self) -> dict[str, Any]:
-        """TimeFrame-level metadata. Allows dict interaction by the user."""
+        """TimeFrame-level metadata."""
         return self._metadata
 
     @metadata.setter
@@ -201,7 +200,7 @@ class TimeFrame:
 
     @property
     def column_metadata(self) -> dict[str, dict[str, Any]]:
-        """Per-column metadata: {column_name: {...}}."""
+        """Per-column metadata."""
         return self._column_metadata
 
     @column_metadata.setter
@@ -235,35 +234,37 @@ class TimeFrame:
 
     @property
     def resolution(self) -> Period:
+        """The resolution of the timeseries data within the TimeFrame"""
         return self._time_manager.resolution
 
     @property
     def periodicity(self) -> Period:
+        """The periodicity of the timeseries data within the TimeFrame"""
         return self._time_manager.periodicity
 
     @property
     def time_anchor(self) -> TimeAnchor:
+        """The time anchor of the timeseries data within the TimeFrame"""
         return self._time_manager.time_anchor
 
     @property
     def df(self) -> pl.DataFrame:
+        """The underlying ``Polars`` DataFrame containing the timeseries data."""
         return self._df
 
     @property
     def columns(self) -> list[str]:
-        """Return all the columns of the TimeFrame."""
+        """All column labels of the DataFrame within the TimeFrame."""
         return [c for c in self.df.columns if c != self.time_name]
 
     @property
     def flag_columns(self) -> list[str]:
-        """Return all the flag columns of the TimeFrame."""
+        """Only the labels for any flag columns within the TimeFrame."""
         return list(self._flag_manager.flag_columns.keys())
 
     @property
     def data_columns(self) -> list[str]:
-        """Return all the data columns of the TimeFrame (essentially any column that isn't the time column
-        or a flag column).
-        """
+        """Only the labels for the data columns within the TimeFrame."""
         return [c for c in self.columns if c not in self.flag_columns]
 
     def sort_time(self) -> None:

@@ -261,6 +261,7 @@ returns a new :class:`~time_stream.TimeFrame` object with the updated data.
    :dedent:
 
 .. jupyter-execute::
-   :hide-code:
-   import examples_timeseries_basics
-   examples_timeseries_basics.add_new_column_to_df()
+    :hide-code:
+
+    import examples_timeseries_basics
+    examples_timeseries_basics.add_new_column_to_df()

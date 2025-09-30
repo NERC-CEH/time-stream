@@ -30,3 +30,12 @@
     flex: 1;
     text-align: center;
 }
+
+
+.toctree-l2 {
+    font-size: 0.8em;
+}
+
+.toctree-l3 {
+    font-size: 0.75em;
+}
