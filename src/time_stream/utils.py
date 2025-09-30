@@ -1,3 +1,9 @@
+"""
+Time-Stream Utility Module.
+
+This module provides helper functions used across the time_stream package for working with temporal data.
+"""
+
 from collections.abc import Iterable
 from datetime import datetime
 
@@ -44,6 +50,10 @@ def truncate_to_period(date_times: pl.Series, period: Period, time_anchor: TimeA
     Returns:
         A `Polars` Series with the truncated date/time values.
     """
+    # Need to ensure we're dealing with datetimes rather than just "dates"
+    if date_times.dtype == pl.Date:
+        date_times = date_times.cast(pl.Datetime("us"))
+
     # 1. Remove any offset from the time series
     date_times = date_times.dt.offset_by("-" + period.pl_offset)
 
@@ -104,7 +114,13 @@ def pad_time(
     max_datetime = existing_datetimes.max()
 
     # Generate a series of the datetimes we would expect with a full time series between the start and end date
-    expected_datetimes = pl.datetime_range(min_datetime, max_datetime, interval=periodicity.pl_interval, eager=True)
+    expected_datetimes = pl.datetime_range(
+        min_datetime,
+        max_datetime,
+        interval=periodicity.pl_interval,
+        eager=True,
+        time_unit=df[time_name].dtype.time_unit,
+    )
 
     # Find any missing datetimes between expected and existing
     missing_datetimes = expected_datetimes.filter(~expected_datetimes.is_in(existing_datetimes))
@@ -152,7 +168,7 @@ def check_columns_in_dataframe(df: pl.DataFrame, columns: str | Iterable[str]) -
         ColumnNotFoundError: If any of the columns in the list do not exist in the dataframe.
     """
     if isinstance(columns, str):
-        columns = [str]
+        columns = [columns]
 
     invalid_columns = sorted(set(columns) - set(df.columns))
     if invalid_columns:

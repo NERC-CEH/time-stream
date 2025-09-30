@@ -1,94 +1,130 @@
-Welcome to Time Stream Documentation
-===========================================
+.. _index:
 
-**Time S**\ eries **T**\ oolkit for **R**\ apid **E**\ nvironmental **A**\ nalysis and **M**\ onitoring: A comprehensive package
-for handling series data with specialised focus on time intervals, aggregation, and data flagging.
+===========
+Time-Stream
+===========
 
-Key Features
------------
+.. rst-class:: lead
 
-* **Time series data structure**: Robust time series data model built on Polars DataFrames
-* **Period-based time management**: Flexible handling of time resolutions and periodicity (days, months, years, etc.)
-* **Aggregation framework**: Easily aggregate time series data over various periods
-* **Flagging system**: Built-in flagging system for data point management and provenance
-* **Column relationships**: Define and manage relationships between data and metadata
-* **Infilling routines**: Fill gaps in time series data using a variety of infilling methods
+    **Time S**\eries **T**\oolkit for **R**\apid **E**\nvironmental **A**\nalysis and **M**\onitoring: An open-source
+    Python library for handling and analysing timeseries data with a focus on maintaining the integrity of the
+    temporal properties of the data.
 
-Getting Started
---------------
+.. container:: buttons
 
-.. toctree::
-   :maxdepth: 2
-   
-   getting_started/installation
-   getting_started/quick_start
-   getting_started/concepts
+    `Docs </user_guide/>`_
+    `GitHub <https://github.com/NERC-CEH/time-stream>`_
 
-User Guide
----------
+.. grid:: 1 1 2 3
+    :gutter: 2
+    :padding: 0
+    :class-row: surface
 
-.. toctree::
-   :maxdepth: 2
-   
-   user_guide/timeseries_basics
-   user_guide/periods
-   user_guide/quality_control
-   user_guide/infilling
-   user_guide/aggregation
-   user_guide/flagging
-   user_guide/column_relationships
+    .. grid-item-card:: :octicon:`history` TimeSeries Data Model
 
-Examples
--------
+        A powerful core object for managing time series with integrated metadata and flags.
 
-.. toctree::
-   :maxdepth: 2
-   
-   examples/creating_timeseries
-   examples/aggregation_examples
-   examples/quality_flagging
-   examples/custom_periods
+    .. grid-item-card:: :octicon:`calendar` Time Periods & Alignments
 
-API Reference
-------------
+        In-built functionality for handling timeseries resolution, periodicity and alignment.
 
-.. toctree::
-   :maxdepth: 2
-   
-   api/timeseries
-   api/period
-   api/aggregation
-   api/columns
-   api/flag_manager
-   api/relationships
-   api/bitwise
+    .. grid-item-card:: :octicon:`stack` Aggregation
 
-Developer Guide
--------------
+        Robust time-based aggregation methods which also provide rich supplementary data about data completeness.
 
-.. toctree::
-   :maxdepth: 2
-   
-   developer/contributing
-   developer/testing
+    .. grid-item-card:: :octicon:`report` Flag Systems & QC
 
-Indices and tables
-=================
+        Define bitwise flag systems, manage flag columns, and run quality checks.
 
-* :ref:`genindex`
-* :ref:`modindex`
-* :ref:`search`
+    .. grid-item-card:: :octicon:`pivot-column` Infilling
+
+        Fill gaps in your timeseries with interpolation and advanced infill strategies, safely and reproducibly.
+
+    .. grid-item-card:: :octicon:`info` Metadata
+
+        Keep important metadata about your timeseries along with the data. Either timeseries-level metadata,
+        or metadata of individual columns.
+
+Why Time-Stream?
+================
+
+The goal of Time-Stream is to provide a user friendly Python library for processing time series data, particularly
+in the hydrological and environmental domain. It is built on top of `Polars <https://docs.pola.rs/>`_, which handles
+efficient DataFrame processes, whilst adding on specific functionality to help you manage time properties such as
+resolution, periodicity, and anchor points.
+
+- **Explicit time property management**: Perform methods on your data without worrying about whether it's handling your time data correctly.
+- **Domain knowledge**: Built by software engineers and data scientists from `UKCEH <https://www.ceh.ac.uk/>`_, with years of experience working with hydrological and environmental data.
+- **Building blocks**: Modular design for aggregation, flagging, QC, and infilling.
+- **Polars performance**: Polars under the hood, vectorized paths where possible.
+
+.. container:: image-row
+
+   .. container:: image-item
+
+      .. figure:: _static/ukceh_logo.png
+         :alt: UKCEH
+         :height: 100px
+         :target: https://www.ceh.ac.uk
+
+   .. container:: image-item
+
+      .. figure:: _static/fdri_logo.png
+         :alt: FDRI
+         :height: 100px
+         :target: https://fdri.org.uk
+
+Community
+=========
+
+Developed at `UKCEH <https://www.ceh.ac.uk/>`_, welcoming community engagement and contributions.
+Below are some of the top contributors to the project:
+
+.. contributors:: NERC-CEH/time-stream
+    :avatars:
+
+Contributing
+============
+
+We welcome contributions! See :doc:`developer/contributing` for setup, coding standards, documentation
+guidelines, and CI.
 
 License
 =======
 
-This project is licensed under the GNU General Public License v3.0 (GPLv3).
+This project is licensed under the `GNU General Public License v3.0 <https://github.com/NERC-CEH/time-stream/blob/main/LICENSE>`_.
 
-You may obtain a copy of the license at:
+.. toctree::
+    :hidden:
+    :maxdepth: 2
+    :caption: Getting started
 
-https://www.gnu.org/licenses/gpl-3.0.en.html
+    getting_started/installation
+    getting_started/quick-start
+    getting_started/concepts
 
-This software is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-GNU General Public License for more details.
+.. toctree::
+    :hidden:
+    :maxdepth: 1
+    :caption: User guide
+
+    user_guide/intro
+    user_guide/aggregation
+    user_guide/infilling
+    user_guide/quality_control
+
+.. toctree::
+    :hidden:
+    :maxdepth: 1
+    :caption: API reference
+
+    api/time_frame
+
+
+.. toctree::
+    :hidden:
+    :maxdepth: 2
+    :caption: Developer guide
+
+    developer/contributing
+    developer/documentation

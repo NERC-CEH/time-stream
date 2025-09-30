@@ -16,21 +16,18 @@ from time_stream.aggregation import (
     MeanSum,
     Min,
     Sum,
-    available_aggregations,
 )
-from time_stream.base import TimeSeries
+from time_stream.base import TimeFrame
 from time_stream.enums import TimeAnchor
 from time_stream.exceptions import (
-    AggregationTypeError,
     MissingCriteriaError,
-    UnknownAggregationError,
+    RegistryKeyTypeError,
+    UnknownRegistryKeyError,
 )
 from time_stream.period import Period
 
 
-def generate_time_series(
-    resolution: Period, periodicity: Period, length: int, missing_data: bool = False
-) -> TimeSeries:
+def generate_time_series(resolution: Period, periodicity: Period, length: int, missing_data: bool = False) -> TimeFrame:
     """Helper function to generate a TimeSeries object for test purposes.
 
     Args:
@@ -57,8 +54,8 @@ def generate_time_series(
     if missing_data:
         df = df.remove(pl.col("value") % 7 == 0)
 
-    ts = TimeSeries(df=df, time_name="timestamp", resolution=resolution, periodicity=periodicity)
-    return ts
+    tf = TimeFrame(df=df, time_name="timestamp", resolution=resolution, periodicity=periodicity)
+    return tf
 
 
 def generate_expected_df(
@@ -216,10 +213,11 @@ class TestAggregationFunction(unittest.TestCase):
     )
     def test_get_with_invalid_string(self, get_input: str) -> None:
         """Test AggregationFunction.get() with invalid string."""
-        with self.assertRaises(UnknownAggregationError) as err:
+        with self.assertRaises(UnknownRegistryKeyError) as err:
             AggregationFunction.get(get_input)
         self.assertEqual(
-            f"Unknown aggregation '{get_input}'. Available aggregations: {available_aggregations()}.",
+            f"Unknown name '{get_input}' for class type 'AggregationFunction'. "
+            f"Available: {AggregationFunction.available()}.",
             str(err.exception),
         )
 
@@ -229,17 +227,17 @@ class TestAggregationFunction(unittest.TestCase):
         class InvalidClass:
             pass
 
-        with self.assertRaises(AggregationTypeError) as err:
+        with self.assertRaises(RegistryKeyTypeError) as err:
             AggregationFunction.get(InvalidClass)  # noqa - expecting type warning
-        self.assertEqual("Aggregation class 'InvalidClass' must inherit from AggregationFunction.", str(err.exception))
+        self.assertEqual("Class 'InvalidClass' must inherit from 'AggregationFunction'.", str(err.exception))
 
     @parameterized.expand([(123,), ([Mean, Max],), ({Min},)])
     def test_get_with_invalid_type(self, get_input: Any) -> None:
         """Test AggregationFunction.get() with invalid type."""
-        with self.assertRaises(AggregationTypeError) as err:
+        with self.assertRaises(RegistryKeyTypeError) as err:
             AggregationFunction.get(get_input)
         self.assertEqual(
-            f"Aggregation must be a string, AggregationFunction class, or instance. Got {type(get_input).__name__}.",
+            f"Check object must be a string, AggregationFunction class, or instance. Got {type(get_input).__name__}.",
             str(err.exception),
         )
 
@@ -310,7 +308,7 @@ class TestSimpleAggregations(unittest.TestCase):
     def test_microsecond_to_microsecond(
         self,
         _: str,
-        input_ts: TimeSeries,
+        input_tf: TimeFrame,
         aggregator: type[AggregationFunction],
         target_period: Period,
         column: list,
@@ -323,13 +321,13 @@ class TestSimpleAggregations(unittest.TestCase):
         microsecond-based resolution."""
         expected_df = generate_expected_df(timestamps, aggregator, column, values, counts, counts, timestamps_of)
         result = aggregator().apply(
-            input_ts.df,
-            input_ts.time_name,
-            input_ts.time_anchor,
-            input_ts.periodicity,
+            input_tf.df,
+            input_tf.time_name,
+            input_tf.time_anchor,
+            input_tf.periodicity,
             target_period,
             column,
-            input_ts.time_anchor,
+            input_tf.time_anchor,
         )
         assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False)
 
@@ -395,7 +393,7 @@ class TestSimpleAggregations(unittest.TestCase):
     def test_microsecond_to_month(
         self,
         _: str,
-        input_ts: TimeSeries,
+        input_tf: TimeFrame,
         aggregator: type[AggregationFunction],
         target_period: Period,
         column: list,
@@ -407,13 +405,13 @@ class TestSimpleAggregations(unittest.TestCase):
         """Test aggregations of microsecond-based (i.e., 1-day or less) resolution data, to a month-based resolution."""
         expected_df = generate_expected_df(timestamps, aggregator, column, values, counts, counts, timestamps_of)
         result = aggregator().apply(
-            input_ts.df,
-            input_ts.time_name,
-            input_ts.time_anchor,
-            input_ts.periodicity,
+            input_tf.df,
+            input_tf.time_name,
+            input_tf.time_anchor,
+            input_tf.periodicity,
             target_period,
             column,
-            input_ts.time_anchor,
+            input_tf.time_anchor,
         )
         assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False)
 
@@ -479,7 +477,7 @@ class TestSimpleAggregations(unittest.TestCase):
     def test_month_to_month(
         self,
         _: str,
-        input_ts: TimeSeries,
+        input_tf: TimeFrame,
         aggregator: type[AggregationFunction],
         target_period: Period,
         column: str,
@@ -491,13 +489,13 @@ class TestSimpleAggregations(unittest.TestCase):
         """Test aggregations of month-based resolution data, to a month-based resolution."""
         expected_df = generate_expected_df(timestamps, aggregator, column, values, counts, counts, timestamps_of)
         result = aggregator().apply(
-            input_ts.df,
-            input_ts.time_name,
-            input_ts.time_anchor,
-            input_ts.periodicity,
+            input_tf.df,
+            input_tf.time_name,
+            input_tf.time_anchor,
+            input_tf.periodicity,
             target_period,
             column,
-            input_ts.time_anchor,
+            input_tf.time_anchor,
         )
         assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False)
 
@@ -563,7 +561,7 @@ class TestSimpleAggregations(unittest.TestCase):
     def test_multi_column(
         self,
         _: str,
-        input_ts: TimeSeries,
+        input_tf: TimeFrame,
         aggregator: type[AggregationFunction],
         target_period: Period,
         column: list,
@@ -574,13 +572,13 @@ class TestSimpleAggregations(unittest.TestCase):
     ) -> None:
         expected_df = generate_expected_df(timestamps, aggregator, column, values, counts, counts, timestamps_of)
         result = aggregator().apply(
-            input_ts.df,
-            input_ts.time_name,
-            input_ts.time_anchor,
-            input_ts.periodicity,
+            input_tf.df,
+            input_tf.time_name,
+            input_tf.time_anchor,
+            input_tf.periodicity,
             target_period,
             column,
-            input_ts.time_anchor,
+            input_tf.time_anchor,
         )
         assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False)
 
@@ -603,7 +601,7 @@ class TestSimpleAggregations(unittest.TestCase):
     def test_multi_column_with_nulls(
         self,
         _: str,
-        input_ts: TimeSeries,
+        input_tf: TimeFrame,
         aggregator: type[AggregationFunction],
         target_period: Period,
         column: list,
@@ -616,11 +614,11 @@ class TestSimpleAggregations(unittest.TestCase):
         """Test that multi-column aggregations work as expected when each column has different null values."""
 
         # Set null values for each column
-        df = input_ts.df.clone()
+        df = input_tf.df.clone()
         for idx, col in enumerate(column):
             df = df.with_columns(
                 [
-                    pl.when(pl.arange(0, input_ts.df.height) == idx).then(None).otherwise(pl.col(col)).alias(col),
+                    pl.when(pl.arange(0, input_tf.df.height) == idx).then(None).otherwise(pl.col(col)).alias(col),
                 ]
             )
 
@@ -629,12 +627,12 @@ class TestSimpleAggregations(unittest.TestCase):
         )
         result = aggregator().apply(
             df,
-            input_ts.time_name,
-            input_ts.time_anchor,
-            input_ts.periodicity,
+            input_tf.time_name,
+            input_tf.time_anchor,
+            input_tf.periodicity,
             target_period,
             column,
-            input_ts.time_anchor,
+            input_tf.time_anchor,
         )
         assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False)
 
@@ -677,7 +675,7 @@ class TestComplexPeriodicityAggregations(unittest.TestCase):
     def test_microsecond_to_microsecond_offset(
         self,
         _: str,
-        input_ts: TimeSeries,
+        input_tf: TimeFrame,
         aggregator: type[AggregationFunction],
         target_period: Period,
         column: str,
@@ -693,13 +691,13 @@ class TestComplexPeriodicityAggregations(unittest.TestCase):
             timestamps, aggregator, column, values, expected_counts, actual_counts, timestamps_of
         )
         result = aggregator().apply(
-            input_ts.df,
-            input_ts.time_name,
-            input_ts.time_anchor,
-            input_ts.periodicity,
+            input_tf.df,
+            input_tf.time_name,
+            input_tf.time_anchor,
+            input_tf.periodicity,
             target_period,
             column,
-            input_ts.time_anchor,
+            input_tf.time_anchor,
         )
         assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False)
 
@@ -734,7 +732,7 @@ class TestComplexPeriodicityAggregations(unittest.TestCase):
     def test_microsecond_to_month_offset(
         self,
         _: str,
-        input_ts: TimeSeries,
+        input_tf: TimeFrame,
         aggregator: type[AggregationFunction],
         target_period: Period,
         column: str,
@@ -750,13 +748,13 @@ class TestComplexPeriodicityAggregations(unittest.TestCase):
             timestamps, aggregator, column, values, expected_counts, actual_counts, timestamps_of
         )
         result = aggregator().apply(
-            input_ts.df,
-            input_ts.time_name,
-            input_ts.time_anchor,
-            input_ts.periodicity,
+            input_tf.df,
+            input_tf.time_name,
+            input_tf.time_anchor,
+            input_tf.periodicity,
             target_period,
             column,
-            input_ts.time_anchor,
+            input_tf.time_anchor,
         )
         assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False)
 
@@ -791,7 +789,7 @@ class TestComplexPeriodicityAggregations(unittest.TestCase):
     def test_microsecond_offset_to_month_offset(
         self,
         _: str,
-        input_ts: TimeSeries,
+        input_tf: TimeFrame,
         aggregator: type[AggregationFunction],
         target_period: Period,
         column: str,
@@ -807,13 +805,13 @@ class TestComplexPeriodicityAggregations(unittest.TestCase):
             timestamps, aggregator, column, values, expected_counts, actual_counts, timestamps_of
         )
         result = aggregator().apply(
-            input_ts.df,
-            input_ts.time_name,
-            input_ts.time_anchor,
-            input_ts.periodicity,
+            input_tf.df,
+            input_tf.time_name,
+            input_tf.time_anchor,
+            input_tf.periodicity,
             target_period,
             column,
-            input_ts.time_anchor,
+            input_tf.time_anchor,
         )
         assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False)
 
@@ -848,7 +846,7 @@ class TestComplexPeriodicityAggregations(unittest.TestCase):
     def test_month_offset_to_month_offset(
         self,
         _: str,
-        input_ts: TimeSeries,
+        input_tf: TimeFrame,
         aggregator: type[AggregationFunction],
         target_period: Period,
         column: str,
@@ -864,13 +862,13 @@ class TestComplexPeriodicityAggregations(unittest.TestCase):
             timestamps, aggregator, column, values, expected_counts, actual_counts, timestamps_of
         )
         result = aggregator().apply(
-            input_ts.df,
-            input_ts.time_name,
-            input_ts.time_anchor,
-            input_ts.periodicity,
+            input_tf.df,
+            input_tf.time_name,
+            input_tf.time_anchor,
+            input_tf.periodicity,
             target_period,
             column,
-            input_ts.time_anchor,
+            input_tf.time_anchor,
         )
         assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False)
 
@@ -945,7 +943,7 @@ class TestEndAnchorAggregations(unittest.TestCase):
     def test_end_anchor_aggregations(
         self,
         _: str,
-        input_ts: TimeSeries,
+        input_tf: TimeFrame,
         aggregator: type[AggregationFunction],
         target_period: Period,
         column: str,
@@ -959,7 +957,7 @@ class TestEndAnchorAggregations(unittest.TestCase):
             timestamps, aggregator, column, values, expected_counts, actual_counts, timestamps_of
         )
         result = aggregator().apply(
-            input_ts.df, input_ts.time_name, TimeAnchor.END, input_ts.periodicity, target_period, column, TimeAnchor.END
+            input_tf.df, input_tf.time_name, TimeAnchor.END, input_tf.periodicity, target_period, column, TimeAnchor.END
         )
         assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False)
 
@@ -994,7 +992,7 @@ class TestEndAnchorAggregations(unittest.TestCase):
     def test_end_anchor_aggregations_with_start_anchor_result(
         self,
         _: str,
-        input_ts: TimeSeries,
+        input_tf: TimeFrame,
         aggregator: type[AggregationFunction],
         target_period: Period,
         column: str,
@@ -1009,10 +1007,10 @@ class TestEndAnchorAggregations(unittest.TestCase):
             timestamps, aggregator, column, values, expected_counts, actual_counts, timestamps_of
         )
         result = aggregator().apply(
-            input_ts.df,
-            input_ts.time_name,
+            input_tf.df,
+            input_tf.time_name,
             TimeAnchor.END,
-            input_ts.periodicity,
+            input_tf.periodicity,
             target_period,
             column,
             TimeAnchor.START,
@@ -1024,7 +1022,7 @@ class TestMissingCriteriaAggregations(unittest.TestCase):
     """Tests the missing criteria functionality for aggregations."""
 
     def setUp(self) -> None:
-        self.input_ts = TS_PT1H_2DAYS_MISSING
+        self.input_tf = TS_PT1H_2DAYS_MISSING
         self.aggregator = Mean
         self.target_period = P1D
         self.column = "value"
@@ -1052,13 +1050,13 @@ class TestMissingCriteriaAggregations(unittest.TestCase):
         )
 
         result = self.aggregator().apply(
-            self.input_ts.df,
-            self.input_ts.time_name,
-            self.input_ts.time_anchor,
-            self.input_ts.periodicity,
+            self.input_tf.df,
+            self.input_tf.time_name,
+            self.input_tf.time_anchor,
+            self.input_tf.periodicity,
             self.target_period,
             self.column,
-            self.input_ts.time_anchor,
+            self.input_tf.time_anchor,
         )
 
         assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False, check_exact=False)
@@ -1093,13 +1091,13 @@ class TestMissingCriteriaAggregations(unittest.TestCase):
         )
 
         result = self.aggregator().apply(
-            self.input_ts.df,
-            self.input_ts.time_name,
-            self.input_ts.time_anchor,
-            self.input_ts.periodicity,
+            self.input_tf.df,
+            self.input_tf.time_name,
+            self.input_tf.time_anchor,
+            self.input_tf.periodicity,
             self.target_period,
             self.column,
-            self.input_ts.time_anchor,
+            self.input_tf.time_anchor,
             criteria,
         )
 
@@ -1110,7 +1108,7 @@ class TestMeanSumWithMissingData(unittest.TestCase):
     """Tests the MeanSum aggregation with time series that has missing data."""
 
     def setUp(self) -> None:
-        self.input_ts = TS_PT1H_2DAYS_MISSING
+        self.input_tf = TS_PT1H_2DAYS_MISSING
         self.target_period = P1D
         self.column = "value"
         self.timestamps = [datetime(2025, 1, 1), datetime(2025, 1, 2)]
@@ -1125,13 +1123,13 @@ class TestMeanSumWithMissingData(unittest.TestCase):
         )
 
         result = MeanSum().apply(
-            self.input_ts.df,
-            self.input_ts.time_name,
-            self.input_ts.time_anchor,
-            self.input_ts.periodicity,
+            self.input_tf.df,
+            self.input_tf.time_name,
+            self.input_tf.time_anchor,
+            self.input_tf.periodicity,
             self.target_period,
             self.column,
-            self.input_ts.time_anchor,
+            self.input_tf.time_anchor,
         )
 
         assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False, check_exact=False)
@@ -1155,8 +1153,8 @@ class TestPaddedAggregations(unittest.TestCase):
 
     def test_padded_result(self) -> None:
         """Test that the aggregation result is padded if the original time series was padded"""
-        ts = TimeSeries(df=self.df, time_name="timestamp", resolution=Period.of_days(1), periodicity=Period.of_days(1))
-        ts.pad()
+        tf = TimeFrame(df=self.df, time_name="timestamp", resolution=Period.of_days(1), periodicity=Period.of_days(1))
+        tf.pad()
 
         expected_df = pl.DataFrame(
             {
@@ -1168,16 +1166,16 @@ class TestPaddedAggregations(unittest.TestCase):
             }
         )
 
-        expected_ts = TimeSeries(
+        expected_tf = TimeFrame(
             df=expected_df, time_name="timestamp", resolution=Period.of_months(1), periodicity=Period.of_months(1)
         )
 
-        result = ts.aggregate(Period.of_months(1), "mean", "value")
-        self.assertEqual(result, expected_ts)
+        result = tf.aggregate(Period.of_months(1), "mean", "value")
+        self.assertEqual(result, expected_tf)
 
     def test_not_padded_result(self) -> None:
         """Test that the aggregation result isn't padded if the original time series wasn't padded"""
-        ts = TimeSeries(df=self.df, time_name="timestamp", resolution=Period.of_days(1), periodicity=Period.of_days(1))
+        tf = TimeFrame(df=self.df, time_name="timestamp", resolution=Period.of_days(1), periodicity=Period.of_days(1))
 
         expected_df = pl.DataFrame(
             {
@@ -1189,12 +1187,12 @@ class TestPaddedAggregations(unittest.TestCase):
             }
         )
 
-        expected_ts = TimeSeries(
+        expected_tf = TimeFrame(
             df=expected_df, time_name="timestamp", resolution=Period.of_months(1), periodicity=Period.of_months(1)
         )
 
-        result = ts.aggregate(Period.of_months(1), "mean", "value")
-        self.assertEqual(result, expected_ts)
+        result = tf.aggregate(Period.of_months(1), "mean", "value")
+        self.assertEqual(result, expected_tf)
 
 
 class TestAggregationWithMetadata(unittest.TestCase):
@@ -1208,16 +1206,15 @@ class TestAggregationWithMetadata(unittest.TestCase):
 
     def test_with_metadata(self) -> None:
         """Test that the aggregation result includes metadata from input time series"""
-        ts = TimeSeries(
-            df=TS_PT1H_2DAYS.df, time_name="timestamp", resolution=PT1H, periodicity=PT1H, metadata=self.metadata
-        )
+        tf = TimeFrame(df=TS_PT1H_2DAYS.df, time_name="timestamp", resolution=PT1H, periodicity=PT1H)
+        tf.metadata = self.metadata
 
-        result = ts.aggregate(Period.of_months(1), "mean", "value")
-        self.assertEqual(result.metadata(), self.metadata)
+        result = tf.aggregate(Period.of_months(1), "mean", "value")
+        self.assertEqual(result.metadata, self.metadata)
 
     def test_with_no_metadata(self) -> None:
         """Test that the aggregation result metadata is empty if input time series metadata is empty"""
-        ts = TimeSeries(df=TS_PT1H_2DAYS.df, time_name="timestamp", resolution=PT1H, periodicity=PT1H)
+        tf = TimeFrame(df=TS_PT1H_2DAYS.df, time_name="timestamp", resolution=PT1H, periodicity=PT1H)
 
-        result = ts.aggregate(Period.of_months(1), "mean", "value")
-        self.assertEqual(result.metadata(), {})
+        result = tf.aggregate(Period.of_months(1), "mean", "value")
+        self.assertEqual(result.metadata, {})

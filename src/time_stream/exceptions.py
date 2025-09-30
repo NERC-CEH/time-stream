@@ -15,10 +15,6 @@ class ColumnTypeError(TimeStreamError):
     """Raised when a requested column is not the expected type."""
 
 
-class ColumnRelationshipError(TimeStreamError):
-    """Raised when there is an issue with the relationship of one column to another"""
-
-
 class DuplicateColumnError(TimeStreamError):
     """Raised when a column name is duplicated."""
 
@@ -37,7 +33,7 @@ class DuplicateTimeError(DuplicateValueError):
     ):
         if not msg:
             msg = (
-                f"Duplicate time values found. A TimeSeries must have unique time values. "
+                f"Duplicate time values found. A TimeFrame must have unique time values. "
                 f"Options for dealing with duplicate rows include: {[o.name for o in DuplicateOption]}."
             )
         self.duplicates = duplicates
@@ -65,7 +61,7 @@ class TimeMutatedError(TimeStreamError):
         if not msg:
             msg = (
                 "Time column has been modified. Adding, removing or modifying time rows requires creating a new "
-                "TimeSeries instance."
+                "TimeFrame instance."
             )
         self.old_timestamps = old_timestamps
         self.new_timestamps = new_timestamps
@@ -74,14 +70,6 @@ class TimeMutatedError(TimeStreamError):
 
 class AggregationError(TimeStreamError):
     """Base class for aggregation-related errors"""
-
-
-class UnknownAggregationError(AggregationError):
-    """Raised when an unknown aggregation is requested."""
-
-
-class AggregationTypeError(AggregationError):
-    """Raised when an invalid aggregation type is provided."""
 
 
 class AggregationPeriodError(AggregationError):
@@ -116,28 +104,12 @@ class QcError(TimeStreamError):
     """Base class for qc-related errors"""
 
 
-class UnknownQcError(QcError):
-    """Raised when an unknown QC method is requested."""
-
-
-class QcTypeError(QcError):
-    """Raised when an invalid QC method type is provided."""
-
-
 class QcUnknownOperatorError(QcError):
     """Raised when an invalid operator is passed to a QC check."""
 
 
 class InfillError(TimeStreamError):
     """Base class for infill-related errors"""
-
-
-class UnknownInfillError(InfillError):
-    """Raised when an unknown infill method is requested."""
-
-
-class InfillTypeError(InfillError):
-    """Raised when an invalid infill method type is provided."""
 
 
 class InfillInsufficientValuesError(InfillError):
@@ -176,9 +148,21 @@ class FlagSystemNotFoundError(FlagSystemError):
     """Raised when a flag system can't be found."""
 
 
-class DuplicateRegistryKeyError(TimeStreamError):
+class UnhandledEnumError(TimeStreamError):
+    """Base class for unhandled enumeration related errors."""
+
+
+class RegistryError(TimeStreamError):
+    """Base class for registry-related errors."""
+
+
+class DuplicateRegistryKeyError(RegistryError):
     """Raised when a registry key already exists."""
 
 
-class UnhandledEnumError(TimeStreamError):
-    """Base class for unhandled enumeration related errors."""
+class UnknownRegistryKeyError(RegistryError):
+    """Raised when a registry key doesn't exist in the registry."""
+
+
+class RegistryKeyTypeError(RegistryError):
+    """Raised when a registry key is an incorrect type."""

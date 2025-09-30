@@ -8,13 +8,15 @@ import polars as pl
 from parameterized import parameterized
 from polars.testing import assert_frame_equal, assert_series_equal
 
-from time_stream import TimeSeries
-from time_stream.exceptions import InfillInsufficientValuesError, InfillTypeError, UnknownInfillError
+from time_stream import TimeFrame
+from time_stream.exceptions import InfillInsufficientValuesError, RegistryKeyTypeError, UnknownRegistryKeyError
 from time_stream.infill import (
     AkimaInterpolation,
     BSplineInterpolation,
     CubicInterpolation,
+    InfillCtx,
     InfillMethod,
+    InfillMethodPipeline,
     LinearInterpolation,
     PchipInterpolation,
     QuadraticInterpolation,
@@ -79,7 +81,7 @@ class TestInfillMethod(unittest.TestCase):
     @parameterized.expand(["dummy", "RANGE", "123"])
     def test_get_with_invalid_string(self, get_input: str) -> None:
         """Test InfillMethod.get() with invalid string."""
-        with self.assertRaises(UnknownInfillError):
+        with self.assertRaises(UnknownRegistryKeyError):
             InfillMethod.get(get_input)
 
     def test_get_with_invalid_class(self) -> None:
@@ -88,15 +90,17 @@ class TestInfillMethod(unittest.TestCase):
         class InvalidClass:
             pass
 
-        with self.assertRaises(InfillTypeError):
+        with self.assertRaises(RegistryKeyTypeError):
             InfillMethod.get(InvalidClass)  # noqa - expecting type warning
 
     @parameterized.expand([(123,), ([LinearInterpolation, QuadraticInterpolation],), ({AkimaInterpolation},)])
     def test_get_with_invalid_type(self, get_input: Any) -> None:
         """Test InfillMethod.get() with invalid type."""
-        with self.assertRaises(InfillTypeError):
+        with self.assertRaises(RegistryKeyTypeError):
             InfillMethod.get(get_input)
 
+
+class TestInfillMethodPipeline(unittest.TestCase):
     @parameterized.expand(
         [
             (COMPLETE, 1, None, False),
@@ -129,13 +133,13 @@ class TestInfillMethod(unittest.TestCase):
         expected: bool,
     ) -> None:
         """Test whether the infill_mask returns expected results."""
-        # Add timestamp column to input df
         df = df.with_columns(pl.Series("timestamp", [datetime(2025, 1, d) for d in range(1, len(df) + 1)]))
 
+        ctx = InfillCtx(df, "timestamp", Mock())
+        pipeline = InfillMethodPipeline(Mock(), ctx, "values", observation_interval, max_gap_size)
+
         # Get the mask
-        mask = InfillMethod.infill_mask(
-            "timestamp", "values", max_gap_size=max_gap_size, observation_interval=observation_interval
-        )
+        mask = pipeline._infill_mask()
 
         # Apply the mask
         df = gap_size_count(df, "values")
@@ -333,10 +337,10 @@ class TestPchipInterpolation(unittest.TestCase):
 
 class TestApply(unittest.TestCase):
     @staticmethod
-    def create_ts(df: pl.DataFrame) -> TimeSeries:
+    def create_tf(df: pl.DataFrame) -> TimeFrame:
         df = df.with_columns(pl.Series("timestamp", [datetime(2025, 1, d) for d in range(1, len(df) + 1)]))
-        ts = TimeSeries(df, "timestamp", "P1D", "P1D")
-        return ts
+        tf = TimeFrame(df, "timestamp", "P1D", "P1D")
+        return tf
 
     @parameterized.expand(
         [
@@ -350,10 +354,10 @@ class TestApply(unittest.TestCase):
     )
     def test_apply(self, interpolator: InfillMethod, df: pl.DataFrame, expected: list) -> None:
         """Test that the apply method works as expected with good data."""
-        ts = self.create_ts(df)
-        result = interpolator.apply(ts, "values")
-        expected = self.create_ts(pl.DataFrame({"values": expected}))
-        assert_frame_equal(result.df, expected.df, check_column_order=False)
+        tf = self.create_tf(df)
+        result = interpolator.apply(tf.df, tf.time_name, tf.periodicity, "values")
+        expected = self.create_tf(pl.DataFrame({"values": expected}))
+        assert_frame_equal(result, expected.df, check_column_order=False)
 
     @parameterized.expand(
         [
@@ -374,17 +378,17 @@ class TestApply(unittest.TestCase):
         mock_fill: Mock,
     ) -> None:
         """Test that the apply method works when there is nothing to infill."""
-        ts = self.create_ts(df)
+        tf = self.create_tf(df)
         result = LinearInterpolation().apply(
-            ts, "values", observation_interval=observation_interval, max_gap_size=max_gap_size
+            tf.df, tf.time_name, tf.periodicity, "values", observation_interval, max_gap_size
         )
 
         # The _fill method should not be called at all - the apply method should return early if nothing to infill
         mock_fill.assert_not_called()
 
         # Double-check the same data is returned
-        expected = self.create_ts(df)
-        assert_frame_equal(result.df, expected.df, check_column_order=False)
+        expected = self.create_tf(df)
+        assert_frame_equal(result, expected.df, check_column_order=False)
 
     @parameterized.expand(
         [
@@ -409,9 +413,9 @@ class TestApply(unittest.TestCase):
         self, df: pl.DataFrame, max_gap_size: int, observation_interval: datetime, expected: list
     ) -> None:
         """Test that the apply method works when dealing with edge cases"""
-        ts = self.create_ts(df)
+        tf = self.create_tf(df)
         result = LinearInterpolation().apply(
-            ts, "values", max_gap_size=max_gap_size, observation_interval=observation_interval
+            tf.df, tf.time_name, tf.periodicity, "values", observation_interval, max_gap_size
         )
-        expected = self.create_ts(pl.DataFrame({"values": expected}))
-        assert_frame_equal(result.df, expected.df, check_column_order=False)
+        expected = self.create_tf(pl.DataFrame({"values": expected}))
+        assert_frame_equal(result, expected.df, check_column_order=False)

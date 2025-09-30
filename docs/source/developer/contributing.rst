@@ -1,153 +1,137 @@
+.. _contributing:
+
+=============
 Contributing
 =============
 
-Writing documentation
----------------------
+.. rst-class:: lead
 
-This section explains how to write documentation for the Time-Stream Package using Sphinx.
-Comprehensive documentation is crucial for helping users understand and effectively use the package.
+    Contributions welcome - big or small, they all move **Time-Stream** forward.
 
-Documentation Structure
-^^^^^^^^^^^^^^^^^^^^^^^
+Ways to contribute
+==================
 
-Our documentation is organized as follows:
+- Reporting bugs
+- Suggesting new features
+- Contributing to the codebase
+  - Improving documentation
+  - Adding unit tests
+  - Fixing bugs or implementing new functionality
 
-.. code-block:: text
+Reporting bugs
+==============
 
-    docs/
-    ├── source/
-    │   ├── _static/           # Static assets (CSS, images)
-    │   ├── getting_started/   # Installation and basic usage
-    │   ├── user_guide/        # In-depth guides for features
-    │   ├── api/               # API reference documentation
-    │   ├── developer/         # Developer guides (like this one)
-    │   ├── conf.py            # Sphinx configuration
-    │   └── index.rst          # Main index page
-    ├── Makefile              # Build commands for Unix
-    └── make.bat              # Build commands for Windows
+We use GitHub issues to track any bugs you might find. Report a bug by opening a
+`new issue <https://github.com/NERC-CEH/time-stream/issues>`_.
 
-Setting Up for Documentation
-^^^^^^^^^^^^^^^^^^^^^^^
+Before creating a bug report, please check that your bug has not already been reported.
+If you find a closed issue that seems to report the same bug you're experiencing,
+open a new issue and include a link to the original issue in your issue description.
 
-Before writing documentation:
+Please include as many details as possible in your bug report. The information helps the maintainers
+resolve the issue faster.
 
-1. Install the required docs packages:
+Suggesting new features
+=======================
 
-   .. code-block:: bash
+We use GitHub issues to track suggested enhancements to Time-Stream.
+You can suggest an enhancement by opening a `new feature request <https://github.com/NERC-CEH/time-stream/issues>`_.
+Before creating a new feature request, please check that a similar issue does not already exist.
 
-       pip install .[docs]
+Please describe the behavior you want and why, and provide examples of how Time-Stream would be used if your feature
+were added.
 
-2. Familiarize yourself with reStructuredText (RST) syntax:
+Contributing to the codebase
+============================
 
-   - Headings use underlines: ``=====`` for main headings, ``-----`` for subheadings, etc.
-   - Lists start with ``*``, ``-``, or numbers ``1.``, ``2.``, etc.
-   - Links use ```Text <URL>`_`` or ``:doc:`path/to/doc``` for internal links
-   - See https://www.sphinx-doc.org/en/master/usage/restructuredtext/index.html for more information
+We welcome any contributions to the codebase of Time-Stream. That might be helping to improve documentation, adding
+new unit tests to improve the robustness of the code, or going deeper to add new functionality.
 
-Creating a New Documentation Page
-^^^^^^^^^^^^^^^^^^^^^^^
+**Contribution workflow**
 
-To add a new page to the documentation:
+1. Clone the repository
+2. Create your feature branch (``git checkout -b feature/amazing-feature``)
+3. Make your changes, with tests and documentation
+4. Run the test suite and docs build (see `Testing`_. and :doc:`documentation`).
+5. Commit your changes (``git commit -m 'Add some amazing feature'``)
+6. Push to the branch (``git push origin feature/amazing-feature``)
+7. Open a Pull Request
 
-1. Create a new ``.rst`` file in the appropriate directory
-2. Start with a title and introduction
-3. Add the page to the relevant toctree in ``index.rst`` or a section index
+Pull requests
+-------------
+Your pull request should follow these guidelines:
 
-Including Code Examples
-^^^^^^^^^^^^^^^^^^^^^^^
+- **Title**: Add a broad title about what your changes are about
+- **Description**:
+    - Link to the issue you were working on.
+    - Add any relevant information to the description that you think may help the maintainers review your code.
+- Make sure your branch is **rebased** against the latest version of the main branch.
+- Make sure all **GitHub Actions** checks pass.
 
-Good documentation includes clear code examples. The way we are including code snippets in these documentation is
-to write Python within actual script files, saved within the ``src/time_stream/examples`` directory. The code can
-then be included in the documentation using the ``literalinclude`` block, and executed using the ``jupyter-execute``
-block.
+After you have opened your pull request, a maintainer will review it and possibly leave some comments.
+Once all comments are resolved, the maintainer will merge your pull request, and your work will be part of the next
+Time-Stream release.
 
-Code in the example Python file should be organised into individual functions, and use "start-after" and "end-before"
-markers. This ensures that the ``literalinclude`` and ``jupyter-execute`` blocks know which bit of code to show/execute.
+Code style and linting
+======================
 
-This approach:
-1. Shows the code exactly as it appears in your example file
-2. Executes the code and displays its output
-3. Keeps example code in maintainable, testable Python files
-4. Ensures documentation examples are accurate and up-to-date
-
-Using start-after / end-before Markers
-"""""""""""""""""""""""
-
-To include specific sections from a file, add marker comments to your code:
-
-.. code-block:: python
-
-    # example.py
-    import time_stream
-
-    def example_function():
-        # [start_block_1]
-        # Create a TimeSeries
-        dates = [datetime(2023, 1, i) for i in range(1, 5)]
-        values = [10, 12, 15, 14]
-
-        df = pl.DataFrame({
-            "timestamp": dates,
-            "temperature": values
-        })
-
-        ts = TimeSeries(df=df, time_name="timestamp")
-        # [end_block_1]
-
-Then in your RST file:
-
-.. code-block:: rst
-
-    .. literalinclude:: ../../../src/time_stream/examples/example.py
-       :language: python
-       :start-after: [start_block_1]
-       :end-before: [end_block_1]
-       :dedent:
-
-Key options for ``literalinclude``:
-
-- ``:language:``: Syntax highlighting language
-- ``:start-after:``: Start including after a specific string
-- ``:end-before:``: Stop including before a specific string
-- ``:dedent:``: Remove indented spaces from each line to make the code snippet in the documentation flush
-
-
-Executing Code with jupyter-execute
-"""""""""""""""""""""""
-
-To show the output of the code snippet, use ``jupyter-execute`` and call the function containing the code snippet:
-
-.. code-block:: rst
-
-    .. jupyter-execute::
-       :hide-code:
-       import examples
-       ts = examples.example_function()
-
-Key options for ``jupyter-execute``:
-
-- ``:hide-code:``: Show only the output, not the code
-
-Building Documentation
-^^^^^^^^^^^^^^^^^^^^^^^
-
-To build the documentation:
+We enforce code style checks using ``ruff``, with configuration held in ``pyproject.toml``. You can run a check
+to see if ruff finds any issues with the code style:
 
 .. code-block:: bash
 
-    cd docs
-    make html
+    ruff check
 
-View the result by opening ``docs/_build/html/index.html`` in a browser.
+Ruff may be able to automatically fix issues:
 
-Review the build output for warnings and errors.
+.. code-block:: bash
 
-Example Documentation Workflow
-^^^^^^^^^^^^^^^^^^^^^^^
+    ruff check --fix
 
-1. **Write example code**: Create a Python file in ``src/time_stream/examples``
-2. **Test the example**: Ensure it works correctly
-3. **Add marker comments**: Add ``[start_block_X]`` and ``[end_block_X]`` markers
-4. **Create documentation**: Write an RST file referencing the example
-5. **Build and verify**: Build the documentation and check the results
-6. **Review and refine**: Ensure clarity and completeness
+Ruff can also auto-format certain aspects of the code, using the config in ``pyproject.toml``
+(which follows the default black settings):
+
+.. code-block:: bash
+
+    ruff format .
+
+Pre commit hooks
+----------------
+
+Run below to setup the pre-commit hooks:
+
+.. code-block:: bash
+
+    git config --local core.hooksPath .githooks/
+
+This will set this repo up to use the git hooks in the `.githooks/` directory.
+The hook runs `ruff format --check` and `ruff check` to prevent commits that are not formatted correctly or have errors.
+The hook intentionally does not alter the files, but informs the user which command to run before they can commit
+successfully.
+
+Testing
+=======
+
+We use `pytest` for running unit tests and coverage.
+
+**Run all tests**
+
+.. code-block:: bash
+
+   pytest
+
+**Check coverage**
+
+.. code-block:: bash
+
+   pytest --cov=time_stream --cov-report=term-missing
+
+**Test only one file**
+
+.. code-block:: bash
+
+   pytest tests/test_base.py
+
+**CI/CD**
+
+GitHub Actions runs lint, type-check, tests, and docs build on every PR.

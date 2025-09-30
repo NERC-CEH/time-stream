@@ -5,7 +5,7 @@ import autosemver
 if TYPE_CHECKING:
     # These imports are only for static type checkers (e.g., Pyright, IDEs).
     # At runtime, they are not executed, so the modules won't be imported unless needed.
-    from time_stream.base import TimeSeries
+    from time_stream.base import TimeFrame
     from time_stream.period import Period
 
 try:
@@ -15,7 +15,7 @@ except Exception:
 
 
 # Declare the public API of the package. This tells `from time_stream import *` what to include.
-__all__ = ["TimeSeries", "Period"]  # noqa
+__all__ = ["TimeFrame", "Period"]  # noqa
 
 
 def __getattr__(name: str) -> Any:
@@ -27,10 +27,10 @@ def __getattr__(name: str) -> Any:
     #   This 'lazy loading' also has additional benefits in that it can help with performance by avoiding unnecessary
     #   dependencies being loaded at startup and also gives us control over what to expose from the package.
 
-    if name == "TimeSeries":
-        from time_stream.base import TimeSeries  # noqa: PLC0415
+    if name == "TimeFrame":
+        from time_stream.base import TimeFrame  # noqa: PLC0415
 
-        return TimeSeries
+        return TimeFrame
 
     if name == "Period":
         from time_stream.period import Period  # noqa: PLC0415

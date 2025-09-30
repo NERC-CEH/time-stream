@@ -1,3 +1,18 @@
+"""
+Bitwise Flag Module.
+
+This module provides a small framework for defining bitwise flag systems, including validation of flag values and
+a couple of convenience helpers for the user interface.
+
+Representing flags as single-bit integers enables efficient storage and  using bitwise operators. Enforcing
+power-of-two guarantees that each flag is singular and that combinations are unique.
+
+The ``BitwiseFlag`` class is the concrete base to use for a flag system. Validation includes:
+  - values are non-negative integers,
+  - each value is a power-of-two,
+  - each value is unique within the enum.
+"""
+
 from enum import EnumType, Flag
 
 from time_stream.exceptions import (
@@ -9,14 +24,18 @@ from time_stream.exceptions import (
 
 
 class BitwiseMeta(EnumType):
-    @property
-    def name(self) -> str:
-        return self.__name__
-
     def __repr__(self):
         """Return a helpful representation of the flag, listing all enum members."""
         members = ", ".join(f"{name}={member.value}" for name, member in self.__members__.items())
-        return f"<{self.name} ({members})>"
+        return f"<{self.__name__} ({members})>"
+
+    def __eq__(cls, other: object) -> bool:
+        if not isinstance(other, BitwiseMeta):
+            return False
+        return (cls.__name__ == other.__name__) and (cls.__members__.items() == other.__members__.items())
+
+    def __hash__(cls) -> int:
+        return hash((cls.__name__, tuple(sorted((n, m.value) for n, m in cls.__members__.items()))))
 
 
 class BitwiseFlag(int, Flag, metaclass=BitwiseMeta):
@@ -29,6 +48,11 @@ class BitwiseFlag(int, Flag, metaclass=BitwiseMeta):
             cls._check_type(member.value)
             cls._check_bitwise(member.value)
             cls._check_unique(member.value)
+
+    @classmethod
+    def system_name(cls) -> str:
+        """Name of this flag system (the enum class name)."""
+        return cls.__name__
 
     @staticmethod
     def _check_type(value: int) -> None:
@@ -105,3 +129,8 @@ class BitwiseFlag(int, Flag, metaclass=BitwiseMeta):
             return cls(flag)
         else:
             raise BitwiseFlagTypeError(f"Flag value must be an integer or string, not {type(flag)}.")
+
+    @classmethod
+    def to_dict(cls) -> dict[str, int]:
+        """Return a mapping of flag names to their bit values."""
+        return {name: member.value for name, member in cls.__members__.items()}

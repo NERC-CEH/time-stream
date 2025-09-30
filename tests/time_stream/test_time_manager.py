@@ -12,6 +12,7 @@ from time_stream.exceptions import (
     DuplicateTimeError,
     PeriodicityError,
     ResolutionError,
+    TimeMutatedError,
 )
 from time_stream.time_manager import TimeManager
 
@@ -129,19 +130,18 @@ class TestHandleTimeDuplicates(unittest.TestCase):
         self.new_df = pl.DataFrame()
 
         self.tm = object.__new__(TimeManager)  # skips __init__
-        self.tm._get_df = lambda: self.df
         self.tm._time_name = "time"
 
     def test_error(self) -> None:
         """Test that the error strategy works as expected"""
         with self.assertRaises(DuplicateTimeError):
             self.tm._on_duplicates = DuplicateOption.ERROR
-            self.tm._handle_time_duplicates()
+            self.tm._handle_time_duplicates(self.df)
 
     def test_keep_first(self) -> None:
         """Test that the keep first strategy works as expected"""
         self.tm._on_duplicates = DuplicateOption.KEEP_FIRST
-        result = self.tm._handle_time_duplicates()
+        result = self.tm._handle_time_duplicates(self.df)
 
         expected = pl.DataFrame(
             {
@@ -168,7 +168,7 @@ class TestHandleTimeDuplicates(unittest.TestCase):
     def test_keep_last(self) -> None:
         """Test that the keep last strategy works as expected"""
         self.tm._on_duplicates = DuplicateOption.KEEP_LAST
-        result = self.tm._handle_time_duplicates()
+        result = self.tm._handle_time_duplicates(self.df)
 
         expected = pl.DataFrame(
             {
@@ -195,7 +195,7 @@ class TestHandleTimeDuplicates(unittest.TestCase):
     def test_drop(self) -> None:
         """Test that the drop strategy works as expected"""
         self.tm._on_duplicates = DuplicateOption.DROP
-        result = self.tm._handle_time_duplicates()
+        result = self.tm._handle_time_duplicates(self.df)
 
         expected = pl.DataFrame(
             {
@@ -220,7 +220,7 @@ class TestHandleTimeDuplicates(unittest.TestCase):
     def test_merge(self) -> None:
         """Test that the merge strategy works as expected"""
         self.tm._on_duplicates = DuplicateOption.MERGE
-        result = self.tm._handle_time_duplicates()
+        result = self.tm._handle_time_duplicates(self.df)
 
         expected = pl.DataFrame(
             {
@@ -243,3 +243,23 @@ class TestHandleTimeDuplicates(unittest.TestCase):
         )
 
         assert_frame_equal(result, expected)
+
+
+class TestCheckTimeIntegrity(unittest.TestCase):
+    def setUp(self) -> None:
+        self.df = pl.DataFrame(
+            {"time": [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3), datetime(2024, 1, 4)]}
+        )
+        self.tm = TimeManager("time", "P1D", "P1D")
+
+    def test_same_time_values(self) -> None:
+        """Test that no changes to the time column is valid"""
+        self.tm._check_time_integrity(self.df, self.df.clone())
+
+    def test_different_time_values(self) -> None:
+        """Test that no changes to the time column is valid"""
+        new_df = pl.DataFrame(
+            {"time": [datetime(1990, 1, 1), datetime(1990, 1, 2), datetime(1990, 1, 3), datetime(1990, 1, 4)]}
+        )
+        with self.assertRaises(TimeMutatedError):
+            self.tm._check_time_integrity(self.df, new_df)

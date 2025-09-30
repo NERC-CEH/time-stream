@@ -1,60 +1,24 @@
 """
 Time Series Aggregation Module
 
-This module provides a flexible framework for aggregating time series data using Polars.
-It supports various aggregation functions (mean, sum, min, max, etc.) with configurable
-missing data handling and period-based grouping.
+This module provides a flexible framework for aggregating time series data using Polars. Aggregation functions are
+implemented as subclasses of ``AggregationFunction`` and can be registered and instantiated by name, class, or instance.
 
-Key Components:
-- AggregationFunction: Base class for all aggregation implementations
-- AggregationPipeline: Handles the aggregation execution logic
-- Registry system: For dynamic aggregation function discovery
+It supports various aggregation functions (mean, sum, min, max, etc.) with configurable missing data handling and
+period-based grouping.
 """
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import timedelta
-from typing import ClassVar
 
 import polars as pl
 
 from time_stream import Period
 from time_stream.enums import MissingCriteria, TimeAnchor
-from time_stream.exceptions import (
-    AggregationError,
-    AggregationPeriodError,
-    AggregationTypeError,
-    DuplicateRegistryKeyError,
-    MissingCriteriaError,
-    UnknownAggregationError,
-)
+from time_stream.exceptions import AggregationError, AggregationPeriodError, MissingCriteriaError
+from time_stream.operation import Operation
 from time_stream.utils import check_columns_in_dataframe
-
-# Registry for built-in aggregations
-_AGGREGATION_REGISTRY: dict[str, type["AggregationFunction"]] = {}
-
-
-def register_aggregation(cls: type["AggregationFunction"]) -> type["AggregationFunction"]:
-    """Decorator to register aggregation classes using their name attribute.
-
-    Args:
-        cls: The aggregation class to register.
-
-    Returns:
-        The decorated class.
-    """
-    # Normalise key to lowercase
-    key = cls.name.lower()
-    if key in _AGGREGATION_REGISTRY:
-        raise DuplicateRegistryKeyError(f"Aggregation key: '{key}' already registered")
-
-    _AGGREGATION_REGISTRY[key] = cls
-    return cls
-
-
-def available_aggregations() -> list[str]:
-    """Return a sorted list of available aggregation names."""
-    return sorted(_AGGREGATION_REGISTRY.keys())
 
 
 @dataclass(frozen=True)
@@ -67,10 +31,8 @@ class AggregationCtx:
     periodicity: Period
 
 
-class AggregationFunction(ABC):
+class AggregationFunction(Operation, ABC):
     """Base class for aggregation functions."""
-
-    name: ClassVar[str]
 
     @abstractmethod
     def expr(self, _ctx: AggregationCtx, _columns: list[str]) -> list[pl.Expr]:
@@ -80,61 +42,6 @@ class AggregationFunction(ABC):
     def post_expr(self, _ctx: AggregationCtx, _columns: list[str]) -> list[pl.Expr]:
         """Return additional Polars expressions to be applied after the aggregation."""
         return []
-
-    @classmethod
-    def get(cls, aggregation: "str | type[AggregationFunction] | AggregationFunction") -> "AggregationFunction":
-        """Factory method to get an aggregation function instance from string names, class types, or existing instances.
-
-        Args:
-            aggregation: The aggregation specification, which can be:
-                - A string name: e.g. "mean", "min", "max"
-                - A class type: Mean, Min, Max, or any AggregationFunction subclass
-                - An instance: Mean(), Min(), or any AggregationFunction instance
-
-        Returns:
-            An instance of the appropriate AggregationFunction subclass.
-
-        Raises:
-            UnknownAggregationError: If a string name is not registered as an aggregation function.
-            AggregationTypeError: If the input type is not supported or class doesn't inherit from AggregationFunction.
-
-        Examples::
-            # From string
-            agg = AggregationFunction.get("mean")
-
-            # From class
-            agg = AggregationFunction.get(Mean)
-
-            # From instance
-            agg = AggregationFunction.get(Mean())
-        """
-        # If it's already an instance, return it
-        if isinstance(aggregation, AggregationFunction):
-            return aggregation
-
-        # If it's a string, look it up in the registry
-        elif isinstance(aggregation, str):
-            try:
-                return _AGGREGATION_REGISTRY[aggregation.lower()]()
-            except KeyError:
-                raise UnknownAggregationError(
-                    f"Unknown aggregation '{aggregation}'. Available aggregations: {available_aggregations()}."
-                )
-
-        # If it's a class, instantiate it
-        elif isinstance(aggregation, type):
-            if issubclass(aggregation, AggregationFunction):
-                return aggregation()
-            else:
-                raise AggregationTypeError(
-                    f"Aggregation class '{aggregation.__name__}' must inherit from AggregationFunction."
-                )
-
-        else:
-            raise AggregationTypeError(
-                f"Aggregation must be a string, AggregationFunction class, or instance. "
-                f"Got {type(aggregation).__name__}."
-            )
 
     def apply(
         self,
@@ -256,8 +163,8 @@ class AggregationPipeline:
 
         if not self.ctx.periodicity.is_subperiod_of(self.aggregation_period):
             raise AggregationPeriodError(
-                f"Incompatible aggregation period '{self.aggregation_period}' with TimeSeries periodicity "
-                f"'{self.ctx.periodicity}'. TimeSeries periodicity must be a subperiod of the aggregation period."
+                f"Incompatible aggregation period '{self.aggregation_period}' with TimeFrame periodicity "
+                f"'{self.ctx.periodicity}'. TimeFrame periodicity must be a subperiod of the aggregation period."
             )
 
     def _get_label_closed(self) -> tuple[str, str]:
@@ -271,7 +178,7 @@ class AggregationPipeline:
         return label, closed
 
     def _actual_count_expr(self) -> list[pl.Expr]:
-        """A `Polars` expression to generate the actual count of values in a TimeSeries found in each period.
+        """A `Polars` expression to generate the actual count of values in a TimeFrame found in each period.
 
         Returns:
             List of `Polars` expressions that can be used to generate actual counts for each column
@@ -279,7 +186,7 @@ class AggregationPipeline:
         return [pl.col(col).count().alias(f"count_{col}") for col in self.columns]
 
     def _expected_count_expr(self) -> pl.Expr:
-        """A `Polars` expression to generate the expected count of values in a TimeSeries found in each
+        """A `Polars` expression to generate the expected count of values in a TimeFrame found in each
         period (if there were no missing values).
 
         Returns:
@@ -318,7 +225,10 @@ class AggregationPipeline:
                 #    For example, aggregating 1 microsecond data over a calendar year involves the creation length
                 #    1_000_000 * 60 * 60 * 24 * 365 arrays which will probably fail with an out-of-memory error.
                 expr = pl.datetime_ranges(
-                    start_expr, end_expr, interval=self.ctx.periodicity.pl_interval, closed=closed
+                    start_expr,
+                    end_expr,
+                    interval=self.ctx.periodicity.pl_interval,
+                    closed=closed,  # type: ignore - linter is complaining that the string isn't a Literal
                 ).list.len()
 
         return expr.cast(pl.UInt32).alias(expected_count_name)
@@ -372,7 +282,7 @@ class AggregationPipeline:
         return expressions
 
 
-@register_aggregation
+@AggregationFunction.register
 class Mean(AggregationFunction):
     """An aggregation class to calculate the mean (average) of values within each aggregation period."""
 
@@ -383,7 +293,7 @@ class Mean(AggregationFunction):
         return [pl.col(col).mean().alias(f"mean_{col}") for col in columns]
 
 
-@register_aggregation
+@AggregationFunction.register
 class Sum(AggregationFunction):
     """An aggregation class to calculate the sum (total) of values within each aggregation period."""
 
@@ -394,7 +304,7 @@ class Sum(AggregationFunction):
         return [pl.col(col).sum().alias(f"sum_{col}") for col in columns]
 
 
-@register_aggregation
+@AggregationFunction.register
 class MeanSum(AggregationFunction):
     """An aggregation class to calculate the mean sum (averaged total) of values within each aggregation period.
     This will estimate the sum when values are missing according to how many values are expected in the period."""
@@ -414,7 +324,7 @@ class MeanSum(AggregationFunction):
         ]
 
 
-@register_aggregation
+@AggregationFunction.register
 class Min(AggregationFunction):
     """An aggregation class to find the minimum of values within each aggregation period."""
 
@@ -435,7 +345,7 @@ class Min(AggregationFunction):
         return expressions
 
 
-@register_aggregation
+@AggregationFunction.register
 class Max(AggregationFunction):
     """An aggregation class to find the maximum of values within each aggregation period."""
 
