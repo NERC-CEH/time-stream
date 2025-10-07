@@ -146,7 +146,7 @@ class TimeManager:
 
         if isinstance(self._periodicity, str):
             self._periodicity = Period.of_duration(self._periodicity)
-        elif self._resolution is None:
+        elif self._periodicity is None:
             self._periodicity = Period.of_duration(str(self._alignment))
 
     def validate(self, df: pl.DataFrame) -> None:

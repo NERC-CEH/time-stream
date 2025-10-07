@@ -17,31 +17,31 @@ from time_stream.exceptions import (
 from time_stream.time_manager import TimeManager
 
 
-class TestValidateResolution(unittest.TestCase):
-    """Test the _validate_resolution method. Note the main functionality is more thoroughly tested in the
-    utils function `check_resolution`.
+class TestValidateAlignment(unittest.TestCase):
+    """Test the _validate_alignment method. Note the main functionality is more thoroughly tested in the
+    utils function `check_alignment`.
     """
 
-    def test_validate_resolution_success(self) -> None:
-        """Test that a correct resolution to time series passes the validation."""
-        tm = object.__new__(TimeManager)  # skips __init__
-        tm._resolution = Period.of_years(1)
-        tm._time_anchor = TimeAnchor.START
+    def setUp(self) -> None:
+        self.tm = object.__new__(TimeManager)  # skips __init__
+        self.tm._resolution = Period.of_years(1)
+        self.tm._offset = None
+        self.tm._periodicity = None
+        self.tm._time_anchor = TimeAnchor.START
+        self.tm._configure_period_properties()
 
+    def test_validate_alignment_success(self) -> None:
+        """Test that a correct alignment to time series passes the validation."""
         times = pl.Series([datetime(2020, 1, 1), datetime(2021, 1, 1), datetime(2022, 1, 1)])
-        tm._validate_resolution(times)
+        self.tm._validate_alignment(times)
 
-    def test_validate_resolution_fails(self) -> None:
-        """Test that an incorrect resolution to time series fails the validation."""
-        tm = object.__new__(TimeManager)  # skips __init__
-        tm._resolution = Period.of_years(1)
-        tm._time_anchor = TimeAnchor.START
-
+    def test_validate_alignment_fails(self) -> None:
+        """Test that an incorrect alignment to time series fails the validation."""
         times = pl.Series([datetime(2020, 1, 1), datetime(2021, 6, 1), datetime(2022, 1, 1)])
 
         with self.assertRaises(ResolutionError) as err:
-            tm._validate_resolution(times)
-        self.assertEqual(f"Time values are not aligned to resolution: {tm._resolution}", str(err.exception))
+            self.tm._validate_alignment(times)
+        self.assertEqual("Time values are not aligned to resolution[+offset]: P1Y", str(err.exception))
 
 
 class TestValidatePeriodicity(unittest.TestCase):
