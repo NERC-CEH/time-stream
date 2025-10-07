@@ -24,21 +24,21 @@ from time_stream.exceptions import (
     TimeMutatedError,
 )
 from time_stream.utils import (
+    check_alignment,
     check_periodicity,
-    check_resolution,
-    configure_period_object,
     epoch_check,
     handle_duplicates,
 )
 
 
 class TimeManager:
-    """Enforces integrity of the temporal aspect of the TimeFrame"""
+    """Enforces integrity of the temporal aspects of the TimeFrame"""
 
     def __init__(
         self,
         time_name: str,
         resolution: str | Period | None = None,
+        offset: str | Period | None = None,
         periodicity: str | Period | None = None,
         on_duplicates: str | DuplicateOption = DuplicateOption.ERROR,
         time_anchor: str | TimeAnchor = TimeAnchor.START,
@@ -99,10 +99,14 @@ class TimeManager:
                               starting at "x-r" (exclusive) and ending at "x" (inclusive).
         """
         self._time_name = time_name
-        self._resolution = configure_period_object(resolution)
-        self._periodicity = configure_period_object(periodicity)
+        self._resolution = resolution
+        self._offset = offset
+        self._alignment = None
+        self._periodicity = periodicity
         self._on_duplicates = DuplicateOption(on_duplicates)
         self._time_anchor = TimeAnchor(time_anchor)
+
+        self._configure_period_properties()
 
     @property
     def time_name(self) -> str:
@@ -113,6 +117,14 @@ class TimeManager:
         return self._resolution
 
     @property
+    def offset(self) -> Period | None:
+        return self._offset
+
+    @property
+    def alignment(self) -> Period:
+        return self._alignment
+
+    @property
     def periodicity(self) -> Period:
         return self._periodicity
 
@@ -120,39 +132,52 @@ class TimeManager:
     def time_anchor(self) -> TimeAnchor:
         return self._time_anchor
 
+    def _configure_period_properties(self) -> None:
+        if isinstance(self._resolution, str):
+            self._resolution = Period.of_iso_duration(self._resolution)
+        elif self._resolution is None:
+            self._resolution = Period.of_microseconds(1)
+
+        if isinstance(self._offset, str):
+            self._resolution = Period.of_iso_duration(self._offset)
+
+        offset = "+" + str(self._offset)[1:] if self._offset else ""
+        self._alignment = Period.of_duration(str(self._resolution) + offset)
+
+        if isinstance(self._periodicity, str):
+            self._periodicity = Period.of_duration(self._periodicity)
+        elif self._resolution is None:
+            self._periodicity = Period.of_duration(str(self._alignment))
+
     def validate(self, df: pl.DataFrame) -> None:
         """Carry out a series of validations on the temporal aspects of the TimeFrame.
 
         Args:
             df: Dataframe to validate against.
-
-        Raises:
-            ResolutionError: If the resolution is not a subperiod of the periodicity
         """
         self._validate_time_column(df)
 
-        if not self._resolution.is_subperiod_of(self._periodicity):
-            raise ResolutionError(
-                f"Resolution {self._resolution} must be a subperiod of periodicity {self._periodicity}"
-            )
-
         dt = df[self.time_name]
-        self._validate_resolution(dt)
+        self._validate_alignment(dt)
         self._validate_periodicity(dt)
 
-    def _validate_resolution(self, dt: pl.Series) -> None:
-        """Validate the resolution of the time series.
+    def _validate_alignment(self, dt: pl.Series) -> None:
+        """Validate that the time values of the time series align to the steps along the timeline
+        defined by the resolution and offset parameters.
 
         Args:
-            dt: The datetime series to validate the resolution of.
+            dt: The datetime series to validate.
 
         Raises:
-            ResolutionError: If the datetimes are not aligned to the resolution.
+            ResolutionError: If the datetimes are not aligned to the defined temporal lattice.
         """
-        epoch_check(self.resolution)
-        resolution_check = check_resolution(dt, self.resolution, self.time_anchor)
-        if not resolution_check:
-            raise ResolutionError(f"Time values are not aligned to resolution: {self.resolution}")
+        epoch_check(self.alignment)
+        if not self.alignment.is_subperiod_of(self.periodicity):
+            raise ResolutionError(
+                f"Alignment '{self.alignment}' must be a subperiod of periodicity '{self.periodicity}'"
+            )
+        if not check_alignment(dt, self.alignment, self.time_anchor):
+            raise ResolutionError(f"Time values are not aligned to resolution[+offset]: {self.alignment}")
 
     def _validate_periodicity(self, dt: pl.Series) -> None:
         """Validate the periodicity of the time series.
@@ -164,8 +189,7 @@ class TimeManager:
             PeriodicityError: If the datetimes do not conform to the periodicity.
         """
         epoch_check(self.periodicity)
-        periodicity_check = check_periodicity(dt, self.periodicity, self.time_anchor)
-        if not periodicity_check:
+        if not check_periodicity(dt, self.periodicity, self.time_anchor):
             raise PeriodicityError(f"Time values do not conform to periodicity: {self.periodicity}")
 
     def _validate_time_column(self, df: pl.DataFrame) -> None:

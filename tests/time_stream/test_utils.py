@@ -9,9 +9,9 @@ from time_stream import Period
 from time_stream.enums import TimeAnchor
 from time_stream.exceptions import ColumnNotFoundError
 from time_stream.utils import (
+    check_alignment,
     check_columns_in_dataframe,
     check_periodicity,
-    check_resolution,
     epoch_check,
     get_date_filter,
     pad_time,
@@ -766,11 +766,11 @@ class TestPadTime(unittest.TestCase):
 class TestCheckResolution(unittest.TestCase):
     def _check_success(self, _: str, times: list, resolution: Period, time_anchor: TimeAnchor) -> None:
         """Test that a check_resolution call returns True"""
-        self.assertTrue(check_resolution(pl.Series("time", times), resolution, time_anchor))
+        self.assertTrue(check_alignment(pl.Series("time", times), resolution, time_anchor))
 
     def _check_failure(self, _: str, times: list, resolution: Period, time_anchor: TimeAnchor) -> None:
         """Test that a .check_resolution call returns False"""
-        self.assertFalse(check_resolution(pl.Series("time", times), resolution, time_anchor))
+        self.assertFalse(check_alignment(pl.Series("time", times), resolution, time_anchor))
 
     @parameterized.expand(
         [

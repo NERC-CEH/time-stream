@@ -72,6 +72,7 @@ class TimeFrame:
         df: pl.DataFrame,
         time_name: str,
         resolution: Period | str | None = None,
+        offset: Period | str | None = None,
         periodicity: Period | str | None = None,
         time_anchor: TimeAnchor | str = TimeAnchor.START,
         on_duplicates: DuplicateOption | str = DuplicateOption.ERROR,
@@ -79,6 +80,7 @@ class TimeFrame:
         self._time_manager = TimeManager(
             time_name=time_name,
             resolution=resolution,
+            offset=offset,
             periodicity=periodicity,
             on_duplicates=on_duplicates,
             time_anchor=time_anchor,
@@ -106,6 +108,7 @@ class TimeFrame:
             df,
             time_name=self.time_name,
             resolution=self.resolution,
+            offset=self.offset,
             periodicity=self.periodicity,
             time_anchor=self.time_anchor,
         )
@@ -172,6 +175,19 @@ class TimeFrame:
         tf.register_flag_system(name, flag_system)
         return tf
 
+    def with_periodicity(self, periodicity: str | Period) -> Self:
+        """Return a new TimeFrame, with a new periodicity registered.
+
+        Args:
+            periodicity: The new periodicity
+
+        Returns:
+            A new TimeFrame with a new periodicity set.
+        """
+        tf = self.copy()
+        tf._periodicity = periodicity
+        tf._time_manager.validate(tf.df)
+
     @property
     def metadata(self) -> dict[str, Any]:
         """TimeFrame-level metadata."""
@@ -236,6 +252,16 @@ class TimeFrame:
     def resolution(self) -> Period:
         """The resolution of the timeseries data within the TimeFrame"""
         return self._time_manager.resolution
+
+    @property
+    def offset(self) -> Period:
+        """The offset of the time steps within the TimeFrame"""
+        return self._time_manager.offset
+
+    @property
+    def alignment(self) -> Period:
+        """The alignment of the time steps within the TimeFrame"""
+        return self._time_manager.alignment
 
     @property
     def periodicity(self) -> Period:
