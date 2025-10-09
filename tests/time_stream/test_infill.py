@@ -339,7 +339,7 @@ class TestApply(unittest.TestCase):
     @staticmethod
     def create_tf(df: pl.DataFrame) -> TimeFrame:
         df = df.with_columns(pl.Series("timestamp", [datetime(2025, 1, d) for d in range(1, len(df) + 1)]))
-        tf = TimeFrame(df, "timestamp", "P1D", "P1D")
+        tf = TimeFrame(df, "timestamp", "P1D")
         return tf
 
     @parameterized.expand(

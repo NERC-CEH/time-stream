@@ -70,6 +70,24 @@ html_context = {
 html_theme_options = {
     "accent_color": "blue",
     "github_url": "https://github.com/NERC-CEH/time-stream",
+    "nav_links": [
+            {
+                "title": "Getting started",
+                "url": "getting_started/installation"
+            },
+            {
+                "title": "User guide",
+                "url": "user_guide/intro"
+            },
+            {
+                "title": "Development",
+                "url": "developer/contributing"
+            },
+            {
+                "title": "API reference",
+                "url": "api/time_frame"
+            },
+        ]
 }
 
 mermaid_version = "11.12.0"

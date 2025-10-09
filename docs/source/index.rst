@@ -1,5 +1,7 @@
 .. _index:
 
+:layout: landing
+
 ===========
 Time-Stream
 ===========
@@ -12,7 +14,7 @@ Time-Stream
 
 .. container:: buttons
 
-    `Docs </user_guide/>`_
+    `Docs <getting_started/installation.html>`_
     `GitHub <https://github.com/NERC-CEH/time-stream>`_
 
 .. grid:: 1 1 2 3

@@ -6,33 +6,121 @@ Concepts
 
 .. rst-class:: lead
 
-    Understand the essentials of **Time-Stream**.
-
-This page explains some of the essentials you need before diving deeper.  It covers
-how time is modelled (resolution, periodicity, alignment, anchors), how metadata and data fit together,
-and what operations can be carried out on your :class:`~time_stream.TimeFrame`.
+    Understand the essential concepts within **Time-Stream**.
 
 Time Properties
 ===============
 
+Time properties define how your timeseries data is structured and sampled along the **timeline**. These properties
+establish the "time grid" that governs when measurements are expected, how they align with each other, and
+help establish the temporal patterns that exist in your data.
+
+The core time properties work together:
+
+- **Resolution** sets the sampling interval (e.g., every 15 minutes, daily, yearly)
+- **Offset** shifts the sampling points from their natural boundaries (e.g., 9am instead of midnight for daily data)
+- **Alignment** is the resulting time grid where all timestamps must fall (derived from resolution + offset)
+- **Periodicity** describes the repeating patterns in your data
+
+Getting these properties right ensures your timeseries data is valid, comparable with other datasets,
+and ready for analysis.
+
+.. note::
+
+   ``resolution`` and ``periodicity`` are provided to a :class:`~time_stream.TimeFrame` as
+   `ISO-8601 duration strings <https://en.wikipedia.org/wiki/ISO_8601#Durations>`_.
+
+   ``offset`` is provided to a :class:`~time_stream.TimeFrame` as a "modified" ISO-8601 string, replacing the "P"
+   with a "+".
+
+   ``alignment`` is calculated internally as ``resolution`` + ``offset``
+
 Resolution
 ----------
 
-**What it is:** defines the precision of the time values in your time series.
+**What it is:** defines the sampling interval for your timeseries; the unit of time step allowable between consecutive
+data points.
 
 **Examples:**
 
-- ``P1S`` - Resolution of 1 second (no sub-second precision).
-- ``PT1M`` - Resolution of 1 minute (seconds must be 0).
-- ``P1D`` - Resolution of 1 day (time must be 00:00:00).
-- Complex offsets are allowed, e.g. ``P1Y+9M9H`` means only **09:00 on 1st October** each year.
+- ``PT1S`` - 1 second step
+- ``PT15M`` - 15 minute step
+- ``P1D`` - daily step
+- ``P3M`` - quarterly step
+- ``P1Y`` - yearly step
 
 **Why it matters:**
 
-- Ensures **valid, aligned timestamps** - catches accidental drift (e.g. "00:14" instead of "00:15").
 - Makes **comparisons deterministic** - data from different sources line up only if they share a resolution.
 - Defines the **granularity of analysis** - a 15-minute resolution series has more detail than a daily one,
   and operations like padding or infilling often depend on knowing the intended resolution.
+- Combined with ``offset`` it defines the **alignment grid** used to validate timestamps.
+
+Offset
+------
+
+**What it is:** the shift from the **natural boundary** of ``resolution`` to position the time steps in your timeseries.
+
+**More detail:**  The **natural boundary** can be thought of as the "start line" from which the ``resolution`` step
+repeats. For **calendar step resolutions** (days, months, years), the natural boundary is the start of that calendar
+period e.g.:
+
+    - midnight for a day
+    - 1st of the month 00:00 for a month
+    - 1st Jan 00:00 for a year
+
+For **clock step resolutions** (seconds, minutes, hours) the natural boundary is the start of that *unit*, e.g.:
+
+    - minute = 0 seconds of each minute
+    - 15 minutes = 0 seconds at each 15 minute (0, 15, 30, 45)
+    - hour = 0 minutes, 0 seconds of the hour
+
+The ``offset`` allows you to modify this natural boundary to reflect the actual time steps when your data was
+measured. For example, you may measure daily data (``resolution="P1D"``), but the values are measured
+at 9:00am each day. This would be an offset of 9 hours (``"+T9H"``) from the natural boundary of midnight 00:00.
+
+**Examples:**
+
+- ``+T9H`` - offset by 9 hours (e.g. for UK water-day)
+- ``+9MT9H`` - offset by 9 months and 9 hours (e.g. for UK water-year)
+- ``+T5M`` - offset by 5 minutes (e.g. used with ``PT15M`` resolution, expect values  at **:05, :20, :35, :50**)
+
+**Why it matters:**
+
+- Encodes hydrology conventions (water day/year) cleanly.
+- Helps catch accidental drift (e.g. "00:14" instead of "00:15").
+
+Alignment
+---------
+
+**What it is:** the **derived time grid** defined by ``resolution + offset`` - i.e. the set of all allowed
+timestamp positions.
+
+**Examples:**
+
+- ``resolution="PT15M"`` + ``offset=None`` = ``alignment="PT15M"``. Values expected at **:00, :15, :30, :45**
+- ``resolution="PT15M"`` + ``offset=+T5M`` = ``alignment="PT15M+T5M"``. Values expected at **:05, :20, :35, :50**
+- ``resolution="P1D"`` + ``offset="+T9H"`` = ``alignment="P1D+T9H"``. Values expected at **09:00 every day**
+- ``resolution="P1Y"`` + ``offset="+9MT9H"`` = ``alignment="P1D+9MT9H"``. Values expected on **1 Oct 09:00 each year**
+
+.. mermaid::
+
+    graph LR
+        A[Alignment<br/>:05, :20, :35, :50]
+        R[Resolution<br/>PT15M] --> Natural
+        Natural["Natural Boundary<br/>:00, :15, :30, :45"] --> Shift
+        O[Offset<br/>+T5M] --> Shift
+        Shift["shift by offset"] --> A
+
+        style R fill:#e1f5ff,stroke:#0066cc,stroke-width:2px
+        style O fill:#fff4e1,stroke:#cc6600,stroke-width:2px
+        style A fill:#e1ffe1,stroke:#00cc00,stroke-width:3px
+        style Natural fill:#f5f5f5,stroke:#999,stroke-width:1px,stroke-dasharray: 5 5
+
+**Why it matters:**
+
+- Ensures valid, aligned timestamps; all timestamps must **snap to this grid**.
+- Defines the default ``periodicity``. 1 value expected for each "tick".
 
 Periodicity
 -----------
@@ -54,7 +142,8 @@ i.e. how many data points are allowed within a given period of time.
 **Why it matters:**
 
 - Enforces **no duplicates in a time window** - e.g. no two daily values for the same day.
-- Provides the **expected sampling frequency** - ensures a 15-minute series really has 96 points/day.
+- Provides the **expected sampling frequency** - ensures a 15-minute series really has maximum of 96 points/day.
+- Allows **missing value detection**
 - Allows **robust aggregation** - defines the windows into which multiple values are grouped.
 
 Time Anchor
@@ -171,6 +260,8 @@ by summarising values within defined periods (daily, monthly, yearly, etc.).
 - Supports **domain relevant** aggregation, e.g. hydrological "water day" or "water year" conventions.
 - Do aggregation in **one-line**, rather than rolling your own solution.
 
+See more details and examples here: :doc:`aggregation user guide </user_guide/aggregation>`
+
 Infilling
 =========
 
@@ -185,6 +276,8 @@ and which are estimated.
 - Fullly **configurable** to your dataset - set specific time periods to infill between, or minimum number
   of points required for a valid infill.
 
+See more details and examples here: :doc:`infilling user guide </user_guide/infilling>`
+
 Quality control (QC)
 ====================
 
@@ -197,3 +290,5 @@ converted into bitwise flags for permanent storage.
 - **Configurable validation** allowing you to check your values with data-specific rules.
 - The results of QC checks feed into **flagging system** and be stored compactly in bitwise flags.
 - Enables you to trace which values failed which checks, **supporting provenance**.
+
+See more details and examples here: :doc:`QC user guide </user_guide/quality_control>`

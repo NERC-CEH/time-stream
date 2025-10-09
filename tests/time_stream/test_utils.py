@@ -9,9 +9,9 @@ from time_stream import Period
 from time_stream.enums import TimeAnchor
 from time_stream.exceptions import ColumnNotFoundError
 from time_stream.utils import (
+    check_alignment,
     check_columns_in_dataframe,
     check_periodicity,
-    check_resolution,
     epoch_check,
     get_date_filter,
     pad_time,
@@ -868,14 +868,14 @@ class TestPadTime(unittest.TestCase):
         pl.testing.assert_frame_equal(expected, result)
 
 
-class TestCheckResolution(unittest.TestCase):
+class TestCheckAlignment(unittest.TestCase):
     def _check_success(self, _: str, times: list, resolution: Period, time_anchor: TimeAnchor) -> None:
-        """Test that a check_resolution call returns True"""
-        self.assertTrue(check_resolution(pl.Series("time", times), resolution, time_anchor))
+        """Test that a check_alignment call returns True"""
+        self.assertTrue(check_alignment(pl.Series("time", times), resolution, time_anchor))
 
     def _check_failure(self, _: str, times: list, resolution: Period, time_anchor: TimeAnchor) -> None:
-        """Test that a .check_resolution call returns False"""
-        self.assertFalse(check_resolution(pl.Series("time", times), resolution, time_anchor))
+        """Test that a .check_alignment call returns False"""
+        self.assertFalse(check_alignment(pl.Series("time", times), resolution, time_anchor))
 
     @parameterized.expand(
         [
@@ -905,11 +905,11 @@ class TestCheckResolution(unittest.TestCase):
             ),
         ]
     )
-    def test_check_year_resolution_success(
-        self, name: str, times: list, resolution: Period, time_anchor: TimeAnchor
+    def test_check_year_alignment_success(
+        self, name: str, times: list, alignment: Period, time_anchor: TimeAnchor
     ) -> None:
-        """Test that a year based time series that does conform to the given resolution passes the check."""
-        self._check_success(name, times, resolution, time_anchor)
+        """Test that a year based time series that does conform to the given alignment passes the check."""
+        self._check_success(name, times, alignment, time_anchor)
 
     @parameterized.expand(
         [
@@ -927,11 +927,11 @@ class TestCheckResolution(unittest.TestCase):
             ),
         ]
     )
-    def test_check_year_resolution_failure(
-        self, name: str, times: list, resolution: Period, time_anchor: TimeAnchor
+    def test_check_year_alignment_failure(
+        self, name: str, times: list, alignment: Period, time_anchor: TimeAnchor
     ) -> None:
-        """Test that a year based time series that doesn't conform to the given resolution fails the check."""
-        self._check_failure(name, times, resolution, time_anchor)
+        """Test that a year based time series that doesn't conform to the given alignment fails the check."""
+        self._check_failure(name, times, alignment, time_anchor)
 
     @parameterized.expand(
         [
@@ -985,11 +985,11 @@ class TestCheckResolution(unittest.TestCase):
             ),
         ]
     )
-    def test_check_month_resolution_success(
-        self, name: str, times: list, resolution: Period, time_anchor: TimeAnchor
+    def test_check_month_alignment_success(
+        self, name: str, times: list, alignment: Period, time_anchor: TimeAnchor
     ) -> None:
-        """Test that a month based time series that does conform to the given resolution passes the check."""
-        self._check_success(name, times, resolution, time_anchor)
+        """Test that a month based time series that does conform to the given alignment passes the check."""
+        self._check_success(name, times, alignment, time_anchor)
 
     @parameterized.expand(
         [
@@ -1007,11 +1007,11 @@ class TestCheckResolution(unittest.TestCase):
             ),
         ]
     )
-    def test_check_month_resolution_failure(
-        self, name: str, times: list, resolution: Period, time_anchor: TimeAnchor
+    def test_check_month_alignment_failure(
+        self, name: str, times: list, alignment: Period, time_anchor: TimeAnchor
     ) -> None:
-        """Test that a month based time series that doesn't conform to the given resolution fails the check."""
-        self._check_failure(name, times, resolution, time_anchor)
+        """Test that a month based time series that doesn't conform to the given alignment fails the check."""
+        self._check_failure(name, times, alignment, time_anchor)
 
     @parameterized.expand(
         [
@@ -1047,11 +1047,11 @@ class TestCheckResolution(unittest.TestCase):
             ),
         ]
     )
-    def test_check_day_resolution_success(
-        self, name: str, times: list, resolution: Period, time_anchor: TimeAnchor
+    def test_check_day_alignment_success(
+        self, name: str, times: list, alignment: Period, time_anchor: TimeAnchor
     ) -> None:
-        """Test that a day based time series that does conform to the given resolution passes the check."""
-        self._check_success(name, times, resolution, time_anchor)
+        """Test that a day based time series that does conform to the given alignment passes the check."""
+        self._check_success(name, times, alignment, time_anchor)
 
     @parameterized.expand(
         [
@@ -1069,11 +1069,11 @@ class TestCheckResolution(unittest.TestCase):
             ),
         ]
     )
-    def test_check_day_resolution_failure(
-        self, name: str, times: list, resolution: Period, time_anchor: TimeAnchor
+    def test_check_day_alignment_failure(
+        self, name: str, times: list, alignment: Period, time_anchor: TimeAnchor
     ) -> None:
-        """Test that a day based time series that doesn't conform to the given resolution fails the check."""
-        self._check_failure(name, times, resolution, time_anchor)
+        """Test that a day based time series that doesn't conform to the given alignment fails the check."""
+        self._check_failure(name, times, alignment, time_anchor)
 
     @parameterized.expand(
         [
@@ -1121,11 +1121,11 @@ class TestCheckResolution(unittest.TestCase):
             ),
         ]
     )
-    def test_check_hour_resolution_success(
-        self, name: str, times: list, resolution: Period, time_anchor: TimeAnchor
+    def test_check_hour_alignment_success(
+        self, name: str, times: list, alignment: Period, time_anchor: TimeAnchor
     ) -> None:
-        """Test that an hour based time series that does conform to the given resolution passes the check."""
-        self._check_success(name, times, resolution, time_anchor)
+        """Test that an hour based time series that does conform to the given alignment passes the check."""
+        self._check_success(name, times, alignment, time_anchor)
 
     @parameterized.expand(
         [
@@ -1143,11 +1143,11 @@ class TestCheckResolution(unittest.TestCase):
             ),
         ]
     )
-    def test_check_hour_resolution_failure(
-        self, name: str, times: list, resolution: Period, time_anchor: TimeAnchor
+    def test_check_hour_alignment_failure(
+        self, name: str, times: list, alignment: Period, time_anchor: TimeAnchor
     ) -> None:
-        """Test that an hour based time series that doesn't conform to the given resolution fails the check."""
-        self._check_failure(name, times, resolution, time_anchor)
+        """Test that an hour based time series that doesn't conform to the given alignment fails the check."""
+        self._check_failure(name, times, alignment, time_anchor)
 
     @parameterized.expand(
         [
@@ -1194,11 +1194,11 @@ class TestCheckResolution(unittest.TestCase):
             ),
         ]
     )
-    def test_check_minute_resolution_success(
-        self, name: str, times: list, resolution: Period, time_anchor: TimeAnchor
+    def test_check_minute_alignment_success(
+        self, name: str, times: list, alignment: Period, time_anchor: TimeAnchor
     ) -> None:
-        """Test that a minute based time series that does conform to the given resolution passes the check."""
-        self._check_success(name, times, resolution, time_anchor)
+        """Test that a minute based time series that does conform to the given alignment passes the check."""
+        self._check_success(name, times, alignment, time_anchor)
 
     @parameterized.expand(
         [
@@ -1216,11 +1216,11 @@ class TestCheckResolution(unittest.TestCase):
             ),
         ]
     )
-    def test_check_minute_resolution_failure(
-        self, name: str, times: list, resolution: Period, time_anchor: TimeAnchor
+    def test_check_minute_alignment_failure(
+        self, name: str, times: list, alignment: Period, time_anchor: TimeAnchor
     ) -> None:
-        """Test that a minute based time series that doesn't conform to the given resolution fails the check."""
-        self._check_failure(name, times, resolution, time_anchor)
+        """Test that a minute based time series that doesn't conform to the given alignment fails the check."""
+        self._check_failure(name, times, alignment, time_anchor)
 
     @parameterized.expand(
         [
@@ -1266,11 +1266,11 @@ class TestCheckResolution(unittest.TestCase):
             ),
         ]
     )
-    def test_check_second_resolution_success(
-        self, name: str, times: list, resolution: Period, time_anchor: TimeAnchor
+    def test_check_second_alignment_success(
+        self, name: str, times: list, alignment: Period, time_anchor: TimeAnchor
     ) -> None:
-        """Test that a second based time series that does conform to the given resolution passes the check."""
-        self._check_success(name, times, resolution, time_anchor)
+        """Test that a second based time series that does conform to the given alignment passes the check."""
+        self._check_success(name, times, alignment, time_anchor)
 
     @parameterized.expand(
         [
@@ -1292,11 +1292,11 @@ class TestCheckResolution(unittest.TestCase):
             ),
         ]
     )
-    def test_check_second_resolution_failure(
-        self, name: str, times: list, resolution: Period, time_anchor: TimeAnchor
+    def test_check_second_alignment_failure(
+        self, name: str, times: list, alignment: Period, time_anchor: TimeAnchor
     ) -> None:
-        """Test that a second based time series that doesn't conform to the given resolution fails the check."""
-        self._check_failure(name, times, resolution, time_anchor)
+        """Test that a second based time series that doesn't conform to the given alignment fails the check."""
+        self._check_failure(name, times, alignment, time_anchor)
 
     @parameterized.expand(
         [
@@ -1348,11 +1348,11 @@ class TestCheckResolution(unittest.TestCase):
             ),
         ]
     )
-    def test_check_microsecond_resolution_success(
-        self, name: str, times: list, resolution: Period, time_anchor: TimeAnchor
+    def test_check_microsecond_alignment_success(
+        self, name: str, times: list, alignment: Period, time_anchor: TimeAnchor
     ) -> None:
-        """Test that a microsecond based time series that does conform to the given resolution passes the check."""
-        self._check_success(name, times, resolution, time_anchor)
+        """Test that a microsecond based time series that does conform to the given alignment passes the check."""
+        self._check_success(name, times, alignment, time_anchor)
 
     @parameterized.expand(
         [
@@ -1368,11 +1368,11 @@ class TestCheckResolution(unittest.TestCase):
             ),
         ]
     )
-    def test_check_microsecond_resolution_failure(
-        self, name: str, times: list, resolution: Period, time_anchor: TimeAnchor
+    def test_check_microsecond_alignment_failure(
+        self, name: str, times: list, alignment: Period, time_anchor: TimeAnchor
     ) -> None:
-        """Test that a microsecond based time series that doesn't conform to the given resolution fails the check."""
-        self._check_failure(name, times, resolution, time_anchor)
+        """Test that a microsecond based time series that doesn't conform to the given alignment fails the check."""
+        self._check_failure(name, times, alignment, time_anchor)
 
 
 class TestCheckPeriodicity(unittest.TestCase):
