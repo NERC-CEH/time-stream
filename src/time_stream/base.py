@@ -53,12 +53,87 @@ class TimeFrame:
     """A class representing a time series data model, with data held in a Polars DataFrame.
 
     Args:
-        df: The ``Polars`` DataFrame containing the time series data.
-        time_name: The name of the time column in the DataFrame.
-        resolution: The resolution of the time series.
-        periodicity: The periodicity of the time series.
-        time_anchor: The time anchor to which the date/times of the time series conform to.
-        on_duplicates: What to do if duplicate rows are found in the data. Default to ERROR.
+        df: The :class:`polars.DataFrame` containing the time-series data.
+        time_name: The name of the time column in ``df``.
+        resolution: Sampling interval for the timeseries; the unit of time step allowable between consecutive data
+            points. Accepts a :class:`Period` or ISO-8601 duration string (e.g. ``"PT15M"``, ``"P1D"``, ``"P1Y"``).
+            If ``None``, defaults to microsecond step (PT0.000001S) (effectively allows any set of datetime values).
+        offset: Offset applied from the natural boundary of ``resolution`` to position the datetime values along the
+            timeline. For example, you may have daily data (``resolution="P1D"``), but all the values are measured
+            at 9:00am, an offset of 9 hours (``"+T9H"``) from the natural boundary of midnight 00:00.
+            Accepts an offset string, following the principles of ISO-8601 but replacing the "P" with a "+"
+            (e.g. ``"+T9H"``, `"+9MT9H"`). If ``None``, no offset is applied.
+        periodicity: Defines the allowed "frequency" of datetimes in your timeseries, i.e., how many datetime
+            entries are allowed within a given period of time. For example, you may have an annual maximum
+            timeseries, where the individual data points are considered to be at daily resolution
+            (``resolution="P1D"``), but are limited to only one data point per year (``periodicity="P1Y"``).
+            Accepts a :class:`Period` or ISO-8601 duration string (e.g. ``"PT15M"``, ``"P1D"``, ``"P1Y"``) with an
+            optional offset syntax (e.g. ``"P1D+T9H"``, ``"P1Y+9MT9H"``). If ``None``, it defaults to the period
+            defined by ``resolution + offset``.
+        time_anchor: Defines the window of time over which a given timestamp refers to. In the descriptions below,
+            "t" is the time value, "r" stands for a single unit of the resolution of the data:
+
+            - ``POINT``: The time stamp is anchored for the instant of time "t".
+              A value at "t" is considered valid only for the instant of time "t".
+            - ``START``: The time stamp is anchored starting at "t". A value at "t" is considered valid
+              starting at "t" (inclusive) and ending at "t+r" (exclusive).
+            - ``END``: The time stamp is anchored ending at "t". A value at "t" is considered valid
+              starting at "t-r" (exclusive) and ending at "t" (inclusive)
+        on_duplicates: What to do if duplicate rows are found in the data:
+
+            - ``ERROR`` (default): Raise error
+            - ``KEEP_FIRST``: Keep the first row of any duplicate groups.
+            - ``KEEP_LAST``: Keep the last row of any duplicate groups.
+            - ``DROP``: Drop all duplicate rows.
+            - ``MERGE``: Merge duplicate rows using coalesce (the first non-null value for each column takes precedence)
+
+    Examples:
+        >>> # Simple 15 minute timeseries:
+        >>> tf = TimeFrame(
+        >>>     df, "timestamp", resolution="PT15M"
+        >>> )
+        >>> print(
+        >>>     "resolution=", tf.resolution,
+        >>>     " alignment=", tf.alignment,
+        >>>     " periodicity=", tf.periodicity
+        >>> )
+        resoution=PT15M alignment=PT15M periodicity=PT15M
+
+        >>> # Daily water day (09:00 to 09:00) with default uniqueness per water day:
+        >>>
+        >>> tf = TimeFrame(
+        >>>     df, "timestamp", resolution="P1D", offset="+T9H"
+        >>> )
+        >>> print(
+        >>>     "resolution=", tf.resolution,
+        >>>     " alignment=", tf.alignment,
+        >>>     " periodicity=", tf.periodicity
+        >>> )
+        resoution=P1D alignment=P1D+T9H periodicity=P1D+T9H
+
+        >>> # Daily timestamps but uniqueness per water-year:
+        >>>
+        >>> tf = TimeFrame(
+        >>>     df, "timestamp", resolution="P1D", offset="+T9H", periodicity="P1Y+P9MT9H"
+        >>> )
+        >>> print(
+        >>>     "resolution=", tf.resolution,
+        >>>     " alignment=", tf.alignment,
+        >>>     " periodicity=", tf.periodicity
+        >>> )
+        resoution=P1D alignment=P1D+T9H periodicity=P1Y+P9MT9H
+
+        >>> # Annual series stored directly on water-year boundary:
+        >>>
+        >>> tf = TimeFrame(
+        >>>     df, "timestamp", resolution="P1Y", offset="+9MT9H"
+        >>> )
+        >>> print(
+        >>>     "resolution=", tf.resolution,
+        >>>     " alignment=", tf.alignment,
+        >>>     " periodicity=", tf.periodicity
+        >>> )
+        resoution=P1Y alignment=P1D+9MT9H periodicity=P1Y+P9MT9H
     """
 
     _df: pl.DataFrame
@@ -72,7 +147,7 @@ class TimeFrame:
         df: pl.DataFrame,
         time_name: str,
         resolution: Period | str | None = None,
-        offset: Period | str | None = None,
+        offset: str | None = None,
         periodicity: Period | str | None = None,
         time_anchor: TimeAnchor | str = TimeAnchor.START,
         on_duplicates: DuplicateOption | str = DuplicateOption.ERROR,
@@ -254,7 +329,7 @@ class TimeFrame:
         return self._time_manager.resolution
 
     @property
-    def offset(self) -> Period:
+    def offset(self) -> str:
         """The offset of the time steps within the TimeFrame"""
         return self._time_manager.offset
 
@@ -444,10 +519,21 @@ class TimeFrame:
             aggregation_time_anchor=aggregation_time_anchor,
         )
 
+        # The resulting resolution and offset needs to be extracted from the aggregation period
+        new_resolution = aggregation_period.without_offset()
+
+        month_offset = aggregation_period.month_offset
+        microsecond_offset = aggregation_period.microsecond_offset
+
+        month_part = f"{month_offset}M" if month_offset > 0 else ""
+        microsecond_part = f"{int(microsecond_offset / 1e6)}S" if microsecond_offset > 0 else ""
+        new_offset = f"+{month_part}T{microsecond_part}" if month_part or microsecond_part else None
+
         tf = TimeFrame(
             df=agg_df,
             time_name=self.time_name,
-            resolution=aggregation_period,
+            resolution=new_resolution,
+            offset=new_offset,
             periodicity=aggregation_period,
             time_anchor=aggregation_time_anchor,
         )

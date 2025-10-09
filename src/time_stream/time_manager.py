@@ -20,6 +20,7 @@ from time_stream.exceptions import (
     DuplicateTimeError,
     DuplicateValueError,
     PeriodicityError,
+    PeriodValidationError,
     ResolutionError,
     TimeMutatedError,
 )
@@ -38,7 +39,7 @@ class TimeManager:
         self,
         time_name: str,
         resolution: str | Period | None = None,
-        offset: str | Period | None = None,
+        offset: str | None = None,
         periodicity: str | Period | None = None,
         on_duplicates: str | DuplicateOption = DuplicateOption.ERROR,
         time_anchor: str | TimeAnchor = TimeAnchor.START,
@@ -47,56 +48,13 @@ class TimeManager:
 
         Args:
             time_name: The name of the time column of the parent TimeFrame.
-            resolution: Resolution defines how "precise" the datetimes are, i.e., to what precision of time unit
-                        should each datetime in the time series match to.
-
-                        Some examples:
-                        PT0.000001S  Allow all datetime values, including microseconds.
-                        PT1S         Allow datetimes with a whole number of seconds. Microseconds must be "0".
-                        PT1M         Allow datetimes to be specified to the minute.
-                                        Seconds and Microseconds must be "0".
-                        PT15M	     Allow datetimes to be specified to a multiple of 15 minutes.
-                                        Seconds and Microseconds must be "0" and Minutes be one of (0, 15, 30, 45)
-                        P1D	         Allow all dates, but the time must be "00:00:00"
-                        P1M	         Allow all years and months, but the day must be "1" and time "00:00:00"
-                        P3M	         Allow quarterly dates.
-                                        Month must be one of (1, 4, 7, 10), day must be "1" and time "00:00:00"
-                        P1Y+9M9H	 Only dates at 09:00 am on the 1st of October are allowed.
-            periodicity: Periodicity defines the allowed "frequency" of the datetimes, i.e., how many datetimes
+            resolution: Sampling interval for the timeseries.
+            offset: Offset applied from the natural boundary of ``resolution`` to position the datetime values along the
+                    timeline.
+            periodicity: Defines the allowed "frequency" of datetimes in your timeseries, i.e., how many datetime
                          entries are allowed within a given period of time.
-
-                         Some examples:
-                         PT0.000001S Effectively there is no "periodicity".
-                         PT1S	     At most 1 datetime can occur within any given second.
-                         PT1M	     At most 1 datetime can occur within any given minute.
-                         PT15M	     At most 1 datetime can occur within any 15-minute duration.
-                                        Each 15-minute duration starts at (0, 15, 30, 45) minutes past the hour.
-                         P1D	     At most 1 datetime can occur within any given calendar day
-                                        (from midnight of the first day up to, but not including, midnight of
-                                        the next day).
-                         P1M	     At most 1 datetime can occur within any given calendar month
-                                        (from midnight on the 1st of the month up to, but not including,
-                                        midnight on the 1st of the following month).
-                         P3M	     At most 1 datetime can occur within any given quarterly period.
-                         P1Y+9M9H	 At most 1 datetime can occur within any given water year
-                                        (from 09:00 am on the 1st of October up to, but including, 09:00 am on
-                                        the 1st of the following year).
-            on_duplicates: What to do if duplicate rows are found in the data. Default to ERROR.
-                           DROP: Raise an error if duplicate rows are found.
-                           KEEP_FIRST: Keep the first row of any duplicate groups.
-                           KEEP_LAST: Keep the last row of any duplicate groups.
-                           DROP: Drop all duplicate rows.
-                           MERGE: Merge duplicate rows using "coalesce"
-                                  (the first non-null value for each column takes precedence).
+            on_duplicates: What to do if duplicate rows are found in the data.
             time_anchor: The time anchor to which the date/times conform to.
-                         In the descriptions below, "x" is the time value, "r" stands for a single unit of the
-                         resolution of the data (15-minute, 1-hour, 1-day, etc.)::
-                         POINT: The time stamp is anchored for the instant of time "x".
-                                A value at "x" is considered valid only for the instant of time "x".
-                         START: The time stamp is anchored starting at "x". A value at "x" is considered valid
-                                starting at "x" (inclusive) and ending at "x+r" (exclusive).
-                         END: The time stamp is anchored ending at "x". A value at "x" is considered valid
-                              starting at "x-r" (exclusive) and ending at "x" (inclusive).
         """
         self._time_name = time_name
         self._resolution = resolution
@@ -117,7 +75,7 @@ class TimeManager:
         return self._resolution
 
     @property
-    def offset(self) -> Period | None:
+    def offset(self) -> str | None:
         return self._offset
 
     @property
@@ -133,21 +91,50 @@ class TimeManager:
         return self._time_anchor
 
     def _configure_period_properties(self) -> None:
-        if isinstance(self._resolution, str):
-            self._resolution = Period.of_iso_duration(self._resolution)
-        elif self._resolution is None:
+        """Normalise and derive the period properties: ``resolution``, ``offset``, ``alignment`` (resolution+offset),
+        and ``periodicity``.
+
+        ``resolution``: Parses string into Period object. If none, default to 1 microsecond to allow any resolution.
+        ``offset``: Checks if valid offset string. If none, no action - no offset used.
+        ``alignment``: Represents resolution+offset. Uses string form of those objects to create a new Period object
+                       e.g. P1D+PT9H.
+        ``periodicity``: Parses string into Period object. If none, default to same Period as the alignment object
+                         (i.e., to represent one value per alignment bucket).
+
+        Raises:
+            TypeError:  If any of ``_resolution``, ``_offset``, or ``_periodicity`` is not ``str``,
+                        ``Period``, or ``None``.
+        """
+        # Configure resolution parameter
+        if self._resolution is None:
             self._resolution = Period.of_microseconds(1)
+        elif isinstance(self._resolution, str):
+            self._resolution = Period.of_iso_duration(self._resolution)
+        elif isinstance(self._resolution, Period):
+            # Check that this is a non-offset period
+            if not self._resolution == self._resolution.without_offset():
+                raise PeriodValidationError(f"Resolution must be a non-offset period. Got: '{self._resolution}'")
+        else:
+            raise TypeError(f"Resolution must be str | Period | None. Got: '{type(self._resolution)}'")
 
+        # Configure offset parameter
         if isinstance(self._offset, str):
-            self._resolution = Period.of_iso_duration(self._offset)
+            pass
+        elif self._offset is not None:
+            raise TypeError(f"Offset must be str | None. Got: '{type(self._offset)}'")
 
-        offset = "+" + str(self._offset)[1:] if self._offset else ""
-        self._alignment = Period.of_duration(str(self._resolution) + offset)
+        # Configure alignment parameter (resolution + offset)
+        offset_str = self._offset or ""
+        self._alignment = Period.of_duration(str(self._resolution) + offset_str)
 
-        if isinstance(self._periodicity, str):
-            self._periodicity = Period.of_duration(self._periodicity)
-        elif self._periodicity is None:
+        # Configure periodicity parameter
+        if self._periodicity is None:
+            # Default to the alignment Period
             self._periodicity = Period.of_duration(str(self._alignment))
+        elif isinstance(self._periodicity, str):
+            self._periodicity = Period.of_duration(self._periodicity)
+        elif not isinstance(self._periodicity, Period):
+            raise TypeError(f"Periodicity must be str | Period | None. Got: '{type(self._periodicity)}'")
 
     def validate(self, df: pl.DataFrame) -> None:
         """Carry out a series of validations on the temporal aspects of the TimeFrame.

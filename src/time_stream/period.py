@@ -2049,6 +2049,24 @@ class Period(ABC):
         """
         return self._properties.pl_offset()
 
+    @property
+    def month_offset(self) -> int:
+        """The month offset of this period
+
+        Returns:
+            An integer representing the month offset
+        """
+        return self._properties.month_offset
+
+    @property
+    def microsecond_offset(self) -> int:
+        """The microsecond offset of this period
+
+        Returns:
+            An integer representing the microsecond offset
+        """
+        return self._properties.microsecond_offset
+
     def is_epoch_agnostic(self) -> bool:
         """Return True if the way that this period splits the
         timeline does not depend on the epoch used to perform
