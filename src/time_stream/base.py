@@ -521,13 +521,7 @@ class TimeFrame:
 
         # The resulting resolution and offset needs to be extracted from the aggregation period
         new_resolution = aggregation_period.without_offset()
-
-        month_offset = aggregation_period.month_offset
-        microsecond_offset = aggregation_period.microsecond_offset
-
-        month_part = f"{month_offset}M" if month_offset > 0 else ""
-        microsecond_part = f"{int(microsecond_offset / 1e6)}S" if microsecond_offset > 0 else ""
-        new_offset = f"+{month_part}T{microsecond_part}" if month_part or microsecond_part else None
+        new_offset = aggregation_period.offset
 
         tf = TimeFrame(
             df=agg_df,

@@ -112,7 +112,7 @@ class TimeManager:
             self._resolution = Period.of_iso_duration(self._resolution)
         elif isinstance(self._resolution, Period):
             # Check that this is a non-offset period
-            if not self._resolution == self._resolution.without_offset():
+            if self._resolution.has_offset():
                 raise PeriodValidationError(f"Resolution must be a non-offset period. Got: '{self._resolution}'")
         else:
             raise TypeError(f"Resolution must be str | Period | None. Got: '{type(self._resolution)}'")
