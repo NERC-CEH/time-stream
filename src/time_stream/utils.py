@@ -80,7 +80,12 @@ def truncate_to_period(date_times: pl.Series, period: Period, time_anchor: TimeA
 
 
 def pad_time(
-    df: pl.DataFrame, time_name: str, periodicity: Period, time_anchor: TimeAnchor = TimeAnchor.START
+    df: pl.DataFrame,
+    time_name: str,
+    periodicity: Period,
+    time_anchor: TimeAnchor = TimeAnchor.START,
+    start: datetime = None,
+    end: datetime = None,
 ) -> pl.DataFrame:
     """Pad the time series in the DataFrame with missing datetime rows, filling in NULLs for missing values.
 
@@ -110,8 +115,8 @@ def pad_time(
     existing_datetimes = truncate_to_period(df[time_name], periodicity, time_anchor)
 
     # Get the min and max datetime from the existing datetimes
-    min_datetime = existing_datetimes.min()
-    max_datetime = existing_datetimes.max()
+    min_datetime = min(start, existing_datetimes.min()) if start else existing_datetimes.min()
+    max_datetime = max(end, existing_datetimes.max()) if end else existing_datetimes.max()
 
     # Generate a series of the datetimes we would expect with a full time series between the start and end date
     expected_datetimes = pl.datetime_range(

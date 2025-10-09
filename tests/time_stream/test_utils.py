@@ -762,6 +762,111 @@ class TestPadTime(unittest.TestCase):
         result = pad_time(df, "time", periodicity)
         pl.testing.assert_frame_equal(result, df)
 
+    @parameterized.expand(
+        [
+            # Start date before df, end date within df range
+            (
+                datetime(2025, 1, 1, 11, 55, 0),
+                datetime(2025, 1, 1, 11, 59, 0),
+                datetime(2025, 1, 1, 11, 55, 0),
+                datetime(2025, 1, 1, 12, 10, 0),
+            ),
+            # Start and end dates outside df range
+            (
+                datetime(2025, 1, 1, 11, 55, 0),
+                datetime(2025, 1, 1, 12, 20, 0),
+                datetime(2025, 1, 1, 11, 55, 0),
+                datetime(2025, 1, 1, 12, 20, 0),
+            ),
+            # Start date within df range, end date after
+            (
+                datetime(2025, 1, 1, 12, 5, 0),
+                datetime(2025, 1, 1, 12, 20, 0),
+                datetime(2025, 1, 1, 12, 0, 0),
+                datetime(2025, 1, 1, 12, 20, 0),
+            ),
+            # Start and end dates within df range
+            (
+                datetime(2025, 1, 1, 12, 2, 0),
+                datetime(2025, 1, 1, 12, 9, 0),
+                datetime(2025, 1, 1, 12, 0, 0),
+                datetime(2025, 1, 1, 12, 10, 0),
+            ),
+        ]
+    )
+    def test_valid_start_end_dates(
+        self, start_date: datetime, end_date: datetime, expected_start_date: datetime, expected_end_date: datetime
+    ) -> None:
+        df = pl.DataFrame(
+            {
+                "time": pl.datetime_range(
+                    datetime(2025, 1, 1, 12, 0, 0), datetime(2025, 1, 1, 12, 10, 0), interval="1m", eager=True
+                )
+            }
+        )
+        periodicity = Period.of_minutes(1)
+        expected = pl.DataFrame(
+            {"time": pl.datetime_range(expected_start_date, expected_end_date, interval="1m", eager=True)}
+        )
+
+        result = pad_time(df, "time", periodicity, start=start_date, end=end_date)
+        pl.testing.assert_frame_equal(expected, result)
+
+    @parameterized.expand(
+        [
+            # Start date before df, end date within df range
+            (
+                datetime(2025, 1, 1, 11, 55, 0),
+                datetime(2025, 1, 1, 11, 59, 0),
+                datetime(2025, 1, 1, 11, 55, 0),
+                datetime(2025, 1, 1, 12, 10, 0),
+            ),
+            # Start and end dates outside df range
+            (
+                datetime(2025, 1, 1, 11, 55, 0),
+                datetime(2025, 1, 1, 12, 20, 0),
+                datetime(2025, 1, 1, 11, 55, 0),
+                datetime(2025, 1, 1, 12, 20, 0),
+            ),
+            # Start date within df range, end date after
+            (
+                datetime(2025, 1, 1, 12, 5, 0),
+                datetime(2025, 1, 1, 12, 20, 0),
+                datetime(2025, 1, 1, 12, 0, 0),
+                datetime(2025, 1, 1, 12, 20, 0),
+            ),
+            # Start and end dates within df range
+            (
+                datetime(2025, 1, 1, 12, 2, 0),
+                datetime(2025, 1, 1, 12, 9, 0),
+                datetime(2025, 1, 1, 12, 0, 0),
+                datetime(2025, 1, 1, 12, 10, 0),
+            ),
+        ]
+    )
+    def test_valid_start_end_dates_with_missing_rows(
+        self, start_date: datetime, end_date: datetime, expected_start_date: datetime, expected_end_date: datetime
+    ) -> None:
+        df = pl.DataFrame(
+            {
+                "time": pl.datetime_range(
+                    datetime(2025, 1, 1, 12, 0, 0), datetime(2025, 1, 1, 12, 10, 0), interval="1m", eager=True
+                )
+            }
+        )
+        # Remove some rows - but not the first or last!
+        df_to_pad = pl.concat(
+            [df.head(1), df.slice(1, df.height - 2).sample(len(df) - 10, with_replacement=False), df.tail(1)]
+        )
+
+        periodicity = Period.of_minutes(1)
+        expected = pl.DataFrame(
+            {"time": pl.datetime_range(expected_start_date, expected_end_date, interval="1m", eager=True)}
+        )
+
+        result = pad_time(df_to_pad, "time", periodicity, start=start_date, end=end_date)
+        pl.testing.assert_frame_equal(expected, result)
+
 
 class TestCheckResolution(unittest.TestCase):
     def _check_success(self, _: str, times: list, resolution: Period, time_anchor: TimeAnchor) -> None:
