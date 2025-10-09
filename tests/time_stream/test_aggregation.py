@@ -27,11 +27,14 @@ from time_stream.exceptions import (
 from time_stream.period import Period
 
 
-def generate_time_series(resolution: Period, periodicity: Period, length: int, missing_data: bool = False) -> TimeFrame:
+def generate_time_series(
+    resolution: Period, periodicity: Period, length: int, offset: str | None = None, missing_data: bool = False
+) -> TimeFrame:
     """Helper function to generate a TimeSeries object for test purposes.
 
     Args:
         resolution: Resolution of the time series
+        offset: Offset of the resolution
         periodicity: Periodicity of the time series
         length: Length of the time series
         missing_data: If True, add some missing data to the time series
@@ -40,7 +43,7 @@ def generate_time_series(resolution: Period, periodicity: Period, length: int, m
         TimeSeries object
     """
     ordinal_from = periodicity.ordinal(datetime(2025, 1, 1))
-    timestamps = [resolution.datetime(ordinal_from + i) for i in range(length)]
+    timestamps = [periodicity.datetime(ordinal_from + i) for i in range(length)]
 
     df = pl.DataFrame(
         {
@@ -54,7 +57,7 @@ def generate_time_series(resolution: Period, periodicity: Period, length: int, m
     if missing_data:
         df = df.remove(pl.col("value") % 7 == 0)
 
-    tf = TimeFrame(df=df, time_name="timestamp", resolution=resolution, periodicity=periodicity)
+    tf = TimeFrame(df=df, time_name="timestamp", resolution=resolution, offset=offset, periodicity=periodicity)
     return tf
 
 
@@ -125,8 +128,8 @@ TS_PT1H_2DAYS = generate_time_series(PT1H, PT1H, 48)  # 2 days of 1-hour data
 TS_PT1H_2DAYS_MISSING = generate_time_series(PT1H, PT1H, 48, missing_data=True)  # 2 days of 1-hour data
 TS_PT1H_2MONTH = generate_time_series(PT1H, PT1H, 1_416)  # 2 months (Jan, Feb 2025) of 1-hour data
 TS_P1M_2YEARS = generate_time_series(P1M, P1M, 24)  # 2 years of month data
-TS_P1D_OFF_2MONTH = generate_time_series(P1D_OFF, P1D_OFF, 59)  # 2 months (Jan, Feb 2025) of 1-day-offset
-TS_P1M_OFF_2YEARS = generate_time_series(P1M_OFF, P1M_OFF, 24)  # 2 years of 1-month-offset data
+TS_P1D_OFF_2MONTH = generate_time_series(P1D, P1D_OFF, 59, offset="+9H")  # 2 months (Jan, Feb 2025) of 1-day-offset
+TS_P1M_OFF_2YEARS = generate_time_series(P1M, P1M_OFF, 24, offset="+9H")  # 2 years of 1-month-offset data
 
 
 class TestAggregationPipeline(unittest.TestCase):
