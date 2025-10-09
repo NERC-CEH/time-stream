@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import polars as pl
 
@@ -23,6 +23,24 @@ def create_simple_dataframe() -> pl.DataFrame:
     return df
 
 
+def create_simple_dataframe_with_offset() -> pl.DataFrame:
+    dates = [datetime(2023, 1, 1, 9) + timedelta(days=i) for i in range(10)]
+    temperatures = [20.5, 21.0, 19.1, 26.0, 24.2, 26.6, 28.4, 30.9, 31.0, 29.1]
+    precipitation = [0.0, 0.0, 5.1, 10.2, 2.0, 0.2, 0.0, 3.0, 1.6, 0.0]
+
+    df = pl.DataFrame({"time": dates, "temperature": temperatures, "precipitation": precipitation})
+
+    return df
+
+
+def create_simple_dataframe_amax() -> pl.DataFrame:
+    dates = [datetime(2023, 5, 21, 9), datetime(2024, 1, 18, 9), datetime(2025, 9, 1, 9)]
+    flows = [23.6, 42.1, 34.6]
+    df = pl.DataFrame({"time": dates, "flow": flows})
+
+    return df
+
+
 def create_simple_time_series() -> ts.TimeFrame:
     df = create_simple_dataframe()
     # [start_block_2]
@@ -38,6 +56,7 @@ def show_default_resolution() -> None:
     tf = create_simple_time_series()
     # [start_block_3]
     print(tf.resolution)
+    print(tf.offset)
     print(tf.periodicity)
     print(tf.time_anchor)
     # [end_block_3]
@@ -45,19 +64,55 @@ def show_default_resolution() -> None:
 
 def create_simple_time_series_with_periods() -> ts.TimeFrame:
     df = create_simple_dataframe()
+
     # [start_block_4]
     tf = ts.TimeFrame(
         df=df,
         time_name="time",
-        resolution="P1D",  # Each timestamp is at day precision
-        periodicity="P1D",  # Data points are spaced 1 day apart
-        time_anchor="end",
+        resolution="P1D",  # Sampling interval of 1 day
     )
 
-    print(tf.resolution)
-    print(tf.periodicity)
-    print(tf.time_anchor)
+    print("resolution=", tf.resolution)
+    print("offset=", tf.offset)
+    print("periodicity=", tf.periodicity)
     # [end_block_4]
+    return tf
+
+
+def create_simple_time_series_with_periods2() -> ts.TimeFrame:
+    df_offset = create_simple_dataframe_with_offset()
+
+    # [start_block_8]
+    tf = ts.TimeFrame(
+        df=df_offset,
+        time_name="time",
+        resolution="P1D",  # Sampling interval of 1 day
+        offset="+T9H",  # Values are measured at 09:00am on each day
+    )
+
+    print("resolution=", tf.resolution)
+    print("offset=", tf.offset)
+    print("periodicity=", tf.periodicity)
+    # [end_block_8]
+    return tf
+
+
+def create_simple_time_series_with_periods3() -> ts.TimeFrame:
+    df_amax = create_simple_dataframe_amax()
+
+    # [start_block_9]
+    tf = ts.TimeFrame(
+        df=df_amax,
+        time_name="time",
+        resolution="P1D",  # Sampling interval of 1 day
+        offset="+T9H",  # Values are measured at 09:00am on each day
+        periodicity="P1Y+9MT9H",  # We only expect 1 value per "water-year" (1st Oct 09:00)
+    )
+
+    print("resolution=", tf.resolution)
+    print("offset=", tf.offset)
+    print("periodicity=", tf.periodicity)
+    # [end_block_9]
     return tf
 
 

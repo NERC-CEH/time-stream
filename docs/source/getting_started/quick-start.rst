@@ -40,11 +40,12 @@ More information about these properties and concepts can be found on the :doc:`c
 
 Here, we will show some basic usage of these time properties.
 
-Periodicity, Resolution and Time Anchor
----------------------------------------
+Resolution, Offset, Periodicity and Time Anchor
+-----------------------------------------------
 
-Without specifying resolution and periodicity, the default initialisation sets these properties to **1 microsecond**, to
-account for any set of datetime values.  The time anchor property is set to **start**:
+Without specifying ``resolution`` or ``periodicity``, the default initialisation sets these properties to
+**1 microsecond**, to account for any set of datetime values.
+The default is for no ``offset``. The ``time_anchor`` is set to **start**:
 
 .. literalinclude:: ../../../src/time_stream/examples/examples_timeseries_basics.py
    :language: python
@@ -60,12 +61,18 @@ account for any set of datetime values.  The time anchor property is set to **st
 
 
 Although the default of 1 microsecond will account for any datetime values, for more control over certain
-time series functionality it is important to specify the actual resolution and periodicity if known.
-These properties can be provided as an ISO 8601 duration string like **P1D** (1 day) or **PT15M** (15 minutes).
+time series functionality it is important to specify the actual ``resolution``, ``offset`` and ``periodicity`` if known.
+These properties can be provided as an ISO 8601 duration string, e.g. **P1D** (1 day) or **PT15M** (15 minutes).
 
-The time anchor property can be set to **start**, **end**, or **point**.
+The ``time_anchor`` property can be set to **start**, **end**, or **point**.
 
 Again, more detail can be found on the :doc:`concepts page <concepts>` page about all these properties.
+
+Resolution
+~~~~~~~~~~
+
+For most cases, it is sufficient to just specify the ``resolution``. The ``offset`` will default to "no offset", and the
+``periodicity`` will be set to the same as the resolution.
 
 .. literalinclude:: ../../../src/time_stream/examples/examples_timeseries_basics.py
    :language: python
@@ -77,7 +84,47 @@ Again, more detail can be found on the :doc:`concepts page <concepts>` page abou
    :hide-code:
 
    import examples_timeseries_basics
-   examples_timeseries_basics.create_simple_time_series_with_periods()
+   tf = examples_timeseries_basics.create_simple_time_series_with_periods()
+
+Offset
+~~~~~~
+
+The next most common modification might be to specify an ``offset``. This is where your data is measured at a
+point in time offset from the "natural boundary" of the ``resolution`` (more info here:
+:doc:`concepts page <concepts>`). The ``periodicity`` is automatically built from the ``resolution + offset``, to
+specify that we only expect 1 value within those points in time.
+
+.. literalinclude:: ../../../src/time_stream/examples/examples_timeseries_basics.py
+   :language: python
+   :start-after: [start_block_8]
+   :end-before: [end_block_8]
+   :dedent:
+
+.. jupyter-execute::
+   :hide-code:
+
+   import examples_timeseries_basics
+   tf = examples_timeseries_basics.create_simple_time_series_with_periods2()
+
+Periodicity
+~~~~~~~~~~~
+
+Finally, you may have data that is measured at a given resolution, but you only expect 1 value in a different period of
+time. This is when you would specify a specific ``periodicity``. The classic hydrological example would be where you
+have an annual-maximum (AMAX) timeseries, where the measured data is a daily resolution, but we only expect 1 value
+per year.
+
+.. literalinclude:: ../../../src/time_stream/examples/examples_timeseries_basics.py
+   :language: python
+   :start-after: [start_block_9]
+   :end-before: [end_block_9]
+   :dedent:
+
+.. jupyter-execute::
+   :hide-code:
+
+   import examples_timeseries_basics
+   tf = examples_timeseries_basics.create_simple_time_series_with_periods3()
 
 Duplicate Detection
 -------------------
@@ -90,7 +137,7 @@ Consider this DataFrame with duplicate time values:
    :hide-code:
 
    import examples_timeseries_basics
-   examples_timeseries_basics.create_df_with_duplicate_rows()
+   df = examples_timeseries_basics.create_df_with_duplicate_rows()
 
 The following strategies are available to use with the ``on_duplicate`` argument:
 

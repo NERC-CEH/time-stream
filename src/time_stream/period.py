@@ -1293,6 +1293,20 @@ class Properties:
         """
         return f"{self.month_offset}mo{self.microsecond_offset}us"
 
+    def offset(self) -> str:
+        """Return a string that captures the month and microsecond
+        offsets of this period which conforms to the offset bit of the
+        string required in a Period.of_duration string.
+
+        Returns:
+            A string suitable for use as the offset part of a Period.of_duration string
+        """
+        month_part = f"{self.month_offset}M" if self.month_offset > 0 else ""
+        microsecond_part = f"T{int(self.microsecond_offset / 1e6)}S" if self.microsecond_offset > 0 else ""
+        offset_str = f"+{month_part}{microsecond_part}" if month_part or microsecond_part else ""
+
+        return offset_str
+
     def is_epoch_agnostic(self) -> bool:
         """Return True if the way that this period splits the
         timeline does not depend on the epoch used to perform
@@ -2048,6 +2062,43 @@ class Period(ABC):
             A string suitable for use with Polars DataFrames
         """
         return self._properties.pl_offset()
+
+    @property
+    def offset(self) -> str:
+        """Return a string that captures the month and microsecond
+        offsets of this period which conforms to the offset bit of the
+        string required in a Period.of_duration string.
+
+        Returns:
+            A string suitable for use with Period of_duration string
+        """
+        return self._properties.offset()
+
+    @property
+    def month_offset(self) -> int:
+        """The month offset of this period
+
+        Returns:
+            An integer representing the month offset
+        """
+        return self._properties.month_offset
+
+    @property
+    def microsecond_offset(self) -> int:
+        """The microsecond offset of this period
+
+        Returns:
+            An integer representing the microsecond offset
+        """
+        return self._properties.microsecond_offset
+
+    def has_offset(self) -> bool:
+        """Check if this period has an offset
+
+        Returns:
+            True if has offset, False if not
+        """
+        return self.month_offset > 0 or self.microsecond_offset > 0
 
     def is_epoch_agnostic(self) -> bool:
         """Return True if the way that this period splits the

@@ -15,7 +15,10 @@ Attributes
     :nosignatures:
     :toctree: _api/
 
+    ~TimeFrame.df
     ~TimeFrame.resolution
+    ~TimeFrame.offset
+    ~TimeFrame.alignment
     ~TimeFrame.periodicity
     ~TimeFrame.time_anchor
     ~TimeFrame.time_name
@@ -24,7 +27,6 @@ Attributes
     ~TimeFrame.data_columns
     ~TimeFrame.metadata
     ~TimeFrame.column_metadata
-    ~TimeFrame.df
 
 Methods
 =======
@@ -37,6 +39,7 @@ Builders
     :toctree: _api/
 
     ~TimeFrame.with_df
+    ~TimeFrame.with_periodicity
     ~TimeFrame.with_metadata
     ~TimeFrame.with_column_metadata
     ~TimeFrame.with_flag_system
