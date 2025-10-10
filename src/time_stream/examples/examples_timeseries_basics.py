@@ -118,7 +118,7 @@ def create_simple_time_series_with_periods3() -> ts.TimeFrame:
 
 def create_simple_time_series_with_metadata() -> ts.TimeFrame:
     with suppress_output():
-        tf = create_simple_time_series_with_periods()
+        tf = create_simple_time_series_with_periods3()
 
     # [start_block_5]
     metadata = {"location": "UKCEH Wallingford", "station_id": "ABC123"}
@@ -126,18 +126,18 @@ def create_simple_time_series_with_metadata() -> ts.TimeFrame:
     tf = tf.with_metadata(metadata)
     # [end_block_5]
 
-    # [start_block_6]
-    column_metadata = {
-        "temperature": {"units": "°C", "description": "Average temperature"},
-        "precipitation": {
-            "units": "mm",
-            "description": "Precipitation amount",
-            "instrument_type": "Tipping bucket",
-            # Note that metadata keys are not required to be the same for all columns
-        },
-    }
-
-    tf = tf.with_column_metadata(column_metadata)
+    # # [start_block_6]
+    # column_metadata = {
+    #     "temperature": {"units": "°C", "description": "Average temperature"},
+    #     "precipitation": {
+    #         "units": "mm",
+    #         "description": "Precipitation amount",
+    #         "instrument_type": "Tipping bucket",
+    #         # Note that metadata keys are not required to be the same for all columns
+    #     },
+    # }
+    #
+    # tf = tf.with_column_metadata(column_metadata)
     # [end_block_6]
     return tf
 
@@ -265,3 +265,9 @@ def add_new_column_to_df() -> None:
     tf = tf.with_df(new_df)
     # [end_block_19]
     print(tf)
+
+
+tf = create_simple_time_series_with_metadata()
+tf = tf.with_flag_system("qc_flags", {"BAD": 1, "GOOD": 2})
+tf.init_flag_column("flow", "qc_flags")
+print(tf)

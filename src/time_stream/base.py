@@ -41,6 +41,7 @@ from time_stream.bitwise import BitwiseFlag
 from time_stream.enums import DuplicateOption, TimeAnchor
 from time_stream.exceptions import ColumnNotFoundError, MetadataError
 from time_stream.flag_manager import FlagColumn, FlagManager, FlagSystemType
+from time_stream.formatting import timeframe_repr
 from time_stream.infill import InfillMethod
 from time_stream.metadata import ColumnMetadataDict
 from time_stream.period import Period
@@ -362,6 +363,11 @@ class TimeFrame:
     def flag_columns(self) -> list[str]:
         """Only the labels for any flag columns within the TimeFrame."""
         return list(self._flag_manager.flag_columns.keys())
+
+    @property
+    def flag_systems(self) -> dict[str, type[BitwiseFlag]]:
+        """The registered flag systems of this TimeFrame."""
+        return self._flag_manager.flag_systems
 
     @property
     def data_columns(self) -> list[str]:
@@ -708,11 +714,11 @@ class TimeFrame:
 
     def __str__(self) -> str:
         """Return the string representation of the TimeFrame dataframe."""
-        return self.df.__str__()
+        return timeframe_repr(self)
 
     def __repr__(self) -> str:
         """Returns the representation of the TimeFrame"""
-        return self.df.__repr__()
+        return timeframe_repr(self)
 
     def __copy__(self) -> Self:
         return self.copy(share_df=True)
