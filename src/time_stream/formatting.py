@@ -5,8 +5,8 @@ This module provides utilities for creating human-readable string representation
 of objects within Time-Stream.
 """
 
+import re
 import sys
-import textwrap
 from typing import TYPE_CHECKING, Any
 
 import polars as pl
@@ -61,6 +61,7 @@ def format_time_properties(tf: "TimeFrame") -> dict:
         "Offset": tf.offset,
         "Alignment": tf.alignment,
         "Periodicity": tf.periodicity,
+        "Anchor": tf.time_anchor,
     }
 
 
@@ -109,7 +110,7 @@ def estimate_object_size(obj: Any) -> int:
         return sys.getsizeof(obj)
 
 
-def format_object_size_str(size_bytes: int) -> str:
+def format_object_size_str(size_bytes: int | float) -> str:
     """Convert byte size to human-readable format with appropriate units.
 
     Args:
@@ -137,14 +138,20 @@ def format_timeframe_column_samples(column_values: pl.Series) -> str:
     Returns:
         String representation in the format "[first, ..., last]"
     """
+    num_values = len(column_values)
+    if num_values == 0:
+        return "[]"
+
     head_val = column_values.head(1).item()
     tail_val = column_values.tail(1).item()
 
     # Only show ellipsis if there are more than 2 values
-    if len(column_values) > 2:
-        final_values = [str(head_val), "...", str(tail_val)]
-    else:
+    if num_values == 1:
+        final_values = [str(head_val)]
+    elif num_values == 2:
         final_values = [str(head_val), str(tail_val)]
+    else:
+        final_values = [str(head_val), "...", str(tail_val)]
 
     return f"[{', '.join(final_values)}]"
 
@@ -158,6 +165,8 @@ def format_repr_items(repr_items: dict) -> list[str]:
     Returns:
         List of formatted strings with headers and key-value pairs, properly aligned and indented for display.
     """
+    if not repr_items:
+        return []
 
     lines = []
 
@@ -189,6 +198,8 @@ def format_headers(header: str) -> str:
     Returns:
         Capitalized header string with trailing colon.
     """
+    if not header:
+        return ""
     return f"{header.capitalize()}:"
 
 
@@ -202,13 +213,13 @@ def format_key_value_pairs(key: str, *args) -> str:
     Returns:
         Formatted string with consistent indent, key, colon separator, and values.
     """
-    if key is None or args is None:
+    if key is None:
         return ""
-    values_str = "  ".join([textwrap_format(value) for value in args])
+    values_str = "  ".join([string_preview(value) for value in args])
     return f"    {key} : {values_str}"
 
 
-def textwrap_format(value: Any, width: int = 80) -> str:
+def string_preview(value: Any, width: int = 80) -> str:
     """Truncate long string representations to fit within a specified width.
 
     Args:
@@ -216,6 +227,14 @@ def textwrap_format(value: Any, width: int = 80) -> str:
         width: Maximum character width before truncation.
 
     Returns:
-        String representation of value, truncated with "..." if exceeds width.
+        String representation of value, truncated with "[...]" if exceeds width.
     """
-    return textwrap.shorten(str(value), width=width, placeholder="...")
+    placeholder = "[...]"
+
+    width = max(width, len(placeholder))
+
+    clean = re.sub(r"\s+", " ", str(value).strip())
+    if len(clean) <= width:
+        return clean
+    truncated = clean[: width - len(placeholder)] + placeholder
+    return truncated.strip()
