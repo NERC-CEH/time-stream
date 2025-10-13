@@ -1157,7 +1157,7 @@ class TestPaddedAggregations(unittest.TestCase):
     def test_padded_result(self) -> None:
         """Test that the aggregation result is padded if the original time series was padded"""
         tf = TimeFrame(df=self.df, time_name="timestamp", resolution=Period.of_days(1), periodicity=Period.of_days(1))
-        tf.pad()
+        tf = tf.pad()
 
         expected_df = pl.DataFrame(
             {

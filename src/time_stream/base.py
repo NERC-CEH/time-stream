@@ -382,7 +382,8 @@ class TimeFrame:
                 dataframe will be used.
 
         """
-        self._df = pad_time(
+        tf = self.copy()
+        tf._df = pad_time(
             df=self.df,
             time_name=self.time_name,
             periodicity=self.periodicity,
@@ -390,7 +391,8 @@ class TimeFrame:
             start=start,
             end=end,
         )
-        self.sort_time()
+        tf.sort_time()
+        return tf
 
     def register_flag_system(self, name: str, flag_system: FlagSystemType) -> None:
         """Register a named flag system with the internal flag manager.

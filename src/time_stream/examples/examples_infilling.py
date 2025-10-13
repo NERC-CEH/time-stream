@@ -57,7 +57,7 @@ def create_simple_time_series_with_gaps() -> ts.TimeFrame:
     )
 
     tf = ts.TimeFrame(df=df, time_name="time", resolution="P1D", periodicity="P1D")
-    tf.pad()
+    tf = tf.pad()
     return tf
 
 
