@@ -2,6 +2,7 @@ import unittest
 from datetime import datetime
 
 import polars as pl
+import pytest
 from parameterized import parameterized
 from polars.testing import assert_series_equal
 
@@ -761,6 +762,145 @@ class TestPadTime(unittest.TestCase):
         df = pl.DataFrame({"time": expected})
         result = pad_time(df, "time", periodicity)
         pl.testing.assert_frame_equal(result, df)
+
+    @parameterized.expand(
+        [
+            # Start date after end_date
+            (
+                datetime(2025, 1, 1, 12, 5, 0),
+                datetime(2025, 1, 1, 12, 2, 0),
+            ),
+            # Start date the same as end date
+            (
+                datetime(2025, 1, 1, 12, 5, 0),
+                datetime(2025, 1, 1, 12, 2, 0),
+            ),
+        ]
+    )
+    def test_invalid_start_end_dates(self, start_date: datetime, end_date: datetime) -> None:
+        df = pl.DataFrame(
+            {
+                "time": pl.datetime_range(
+                    datetime(2025, 1, 1, 12, 0, 0), datetime(2025, 1, 1, 12, 10, 0), interval="1m", eager=True
+                )
+            }
+        )
+        periodicity = Period.of_minutes(1)
+        expected_error = f"Invalid datetime range to pad. Start: {start_date}. End: {end_date}"
+
+        with pytest.raises(ValueError, match=expected_error):
+            pad_time(df, "time", periodicity, start=start_date, end=end_date)
+
+    @parameterized.expand(
+        [
+            # Start date before df, end date within df range
+            (
+                datetime(2025, 1, 1, 11, 55, 0),
+                datetime(2025, 1, 1, 11, 59, 0),
+                datetime(2025, 1, 1, 11, 55, 0),
+                datetime(2025, 1, 1, 12, 10, 0),
+            ),
+            # Start and end dates outside df range
+            (
+                datetime(2025, 1, 1, 11, 55, 0),
+                datetime(2025, 1, 1, 12, 20, 0),
+                datetime(2025, 1, 1, 11, 55, 0),
+                datetime(2025, 1, 1, 12, 20, 0),
+            ),
+            # Start date within df range, end date after
+            (
+                datetime(2025, 1, 1, 12, 5, 0),
+                datetime(2025, 1, 1, 12, 20, 0),
+                datetime(2025, 1, 1, 12, 0, 0),
+                datetime(2025, 1, 1, 12, 20, 0),
+            ),
+            # Start and end dates within df range
+            (
+                datetime(2025, 1, 1, 12, 2, 0),
+                datetime(2025, 1, 1, 12, 9, 0),
+                datetime(2025, 1, 1, 12, 0, 0),
+                datetime(2025, 1, 1, 12, 10, 0),
+            ),
+        ]
+    )
+    def test_valid_start_end_dates(
+        self, start_date: datetime, end_date: datetime, expected_start_date: datetime, expected_end_date: datetime
+    ) -> None:
+        df = pl.DataFrame(
+            {
+                "time": pl.datetime_range(
+                    datetime(2025, 1, 1, 12, 0, 0), datetime(2025, 1, 1, 12, 10, 0), interval="1m", eager=True
+                )
+            }
+        )
+        periodicity = Period.of_minutes(1)
+        expected = pl.DataFrame(
+            {"time": pl.datetime_range(expected_start_date, expected_end_date, interval="1m", eager=True)}
+        )
+
+        result = pad_time(df, "time", periodicity, start=start_date, end=end_date)
+        pl.testing.assert_frame_equal(expected, result)
+
+    @parameterized.expand(
+        [
+            # Start date before df, end date within df range
+            (
+                datetime(2025, 1, 1, 11, 55, 0),
+                datetime(2025, 1, 1, 11, 59, 0),
+                datetime(2025, 1, 1, 11, 55, 0),
+                datetime(2025, 1, 1, 12, 10, 0),
+            ),
+            # Start and end dates outside df range
+            (
+                datetime(2025, 1, 1, 11, 55, 0),
+                datetime(2025, 1, 1, 12, 20, 0),
+                datetime(2025, 1, 1, 11, 55, 0),
+                datetime(2025, 1, 1, 12, 20, 0),
+            ),
+            # Start date within df range, end date after
+            (
+                datetime(2025, 1, 1, 12, 5, 0),
+                datetime(2025, 1, 1, 12, 20, 0),
+                datetime(2025, 1, 1, 12, 0, 0),
+                datetime(2025, 1, 1, 12, 20, 0),
+            ),
+            # Start and end dates within df range
+            (
+                datetime(2025, 1, 1, 12, 2, 0),
+                datetime(2025, 1, 1, 12, 9, 0),
+                datetime(2025, 1, 1, 12, 0, 0),
+                datetime(2025, 1, 1, 12, 10, 0),
+            ),
+        ]
+    )
+    def test_valid_start_end_dates_with_missing_rows(
+        self, start_date: datetime, end_date: datetime, expected_start_date: datetime, expected_end_date: datetime
+    ) -> None:
+        df = pl.DataFrame(
+            {
+                "time": pl.datetime_range(
+                    datetime(2025, 1, 1, 12, 0, 0), datetime(2025, 1, 1, 12, 10, 0), interval="1m", eager=True
+                )
+            }
+        )
+        # Remove some rows - but not the first or last!
+        df_to_pad = pl.concat(
+            [df.head(1), df.slice(1, df.height - 2).sample(len(df) - 10, with_replacement=False), df.tail(1)]
+        )
+
+        periodicity = Period.of_minutes(1)
+        expected = pl.DataFrame({"time": pl.datetime_range(start_date, end_date, interval="1m", eager=True)})
+        missing_times = set(df_to_pad["time"]) - set(expected["time"])
+        expected_df = pl.concat([expected, pl.DataFrame({"time": sorted(missing_times)})]).sort(by="time")
+
+        """ NOTES - DELETE LATER
+        All dates within start and end should be padded
+        Select dates outside of that
+
+        """
+
+        result = pad_time(df_to_pad, "time", periodicity, start=start_date, end=end_date)
+        pl.testing.assert_frame_equal(expected_df, result)
 
 
 class TestCheckAlignment(unittest.TestCase):
