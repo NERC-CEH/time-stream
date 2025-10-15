@@ -48,12 +48,14 @@ def create_simple_time_series() -> ts.TimeFrame:
         df=df,
         time_name="time",  # Specify which column contains the primary datetime values
     )
+    print(tf)
     # [end_block_2]
     return tf
 
 
 def show_default_resolution() -> None:
-    tf = create_simple_time_series()
+    with suppress_output():
+        tf = create_simple_time_series()
     # [start_block_3]
     print(tf.resolution)
     print(tf.offset)
@@ -174,7 +176,7 @@ def accessing_data() -> None:
     # or
     selected_tf = tf[["temperature"]]
     print("Type: ", type(selected_tf))
-    print(selected_tf)
+    print(selected_tf.df)
     # [end_block_12]
 
 
@@ -221,7 +223,7 @@ def duplicate_row_example_keep_first() -> None:
     # [start_block_29]
     tf = ts.TimeFrame(df, "time", on_duplicates="keep_first")
     # [end_block_29]
-    print(tf)
+    print(tf.df)
 
 
 def duplicate_row_example_keep_last() -> None:
@@ -231,7 +233,7 @@ def duplicate_row_example_keep_last() -> None:
     # [start_block_30]
     tf = ts.TimeFrame(df, "time", on_duplicates="keep_last")
     # [end_block_30]
-    print(tf)
+    print(tf.df)
 
 
 def duplicate_row_example_drop() -> None:
@@ -241,7 +243,7 @@ def duplicate_row_example_drop() -> None:
     # [start_block_31]
     tf = ts.TimeFrame(df, "time", on_duplicates="drop")
     # [end_block_31]
-    print(tf)
+    print(tf.df)
 
 
 def duplicate_row_example_merge() -> None:
@@ -251,7 +253,7 @@ def duplicate_row_example_merge() -> None:
     # [start_block_32]
     tf = ts.TimeFrame(df, "time", on_duplicates="merge")
     # [end_block_32]
-    print(tf)
+    print(tf.df)
 
 
 def add_new_column_to_df() -> None:
@@ -264,4 +266,4 @@ def add_new_column_to_df() -> None:
 
     tf = tf.with_df(new_df)
     # [end_block_19]
-    print(tf)
+    print(tf.df)

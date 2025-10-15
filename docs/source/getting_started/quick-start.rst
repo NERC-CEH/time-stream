@@ -32,6 +32,12 @@ for time series operations:
    :end-before: [end_block_2]
    :dedent:
 
+.. jupyter-execute::
+   :hide-code:
+
+   import examples_timeseries_basics
+   tf = examples_timeseries_basics.create_simple_time_series()
+
 With Time Properties
 ====================
 
