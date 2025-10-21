@@ -9,9 +9,15 @@ from parameterized import parameterized
 from polars.testing import assert_frame_equal, assert_series_equal
 
 from time_stream import TimeFrame
-from time_stream.exceptions import InfillInsufficientValuesError, RegistryKeyTypeError, UnknownRegistryKeyError
+from time_stream.exceptions import (
+    ColumnNotFoundError,
+    InfillInsufficientValuesError,
+    RegistryKeyTypeError,
+    UnknownRegistryKeyError,
+)
 from time_stream.infill import (
     AkimaInterpolation,
+    AltData,
     BSplineInterpolation,
     CubicInterpolation,
     InfillCtx,
@@ -419,3 +425,70 @@ class TestApply(unittest.TestCase):
         )
         expected = self.create_tf(pl.DataFrame({"values": expected}))
         assert_frame_equal(result, expected.df, check_column_order=False)
+
+
+class TestAltData(unittest.TestCase):
+    def setUp(self) -> None:
+        self.df = pl.DataFrame(
+            {
+                "timestamp": [
+                    datetime(2025, 1, 1),
+                    datetime(2025, 1, 2),
+                    datetime(2025, 1, 3),
+                    datetime(2025, 1, 4),
+                    datetime(2025, 1, 5),
+                ],
+                "values": [1.0, None, 3.0, None, 5.0],
+                "alt_values": [10.0, 20.0, 30.0, 40.0, 50.0],
+                "alt_with_missing": [10.0, None, 30.0, 40.0, None],
+            }
+        )
+        self.tf = TimeFrame(self.df, "timestamp", "P1D")
+
+    def test_alt_data_infill(self) -> None:
+        """Test basic infilling from an alternative column."""
+        infiller = AltData(ts_id="alt_values")
+        result_df = infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
+        expected_df = self.df.with_columns(pl.Series("values", [1.0, 20.0, 3.0, 40.0, 5.0]))
+        assert_frame_equal(result_df, expected_df, check_column_order=False)
+
+    def test_alt_data_infill_with_correction(self) -> None:
+        """Test infilling with a correction factor."""
+        infiller = AltData(ts_id="alt_values", correction_factor=0.1)
+        result_df = infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
+        expected_df = self.df.with_columns(pl.Series("values", [1.0, 2.0, 3.0, 4.0, 5.0]))
+        assert_frame_equal(result_df, expected_df, check_column_order=False)
+
+    def test_alt_data_infill_no_missing_data(self) -> None:
+        """Test that nothing happens when there is no missing data."""
+        df_complete = self.df.with_columns(pl.Series("values", [1.0, 2.0, 3.0, 4.0, 5.0]))
+        tf_complete = TimeFrame(df_complete, "timestamp", "P1D")
+        infiller = AltData(ts_id="alt_values")
+        result_df = infiller.apply(tf_complete.df, tf_complete.time_name, tf_complete.periodicity, "values")
+        assert_frame_equal(result_df, tf_complete.df, check_column_order=False)
+
+    def test_alt_data_infill_missing_alt_data(self) -> None:
+        """Test that missing data in the alternative column is not used for infilling."""
+        infiller = AltData(ts_id="alt_with_missing")
+        result_df = infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
+        expected_df = self.df.with_columns(pl.Series("values", [1.0, None, 3.0, 40.0, 5.0]))
+        assert_frame_equal(result_df, expected_df, check_column_order=False)
+
+    def test_alt_data_infill_missing_ts_id_column(self) -> None:
+        """Test that an error is raised if the ts_id column is missing."""
+        infiller = AltData(ts_id="non_existent_column")
+        with self.assertRaises(ColumnNotFoundError):
+            infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
+
+    def test_alt_data_infill_restricting_date_range(self) -> None:
+        """Test that only data in the observation_interval is infilled."""
+        infiller = AltData(ts_id="alt_values")
+        result_df = infiller.apply(
+            self.tf.df,
+            self.tf.time_name,
+            self.tf.periodicity,
+            "values",
+            observation_interval=(datetime(2025, 1, 1), datetime(2025, 1, 2)),
+        )
+        expected_df = self.df.with_columns(pl.Series("values", [1.0, 20.0, 3.0, None, 5.0]))
+        assert_frame_equal(result_df, expected_df, check_column_order=False)

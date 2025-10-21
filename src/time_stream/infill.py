@@ -356,3 +356,36 @@ class PchipInterpolation(ScipyInterpolation):
     def _create_interpolator(self, x_valid: np.ndarray, y_valid: np.ndarray) -> Any:
         """Create scipy PCHIP interpolator."""
         return PchipInterpolator(x_valid, y_valid, **self.scipy_kwargs)
+
+
+@InfillMethod.register
+class AltData(InfillMethod):
+    """Infill from an alternative data source, with optional correction factor."""
+
+    name = "alt_data"
+
+    def __init__(self, ts_id: str, correction_factor: float = 1.0):
+        """Initialize the alternative data infill method.
+        Args:
+            ts_id: The name of the column providing the alternative data.
+            correction_factor: An optional correction factor to apply to the alternative data.
+        """
+        self.ts_id = ts_id
+        self.correction_factor = correction_factor
+
+    def _fill(self, df: pl.DataFrame, infill_column: str) -> pl.DataFrame:
+        """Fill missing values using data from the alternative column.
+        Args:
+            df: The DataFrame to infill.
+            infill_column: The column to infill.
+        Returns:
+            pl.DataFrame with infilled values.
+        """
+        check_columns_in_dataframe(df, [self.ts_id])
+
+        return df.with_columns(
+            pl.when(pl.col(infill_column).is_null())
+            .then(pl.col(self.ts_id) * self.correction_factor)
+            .otherwise(pl.col(infill_column))
+            .alias(self._infilled_column_name(infill_column))
+        )
