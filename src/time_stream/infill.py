@@ -364,13 +364,13 @@ class AltData(InfillMethod):
 
     name = "alt_data"
 
-    def __init__(self, ts_id: str, correction_factor: float = 1.0):
+    def __init__(self, alt_data_column: str, correction_factor: float = 1.0):
         """Initialize the alternative data infill method.
         Args:
-            ts_id: The name of the column providing the alternative data.
+            alt_data_column: The name of the column providing the alternative data.
             correction_factor: An optional correction factor to apply to the alternative data.
         """
-        self.ts_id = ts_id
+        self.alt_data_column = alt_data_column
         self.correction_factor = correction_factor
 
     def _fill(self, df: pl.DataFrame, infill_column: str) -> pl.DataFrame:
@@ -381,11 +381,11 @@ class AltData(InfillMethod):
         Returns:
             pl.DataFrame with infilled values.
         """
-        check_columns_in_dataframe(df, [self.ts_id])
+        check_columns_in_dataframe(df, [self.alt_data_column])
 
         return df.with_columns(
             pl.when(pl.col(infill_column).is_null())
-            .then(pl.col(self.ts_id) * self.correction_factor)
+            .then(pl.col(self.alt_data_column) * self.correction_factor)
             .otherwise(pl.col(infill_column))
             .alias(self._infilled_column_name(infill_column))
         )
