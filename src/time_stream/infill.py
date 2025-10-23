@@ -376,9 +376,11 @@ class AltData(InfillMethod):
 
     def _fill(self, df: pl.DataFrame, infill_column: str) -> pl.DataFrame:
         """Fill missing values using data from the alternative column.
+        
         Args:
             df: The DataFrame to infill.
             infill_column: The column to infill.
+            
         Returns:
             pl.DataFrame with infilled values.
         """
