@@ -366,6 +366,7 @@ class AltData(InfillMethod):
 
     def __init__(self, alt_data_column: str, correction_factor: float = 1.0):
         """Initialize the alternative data infill method.
+        
         Args:
             alt_data_column: The name of the column providing the alternative data.
             correction_factor: An optional correction factor to apply to the alternative data.
