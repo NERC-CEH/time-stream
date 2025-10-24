@@ -15,7 +15,7 @@ The infill pipeline handles:
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 import polars as pl
@@ -386,20 +386,20 @@ class AltData(InfillMethod):
         Returns:
             pl.DataFrame with infilled values.
         """
-        breakpoint()
         if self.alt_df is None:
             check_columns_in_dataframe(df, [self.alt_data_column])
         else:
-            check_columns_in_dataframe(self.alt_df, ['time', self.alt_data_column])
+            time_column_name = next(iter(df.schema))
+            check_columns_in_dataframe(self.alt_df, [time_column_name, self.alt_data_column])
 
             if self.alt_data_column in df.columns:
                 raise ValueError(f"Column {self.alt_data_column} already exists in the main dataframe.")
 
             df = df.join(
-                self.alt_df.select(['time', self.alt_data_column]),
-                on='time',
+                self.alt_df.select([time_column_name, self.alt_data_column]),
+                on=time_column_name,
                 how="left",
-                suffix="_alt"
+                suffix="_alt",
             )
 
         infilled = df.with_columns(

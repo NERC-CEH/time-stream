@@ -532,4 +532,3 @@ class TestAltData(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
-
