@@ -183,6 +183,43 @@ Example:
    At 15-minute resolution, ``max_gap_size=2`` = 30 minutes; at daily resolution,
    ``max_gap_size=2`` = 2 days.
 
+Alternative data infilling
+--------------------------
+
+The ``"alt_data"`` infill method allows you to fill missing values in a column using data from an alternative source.
+
+You can specify the alternative data in two ways:
+
+1.  **From a column within the same TimeFrame**: If the alternative data is already present as a column in your
+    current :class:`~time_stream.TimeFrame` object, you can directly reference it.
+2.  **From a separate DataFrame**: You can provide an entirely separate
+    Polars DataFrame containing the alternative data.
+
+In both cases, you can also apply a ``correction_factor`` to the alternative data before it's used for infilling.
+
+Example: Infilling from a separate DataFrame
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Let's say you have a primary dataset with missing "flow" values, and a separate ``alt_df`` with "alt_data" that
+can be used to infill these gaps.
+
+**Code:**
+
+.. code-block:: python
+
+   alt_df = pl.DataFrame({
+       "time": [pd.Timestamp("2020-09-01 00:15:00")]
+       "alt_values": [ 1.0 ]
+   })
+
+   tf_infill = tf.infill(
+       "alt_data",
+       "flow",
+       alt_df=alt_df,
+       correction_factor=0.5,
+       alt_data_column="alt_values"
+   )
+
 Visualisation of methods
 ========================
 
