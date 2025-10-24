@@ -492,3 +492,44 @@ class TestAltData(unittest.TestCase):
         )
         expected_df = self.df.with_columns(pl.Series("values", [1.0, 20.0, 3.0, None, 5.0]))
         assert_frame_equal(result_df, expected_df, check_column_order=False)
+
+    def test_alt_data_infill_with_alt_data_provided(self) -> None:
+        """Test infilling from a provided alternative DataFrame."""
+        alt_df = pl.DataFrame(
+            {
+                "timestamp": self.df["timestamp"],
+                "alt_values_df": [11.0, 22.0, 33.0, 44.0, 55.0],
+            }
+        )
+        infiller = AltData(alt_data_column="alt_values_df", alt_df=alt_df)
+        result_df = infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
+        expected_df = self.df.with_columns(pl.Series("values", [1.0, 22.0, 3.0, 44.0, 5.0]))
+        assert_frame_equal(result_df, expected_df, check_column_order=False)
+
+    def test_alt_data_infill_with_alt_data_missing_time_column(self) -> None:
+        """Test error when provided alt_data is missing the time column."""
+        alt_df = pl.DataFrame({"alt_values_df": [11.0, 22.0, 33.0, 44.0, 55.0]})
+        infiller = AltData(alt_data_column="alt_values", alt_df=alt_df)
+        with self.assertRaises(ColumnNotFoundError):
+            infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
+
+    def test_alt_data_infill_with_alt_data_missing_data_column(self) -> None:
+        """Test error when provided alt_data is missing the data column."""
+        alt_df = pl.DataFrame({"time": self.df["timestamp"]})
+        infiller = AltData(alt_data_column="non_existent_column", alt_df=alt_df)
+        with self.assertRaises(ColumnNotFoundError):
+            infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
+
+    def test_alt_data_infill_with_alt_data_and_column_in_main_df(self) -> None:
+        """Test that alt_data is prioritized when column name exists in main df."""
+        alt_df = pl.DataFrame(
+            {
+                "timestamp": self.df["timestamp"],
+                "alt_values": [11.0, 22.0, 33.0, 44.0, 55.0],
+            }
+        )
+        infiller = AltData(alt_data_column="alt_values", alt_df=alt_df)
+
+        with self.assertRaises(ValueError):
+            infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
+
