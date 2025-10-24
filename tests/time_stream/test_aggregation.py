@@ -4,6 +4,7 @@ from typing import Any
 from unittest.mock import Mock
 
 import polars as pl
+import pytest
 from parameterized import parameterized
 from polars.testing import assert_frame_equal
 
@@ -15,6 +16,7 @@ from time_stream.aggregation import (
     Mean,
     MeanSum,
     Min,
+    Percentile,
     Sum,
 )
 from time_stream.base import TimeFrame
@@ -261,6 +263,7 @@ class TestSimpleAggregations(unittest.TestCase):
                 [24, 24],
                 {"value": [11.5, 35.5]},
                 None,
+                {},
             ),
             (
                 "hourly_to_daily_max",
@@ -272,6 +275,7 @@ class TestSimpleAggregations(unittest.TestCase):
                 [24, 24],
                 {"value": [23, 47]},
                 [datetime(2025, 1, 1, 23), datetime(2025, 1, 2, 23)],
+                {},
             ),
             (
                 "hourly_to_daily_min",
@@ -283,6 +287,7 @@ class TestSimpleAggregations(unittest.TestCase):
                 [24, 24],
                 {"value": [0, 24]},
                 [datetime(2025, 1, 1), datetime(2025, 1, 2)],
+                {},
             ),
             (
                 "hourly_to_daily_mean_sum",
@@ -294,6 +299,7 @@ class TestSimpleAggregations(unittest.TestCase):
                 [24, 24],
                 {"value": [276, 852]},
                 None,
+                {},
             ),
             (
                 "hourly_to_daily_sum",
@@ -305,6 +311,19 @@ class TestSimpleAggregations(unittest.TestCase):
                 [24, 24],
                 {"value": [276, 852]},
                 None,
+                {},
+            ),
+            (
+                "hourly_to_daily_95_percentile",
+                TS_PT1H_2DAYS,
+                Percentile,
+                P1D,
+                "value",
+                [datetime(2025, 1, 1), datetime(2025, 1, 2)],
+                [24, 24],
+                {"value": [22, 46]},
+                None,
+                {"p": 95},
             ),
         ]
     )
@@ -319,6 +338,7 @@ class TestSimpleAggregations(unittest.TestCase):
         counts: list,
         values: dict,
         timestamps_of: list | None,
+        kwargs: dict[str, Any] | None,
     ) -> None:
         """Test aggregations of microsecond-based (i.e., 1 day or less) resolution data, to another
         microsecond-based resolution."""
@@ -331,6 +351,7 @@ class TestSimpleAggregations(unittest.TestCase):
             target_period,
             column,
             input_tf.time_anchor,
+            **kwargs,
         )
         assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False)
 
@@ -346,6 +367,7 @@ class TestSimpleAggregations(unittest.TestCase):
                 [744, 672],
                 {"value": [371.5, 1079.5]},
                 None,
+                {},
             ),
             (
                 "hourly_to_monthly_max",
@@ -357,6 +379,7 @@ class TestSimpleAggregations(unittest.TestCase):
                 [744, 672],
                 {"value": [743, 1415]},
                 [datetime(2025, 1, 31, 23), datetime(2025, 2, 28, 23)],
+                {},
             ),
             (
                 "hourly_to_monthly_min",
@@ -368,6 +391,7 @@ class TestSimpleAggregations(unittest.TestCase):
                 [744, 672],
                 {"value": [0, 744]},
                 [datetime(2025, 1, 1), datetime(2025, 2, 1)],
+                {},
             ),
             (
                 "hourly_to_monthly_mean_sum",
@@ -379,6 +403,7 @@ class TestSimpleAggregations(unittest.TestCase):
                 [744, 672],
                 {"value": [276396, 725424]},
                 None,
+                {},
             ),
             (
                 "hourly_to_monthly_sum",
@@ -390,6 +415,19 @@ class TestSimpleAggregations(unittest.TestCase):
                 [744, 672],
                 {"value": [276396, 725424]},
                 None,
+                {},
+            ),
+            (
+                "hourly_to_monthly_75_percentile",
+                TS_PT1H_2MONTH,
+                Percentile,
+                P1M,
+                "value",
+                [datetime(2025, 1, 1), datetime(2025, 2, 1)],
+                [744, 672],
+                {"value": [557, 1247]},
+                None,
+                {"p": 75},
             ),
         ]
     )
@@ -404,6 +442,7 @@ class TestSimpleAggregations(unittest.TestCase):
         counts: list,
         values: dict,
         timestamps_of: list | None,
+        kwargs: dict[str, Any],
     ) -> None:
         """Test aggregations of microsecond-based (i.e., 1-day or less) resolution data, to a month-based resolution."""
         expected_df = generate_expected_df(timestamps, aggregator, column, values, counts, counts, timestamps_of)
@@ -415,6 +454,7 @@ class TestSimpleAggregations(unittest.TestCase):
             target_period,
             column,
             input_tf.time_anchor,
+            **kwargs,
         )
         assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False)
 
@@ -430,6 +470,7 @@ class TestSimpleAggregations(unittest.TestCase):
                 [12, 12],
                 {"value": [5.5, 17.5]},
                 None,
+                {},
             ),
             (
                 "monthly_to_yearly_max",
@@ -441,6 +482,7 @@ class TestSimpleAggregations(unittest.TestCase):
                 [12, 12],
                 {"value": [11, 23]},
                 [datetime(2025, 12, 1), datetime(2026, 12, 1)],
+                {},
             ),
             (
                 "monthly_to_yearly_min",
@@ -452,6 +494,7 @@ class TestSimpleAggregations(unittest.TestCase):
                 [12, 12],
                 {"value": [0, 12]},
                 [datetime(2025, 1, 1), datetime(2026, 1, 1)],
+                {},
             ),
             (
                 "monthly_to_yearly_mean_sum",
@@ -463,6 +506,7 @@ class TestSimpleAggregations(unittest.TestCase):
                 [12, 12],
                 {"value": [66, 210]},
                 None,
+                {},
             ),
             (
                 "monthly_to_yearly_sum",
@@ -474,6 +518,19 @@ class TestSimpleAggregations(unittest.TestCase):
                 [12, 12],
                 {"value": [66, 210]},
                 None,
+                {},
+            ),
+            (
+                "monthly_to_yearly_25_percentile",
+                TS_P1M_2YEARS,
+                Percentile,
+                P1Y,
+                "value",
+                [datetime(2025, 1, 1), datetime(2026, 1, 1)],
+                [12, 12],
+                {"value": [3, 15]},
+                None,
+                {"p": 25},
             ),
         ]
     )
@@ -488,6 +545,7 @@ class TestSimpleAggregations(unittest.TestCase):
         counts: list,
         values: dict,
         timestamps_of: list | None,
+        kwargs: dict[str, Any] | None,
     ) -> None:
         """Test aggregations of month-based resolution data, to a month-based resolution."""
         expected_df = generate_expected_df(timestamps, aggregator, column, values, counts, counts, timestamps_of)
@@ -499,6 +557,7 @@ class TestSimpleAggregations(unittest.TestCase):
             target_period,
             column,
             input_tf.time_anchor,
+            **kwargs,
         )
         assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False)
 
@@ -514,6 +573,7 @@ class TestSimpleAggregations(unittest.TestCase):
                 [24, 24],
                 {"value": [11.5, 35.5], "value_plus1": [12.5, 36.5], "value_times2": [23, 71]},
                 None,
+                {},
             ),
             (
                 "multi_column_max",
@@ -525,6 +585,7 @@ class TestSimpleAggregations(unittest.TestCase):
                 [24, 24],
                 {"value": [23, 47], "value_plus1": [24, 48], "value_times2": [46, 94]},
                 [datetime(2025, 1, 1, 23), datetime(2025, 1, 2, 23)],
+                {},
             ),
             (
                 "multi_column_min",
@@ -536,6 +597,7 @@ class TestSimpleAggregations(unittest.TestCase):
                 [24, 24],
                 {"value": [0, 24], "value_plus1": [1, 25], "value_times2": [0, 48]},
                 [datetime(2025, 1, 1), datetime(2025, 1, 2)],
+                {},
             ),
             (
                 "multi_column_mean_sum",
@@ -547,6 +609,7 @@ class TestSimpleAggregations(unittest.TestCase):
                 [24, 24],
                 {"value": [276, 852], "value_plus1": [300, 876], "value_times2": [552, 1704]},
                 None,
+                {},
             ),
             (
                 "multi_column_sum",
@@ -558,6 +621,19 @@ class TestSimpleAggregations(unittest.TestCase):
                 [24, 24],
                 {"value": [276, 852], "value_plus1": [300, 876], "value_times2": [552, 1704]},
                 None,
+                {},
+            ),
+            (
+                "multi_column_50_percentile",
+                TS_PT1H_2DAYS,
+                Percentile,
+                P1D,
+                ["value", "value_plus1", "value_times2"],
+                [datetime(2025, 1, 1), datetime(2025, 1, 2)],
+                [24, 24],
+                {"value": [12, 36], "value_plus1": [13, 37], "value_times2": [24, 72]},
+                None,
+                {"p": 50},
             ),
         ]
     )
@@ -572,6 +648,7 @@ class TestSimpleAggregations(unittest.TestCase):
         counts: list,
         values: dict,
         timestamps_of: list | None,
+        kwargs: dict[str, Any],
     ) -> None:
         expected_df = generate_expected_df(timestamps, aggregator, column, values, counts, counts, timestamps_of)
         result = aggregator().apply(
@@ -582,6 +659,7 @@ class TestSimpleAggregations(unittest.TestCase):
             target_period,
             column,
             input_tf.time_anchor,
+            **kwargs,
         )
         assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False)
 
@@ -1221,3 +1299,54 @@ class TestAggregationWithMetadata(unittest.TestCase):
 
         result = tf.aggregate(Period.of_months(1), "mean", "value")
         self.assertEqual(result.metadata, {})
+
+
+class TestPercentileAggregation(unittest.TestCase):
+    @parameterized.expand(
+        [
+            (0, {"value": [0, 24]}),
+            (1, {"value": [0, 24]}),
+            (5, {"value": [1, 25]}),
+            (25, {"value": [6, 30]}),
+            (50, {"value": [12, 36]}),
+            (75, {"value": [17, 41]}),
+            (95, {"value": [22, 46]}),
+            (100, {"value": [23, 47]}),
+        ]
+    )
+    def test_percentile_aggregation(self, percentile: int, expected_values: list[int]) -> None:
+        input_tf = TS_PT1H_2DAYS
+        column = "value"
+        timestamps = [datetime(2025, 1, 1), datetime(2025, 1, 2)]
+        counts = [24, 24]
+
+        expected_df = generate_expected_df(timestamps, Percentile, column, expected_values, counts, counts, None)
+        result = Percentile().apply(
+            df=input_tf.df,
+            time_name=input_tf.time_name,
+            time_anchor=input_tf.time_anchor,
+            periodicity=input_tf.periodicity,
+            aggregation_period=P1D,
+            columns="value",
+            aggregation_time_anchor=input_tf.time_anchor,
+            p=percentile,
+        )
+        assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False)
+
+    @parameterized.expand([(0.000000001), (0.999999), (101), (10000)])
+    def test_invalid_percentile(self, percentile: float) -> None:
+        input_tf = TS_PT1H_2DAYS
+
+        expected_error = "The percentile value must be provided as an integer value from 0 to 100"
+
+        with pytest.raises(ValueError, match=expected_error):
+            Percentile().apply(
+                df=input_tf.df,
+                time_name=input_tf.time_name,
+                time_anchor=input_tf.time_anchor,
+                periodicity=input_tf.periodicity,
+                aggregation_period=P1D,
+                columns="value",
+                aggregation_time_anchor=input_tf.time_anchor,
+                p=percentile,
+            )

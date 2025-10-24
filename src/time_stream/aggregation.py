@@ -35,7 +35,7 @@ class AggregationFunction(Operation, ABC):
     """Base class for aggregation functions."""
 
     @abstractmethod
-    def expr(self, _ctx: AggregationCtx, _columns: list[str]) -> list[pl.Expr]:
+    def expr(self, _ctx: AggregationCtx, _columns: list[str], **kwargs) -> list[pl.Expr]:
         """Return the Polars expressions for this aggregation."""
         raise NotImplementedError
 
@@ -53,6 +53,7 @@ class AggregationFunction(Operation, ABC):
         columns: str | list[str],
         aggregation_time_anchor: TimeAnchor,
         missing_criteria: tuple[str, float | int] | None = None,
+        **kwargs,
     ) -> pl.DataFrame:
         """Run the aggregation pipeline.
 
@@ -72,7 +73,13 @@ class AggregationFunction(Operation, ABC):
         """
         ctx = AggregationCtx(df, time_name, time_anchor, periodicity)
         pipeline = AggregationPipeline(
-            self, ctx, aggregation_period, columns, aggregation_time_anchor, missing_criteria
+            self,
+            ctx,
+            aggregation_period,
+            columns,
+            aggregation_time_anchor,
+            missing_criteria,
+            **kwargs,
         )
         return pipeline.execute()
 
@@ -88,6 +95,7 @@ class AggregationPipeline:
         columns: str | list[str],
         aggregation_time_anchor: TimeAnchor,
         missing_criteria: tuple[str, float | int] | None = None,
+        **kwargs,
     ):
         self.agg_func = agg_func
         self.ctx = ctx
@@ -95,6 +103,7 @@ class AggregationPipeline:
         self.aggregation_time_anchor = aggregation_time_anchor
         self.columns = [columns] if isinstance(columns, str) else columns
         self.missing_criteria = missing_criteria
+        self.kwargs = kwargs
 
     def execute(self) -> pl.DataFrame:
         """The general `Polars` method used for aggregating data is::
@@ -123,7 +132,7 @@ class AggregationPipeline:
 
         # Build expressions to go in the .agg method
         agg_expressions = []
-        agg_expressions.extend(self.agg_func.expr(self.ctx, self.columns))
+        agg_expressions.extend(self.agg_func.expr(self.ctx, self.columns, **self.kwargs))
         agg_expressions.extend(self._actual_count_expr())
 
         # Do the aggregation function
@@ -363,4 +372,26 @@ class Max(AggregationFunction):
                     pl.col(ctx.time_name).get(pl.col(col).arg_max()).alias(f"{ctx.time_name}_of_{self.name}_{col}"),
                 ]
             )
+        return expressions
+
+
+@AggregationFunction.register
+class Percentile(AggregationFunction):
+    """An aggregation class to find the nth percentile of values within each aggregation period."""
+
+    name = "percentile"
+
+    def expr(self, ctx: AggregationCtx, columns: list[str], p: int) -> list[pl.Expr]:
+        """Return the 'Polars' expression for calculating the percentile"""
+
+        # If the percentile value is between 0 -100 divide it by 100 to convert it to the quantile equivalent.
+        if (p != 0 and p < 1) or (p > 100):
+            raise ValueError("The percentile value must be provided as an integer value from 0 to 100")
+
+        quantile = p / 100
+
+        expressions = []
+        for col in columns:
+            expressions.extend([pl.col(col).quantile(quantile).alias(f"{self.name}_{col}")])
+
         return expressions
