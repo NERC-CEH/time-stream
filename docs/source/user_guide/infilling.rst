@@ -208,7 +208,7 @@ can be used to infill these gaps.
 .. code-block:: python
 
    alt_df = pl.DataFrame({
-       "time": [pd.Timestamp("2020-09-01 00:15:00")]
+       "time": [pd.Timestamp("2020-09-01 00:15:00")],
        "alt_values": [ 1.0 ]
    })
 
