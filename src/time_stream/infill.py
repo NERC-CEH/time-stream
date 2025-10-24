@@ -15,7 +15,7 @@ The infill pipeline handles:
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
+from typing import Any, Optional
 
 import numpy as np
 import polars as pl
@@ -366,7 +366,7 @@ class AltData(InfillMethod):
 
     def __init__(self, alt_data_column: str, correction_factor: float = 1.0):
         """Initialize the alternative data infill method.
-        
+
         Args:
             alt_data_column: The name of the column providing the alternative data.
             correction_factor: An optional correction factor to apply to the alternative data.
@@ -374,21 +374,40 @@ class AltData(InfillMethod):
         self.alt_data_column = alt_data_column
         self.correction_factor = correction_factor
 
-    def _fill(self, df: pl.DataFrame, infill_column: str) -> pl.DataFrame:
+    def _fill(self, df: pl.DataFrame, infill_column: str, alt_df: Optional[pl.DataFrame]) -> pl.DataFrame:
         """Fill missing values using data from the alternative column.
-        
+
         Args:
             df: The DataFrame to infill.
             infill_column: The column to infill.
-            
+            alt_df: The DataFrame containing the alternative data.
+
         Returns:
             pl.DataFrame with infilled values.
         """
-        check_columns_in_dataframe(df, [self.alt_data_column])
+        if alt_df is None:
+            check_columns_in_dataframe(df, [self.alt_data_column])
+        else:
+            check_columns_in_dataframe(alt_df, ['time', self.alt_data_column])
 
-        return df.with_columns(
+            if self.alt_data_column in df.columns:
+                raise ValueError(f"Column {self.alt_data_column} already exists in the main dataframe.")
+
+            df = df.join(
+                alt_df.select(['time', self.alt_data_column]),
+                on='time',
+                how="left",
+                suffix="_alt"
+            )
+
+        infilled = df.with_columns(
             pl.when(pl.col(infill_column).is_null())
             .then(pl.col(self.alt_data_column) * self.correction_factor)
             .otherwise(pl.col(infill_column))
             .alias(self._infilled_column_name(infill_column))
         )
+
+        if alt_df is not None:
+            infilled = infilled.drop(self.alt_data_column)
+
+        return infilled
