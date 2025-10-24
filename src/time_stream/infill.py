@@ -44,12 +44,13 @@ class InfillMethod(Operation, ABC):
         return f"{infill_column}_{self.name}"
 
     @abstractmethod
-    def _fill(self, df: pl.DataFrame, infill_column: str) -> pl.DataFrame:
+    def _fill(self, df: pl.DataFrame, infill_column: str, ctx: InfillCtx) -> pl.DataFrame:
         """Return the Polars dataframe containing infilled data.
 
         Args:
             df: The DataFrame to infill.
             infill_column: The column to infill.
+            ctx: The infill context.
 
         Returns:
             pl.DataFrame with infilled values
@@ -119,7 +120,7 @@ class InfillMethodPipeline:
             return self.ctx.df
 
         # Apply the specific infill logic from the child class
-        df_infilled = self.infill_method._fill(df, self.column)
+        df_infilled = self.infill_method._fill(df, self.column, self.ctx)
         infilled_column = self.infill_method._infilled_column_name(self.column)
 
         # Limit the infilled data to where the infill mask is True
@@ -215,7 +216,7 @@ class ScipyInterpolation(InfillMethod, ABC):
         """Minimum number of data points required for this interpolation method."""
         pass
 
-    def _fill(self, df: pl.DataFrame, infill_column: str) -> pl.DataFrame:
+    def _fill(self, df: pl.DataFrame, infill_column: str, ctx: InfillCtx) -> pl.DataFrame:
         """Apply scipy interpolation to fill missing values in the specified column.
 
         This method handles the common scipy interpolation workflow:
@@ -229,6 +230,7 @@ class ScipyInterpolation(InfillMethod, ABC):
         Args:
             df: The DataFrame to infill.
             infill_column: The column to infill.
+            ctx: The infill context.
 
         Returns:
             pl.DataFrame with infilled values
@@ -376,12 +378,13 @@ class AltData(InfillMethod):
         self.correction_factor = correction_factor
         self.alt_df = alt_df
 
-    def _fill(self, df: pl.DataFrame, infill_column: str) -> pl.DataFrame:
+    def _fill(self, df: pl.DataFrame, infill_column: str, ctx: InfillCtx) -> pl.DataFrame:
         """Fill missing values using data from the alternative column.
 
         Args:
             df: The DataFrame to infill.
             infill_column: The column to infill.
+            ctx: The infill context.
 
         Returns:
             pl.DataFrame with infilled values.
@@ -389,7 +392,7 @@ class AltData(InfillMethod):
         if self.alt_df is None:
             check_columns_in_dataframe(df, [self.alt_data_column])
         else:
-            time_column_name = next(iter(df.schema))
+            time_column_name = ctx.time_name
             check_columns_in_dataframe(self.alt_df, [time_column_name, self.alt_data_column])
 
             if self.alt_data_column in df.columns:
