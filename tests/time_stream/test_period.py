@@ -4,14 +4,13 @@ Unit tests for the period module
 
 import datetime
 import re
-import unittest
 from dataclasses import (
     dataclass,
 )
 from typing import Any, Callable
 from unittest.mock import Mock, patch
 
-from parameterized import parameterized
+import pytest
 
 import time_stream.period as p
 from time_stream.exceptions import PeriodConfigError, PeriodParsingError, PeriodValidationError
@@ -20,45 +19,49 @@ from time_stream.period import Period
 TZ_UTC = datetime.timezone.utc
 
 
-class TestNaive(unittest.TestCase):
+class TestNaive:
     """Unit tests for the _naive function."""
 
     def test_naive_with_tzinfo(self) -> None:
         """Test _naive function with a datetime object that has tzinfo."""
         dt_with_tz = datetime.datetime(2023, 10, 10, 10, 0, tzinfo=TZ_UTC)
         result = p._naive(dt_with_tz)
-        self.assertIsNone(result.tzinfo)
-        self.assertEqual(result, datetime.datetime(2023, 10, 10, 10, 0))
+
+        assert result.tzinfo is None
+        assert result == datetime.datetime(2023, 10, 10, 10, 0)
 
     def test_naive_without_tzinfo(self) -> None:
         """Test _naive function with a datetime object that has no tzinfo."""
         dt_without_tz = datetime.datetime(2023, 10, 10, 10, 0)
         result = p._naive(dt_without_tz)
-        self.assertIsNone(result.tzinfo)
-        self.assertEqual(result, dt_without_tz)
+
+        assert result.tzinfo is None
+        assert result == dt_without_tz
 
 
-class TestGregorianSeconds(unittest.TestCase):
+class TestGregorianSeconds:
     """Unit tests for the _gregorian_seconds function."""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "dt_obj,expected_seconds",
         [
-            ("Zero", datetime.datetime(1, 1, 1, 0, 0, 0), 86_400 + 0),
-            ("2 hours", datetime.datetime(1, 1, 1, 2, 2, 2), 86_400 + (3600 * 2) + (60 * 2) + 2),
-        ]
+            (datetime.datetime(1, 1, 1, 0, 0, 0), 86_400 + 0),
+            (datetime.datetime(1, 1, 1, 2, 2, 2), (86_400 + (3600 * 2) + (60 * 2) + 2)),
+        ],
+        ids=["Zero", "2 hours"],
     )
-    def test_gregorian_seconds(self, _: str, dt_obj: datetime.datetime, expected_seconds: int) -> None:
+    def test_gregorian_seconds(self, dt_obj: datetime.datetime, expected_seconds: int) -> None:
         """Test _gregorian_seconds function with various datetime inputs."""
-        self.assertEqual(p._gregorian_seconds(dt_obj), expected_seconds)
+        assert p._gregorian_seconds(dt_obj) == expected_seconds
 
 
-class TestPeriodRegex(unittest.TestCase):
+class TestPeriodRegex:
     """Unit tests for the _period_regex function."""
 
     def test_period_regex(self) -> None:
         """Test regex string returned from _period_regex function."""
         regex = p._period_regex("test")
-        self.assertIsInstance(regex, str)
+        assert isinstance(regex, str)
         expected = (
             r"(?:(?P<test_years>\d+)[Yy])?"
             r"(?:(?P<test_months>\d+)[Mm])?"
@@ -71,164 +74,168 @@ class TestPeriodRegex(unittest.TestCase):
             r"[Ss])?"
             r")?"
         )
-        self.assertEqual(regex, expected)
+        assert regex == expected
 
 
-class TestYearShift(unittest.TestCase):
+class TestYearShift:
     """Unit tests for the year_shift function."""
 
     def test_no_shift(self) -> None:
         """Test that the date remains the same when shift_amount is 0."""
         date_time = datetime.datetime(2023, 10, 8)
-        self.assertEqual(p.year_shift(date_time, 0), date_time)
+        assert p.year_shift(date_time, 0) == date_time
 
     def test_positive_shift(self) -> None:
         """Test shifting the date forward by a positive number of years."""
         date_time = datetime.datetime(2023, 10, 8)
         expected = datetime.datetime(2025, 10, 8)
-        self.assertEqual(p.year_shift(date_time, 2), expected)
+        assert p.year_shift(date_time, 2) == expected
 
     def test_negative_shift(self) -> None:
         """Test shifting the date backward by a negative number of years."""
         date_time = datetime.datetime(2023, 10, 8)
         expected = datetime.datetime(2021, 10, 8)
-        self.assertEqual(p.year_shift(date_time, -2), expected)
+        assert p.year_shift(date_time, -2) == expected
 
     def test_leap_year(self) -> None:
         """Test shifting a leap day to another leap year."""
         date_time = datetime.datetime(2020, 2, 29)
         expected = datetime.datetime(2024, 2, 29)
-        self.assertEqual(p.year_shift(date_time, 4), expected)
+        assert p.year_shift(date_time, 4) == expected
 
     def test_non_leap_year(self) -> None:
         """Test shifting a leap day to a non-leap year."""
         date_time = datetime.datetime(2020, 2, 29)
         expected = datetime.datetime(2021, 2, 28)
-        self.assertEqual(p.year_shift(date_time, 1), expected)
+        assert p.year_shift(date_time, 1) == expected
 
     def test_end_of_month(self) -> None:
         """Test shifting a date at the end of the month."""
         date_time = datetime.datetime(2023, 1, 31)
         expected = datetime.datetime(2024, 1, 31)
-        self.assertEqual(p.year_shift(date_time, 1), expected)
+        assert p.year_shift(date_time, 1) == expected
 
 
-class TestMonthShift(unittest.TestCase):
+class TestMonthShift:
     """Unit tests for the month_shift function."""
 
     def test_no_shift(self) -> None:
         """Test that the date remains the same when shift_amount is 0."""
         date_time = datetime.datetime(2023, 10, 8)
-        self.assertEqual(p.month_shift(date_time, 0), date_time)
+        assert p.month_shift(date_time, 0) == date_time
 
     def test_positive_shift(self) -> None:
         """Test shifting the date forward by a positive number of months."""
         date_time = datetime.datetime(2023, 10, 8)
         expected = datetime.datetime(2024, 4, 8)
-        self.assertEqual(p.month_shift(date_time, 6), expected)
+        assert p.month_shift(date_time, 6) == expected
 
     def test_negative_shift(self) -> None:
         """Test shifting the date backward by a negative number of months."""
         date_time = datetime.datetime(2023, 10, 8)
         expected = datetime.datetime(2023, 4, 8)
-        self.assertEqual(p.month_shift(date_time, -6), expected)
+        assert p.month_shift(date_time, -6) == expected
 
     def test_end_of_month(self) -> None:
         """Test shifting a date at the end of the month."""
         date_time = datetime.datetime(2023, 1, 31)
         expected = datetime.datetime(2023, 2, 28)  # February in a non-leap year
-        self.assertEqual(p.month_shift(date_time, 1), expected)
+        assert p.month_shift(date_time, 1) == expected
 
     def test_leap_year(self) -> None:
         """Test shifting a date in a leap year."""
         date_time = datetime.datetime(2020, 2, 29)
         expected = datetime.datetime(2020, 3, 29)
-        self.assertEqual(p.month_shift(date_time, 1), expected)
+        assert p.month_shift(date_time, 1) == expected
 
     def test_non_leap_year(self) -> None:
         """Test shifting a date from a leap year to a non-leap year."""
         date_time = datetime.datetime(2020, 2, 29)
         expected = datetime.datetime(2021, 2, 28)
-        self.assertEqual(p.month_shift(date_time, 12), expected)
+        assert p.month_shift(date_time, 12) == expected
 
 
-class TestOfMonthOffset(unittest.TestCase):
+class TestOfMonthOffset:
     """Unit tests for of_month_offset in the DateTimeAdjusters class."""
 
-    @parameterized.expand([("15 months", 15), ("12 months", 12), ("6 months", 6)])
-    def test_of_month_offset_year_shift(self, _: str, months: int) -> None:
+    @pytest.mark.parametrize(
+        "months",
+        [15, 12, 6],
+        ids=[
+            "15 months",
+            "12 months",
+            "6 months",
+        ],
+    )
+    def test_of_month_offset_year_shift(self, months: int) -> None:
         """Test DateTimeAdjusters.of_month_offset with a differing number of months"""
         adjusters = p.DateTimeAdjusters.of_month_offset(months)
-        self.assertIsInstance(adjusters, p.DateTimeAdjusters)
-        self.assertIsInstance(adjusters.advance, Callable)
-        self.assertIsInstance(adjusters.retreat, Callable)
+        assert isinstance(adjusters, p.DateTimeAdjusters)
+        assert isinstance(adjusters.advance, Callable)
+        assert isinstance(adjusters.retreat, Callable)
 
     def test_of_month_offset_zero(self) -> None:
         """Test DateTimeAdjusters.of_month_offset with a zero shift."""
         adjusters = p.DateTimeAdjusters.of_month_offset(0)
-        self.assertIsNone(adjusters)
+        assert adjusters is None
 
 
-class TestOfMicrosecondOffset(unittest.TestCase):
+class TestOfMicrosecondOffset:
     """Unit tests for of_microsecond_offset in the DateTimeAdjusters class."""
 
     def test_of_microsecond_offset(self) -> None:
         """Test DateTimeAdjusters.of_microsecond_offset with various microsecond offsets."""
         microseconds = 100
         adjusters = p.DateTimeAdjusters.of_microsecond_offset(microseconds)
-        self.assertIsInstance(adjusters, p.DateTimeAdjusters)
-        self.assertIsInstance(adjusters.advance, Callable)
-        self.assertIsInstance(adjusters.retreat, Callable)
+        assert isinstance(adjusters, p.DateTimeAdjusters)
+        assert isinstance(adjusters.advance, Callable)
+        assert isinstance(adjusters.retreat, Callable)
 
         # As lambda functions are returned for the adjuster functions, test their behaviour
         dt_obj = datetime.datetime(2023, 10, 10, 10, 0, 0)
         expected_advance = dt_obj + datetime.timedelta(microseconds=microseconds)
         expected_retreat = dt_obj - datetime.timedelta(microseconds=microseconds)
 
-        self.assertEqual(adjusters.advance(dt_obj), expected_advance)
-        self.assertEqual(adjusters.retreat(dt_obj), expected_retreat)
+        assert adjusters.advance(dt_obj) == expected_advance
+        assert adjusters.retreat(dt_obj) == expected_retreat
 
     def test_of_microsecond_offset_zero(self) -> None:
         """Test DateTimeAdjusters.of_microsecond_offset with a zero shift."""
         adjusters = p.DateTimeAdjusters.of_microsecond_offset(0)
-        self.assertIsNone(adjusters)
+        assert adjusters is None
 
 
-class TestOfOffsets(unittest.TestCase):
+class TestOfOffsets:
     """Unit tests for of_offsets in the DateTimeAdjusters class."""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "months,microseconds,expected_adv,expected_ret",
         [
             (
-                "15 months, 1000000 microseconds",
                 15,
                 1_000_000,
                 datetime.datetime(2024, 4, 1, 0, 0, 1),
                 datetime.datetime(2021, 9, 30, 23, 59, 59),
             ),
             (
-                "12 months, 500000 microseconds",
                 12,
                 500_000,
                 datetime.datetime(2024, 1, 1, 0, 0, 0, 500_000),
                 datetime.datetime(2021, 12, 31, 23, 59, 59, 500000),
             ),
             (
-                "6 months, 1000 microseconds",
                 6,
                 1_000,
                 datetime.datetime(2023, 7, 1, 0, 0, 0, 1000),
                 datetime.datetime(2022, 6, 30, 23, 59, 59, 999000),
             ),
             (
-                "0 months, 1000 microseconds",
                 0,
                 1_000,
                 datetime.datetime(2023, 1, 1, 0, 0, 0, 1000),
                 datetime.datetime(2022, 12, 31, 23, 59, 59, 999000),
             ),
             (
-                "6 months, 0 microseconds",
                 6,
                 0,
                 datetime.datetime(
@@ -241,369 +248,460 @@ class TestOfOffsets(unittest.TestCase):
                 ),
                 datetime.datetime(2022, 7, 1, 0, 0, 0),
             ),
-        ]
+        ],
+        ids=[
+            "15 months, 1000000 microseconds",
+            "12 months, 500000 microseconds",
+            "6 months, 1000 microseconds",
+            "0 months, 1000 microseconds",
+            "6 months, 0 microseconds",
+        ],
     )
-    def test_of_offsets(
-        self, _: str, months: int, microseconds: int, expected_adv: Callable, expected_ret: Callable
-    ) -> None:
+    def test_of_offsets(self, months: int, microseconds: int, expected_adv: Callable, expected_ret: Callable) -> None:
         """Test DateTimeAdjusters.of_offsets with various month and microsecond offsets."""
         adjusters = p.DateTimeAdjusters.of_offsets(months, microseconds)
-        self.assertIsInstance(adjusters, p.DateTimeAdjusters)
-        self.assertIsInstance(adjusters.advance, Callable)
-        self.assertIsInstance(adjusters.retreat, Callable)
+        assert isinstance(adjusters, p.DateTimeAdjusters)
+        assert isinstance(adjusters.advance, Callable)
+        assert isinstance(adjusters.retreat, Callable)
 
         dt_obj = datetime.datetime(2023, 1, 1, 0, 0, 0)
-        self.assertEqual(adjusters.advance(dt_obj), expected_adv)
-        self.assertEqual(adjusters.retreat(dt_obj), expected_ret)
+        assert adjusters.advance(dt_obj) == expected_adv
+        assert adjusters.retreat(dt_obj) == expected_ret
 
     def test_of_offsets_zero(self) -> None:
         """Test DateTimeAdjusters.of_offsets with zero month and microsecond offsets."""
-        with self.assertRaises(PeriodConfigError):
+        with pytest.raises(PeriodConfigError):
             p.DateTimeAdjusters.of_offsets(0, 0)
 
 
-class TestDateTimeAdjustersPostInit(unittest.TestCase):
+class TestDateTimeAdjustersPostInit:
     """Unit tests for __post_init__ in the DateTimeAdjusters class."""
 
     def test_post_init_no_error(self) -> None:
         """Test DateTimeAdjusters.__post_init__ does not raise an error when advance and retreat are set"""
         p.DateTimeAdjusters(retreat=lambda x: x, advance=lambda x: x).__post_init__()
 
-    @parameterized.expand(
-        [("Both none", None, None), ("Retreat None", None, lambda x: x), ("Advance None", lambda x: x, None)]
+    @pytest.mark.parametrize(
+        "retreat,advance",
+        [(None, None), (None, lambda x: x), (lambda x: x, None)],
+        ids=[
+            "Both none",
+            "Retreat None",
+            "Advance None",
+        ],
     )
-    def test_post_init_raises_with_none(self, _: str, retreat: Callable | None, advance: Callable | None) -> None:
+    def test_post_init_raises_with_none(self, retreat: Callable | None, advance: Callable | None) -> None:
         """Test DateTimeAdjusters.__post_init__ to ensure it raises AssertionError when retreat or advance is None."""
-        with self.assertRaises(PeriodConfigError):
+        with pytest.raises(PeriodConfigError):
             p.DateTimeAdjusters(retreat=retreat, advance=advance).__post_init__()
 
 
-class TestSecondString(unittest.TestCase):
+class TestSecondString:
     """Unit tests for the _second_string function."""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "seconds,microseconds,expected",
         [
-            ("whole seconds", 10, 0, "10"),
-            ("seconds with microseconds", 10, 500000, "10.5"),
-            ("seconds with trailing zero microseconds", 10, 5000000, "10.5"),
-            ("seconds with no trailing zero microseconds", 10, 500001, "10.500001"),
-            ("zero seconds", 0, 0, "0"),
-            ("zero seconds with microseconds", 0, 123456, "0.123456"),
-        ]
+            (10, 0, "10"),
+            (10, 500000, "10.5"),
+            (10, 5000000, "10.5"),
+            (10, 500001, "10.500001"),
+            (0, 0, "0"),
+            (0, 123456, "0.123456"),
+        ],
+        ids=[
+            "whole seconds",
+            "seconds with microseconds",
+            "seconds with trailing zero microseconds",
+            "seconds with no trailing zero microseconds",
+            "zero seconds",
+            "zero seconds with microseconds",
+        ],
     )
-    def test_second_string(self, _: str, seconds: int, microseconds: int, expected: str) -> None:
+    def test_second_string(self, seconds: int, microseconds: int, expected: str) -> None:
         """Test _second_string function with various seconds and microseconds."""
         result = p._second_string(seconds, microseconds)
-        self.assertEqual(result, expected)
+        assert result == expected
 
 
-class TestAppendSecondElems(unittest.TestCase):
+class TestAppendSecondElems:
     """Unit tests for the _append_second_elems function."""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "elems,seconds,microseconds,expected",
         [
-            ("no days, hours, minutes, or microseconds", [], 10, 0, ["T", "10", "S"]),
-            ("with microseconds", [], 10, 500000, ["T", "10.5", "S"]),
-            ("with minutes", [], 70, 0, ["T", "1M", "10", "S"]),
-            ("with hours", [], 3660, 0, ["T", "1H", "1M"]),
-            ("with days", [], 90000, 0, ["1D", "T", "1H"]),
-            ("complex case", ["P"], 90061, 500000, ["P", "1D", "T", "1H", "1M", "1.5", "S"]),
-        ]
+            ([], 10, 0, ["T", "10", "S"]),
+            ([], 10, 500000, ["T", "10.5", "S"]),
+            ([], 70, 0, ["T", "1M", "10", "S"]),
+            ([], 3660, 0, ["T", "1H", "1M"]),
+            ([], 90000, 0, ["1D", "T", "1H"]),
+            (["P"], 90061, 500000, ["P", "1D", "T", "1H", "1M", "1.5", "S"]),
+        ],
+        ids=[
+            "no days, hours, minutes, or microseconds",
+            "with microseconds",
+            "with minutes",
+            "with hours",
+            "with days",
+            "complex case",
+        ],
     )
-    def test_append_second_elems(self, _: str, elems: list, seconds: int, microseconds: int, expected: list) -> None:
+    def test_append_second_elems(self, elems: list, seconds: int, microseconds: int, expected: list) -> None:
         """Test _append_second_elems function with various inputs."""
         result = p._append_second_elems(elems, seconds, microseconds)
-        self.assertEqual(result, expected)
+        assert result == expected
 
 
-class TestAppendMonthElems(unittest.TestCase):
+class TestAppendMonthElems:
     """Unit tests for the _append_month_elems function."""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "elems,months,expected",
         [
-            ("no months", [], 0, []),
-            ("only months", [], 5, ["5M"]),
-            ("only years", [], 24, ["2Y"]),
-            ("years and months", [], 30, ["2Y", "6M"]),
-            ("complex case", ["P"], 18, ["P", "1Y", "6M"]),
-        ]
+            ([], 0, []),
+            ([], 5, ["5M"]),
+            ([], 24, ["2Y"]),
+            ([], 30, ["2Y", "6M"]),
+            (["P"], 18, ["P", "1Y", "6M"]),
+        ],
+        ids=[
+            "no months",
+            "only months",
+            "only years",
+            "years and months",
+            "complex case",
+        ],
     )
-    def test_append_month_elems(self, _: str, elems: list, months: int, expected: list) -> None:
+    def test_append_month_elems(self, elems: list, months: int, expected: list) -> None:
         """Test _append_month_elems function with various inputs."""
         result = p._append_month_elems(elems, months)
-        self.assertEqual(result, expected)
+        assert result == expected
 
 
-class TestGetMicrosecondPeriodName(unittest.TestCase):
+class TestGetMicrosecondPeriodName:
     """Unit tests for the _get_microsecond_period_name function."""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "total_microseconds,expected",
         [
-            ("zero microseconds", 0, "P"),
-            ("only seconds", 1_000_000, "PT1S"),
-            ("seconds and microseconds", 1_500_000, "PT1.5S"),
-            ("only microseconds", 500_000, "PT0.5S"),
-            ("complex case", 3_645_034_555, "PT1H45.034555S"),
-        ]
+            (0, "P"),
+            (1_000_000, "PT1S"),
+            (1_500_000, "PT1.5S"),
+            (500_000, "PT0.5S"),
+            (3_645_034_555, "PT1H45.034555S"),
+        ],
+        ids=[
+            "zero microseconds",
+            "only seconds",
+            "seconds and microseconds",
+            "only microseconds",
+            "complex case",
+        ],
     )
-    def test_get_microsecond_period_name(self, _: str, total_microseconds: int, expected: str) -> None:
+    def test_get_microsecond_period_name(self, total_microseconds: int, expected: str) -> None:
         """Test _get_microsecond_period_name function with various inputs."""
         result = p._get_microsecond_period_name(total_microseconds)
-        self.assertEqual(result, expected)
+        assert result == expected
 
 
-class TestGetSecondPeriodName(unittest.TestCase):
+class TestGetSecondPeriodName:
     """Unit tests for the _get_second_period_name function."""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "seconds,expected",
         [
-            ("zero seconds", 0, "P"),
-            ("only seconds", 10, "PT10S"),
-            ("seconds forming minutes", 70, "PT1M10S"),
-            ("seconds forming hours", 3660, "PT1H1M"),
-            ("complex case", 90061, "P1DT1H1M1S"),
-        ]
+            (0, "P"),
+            (10, "PT10S"),
+            (70, "PT1M10S"),
+            (3660, "PT1H1M"),
+            (90061, "P1DT1H1M1S"),
+        ],
+        ids=[
+            "zero seconds",
+            "only seconds",
+            "seconds forming minutes",
+            "seconds forming hours",
+            "complex case",
+        ],
     )
-    def test_get_second_period_name(self, _: str, seconds: int, expected: str) -> None:
+    def test_get_second_period_name(self, seconds: int, expected: str) -> None:
         """Test _get_second_period_name function with various inputs."""
         result = p._get_second_period_name(seconds)
-        self.assertEqual(result, expected)
+        assert result == expected
 
 
-class TestGetMonthPeriodName(unittest.TestCase):
+class TestGetMonthPeriodName:
     """Unit tests for the _get_month_period_name function."""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "months,expected",
         [
-            ("zero months", 0, "P"),
-            ("only months", 5, "P5M"),
-            ("only years", 24, "P2Y"),
-            ("years and months", 30, "P2Y6M"),
-        ]
+            (0, "P"),
+            (5, "P5M"),
+            (24, "P2Y"),
+            (30, "P2Y6M"),
+        ],
+        ids=[
+            "zero months",
+            "only months",
+            "only years",
+            "years and months",
+        ],
     )
-    def test_get_month_period_name(self, _: str, months: int, expected: str) -> None:
+    def test_get_month_period_name(self, months: int, expected: str) -> None:
         """Test _get_month_period_name function with various inputs."""
         result = p._get_month_period_name(months)
-        self.assertEqual(result, expected)
+        assert result == expected
 
 
-class TestFmtNaiveMicrosecond(unittest.TestCase):
+class TestFmtNaiveMicrosecond:
     """Unit tests for the _fmt_naive_microsecond function."""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "obj,separator,expected",
         [
             (
-                "standard datetime with dash separator",
                 datetime.datetime(2023, 10, 10, 10, 0, 0, 123456),
                 "-",
                 "2023-10-10-10:00:00.123456",
             ),
             (
-                "standard datetime with T separator",
                 datetime.datetime(2023, 10, 10, 10, 0, 0, 123456),
                 "T",
                 "2023-10-10T10:00:00.123456",
             ),
             (
-                "datetime with zero microseconds",
                 datetime.datetime(2023, 10, 10, 10, 0, 0, 0),
                 "-",
                 "2023-10-10-10:00:00.000000",
             ),
-        ]
+        ],
+        ids=[
+            "standard datetime with dash separator",
+            "standard datetime with T separator",
+            "datetime with zero microseconds",
+        ],
     )
-    def test_fmt_naive_microsecond(self, _: str, obj: datetime.datetime, separator: str, expected: str) -> None:
+    def test_fmt_naive_microsecond(self, obj: datetime.datetime, separator: str, expected: str) -> None:
         """Test _fmt_naive_microsecond function with various datetime objects and separators."""
         result = p._fmt_naive_microsecond(obj, separator)
-        self.assertEqual(result, expected)
+        assert result == expected
 
 
-class TestFmtNaiveMillisecond(unittest.TestCase):
+class TestFmtNaiveMillisecond:
     """Unit tests for the _fmt_naive_millisecond function."""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "obj,separator,expected",
         [
             (
-                "standard datetime with dash separator",
                 datetime.datetime(2023, 10, 10, 10, 0, 0, 123456),
                 "-",
                 "2023-10-10-10:00:00.123",
             ),
             (
-                "standard datetime with T separator",
                 datetime.datetime(2023, 10, 10, 10, 0, 0, 123456),
                 "T",
                 "2023-10-10T10:00:00.123",
             ),
             (
-                "datetime with zero microseconds",
                 datetime.datetime(2023, 10, 10, 10, 0, 0, 0),
                 "-",
                 "2023-10-10-10:00:00.000",
             ),
-        ]
+        ],
+        ids=[
+            "standard datetime with dash separator",
+            "standard datetime with T separator",
+            "datetime with zero microseconds",
+        ],
     )
-    def test_fmt_naive_millisecond(self, _: str, obj: datetime.datetime, separator: str, expected: str) -> None:
+    def test_fmt_naive_millisecond(self, obj: datetime.datetime, separator: str, expected: str) -> None:
         """Test _fmt_naive_millisecond function with various datetime objects and separators."""
         result = p._fmt_naive_millisecond(obj, separator)
-        self.assertEqual(result, expected)
+        assert result == expected
 
 
-class TestFmtNaiveSecond(unittest.TestCase):
+class TestFmtNaiveSecond:
     """Unit tests for the _fmt_naive_second function."""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "obj,separator,expected",
         [
             (
-                "standard datetime with dash separator",
                 datetime.datetime(2023, 10, 10, 10, 0, 0),
                 "-",
                 "2023-10-10-10:00:00",
             ),
             (
-                "standard datetime with T separator",
                 datetime.datetime(2023, 10, 10, 10, 0, 0),
                 "T",
                 "2023-10-10T10:00:00",
             ),
-        ]
+        ],
+        ids=[
+            "standard datetime with dash separator",
+            "standard datetime with T separator",
+        ],
     )
-    def test_fmt_naive_second(self, _: str, obj: datetime.datetime, separator: str, expected: str) -> None:
+    def test_fmt_naive_second(self, obj: datetime.datetime, separator: str, expected: str) -> None:
         """Test _fmt_naive_second function with various datetime objects and separators."""
         result = p._fmt_naive_second(obj, separator)
-        self.assertEqual(result, expected)
+        assert result == expected
 
 
-class TestFmtNaiveMinute(unittest.TestCase):
+class TestFmtNaiveMinute:
     """Unit tests for the _fmt_naive_minute function."""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "obj,separator,expected",
         [
             (
-                "standard datetime with dash separator",
                 datetime.datetime(2023, 10, 10, 10, 0, 0),
                 "-",
                 "2023-10-10-10:00",
             ),
-            ("standard datetime with T separator", datetime.datetime(2023, 10, 10, 10, 0, 0), "T", "2023-10-10T10:00"),
-        ]
+            (datetime.datetime(2023, 10, 10, 10, 0, 0), "T", "2023-10-10T10:00"),
+        ],
+        ids=[
+            "standard datetime with dash separator",
+            "standard datetime with T separator",
+        ],
     )
-    def test_fmt_naive_minute(self, _: str, obj: datetime.datetime, separator: str, expected: str) -> None:
+    def test_fmt_naive_minute(self, obj: datetime.datetime, separator: str, expected: str) -> None:
         """Test _fmt_naive_minute function with various datetime objects and separators."""
         result = p._fmt_naive_minute(obj, separator)
-        self.assertEqual(result, expected)
+        assert result == expected
 
 
-class TestFmtNaiveHour(unittest.TestCase):
+class TestFmtNaiveHour:
     """Unit tests for the _fmt_naive_hour function."""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "obj,separator,expected",
         [
-            ("standard datetime with dash separator", datetime.datetime(2023, 10, 10, 10, 0, 0), "-", "2023-10-10-10"),
-            ("standard datetime with T separator", datetime.datetime(2023, 10, 10, 10, 0, 0), "T", "2023-10-10T10"),
-        ]
+            (datetime.datetime(2023, 10, 10, 10, 0, 0), "-", "2023-10-10-10"),
+            (datetime.datetime(2023, 10, 10, 10, 0, 0), "T", "2023-10-10T10"),
+        ],
+        ids=[
+            "standard datetime with dash separator",
+            "standard datetime with T separator",
+        ],
     )
-    def test_fmt_naive_hour(self, _: str, obj: datetime.datetime, separator: str, expected: str) -> None:
+    def test_fmt_naive_hour(self, obj: datetime.datetime, separator: str, expected: str) -> None:
         """Test _fmt_naive_hour function with various datetime objects and separators."""
         result = p._fmt_naive_hour(obj, separator)
-        self.assertEqual(result, expected)
+        assert result == expected
 
 
-class TestFmtNaiveDay(unittest.TestCase):
+class TestFmtNaiveDay:
     """Unit tests for the _fmt_naive_day function."""
 
     def test_fmt_naive_day(self) -> None:
         """Test _fmt_naive_day function with various datetime objects."""
         expected = "2023-10-10"
         result = p._fmt_naive_day(datetime.datetime(2023, 10, 10, 10, 0, 0))
-        self.assertEqual(result, expected)
+        assert result == expected
 
 
-class TestFmtNaiveMonth(unittest.TestCase):
+class TestFmtNaiveMonth:
     """Unit tests for the _fmt_naive_month function."""
 
     def test_fmt_naive_month(self) -> None:
         """Test _fmt_naive_month function with various datetime objects."""
         expected = "2023-10"
         result = p._fmt_naive_month(datetime.datetime(2023, 10, 10, 10, 0, 0))
-        self.assertEqual(result, expected)
+        assert result == expected
 
 
-class TestFmtNaiveYear(unittest.TestCase):
+class TestFmtNaiveYear:
     """Unit tests for the _fmt_naive_year function."""
 
     def test_fmt_naive_year(self) -> None:
         """Test _fmt_naive_year function with various datetime objects."""
         expected = "2023"
         result = p._fmt_naive_year(datetime.datetime(2023, 10, 10, 10, 0, 0))
-        self.assertEqual(result, expected)
+        assert result == expected
 
 
-class TestFmtTzdelta(unittest.TestCase):
+class TestFmtTzdelta:
     """Unit tests for the _fmt_tzdelta function."""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "delta,expected",
         [
-            ("zero delta", datetime.timedelta(0), "Z"),
-            ("positive delta", datetime.timedelta(hours=5, minutes=30), "+05:30"),
-            ("negative delta", datetime.timedelta(hours=-5, minutes=-30), "-05:30"),
-            ("positive delta with seconds", datetime.timedelta(hours=1, minutes=45, seconds=30), "+01:45"),
-            ("negative delta with seconds", datetime.timedelta(hours=-1, minutes=-45, seconds=-30), "-01:45"),
-        ]
+            (datetime.timedelta(0), "Z"),
+            (datetime.timedelta(hours=5, minutes=30), "+05:30"),
+            (datetime.timedelta(hours=-5, minutes=-30), "-05:30"),
+            (datetime.timedelta(hours=1, minutes=45, seconds=30), "+01:45"),
+            (datetime.timedelta(hours=-1, minutes=-45, seconds=-30), "-01:45"),
+        ],
+        ids=[
+            "zero delta",
+            "positive delta",
+            "negative delta",
+            "positive delta with seconds",
+            "negative delta with seconds",
+        ],
     )
-    def test_fmt_tzdelta(self, _: str, delta: datetime.timedelta, expected: str) -> None:
+    def test_fmt_tzdelta(self, delta: datetime.timedelta, expected: str) -> None:
         """Test _fmt_tzdelta function with various timedelta objects."""
         result = p._fmt_tzdelta(delta)
-        self.assertEqual(result, expected)
+        assert result == expected
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "delta",
         [
-            ("delta exceeding one day", datetime.timedelta(days=1, hours=1)),
-            ("negative delta exceeding one day", datetime.timedelta(days=-1, hours=-1)),
-        ]
+            datetime.timedelta(days=1, hours=1),
+            datetime.timedelta(days=-1, hours=-1),
+        ],
+        ids=[
+            "delta exceeding one day",
+            "negative delta exceeding one day",
+        ],
     )
-    def test_fmt_tzdelta_invalid(self, _: str, delta: datetime.timedelta) -> None:
+    def test_fmt_tzdelta_invalid(self, delta: datetime.timedelta) -> None:
         """Test _fmt_tzdelta function with invalid timedelta objects."""
-        with self.assertRaises((PeriodParsingError, PeriodValidationError)):  # type: ignore[arg-type]
+        with pytest.raises((PeriodParsingError, PeriodValidationError)):  # type: ignore[arg-type]
             p._fmt_tzdelta(delta)
 
 
-class TestFmtTzinfo(unittest.TestCase):
+class TestFmtTzinfo:
     """Unit tests for the _fmt_tzinfo function."""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "tz,expected",
         [
-            ("no tzinfo", None, ""),
-            ("UTC tzinfo", TZ_UTC, "Z"),
-            ("positive tzinfo", datetime.timezone(datetime.timedelta(hours=5, minutes=30)), "+05:30"),
-            ("negative tzinfo", datetime.timezone(datetime.timedelta(hours=-5, minutes=-30)), "-05:30"),
-        ]
+            (None, ""),
+            (TZ_UTC, "Z"),
+            (datetime.timezone(datetime.timedelta(hours=5, minutes=30)), "+05:30"),
+            (datetime.timezone(datetime.timedelta(hours=-5, minutes=-30)), "-05:30"),
+        ],
+        ids=["no tzinfo", "UTC tzinfo", "positive tzinfo", "negative tzinfo"],
     )
-    def test_fmt_tzinfo(self, _: str, tz: datetime.timezone | None, expected: str) -> None:
+    def test_fmt_tzinfo(self, tz: datetime.timezone | None, expected: str) -> None:
         """Test _fmt_tzinfo function with various tzinfo objects."""
         result = p._fmt_tzinfo(tz)
-        self.assertEqual(result, expected)
+        assert result == expected
 
 
-class TestFmtAwareMicrosecond(unittest.TestCase):
+class TestFmtAwareMicrosecond:
     """Unit tests for the _fmt_aware_microsecond function."""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "obj,separator,expected",
         [
             (
-                "UTC timezone with dash separator",
                 datetime.datetime(2023, 10, 10, 10, 0, 0, 123456, tzinfo=TZ_UTC),
                 "-",
                 "2023-10-10-10:00:00.123456Z",
             ),
             (
-                "UTC timezone with T separator",
                 datetime.datetime(2023, 10, 10, 10, 0, 0, 123456, tzinfo=TZ_UTC),
                 "T",
                 "2023-10-10T10:00:00.123456Z",
             ),
             (
-                "positive timezone",
                 datetime.datetime(
                     2023, 10, 10, 10, 0, 0, 123456, tzinfo=datetime.timezone(datetime.timedelta(hours=5, minutes=30))
                 ),
@@ -611,40 +709,43 @@ class TestFmtAwareMicrosecond(unittest.TestCase):
                 "2023-10-10-10:00:00.123456+05:30",
             ),
             (
-                "negative timezone",
                 datetime.datetime(
                     2023, 10, 10, 10, 0, 0, 123456, tzinfo=datetime.timezone(datetime.timedelta(hours=-5, minutes=-30))
                 ),
                 "-",
                 "2023-10-10-10:00:00.123456-05:30",
             ),
-        ]
+        ],
+        ids=[
+            "UTC timezone with dash separator",
+            "UTC timezone with T separator",
+            "positive timezone",
+            "negative timezone",
+        ],
     )
-    def test_fmt_aware_microsecond(self, _: str, obj: datetime.datetime, separator: str, expected: str) -> None:
+    def test_fmt_aware_microsecond(self, obj: datetime.datetime, separator: str, expected: str) -> None:
         """Test _fmt_aware_microsecond function with various datetime objects and separators."""
         result = p._fmt_aware_microsecond(obj, separator)
-        self.assertEqual(result, expected)
+        assert result == expected
 
 
-class TestFmtAwareMillisecond(unittest.TestCase):
+class TestFmtAwareMillisecond:
     """Unit tests for the _fmt_aware_millisecond function."""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "obj,separator,expected",
         [
             (
-                "UTC timezone with dash separator",
                 datetime.datetime(2023, 10, 10, 10, 0, 0, 123456, tzinfo=TZ_UTC),
                 "-",
                 "2023-10-10-10:00:00.123Z",
             ),
             (
-                "UTC timezone with T separator",
                 datetime.datetime(2023, 10, 10, 10, 0, 0, 123456, tzinfo=TZ_UTC),
                 "T",
                 "2023-10-10T10:00:00.123Z",
             ),
             (
-                "positive timezone",
                 datetime.datetime(
                     2023, 10, 10, 10, 0, 0, 123456, tzinfo=datetime.timezone(datetime.timedelta(hours=5, minutes=30))
                 ),
@@ -652,40 +753,43 @@ class TestFmtAwareMillisecond(unittest.TestCase):
                 "2023-10-10-10:00:00.123+05:30",
             ),
             (
-                "negative timezone",
                 datetime.datetime(
                     2023, 10, 10, 10, 0, 0, 123456, tzinfo=datetime.timezone(datetime.timedelta(hours=-5, minutes=-30))
                 ),
                 "-",
                 "2023-10-10-10:00:00.123-05:30",
             ),
-        ]
+        ],
+        ids=[
+            "UTC timezone with dash separator",
+            "UTC timezone with T separator",
+            "positive timezone",
+            "negative timezone",
+        ],
     )
-    def test_fmt_aware_millisecond(self, _: str, obj: datetime.datetime, separator: str, expected: str) -> None:
+    def test_fmt_aware_millisecond(self, obj: datetime.datetime, separator: str, expected: str) -> None:
         """Test _fmt_aware_millisecond function with various datetime objects and separators."""
         result = p._fmt_aware_millisecond(obj, separator)
-        self.assertEqual(result, expected)
+        assert result == expected
 
 
-class TestFmtAwareSecond(unittest.TestCase):
+class TestFmtAwareSecond:
     """Unit tests for the _fmt_aware_second function."""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "obj,separator,expected",
         [
             (
-                "UTC timezone with dash separator",
                 datetime.datetime(2023, 10, 10, 10, 0, 0, tzinfo=TZ_UTC),
                 "-",
                 "2023-10-10-10:00:00Z",
             ),
             (
-                "UTC timezone with T separator",
                 datetime.datetime(2023, 10, 10, 10, 0, 0, tzinfo=TZ_UTC),
                 "T",
                 "2023-10-10T10:00:00Z",
             ),
             (
-                "positive timezone",
                 datetime.datetime(
                     2023, 10, 10, 10, 0, 0, tzinfo=datetime.timezone(datetime.timedelta(hours=5, minutes=30))
                 ),
@@ -693,40 +797,43 @@ class TestFmtAwareSecond(unittest.TestCase):
                 "2023-10-10-10:00:00+05:30",
             ),
             (
-                "negative timezone",
                 datetime.datetime(
                     2023, 10, 10, 10, 0, 0, tzinfo=datetime.timezone(datetime.timedelta(hours=-5, minutes=-30))
                 ),
                 "-",
                 "2023-10-10-10:00:00-05:30",
             ),
-        ]
+        ],
+        ids=[
+            "UTC timezone with dash separator",
+            "UTC timezone with T separator",
+            "positive timezone",
+            "negative timezone",
+        ],
     )
-    def test_fmt_aware_second(self, _: str, obj: datetime.datetime, separator: str, expected: str) -> None:
+    def test_fmt_aware_second(self, obj: datetime.datetime, separator: str, expected: str) -> None:
         """Test _fmt_aware_second function with various datetime objects and separators."""
         result = p._fmt_aware_second(obj, separator)
-        self.assertEqual(result, expected)
+        assert result == expected
 
 
-class TestFmtAwareMinute(unittest.TestCase):
+class TestFmtAwareMinute:
     """Unit tests for the _fmt_aware_minute function."""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "obj,separator,expected",
         [
             (
-                "UTC timezone with dash separator",
                 datetime.datetime(2023, 10, 10, 10, 0, tzinfo=TZ_UTC),
                 "-",
                 "2023-10-10-10:00Z",
             ),
             (
-                "UTC timezone with T separator",
                 datetime.datetime(2023, 10, 10, 10, 0, tzinfo=TZ_UTC),
                 "T",
                 "2023-10-10T10:00Z",
             ),
             (
-                "positive timezone",
                 datetime.datetime(
                     2023, 10, 10, 10, 0, tzinfo=datetime.timezone(datetime.timedelta(hours=5, minutes=30))
                 ),
@@ -734,70 +841,83 @@ class TestFmtAwareMinute(unittest.TestCase):
                 "2023-10-10-10:00+05:30",
             ),
             (
-                "negative timezone",
                 datetime.datetime(
                     2023, 10, 10, 10, 0, tzinfo=datetime.timezone(datetime.timedelta(hours=-5, minutes=-30))
                 ),
                 "-",
                 "2023-10-10-10:00-05:30",
             ),
-        ]
+        ],
+        ids=[
+            "UTC timezone with dash separator",
+            "UTC timezone with T separator",
+            "positive timezone",
+            "negative timezone",
+        ],
     )
-    def test_fmt_aware_minute(self, _: str, obj: datetime.datetime, separator: str, expected: str) -> None:
+    def test_fmt_aware_minute(self, obj: datetime.datetime, separator: str, expected: str) -> None:
         """Test _fmt_aware_minute function with various datetime objects and separators."""
         result = p._fmt_aware_minute(obj, separator)
-        self.assertEqual(result, expected)
+        assert result == expected
 
 
-class TestFmtAwareHour(unittest.TestCase):
+class TestFmtAwareHour:
     """Unit tests for the _fmt_aware_hour function."""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "obj,separator,expected",
         [
             (
-                "UTC timezone with dash separator",
                 datetime.datetime(2023, 10, 10, 10, tzinfo=TZ_UTC),
                 "-",
                 "2023-10-10-10Z",
             ),
             (
-                "UTC timezone with T separator",
                 datetime.datetime(2023, 10, 10, 10, tzinfo=TZ_UTC),
                 "T",
                 "2023-10-10T10Z",
             ),
             (
-                "positive timezone",
                 datetime.datetime(2023, 10, 10, 10, tzinfo=datetime.timezone(datetime.timedelta(hours=5, minutes=30))),
                 "-",
                 "2023-10-10-10+05:30",
             ),
             (
-                "negative timezone",
                 datetime.datetime(
                     2023, 10, 10, 10, tzinfo=datetime.timezone(datetime.timedelta(hours=-5, minutes=-30))
                 ),
                 "-",
                 "2023-10-10-10-05:30",
             ),
-        ]
+        ],
+        ids=[
+            "UTC timezone with dash separator",
+            "UTC timezone with T separator",
+            "positive timezone",
+            "negative timezone",
+        ],
     )
-    def test_fmt_aware_hour(self, _: str, obj: datetime.datetime, separator: str, expected: str) -> None:
+    def test_fmt_aware_hour(self, obj: datetime.datetime, separator: str, expected: str) -> None:
         """Test _fmt_aware_hour function with various datetime objects and separators."""
         result = p._fmt_aware_hour(obj, separator)
-        self.assertEqual(result, expected)
+        assert result == expected
 
 
-class TestOfYears(unittest.TestCase):
+class TestOfYears:
     """Unit tests for the Properties.of_years method."""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "no_of_years",
         [
-            ("one year", 1),
-            ("two years", 2),
-        ]
+            1,
+            2,
+        ],
+        ids=[
+            "one year",
+            "two years",
+        ],
     )
-    def test_valid_years(self, _: str, no_of_years: int) -> None:
+    def test_valid_years(self, no_of_years: int) -> None:
         """Test Properties.of_years method with various year inputs."""
         expected = p.Properties(
             step=p._STEP_MONTHS,
@@ -808,24 +928,29 @@ class TestOfYears(unittest.TestCase):
             ordinal_shift=0,
         )
         result = p.Properties.of_years(no_of_years)
-        self.assertEqual(result, expected)
+        assert result == expected
 
     def test_zero_years(self) -> None:
         """Test Properties.of_years method with various year inputs."""
-        with self.assertRaises(PeriodValidationError):
+        with pytest.raises(PeriodValidationError):
             p.Properties.of_years(0)
 
 
-class TestOfMonths(unittest.TestCase):
+class TestOfMonths:
     """Unit tests for the Properties.of_months method."""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "no_of_months",
         [
-            ("one month", 1),
-            ("twelve months", 12),
-        ]
+            1,
+            12,
+        ],
+        ids=[
+            "one month",
+            "twelve months",
+        ],
     )
-    def test_valid_months(self, _: str, no_of_months: int) -> None:
+    def test_valid_months(self, no_of_months: int) -> None:
         """Test Properties.of_months method with various month inputs."""
         expected = p.Properties(
             step=p._STEP_MONTHS,
@@ -836,24 +961,29 @@ class TestOfMonths(unittest.TestCase):
             ordinal_shift=0,
         )
         result = p.Properties.of_months(no_of_months)
-        self.assertEqual(result, expected)
+        assert result == expected
 
     def test_zero_months(self) -> None:
         """Test Properties.of_months method with zero month input."""
-        with self.assertRaises(PeriodValidationError):
+        with pytest.raises(PeriodValidationError):
             p.Properties.of_months(0)
 
 
-class TestOfDays(unittest.TestCase):
+class TestOfDays:
     """Unit tests for the Properties.of_days method."""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "no_of_days",
         [
-            ("one day", 1),
-            ("seven days", 7),
-        ]
+            1,
+            7,
+        ],
+        ids=[
+            "one day",
+            "seven days",
+        ],
     )
-    def test_valid_days(self, _: str, no_of_days: int) -> None:
+    def test_valid_days(self, no_of_days: int) -> None:
         """Test Properties.of_days method with various day inputs."""
         expected = p.Properties(
             step=p._STEP_SECONDS,
@@ -864,24 +994,26 @@ class TestOfDays(unittest.TestCase):
             ordinal_shift=0,
         )
         result = p.Properties.of_days(no_of_days)
-        self.assertEqual(result, expected)
+        assert result == expected
 
     def test_zero_days(self) -> None:
         """Test Properties.of_days method with zero day input."""
-        with self.assertRaises(PeriodValidationError):
+        with pytest.raises(PeriodValidationError):
             p.Properties.of_days(0)
 
 
-class TestOfHours(unittest.TestCase):
+class TestOfHours:
     """Unit tests for the Properties.of_hours method."""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "no_of_hours",
         [
-            ("one hour", 1),
-            ("twenty-four hours", 24),
-        ]
+            1,
+            24,
+        ],
+        ids=["one hour", "twenty-four hours"],
     )
-    def test_valid_hours(self, _: str, no_of_hours: int) -> None:
+    def test_valid_hours(self, no_of_hours: int) -> None:
         """Test Properties.of_hours method with various hour inputs."""
         expected = p.Properties(
             step=p._STEP_SECONDS,
@@ -892,24 +1024,29 @@ class TestOfHours(unittest.TestCase):
             ordinal_shift=0,
         )
         result = p.Properties.of_hours(no_of_hours)
-        self.assertEqual(result, expected)
+        assert result == expected
 
     def test_zero_hours(self) -> None:
         """Test Properties.of_hours method with zero hour input."""
-        with self.assertRaises(PeriodValidationError):
+        with pytest.raises(PeriodValidationError):
             p.Properties.of_hours(0)
 
 
-class TestOfMinutes(unittest.TestCase):
+class TestOfMinutes:
     """Unit tests for the Properties.of_minutes method."""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "no_of_minutes",
         [
-            ("one minute", 1),
-            ("sixty minutes", 60),
-        ]
+            1,
+            60,
+        ],
+        ids=[
+            "one minute",
+            "sixty minutes",
+        ],
     )
-    def test_valid_minutes(self, _: str, no_of_minutes: int) -> None:
+    def test_valid_minutes(self, no_of_minutes: int) -> None:
         """Test Properties.of_minutes method with various minute inputs."""
         expected = p.Properties(
             step=p._STEP_SECONDS,
@@ -920,24 +1057,29 @@ class TestOfMinutes(unittest.TestCase):
             ordinal_shift=0,
         )
         result = p.Properties.of_minutes(no_of_minutes)
-        self.assertEqual(result, expected)
+        assert result == expected
 
     def test_zero_minutes(self) -> None:
         """Test Properties.of_minutes method with zero minute input."""
-        with self.assertRaises(PeriodValidationError):
+        with pytest.raises(PeriodValidationError):
             p.Properties.of_minutes(0)
 
 
-class TestOfSeconds(unittest.TestCase):
+class TestOfSeconds:
     """Unit tests for the Properties.of_seconds method."""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "no_of_seconds",
         [
-            ("one second", 1),
-            ("sixty seconds", 60),
-        ]
+            1,
+            60,
+        ],
+        ids=[
+            "one second",
+            "sixty seconds",
+        ],
     )
-    def test_valid_seconds(self, _: str, no_of_seconds: int) -> None:
+    def test_valid_seconds(self, no_of_seconds: int) -> None:
         """Test Properties.of_seconds method with various second inputs."""
         expected = p.Properties(
             step=p._STEP_SECONDS,
@@ -948,24 +1090,29 @@ class TestOfSeconds(unittest.TestCase):
             ordinal_shift=0,
         )
         result = p.Properties.of_seconds(no_of_seconds)
-        self.assertEqual(result, expected)
+        assert result == expected
 
     def test_zero_seconds(self) -> None:
         """Test Properties.of_seconds method with zero second input."""
-        with self.assertRaises(PeriodValidationError):
+        with pytest.raises(PeriodValidationError):
             p.Properties.of_seconds(0)
 
 
-class TestOfMicroseconds(unittest.TestCase):
+class TestOfMicroseconds:
     """Unit tests for the Properties.of_microseconds method."""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "no_of_microseconds",
         [
-            ("one microsecond", 1),
-            ("one million microseconds", 1_000_000),
-        ]
+            1,
+            1_000_000,
+        ],
+        ids=[
+            "one microsecond",
+            "one million microseconds",
+        ],
     )
-    def test_valid_microseconds(self, _: str, no_of_microseconds: int) -> None:
+    def test_valid_microseconds(self, no_of_microseconds: int) -> None:
         """Test Properties.of_microseconds method with various microsecond inputs."""
         seconds, microseconds = divmod(no_of_microseconds, 1_000_000)
         if microseconds == 0:
@@ -987,45 +1134,51 @@ class TestOfMicroseconds(unittest.TestCase):
                 ordinal_shift=0,
             )
         result = p.Properties.of_microseconds(no_of_microseconds)
-        self.assertEqual(result, expected)
+        assert result == expected
 
     def test_zero_microseconds(self) -> None:
         """Test Properties.of_microseconds method with zero microsecond input."""
-        with self.assertRaises(PeriodValidationError):
+        with pytest.raises(PeriodValidationError):
             p.Properties.of_microseconds(0)
 
 
-class TestOfStepAndMultiplier(unittest.TestCase):
+class TestOfStepAndMultiplier:
     """Unit tests for the Properties.of_step_and_multiplier method."""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "step,multiplier",
         [
-            ("microseconds step", p._STEP_MICROSECONDS, 1_000_000),
-            ("seconds step", p._STEP_SECONDS, 60),
-            ("months step", p._STEP_MONTHS, 12),
-        ]
+            (p._STEP_MICROSECONDS, 1_000_000),
+            (p._STEP_SECONDS, 60),
+            (p._STEP_MONTHS, 12),
+        ],
+        ids=[
+            "microseconds step",
+            "seconds step",
+            "months step",
+        ],
     )
-    def test_valid_step_and_multiplier(self, _: str, step: int, multiplier: int) -> None:
+    def test_valid_step_and_multiplier(self, step: int, multiplier: int) -> None:
         """Test Properties.of_step_and_multiplier method with various step and multiplier inputs."""
         expected = p.Properties(
             step=step, multiplier=multiplier, month_offset=0, microsecond_offset=0, tzinfo=None, ordinal_shift=0
         )
         result = p.Properties.of_step_and_multiplier(step, multiplier)
-        self.assertEqual(result, expected)
+        assert result == expected
 
     def test_invalid_step(self) -> None:
         """Test Properties.of_step_and_multiplier method with invalid step input."""
-        with self.assertRaises(PeriodValidationError):
+        with pytest.raises(PeriodValidationError):
             p.Properties.of_step_and_multiplier(999, 1)
 
 
-class TestNormaliseStepAndMultiplier(unittest.TestCase):
+class TestNormaliseStepAndMultiplier:
     """Unit tests for the Properties.normalise_step_and_multiplier method."""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "props,expected",
         [
             (
-                "normalised months",
                 p.Properties(
                     step=p._STEP_MONTHS,
                     multiplier=1,
@@ -1044,7 +1197,6 @@ class TestNormaliseStepAndMultiplier(unittest.TestCase):
                 ),
             ),
             (
-                "normalised seconds",
                 p.Properties(
                     step=p._STEP_SECONDS,
                     multiplier=1,
@@ -1063,7 +1215,6 @@ class TestNormaliseStepAndMultiplier(unittest.TestCase):
                 ),
             ),
             (
-                "normalised microseconds",
                 p.Properties(
                     step=p._STEP_MICROSECONDS,
                     multiplier=1,
@@ -1082,7 +1233,6 @@ class TestNormaliseStepAndMultiplier(unittest.TestCase):
                 ),
             ),
             (
-                "normalise microseconds to seconds",
                 p.Properties(
                     step=p._STEP_MICROSECONDS,
                     multiplier=1_000_000,
@@ -1100,21 +1250,27 @@ class TestNormaliseStepAndMultiplier(unittest.TestCase):
                     ordinal_shift=0,
                 ),
             ),
-        ]
+        ],
+        ids=[
+            "normalised months",
+            "normalised seconds",
+            "normalised microseconds",
+            "normalise microseconds to seconds",
+        ],
     )
-    def test_normalise_step_and_multiplier(self, _: str, props: p.Properties, expected: p.Properties) -> None:
+    def test_normalise_step_and_multiplier(self, props: p.Properties, expected: p.Properties) -> None:
         """Test Properties.normalise_step_and_multiplier method with various inputs."""
         result = props.normalise_step_and_multiplier()
-        self.assertEqual(result, expected)
+        assert result == expected
 
 
-class TestNormaliseOffsets(unittest.TestCase):
+class TestNormaliseOffsets:
     """Unit tests for the Properties.normalise_offsets method."""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "props,expected",
         [
             (
-                "normalised months",
                 p.Properties(
                     step=p._STEP_MONTHS,
                     multiplier=12,
@@ -1133,7 +1289,6 @@ class TestNormaliseOffsets(unittest.TestCase):
                 ),
             ),
             (
-                "normalised seconds",
                 p.Properties(
                     step=p._STEP_SECONDS,
                     multiplier=60,
@@ -1152,7 +1307,6 @@ class TestNormaliseOffsets(unittest.TestCase):
                 ),
             ),
             (
-                "normalised microseconds",
                 p.Properties(
                     step=p._STEP_MICROSECONDS,
                     multiplier=1_000_000,
@@ -1171,7 +1325,6 @@ class TestNormaliseOffsets(unittest.TestCase):
                 ),
             ),
             (
-                "already normalised",
                 p.Properties(
                     step=p._STEP_MONTHS,
                     multiplier=12,
@@ -1189,21 +1342,27 @@ class TestNormaliseOffsets(unittest.TestCase):
                     ordinal_shift=0,
                 ),
             ),
-        ]
+        ],
+        ids=[
+            "normalised months",
+            "normalised seconds",
+            "normalised microseconds",
+            "already normalised",
+        ],
     )
-    def test_normalise_offsets(self, _: str, props: p.Properties, expected: p.Properties) -> None:
+    def test_normalise_offsets(self, props: p.Properties, expected: p.Properties) -> None:
         """Test Properties.normalise_offsets method with various inputs."""
         result = props.normalise_offsets()
-        self.assertEqual(result, expected)
+        assert result == expected
 
 
-class TestWithMonthOffset(unittest.TestCase):
+class TestWithMonthOffset:
     """Unit tests for the Properties.with_month_offset method."""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "month_amount,expected",
         [
             (
-                "add one month",
                 1,
                 p.Properties(
                     step=p._STEP_MONTHS,
@@ -1215,7 +1374,6 @@ class TestWithMonthOffset(unittest.TestCase):
                 ),
             ),
             (
-                "add thirteen months",
                 13,
                 p.Properties(
                     step=p._STEP_MONTHS,
@@ -1227,7 +1385,6 @@ class TestWithMonthOffset(unittest.TestCase):
                 ),
             ),
             (
-                "no change",
                 0,
                 p.Properties(
                     step=p._STEP_MONTHS,
@@ -1238,32 +1395,37 @@ class TestWithMonthOffset(unittest.TestCase):
                     ordinal_shift=0,
                 ),
             ),
-        ]
+        ],
+        ids=[
+            "add one month",
+            "add thirteen months",
+            "no change",
+        ],
     )
-    def test_with_month_offset(self, _: str, month_amount: int, expected: p.Properties) -> None:
+    def test_with_month_offset(self, month_amount: int, expected: p.Properties) -> None:
         """Test Properties.with_month_offset method with various month amounts."""
         props = p.Properties(
             step=p._STEP_MONTHS, multiplier=12, month_offset=0, microsecond_offset=0, tzinfo=None, ordinal_shift=0
         )
         result = props.with_month_offset(month_amount)
-        self.assertEqual(result, expected)
+        assert result == expected
 
     def test_invalid_offset(self) -> None:
         """Test Properties.of_step_and_multiplier method with invalid step input."""
         props = p.Properties(
             step=p._STEP_MONTHS, multiplier=12, month_offset=0, microsecond_offset=0, tzinfo=None, ordinal_shift=0
         )
-        with self.assertRaises(PeriodValidationError):
+        with pytest.raises(PeriodValidationError):
             props.with_month_offset(-1)
 
 
-class TestWithMicrosecondOffset(unittest.TestCase):
+class TestWithMicrosecondOffset:
     """Unit tests for the Properties.with_microsecond_offset method."""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "microsecond_amount,expected",
         [
             (
-                "add one microsecond",
                 1,
                 p.Properties(
                     step=p._STEP_MICROSECONDS,
@@ -1275,7 +1437,6 @@ class TestWithMicrosecondOffset(unittest.TestCase):
                 ),
             ),
             (
-                "add one million microseconds",
                 1_000_000,
                 p.Properties(
                     step=p._STEP_MICROSECONDS,
@@ -1287,7 +1448,6 @@ class TestWithMicrosecondOffset(unittest.TestCase):
                 ),
             ),
             (
-                "no change",
                 0,
                 p.Properties(
                     step=p._STEP_MICROSECONDS,
@@ -1298,9 +1458,14 @@ class TestWithMicrosecondOffset(unittest.TestCase):
                     ordinal_shift=0,
                 ),
             ),
-        ]
+        ],
+        ids=[
+            "add one microsecond",
+            "add one million microseconds",
+            "no change",
+        ],
     )
-    def test_with_microsecond_offset(self, _: str, microsecond_amount: int, expected: p.Properties) -> None:
+    def test_with_microsecond_offset(self, microsecond_amount: int, expected: p.Properties) -> None:
         """Test Properties.with_microsecond_offset method with various microsecond amounts."""
         props = p.Properties(
             step=p._STEP_MICROSECONDS,
@@ -1311,7 +1476,7 @@ class TestWithMicrosecondOffset(unittest.TestCase):
             ordinal_shift=0,
         )
         result = props.with_microsecond_offset(microsecond_amount)
-        self.assertEqual(result, expected)
+        assert result == expected
 
     def test_invalid_offset(self) -> None:
         """Test Properties.with_microsecond_offset method with invalid microsecond input."""
@@ -1323,17 +1488,17 @@ class TestWithMicrosecondOffset(unittest.TestCase):
             tzinfo=None,
             ordinal_shift=0,
         )
-        with self.assertRaises(PeriodValidationError):
+        with pytest.raises(PeriodValidationError):
             props.with_microsecond_offset(-1)
 
 
-class TestWithTzinfo(unittest.TestCase):
+class TestWithTzinfo:
     """Unit tests for the Properties.with_tzinfo method."""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "tzinfo,expected",
         [
             (
-                "UTC timezone",
                 TZ_UTC,
                 p.Properties(
                     step=p._STEP_MONTHS,
@@ -1345,7 +1510,6 @@ class TestWithTzinfo(unittest.TestCase):
                 ),
             ),
             (
-                "None timezone",
                 None,
                 p.Properties(
                     step=p._STEP_MONTHS,
@@ -1357,7 +1521,6 @@ class TestWithTzinfo(unittest.TestCase):
                 ),
             ),
             (
-                "positive timezone",
                 datetime.timezone(datetime.timedelta(hours=5, minutes=30)),
                 p.Properties(
                     step=p._STEP_MONTHS,
@@ -1369,7 +1532,6 @@ class TestWithTzinfo(unittest.TestCase):
                 ),
             ),
             (
-                "negative timezone",
                 datetime.timezone(datetime.timedelta(hours=-5, minutes=-30)),
                 p.Properties(
                     step=p._STEP_MONTHS,
@@ -1380,24 +1542,30 @@ class TestWithTzinfo(unittest.TestCase):
                     ordinal_shift=0,
                 ),
             ),
-        ]
+        ],
+        ids=[
+            "UTC timezone",
+            "None timezone",
+            "positive timezone",
+            "negative timezone",
+        ],
     )
-    def test_with_tzinfo(self, _: str, tzinfo: datetime.tzinfo, expected: p.Properties) -> None:
+    def test_with_tzinfo(self, tzinfo: datetime.tzinfo, expected: p.Properties) -> None:
         """Test Properties.with_tzinfo method with various tzinfo objects."""
         props = p.Properties(
             step=p._STEP_MONTHS, multiplier=12, month_offset=0, microsecond_offset=0, tzinfo=None, ordinal_shift=0
         )
         result = props.with_tzinfo(tzinfo)
-        self.assertEqual(result, expected)
+        assert result == expected
 
 
-class TestWithOrdinalShift(unittest.TestCase):
+class TestWithOrdinalShift:
     """Unit tests for the Properties.with_ordinal_shift method."""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "ordinal_shift,expected",
         [
             (
-                "positive shift",
                 1,
                 p.Properties(
                     step=p._STEP_MONTHS,
@@ -1409,7 +1577,6 @@ class TestWithOrdinalShift(unittest.TestCase):
                 ),
             ),
             (
-                "negative shift",
                 -1,
                 p.Properties(
                     step=p._STEP_MONTHS,
@@ -1421,7 +1588,6 @@ class TestWithOrdinalShift(unittest.TestCase):
                 ),
             ),
             (
-                "zero shift",
                 0,
                 p.Properties(
                     step=p._STEP_MONTHS,
@@ -1432,24 +1598,29 @@ class TestWithOrdinalShift(unittest.TestCase):
                     ordinal_shift=0,
                 ),
             ),
-        ]
+        ],
+        ids=[
+            "positive shift",
+            "negative shift",
+            "zero shift",
+        ],
     )
-    def test_with_ordinal_shift(self, _: str, ordinal_shift: int, expected: p.Properties) -> None:
+    def test_with_ordinal_shift(self, ordinal_shift: int, expected: p.Properties) -> None:
         """Test Properties.with_ordinal_shift method with various ordinal shift values."""
         props = p.Properties(
             step=p._STEP_MONTHS, multiplier=12, month_offset=0, microsecond_offset=0, tzinfo=None, ordinal_shift=0
         )
         result = props.with_ordinal_shift(ordinal_shift)
-        self.assertEqual(result, expected)
+        assert result == expected
 
 
-class TestWithOffsetPeriodFields(unittest.TestCase):
+class TestWithOffsetPeriodFields:
     """Unit tests for the Properties.with_offset_period_fields method."""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "months_seconds,expected",
         [
             (
-                "offset period fields with months and seconds",
                 (6, 1_000_000),
                 p.Properties(
                     step=p._STEP_MONTHS,
@@ -1461,7 +1632,6 @@ class TestWithOffsetPeriodFields(unittest.TestCase):
                 ),
             ),
             (
-                "offset period fields with normalised months and seconds",
                 (12, 1_000_000),
                 p.Properties(
                     step=p._STEP_MONTHS,
@@ -1473,7 +1643,6 @@ class TestWithOffsetPeriodFields(unittest.TestCase):
                 ),
             ),
             (
-                "offset period fields with zero months and seconds",
                 (0, 0),
                 p.Properties(
                     step=p._STEP_MONTHS,
@@ -1484,11 +1653,19 @@ class TestWithOffsetPeriodFields(unittest.TestCase):
                     ordinal_shift=0,
                 ),
             ),
-        ]
+        ],
+        ids=[
+            "offset period fields with months and seconds",
+            "offset period fields with normalised months and seconds",
+            "offset period fields with zero months and seconds",
+        ],
     )
     @patch("time_stream.period.PeriodFields")
     def test_with_offset_period_fields(
-        self, _: str, months_seconds: tuple, expected: p.Properties, mock_period_fields: Mock
+        self,
+        mock_period_fields: Mock,
+        months_seconds: tuple,
+        expected: p.Properties,
     ) -> None:
         """Test Properties.with_offset_period_fields method with various PeriodFields inputs."""
         mock_months_seconds = Mock()
@@ -1500,16 +1677,16 @@ class TestWithOffsetPeriodFields(unittest.TestCase):
             step=p._STEP_MONTHS, multiplier=12, month_offset=0, microsecond_offset=0, tzinfo=None, ordinal_shift=0
         )
         result = props.with_offset_period_fields(mock_period_fields)
-        self.assertEqual(result, expected)
+        assert result == expected
 
 
-class TestWithOffsetMonthsSeconds(unittest.TestCase):
+class TestWithOffsetMonthsSeconds:
     """Unit tests for the Properties.with_offset_months_seconds method."""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "months_seconds,expected",
         [
             (
-                "offset period fields with months and seconds",
                 (6, 1_000_000),
                 p.Properties(
                     step=p._STEP_MONTHS,
@@ -1521,7 +1698,6 @@ class TestWithOffsetMonthsSeconds(unittest.TestCase):
                 ),
             ),
             (
-                "offset period fields with normalised months and seconds",
                 (12, 1_000_000),
                 p.Properties(
                     step=p._STEP_MONTHS,
@@ -1533,7 +1709,6 @@ class TestWithOffsetMonthsSeconds(unittest.TestCase):
                 ),
             ),
             (
-                "offset period fields with zero months and seconds",
                 (0, 0),
                 p.Properties(
                     step=p._STEP_MONTHS,
@@ -1544,9 +1719,14 @@ class TestWithOffsetMonthsSeconds(unittest.TestCase):
                     ordinal_shift=0,
                 ),
             ),
-        ]
+        ],
+        ids=[
+            "offset period fields with months and seconds",
+            "offset period fields with normalised months and seconds",
+            "offset period fields with zero months and seconds",
+        ],
     )
-    def test_with_offset_months_seconds(self, _: str, months_seconds: tuple, expected: p.Properties) -> None:
+    def test_with_offset_months_seconds(self, months_seconds: tuple, expected: p.Properties) -> None:
         """Test Properties.with_offset_months_seconds method with various MonthsSeconds inputs."""
         mock_months_seconds = Mock()
         mock_months_seconds.months = months_seconds[0]
@@ -1556,10 +1736,10 @@ class TestWithOffsetMonthsSeconds(unittest.TestCase):
             step=p._STEP_MONTHS, multiplier=12, month_offset=0, microsecond_offset=0, tzinfo=None, ordinal_shift=0
         )
         result = props.with_offset_months_seconds(mock_months_seconds)
-        self.assertEqual(result, expected)
+        assert result == expected
 
 
-class TestGetIso8601(unittest.TestCase):
+class TestGetIso8601:
     """Unit tests for the get_iso8601 method."""
 
     def test_get_iso8601_microseconds(self) -> None:
@@ -1568,7 +1748,7 @@ class TestGetIso8601(unittest.TestCase):
             step=p._STEP_MICROSECONDS, multiplier=1, month_offset=0, microsecond_offset=0, tzinfo=None, ordinal_shift=0
         )
         expected = p._get_microsecond_period_name(1)
-        self.assertEqual(properties.get_iso8601(), expected)
+        assert properties.get_iso8601() == expected
 
     def test_get_iso8601_seconds(self) -> None:
         """Test get_iso8601 method with step as _STEP_SECONDS."""
@@ -1576,7 +1756,7 @@ class TestGetIso8601(unittest.TestCase):
             step=p._STEP_SECONDS, multiplier=1, month_offset=0, microsecond_offset=0, tzinfo=None, ordinal_shift=0
         )
         expected = p._get_second_period_name(1)
-        self.assertEqual(properties.get_iso8601(), expected)
+        assert properties.get_iso8601() == expected
 
     def test_get_iso8601_months(self) -> None:
         """Test get_iso8601 method with step as _STEP_MONTHS."""
@@ -1584,10 +1764,10 @@ class TestGetIso8601(unittest.TestCase):
             step=p._STEP_MONTHS, multiplier=1, month_offset=0, microsecond_offset=0, tzinfo=None, ordinal_shift=0
         )
         expected = p._get_month_period_name(1)
-        self.assertEqual(properties.get_iso8601(), expected)
+        assert properties.get_iso8601() == expected
 
 
-class TestGetTimedelta(unittest.TestCase):
+class TestGetTimedelta:
     """Unit tests for the get_timedelta method."""
 
     def test_get_timedelta_microseconds(self) -> None:
@@ -1601,7 +1781,7 @@ class TestGetTimedelta(unittest.TestCase):
             ordinal_shift=0,
         )
         expected = datetime.timedelta(seconds=1, microseconds=500_000)
-        self.assertEqual(properties.get_timedelta(), expected)
+        assert properties.get_timedelta() == expected
 
     def test_get_timedelta_seconds(self) -> None:
         """Test get_timedelta method with step as _STEP_SECONDS."""
@@ -1609,17 +1789,17 @@ class TestGetTimedelta(unittest.TestCase):
             step=p._STEP_SECONDS, multiplier=3600, month_offset=0, microsecond_offset=0, tzinfo=None, ordinal_shift=0
         )
         expected = datetime.timedelta(seconds=3600)
-        self.assertEqual(properties.get_timedelta(), expected)
+        assert properties.get_timedelta() == expected
 
     def test_get_timedelta_months(self) -> None:
         """Test get_timedelta method with step as _STEP_MONTHS."""
         properties = p.Properties(
             step=p._STEP_MONTHS, multiplier=1, month_offset=0, microsecond_offset=0, tzinfo=None, ordinal_shift=0
         )
-        self.assertIsNone(properties.get_timedelta())
+        assert properties.get_timedelta() is None
 
 
-class TestAppendStepElems(unittest.TestCase):
+class TestAppendStepElems:
     """Unit tests for the _append_step_elems method."""
 
     def test_append_step_elems_microseconds(self) -> None:
@@ -1635,7 +1815,7 @@ class TestAppendStepElems(unittest.TestCase):
         elems = []
         properties._append_step_elems(elems)
         expected = ["T", "1.5", "S"]
-        self.assertEqual(elems, expected)
+        assert elems == expected
 
     def test_append_step_elems_seconds(self) -> None:
         """Test _append_step_elems method with step as _STEP_SECONDS."""
@@ -1645,7 +1825,7 @@ class TestAppendStepElems(unittest.TestCase):
         elems = []
         properties._append_step_elems(elems)
         expected = ["T", "1H"]
-        self.assertEqual(elems, expected)
+        assert elems == expected
 
     def test_append_step_elems_months(self) -> None:
         """Test _append_step_elems method with step as _STEP_MONTHS."""
@@ -1655,10 +1835,10 @@ class TestAppendStepElems(unittest.TestCase):
         elems = []
         properties._append_step_elems(elems)
         expected = ["1M"]
-        self.assertEqual(elems, expected)
+        assert elems == expected
 
 
-class TestAppendOffsetElems(unittest.TestCase):
+class TestAppendOffsetElems:
     """Unit tests for the _append_offset_elems method."""
 
     def test_append_offset_elems_no_offset(self) -> None:
@@ -1668,7 +1848,7 @@ class TestAppendOffsetElems(unittest.TestCase):
         )
         elems = []
         properties._append_offset_elems(elems)
-        self.assertEqual(elems, [])
+        assert elems == []
 
     def test_append_offset_elems_month_offset(self) -> None:
         """Test _append_offset_elems method with a month offset."""
@@ -1678,7 +1858,7 @@ class TestAppendOffsetElems(unittest.TestCase):
         elems = []
         properties._append_offset_elems(elems)
         expected = ["+", "2M"]
-        self.assertEqual(elems, expected)
+        assert elems == expected
 
     def test_append_offset_elems_microsecond_offset(self) -> None:
         """Test _append_offset_elems method with a microsecond offset."""
@@ -1693,7 +1873,7 @@ class TestAppendOffsetElems(unittest.TestCase):
         elems = []
         properties._append_offset_elems(elems)
         expected = ["+", "T", "1.5", "S"]
-        self.assertEqual(elems, expected)
+        assert elems == expected
 
     def test_append_offset_elems_both_offsets(self) -> None:
         """Test _append_offset_elems method with both month and microsecond offsets."""
@@ -1708,40 +1888,52 @@ class TestAppendOffsetElems(unittest.TestCase):
         elems = []
         properties._append_offset_elems(elems)
         expected = ["+", "2M", "T", "1.5", "S"]
-        self.assertEqual(elems, expected)
+        assert elems == expected
 
 
-class TestAppendTzElems(unittest.TestCase):
+class TestAppendTzElems:
     """Unit tests for the _append_tz_elems method."""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "tzinfo,expected",
         [
-            ("no_tzinfo", None, ["[", "]"]),
-            ("with_tzinfo", datetime.timezone(datetime.timedelta(hours=5, minutes=30)), ["[", "+05:30", "]"]),
-            ("with_utc", TZ_UTC, ["[", "Z", "]"]),
-        ]
+            (None, ["[", "]"]),
+            (datetime.timezone(datetime.timedelta(hours=5, minutes=30)), ["[", "+05:30", "]"]),
+            (TZ_UTC, ["[", "Z", "]"]),
+        ],
+        ids=[
+            "no_tzinfo",
+            "with_tzinfo",
+            "with_utc",
+        ],
     )
-    def test_append_tz_elems(self, _: str, tzinfo: datetime.tzinfo, expected: list) -> None:
+    def test_append_tz_elems(self, tzinfo: datetime.tzinfo, expected: list) -> None:
         """Test _append_tz_elems method with various tzinfo values."""
         properties = p.Properties(
             step=p._STEP_SECONDS, multiplier=1, month_offset=0, microsecond_offset=0, tzinfo=tzinfo, ordinal_shift=0
         )
         elems = []
         properties._append_tz_elems(elems)
-        self.assertEqual(elems, expected)
+        assert elems == expected
 
 
-class TestAppendShiftElems(unittest.TestCase):
+class TestAppendShiftElems:
     """Unit tests for the _append_shift_elems method."""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "ordinal_shift,expected",
         [
-            ("no_shift", 0, []),
-            ("positive_shift", 5, ["5"]),
-            ("negative_shift", -3, ["-3"]),
-        ]
+            (0, []),
+            (5, ["5"]),
+            (-3, ["-3"]),
+        ],
+        ids=[
+            "no_shift",
+            "positive_shift",
+            "negative_shift",
+        ],
     )
-    def test_append_shift_elems(self, _: str, ordinal_shift: int, expected: list) -> None:
+    def test_append_shift_elems(self, ordinal_shift: int, expected: list) -> None:
         """Test _append_shift_elems method with various ordinal shifts."""
         properties = p.Properties(
             step=p._STEP_SECONDS,
@@ -1753,10 +1945,10 @@ class TestAppendShiftElems(unittest.TestCase):
         )
         elems = []
         properties._append_shift_elems(elems)
-        self.assertEqual(elems, expected)
+        assert elems == expected
 
 
-class TestGetNaiveFormatter(unittest.TestCase):
+class TestGetNaiveFormatter:
     """Unit tests for the get_naive_formatter method."""
 
     def test_get_naive_formatter_microseconds(self) -> None:
@@ -1770,9 +1962,8 @@ class TestGetNaiveFormatter(unittest.TestCase):
             ordinal_shift=0,
         )
         formatter = properties.get_naive_formatter("T")
-        self.assertEqual(
-            formatter(datetime.datetime(2023, 10, 10, 10, 0)),
-            p._fmt_naive_microsecond(datetime.datetime(2023, 10, 10, 10, 0), "T"),
+        assert formatter(datetime.datetime(2023, 10, 10, 10, 0)) == p._fmt_naive_microsecond(
+            datetime.datetime(2023, 10, 10, 10, 0), "T"
         )
 
     def test_get_naive_formatter_milliseconds(self) -> None:
@@ -1786,9 +1977,8 @@ class TestGetNaiveFormatter(unittest.TestCase):
             ordinal_shift=0,
         )
         formatter = properties.get_naive_formatter("T")
-        self.assertEqual(
-            formatter(datetime.datetime(2023, 10, 10, 10, 0)),
-            p._fmt_naive_millisecond(datetime.datetime(2023, 10, 10, 10, 0), "T"),
+        assert formatter(datetime.datetime(2023, 10, 10, 10, 0)) == p._fmt_naive_millisecond(
+            datetime.datetime(2023, 10, 10, 10, 0), "T"
         )
 
     def test_get_naive_formatter_seconds(self) -> None:
@@ -1802,9 +1992,8 @@ class TestGetNaiveFormatter(unittest.TestCase):
             ordinal_shift=0,
         )
         formatter = properties.get_naive_formatter("T")
-        self.assertEqual(
-            formatter(datetime.datetime(2023, 10, 10, 10, 0)),
-            p._fmt_naive_second(datetime.datetime(2023, 10, 10, 10, 0), "T"),
+        assert formatter(datetime.datetime(2023, 10, 10, 10, 0)) == p._fmt_naive_second(
+            datetime.datetime(2023, 10, 10, 10, 0), "T"
         )
 
     def test_get_naive_formatter_minutes(self) -> None:
@@ -1818,9 +2007,8 @@ class TestGetNaiveFormatter(unittest.TestCase):
             ordinal_shift=0,
         )
         formatter = properties.get_naive_formatter("T")
-        self.assertEqual(
-            formatter(datetime.datetime(2023, 10, 10, 10, 0)),
-            p._fmt_naive_minute(datetime.datetime(2023, 10, 10, 10, 0), "T"),
+        assert formatter(datetime.datetime(2023, 10, 10, 10, 0)) == p._fmt_naive_minute(
+            datetime.datetime(2023, 10, 10, 10, 0), "T"
         )
 
     def test_get_naive_formatter_hours(self) -> None:
@@ -1834,9 +2022,8 @@ class TestGetNaiveFormatter(unittest.TestCase):
             ordinal_shift=0,
         )
         formatter = properties.get_naive_formatter("T")
-        self.assertEqual(
-            formatter(datetime.datetime(2023, 10, 10, 10, 0)),
-            p._fmt_naive_hour(datetime.datetime(2023, 10, 10, 10, 0), "T"),
+        assert formatter(datetime.datetime(2023, 10, 10, 10, 0)) == p._fmt_naive_hour(
+            datetime.datetime(2023, 10, 10, 10, 0), "T"
         )
 
     def test_get_naive_formatter_days(self) -> None:
@@ -1850,8 +2037,8 @@ class TestGetNaiveFormatter(unittest.TestCase):
             ordinal_shift=0,
         )
         formatter = properties.get_naive_formatter("T")
-        self.assertEqual(
-            formatter(datetime.datetime(2023, 10, 10, 10, 0)), p._fmt_naive_day(datetime.datetime(2023, 10, 10, 10, 0))
+        assert formatter(datetime.datetime(2023, 10, 10, 10, 0)) == p._fmt_naive_day(
+            datetime.datetime(2023, 10, 10, 10, 0)
         )
 
     def test_get_naive_formatter_months(self) -> None:
@@ -1860,9 +2047,8 @@ class TestGetNaiveFormatter(unittest.TestCase):
             step=p._STEP_MONTHS, multiplier=1, month_offset=1, microsecond_offset=0, tzinfo=None, ordinal_shift=0
         )
         formatter = properties.get_naive_formatter("T")
-        self.assertEqual(
-            formatter(datetime.datetime(2023, 10, 10, 10, 0)),
-            p._fmt_naive_month(datetime.datetime(2023, 10, 10, 10, 0)),
+        assert formatter(datetime.datetime(2023, 10, 10, 10, 0)) == p._fmt_naive_month(
+            datetime.datetime(2023, 10, 10, 10, 0)
         )
 
     def test_get_naive_formatter_years(self) -> None:
@@ -1871,25 +2057,33 @@ class TestGetNaiveFormatter(unittest.TestCase):
             step=p._STEP_MONTHS, multiplier=12, month_offset=12, microsecond_offset=0, tzinfo=None, ordinal_shift=0
         )
         formatter = properties.get_naive_formatter("T")
-        self.assertEqual(
-            formatter(datetime.datetime(2023, 10, 10, 10, 0)), p._fmt_naive_year(datetime.datetime(2023, 10, 10, 10, 0))
+        assert formatter(datetime.datetime(2023, 10, 10, 10, 0)) == p._fmt_naive_year(
+            datetime.datetime(2023, 10, 10, 10, 0)
         )
 
 
-class TestGetAwareFormatter(unittest.TestCase):
+class TestGetAwareFormatter:
     """Unit tests for the get_aware_formatter method."""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "step,multiplier,microsecond_offset,separator,expected_formatter",
         [
-            ("microseconds", p._STEP_MICROSECONDS, 1_500_000, 1, "T", p._fmt_aware_microsecond),
-            ("milliseconds", p._STEP_MICROSECONDS, 1_000_000, 1_000, "T", p._fmt_aware_millisecond),
-            ("seconds", p._STEP_SECONDS, 3600, 1_000_000, "T", p._fmt_aware_second),
-            ("minutes", p._STEP_SECONDS, 60, 60_000_000, "T", p._fmt_aware_minute),
-            ("hours", p._STEP_SECONDS, 3600 * 24, 3_600_000_000, "T", p._fmt_aware_hour),
-        ]
+            (p._STEP_MICROSECONDS, 1_500_000, 1, "T", p._fmt_aware_microsecond),
+            (p._STEP_MICROSECONDS, 1_000_000, 1_000, "T", p._fmt_aware_millisecond),
+            (p._STEP_SECONDS, 3600, 1_000_000, "T", p._fmt_aware_second),
+            (p._STEP_SECONDS, 60, 60_000_000, "T", p._fmt_aware_minute),
+            (p._STEP_SECONDS, 3600 * 24, 3_600_000_000, "T", p._fmt_aware_hour),
+        ],
+        ids=[
+            "microseconds",
+            "milliseconds",
+            "seconds",
+            "minutes",
+            "hours",
+        ],
     )
     def test_get_aware_formatter(
-        self, _: str, step: int, multiplier: int, microsecond_offset: int, separator: str, expected_formatter: Callable
+        self, step: int, multiplier: int, microsecond_offset: int, separator: str, expected_formatter: Callable
     ) -> None:
         """Test get_aware_formatter method with various steps and multipliers."""
         properties = p.Properties(
@@ -1901,42 +2095,54 @@ class TestGetAwareFormatter(unittest.TestCase):
             ordinal_shift=0,
         )
         formatter = properties.get_aware_formatter(separator)
-        self.assertEqual(
-            formatter(datetime.datetime(2023, 10, 10, 10, 0, tzinfo=TZ_UTC)),
-            expected_formatter(datetime.datetime(2023, 10, 10, 10, 0, tzinfo=TZ_UTC), separator),
+        assert formatter(datetime.datetime(2023, 10, 10, 10, 0, tzinfo=TZ_UTC)) == expected_formatter(
+            datetime.datetime(2023, 10, 10, 10, 0, tzinfo=TZ_UTC), separator
         )
 
 
-class TestPlInterval(unittest.TestCase):
+class TestPlInterval:
     """Unit tests for the pl_interval method."""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "step,multiplier,expected",
         [
-            ("microseconds", p._STEP_MICROSECONDS, 1_500_000, "1500000us"),
-            ("seconds", p._STEP_SECONDS, 3600, "3600s"),
-            ("months", p._STEP_MONTHS, 1, "1mo"),
-        ]
+            (p._STEP_MICROSECONDS, 1_500_000, "1500000us"),
+            (p._STEP_SECONDS, 3600, "3600s"),
+            (p._STEP_MONTHS, 1, "1mo"),
+        ],
+        ids=[
+            "microseconds",
+            "seconds",
+            "months",
+        ],
     )
-    def test_pl_interval_valid(self, _: str, step: int, multiplier: int, expected: str) -> None:
+    def test_pl_interval_valid(self, step: int, multiplier: int, expected: str) -> None:
         """Test pl_interval method with valid steps and multipliers."""
         properties = p.Properties(
             step=step, multiplier=multiplier, month_offset=0, microsecond_offset=0, tzinfo=None, ordinal_shift=0
         )
-        self.assertEqual(properties.pl_interval(), expected)
+        assert properties.pl_interval() == expected
 
 
-class TestPlOffset(unittest.TestCase):
+class TestPlOffset:
     """Unit tests for the pl_offset method."""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "step,month_offset,microsecond_offset,expected",
         [
-            ("no_offset", p._STEP_SECONDS, 0, 0, "0mo0us"),
-            ("month_offset", p._STEP_MONTHS, 2, 0, "2mo0us"),
-            ("microsecond_offset", p._STEP_MICROSECONDS, 0, 1_500_000, "0mo1500000us"),
-            ("both_offsets", p._STEP_MONTHS, 2, 1_500_000, "2mo1500000us"),
-        ]
+            (p._STEP_SECONDS, 0, 0, "0mo0us"),
+            (p._STEP_MONTHS, 2, 0, "2mo0us"),
+            (p._STEP_MICROSECONDS, 0, 1_500_000, "0mo1500000us"),
+            (p._STEP_MONTHS, 2, 1_500_000, "2mo1500000us"),
+        ],
+        ids=[
+            "no_offset",
+            "month_offset",
+            "microsecond_offset",
+            "both_offsets",
+        ],
     )
-    def test_pl_offset(self, _: str, step: int, month_offset: int, microsecond_offset: int, expected: str) -> None:
+    def test_pl_offset(self, step: int, month_offset: int, microsecond_offset: int, expected: str) -> None:
         """Test pl_offset method with various month and microsecond offsets."""
         properties = p.Properties(
             step=step,
@@ -1946,44 +2152,62 @@ class TestPlOffset(unittest.TestCase):
             tzinfo=None,
             ordinal_shift=0,
         )
-        self.assertEqual(properties.pl_offset(), expected)
+        assert properties.pl_offset() == expected
 
 
-class TestIsEpochAgnostic(unittest.TestCase):
+class TestIsEpochAgnostic:
     """Unit tests for the is_epoch_agnostic method."""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "step,multiplier,expected",
         [
-            ("microseconds_epoch_agnostic", p._STEP_MICROSECONDS, 1, True),
-            ("microseconds_not_epoch_agnostic", p._STEP_MICROSECONDS, 1_500_000, False),
-            ("seconds_epoch_agnostic", p._STEP_SECONDS, 1, True),
-            ("seconds_not_epoch_agnostic", p._STEP_SECONDS, 86_401, False),
-            ("months_epoch_agnostic", p._STEP_MONTHS, 1, True),
-            ("months_not_epoch_agnostic", p._STEP_MONTHS, 13, False),
-        ]
+            (p._STEP_MICROSECONDS, 1, True),
+            (p._STEP_MICROSECONDS, 1_500_000, False),
+            (p._STEP_SECONDS, 1, True),
+            (p._STEP_SECONDS, 86_401, False),
+            (p._STEP_MONTHS, 1, True),
+            (p._STEP_MONTHS, 13, False),
+        ],
+        ids=[
+            "microseconds_epoch_agnostic",
+            "microseconds_not_epoch_agnostic",
+            "seconds_epoch_agnostic",
+            "seconds_not_epoch_agnostic",
+            "months_epoch_agnostic",
+            "months_not_epoch_agnostic",
+        ],
     )
-    def test_is_epoch_agnostic(self, _: str, step: int, multiplier: int, expected: bool) -> None:
+    def test_is_epoch_agnostic(self, step: int, multiplier: int, expected: bool) -> None:
         """Test is_epoch_agnostic method with various steps and multipliers."""
         properties = p.Properties(
             step=step, multiplier=multiplier, month_offset=0, microsecond_offset=0, tzinfo=None, ordinal_shift=0
         )
-        self.assertEqual(properties.is_epoch_agnostic(), expected)
+        assert properties.is_epoch_agnostic() == expected
 
 
-class TestPropertiesStrMethod(unittest.TestCase):
+class TestPropertiesStrMethod:
     """Unit tests for the __str__ method."""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "step,multiplier,microsecond_offset,expected",
         [
-            ("microseconds", p._STEP_MICROSECONDS, 1_500_000, 0, "PT1.5S"),
-            ("seconds", p._STEP_SECONDS, 3600, 0, "PT1H"),
-            ("months", p._STEP_MONTHS, 1, 0, "P1M"),
-            ("microseconds_with_offset", p._STEP_MICROSECONDS, 1_500_000, 1, "PT1.5S+T0.000001S"),
-            ("seconds_with_offset", p._STEP_SECONDS, 3600, 1, "PT1H+T0.000001S"),
-            ("months_with_offset", p._STEP_MONTHS, 1, 1, "P1M+T0.000001S"),
-        ]
+            (p._STEP_MICROSECONDS, 1_500_000, 0, "PT1.5S"),
+            (p._STEP_SECONDS, 3600, 0, "PT1H"),
+            (p._STEP_MONTHS, 1, 0, "P1M"),
+            (p._STEP_MICROSECONDS, 1_500_000, 1, "PT1.5S+T0.000001S"),
+            (p._STEP_SECONDS, 3600, 1, "PT1H+T0.000001S"),
+            (p._STEP_MONTHS, 1, 1, "P1M+T0.000001S"),
+        ],
+        ids=[
+            "microseconds",
+            "seconds",
+            "months",
+            "microseconds_with_offset",
+            "seconds_with_offset",
+            "months_with_offset",
+        ],
     )
-    def test_str_method(self, _: str, step: int, multiplier: int, microsecond_offset: int, expected: str) -> None:
+    def test_str_method(self, step: int, multiplier: int, microsecond_offset: int, expected: str) -> None:
         """Test __str__ method with various steps, multipliers, and offsets."""
         properties = p.Properties(
             step=step,
@@ -1993,27 +2217,37 @@ class TestPropertiesStrMethod(unittest.TestCase):
             tzinfo=None,
             ordinal_shift=0,
         )
-        self.assertEqual(str(properties), expected)
+        assert str(properties) == expected
 
 
-class TestPropertiesReprMethod(unittest.TestCase):
+class TestPropertiesReprMethod:
     """Unit tests for the __repr__ method."""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "step,multiplier,microsecond_offset,tzinfo,ordinal_shift,expected",
         [
-            ("microseconds", p._STEP_MICROSECONDS, 1_500_000, 0, None, 0, "PT1.5S[]"),
-            ("seconds", p._STEP_SECONDS, 3600, 0, None, 0, "PT1H[]"),
-            ("months", p._STEP_MONTHS, 1, 0, None, 0, "P1M[]"),
-            ("microseconds_with_offset", p._STEP_MICROSECONDS, 1_500_000, 1, None, 0, "PT1.5S+T0.000001S[]"),
-            ("seconds_with_offset", p._STEP_SECONDS, 3600, 1, None, 0, "PT1H+T0.000001S[]"),
-            ("months_with_offset", p._STEP_MONTHS, 1, 1, None, 0, "P1M+T0.000001S[]"),
-            ("with_tzinfo", p._STEP_SECONDS, 3600, 0, TZ_UTC, 0, "PT1H[Z]"),
-            ("with_ordinal_shift", p._STEP_SECONDS, 3600, 0, None, 5, "PT1H[]5"),
-        ]
+            (p._STEP_MICROSECONDS, 1_500_000, 0, None, 0, "PT1.5S[]"),
+            (p._STEP_SECONDS, 3600, 0, None, 0, "PT1H[]"),
+            (p._STEP_MONTHS, 1, 0, None, 0, "P1M[]"),
+            (p._STEP_MICROSECONDS, 1_500_000, 1, None, 0, "PT1.5S+T0.000001S[]"),
+            (p._STEP_SECONDS, 3600, 1, None, 0, "PT1H+T0.000001S[]"),
+            (p._STEP_MONTHS, 1, 1, None, 0, "P1M+T0.000001S[]"),
+            (p._STEP_SECONDS, 3600, 0, TZ_UTC, 0, "PT1H[Z]"),
+            (p._STEP_SECONDS, 3600, 0, None, 5, "PT1H[]5"),
+        ],
+        ids=[
+            "microseconds",
+            "seconds",
+            "months",
+            "microseconds_with_offset",
+            "seconds_with_offset",
+            "months_with_offset",
+            "with_tzinfo",
+            "with_ordinal_shift",
+        ],
     )
     def test_repr_method(
         self,
-        _: str,
         step: int,
         multiplier: int,
         microsecond_offset: int,
@@ -2030,131 +2264,166 @@ class TestPropertiesReprMethod(unittest.TestCase):
             tzinfo=tzinfo,
             ordinal_shift=ordinal_shift,
         )
-        self.assertEqual(repr(properties), expected)
+        assert repr(properties) == expected
 
 
-class TestMonthsSecondsPostInit(unittest.TestCase):
+class TestMonthsSecondsPostInit:
     """Unit tests for the __post_init__ method."""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "string,months,seconds,microseconds",
         [
-            ("valid_months", "P1M", 1, 0, 0),
-        ]
+            ("P1M", 1, 0, 0),
+        ],
+        ids=[
+            "valid_months",
+        ],
     )
-    def test_post_init_valid(self, _: str, string: str, months: int, seconds: int, microseconds: int) -> None:
+    def test_post_init_valid(self, string: str, months: int, seconds: int, microseconds: int) -> None:
         """Test __post_init__ method with valid periods."""
         period = p.MonthsSeconds(string, months, seconds, microseconds)
-        self.assertEqual(period.string, string)
-        self.assertEqual(period.months, months)
-        self.assertEqual(period.seconds, seconds)
-        self.assertEqual(period.microseconds, microseconds)
+        assert period.string == string
+        assert period.months == months
+        assert period.seconds == seconds
+        assert period.microseconds == microseconds
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "string,months,seconds,microseconds",
         [
-            ("invalid_negative_months", "P-1M", -1, 0, 0),
-            ("invalid_negative_seconds", "PT-1S", 0, -1, 0),
-            ("invalid_negative_microseconds", "PT-1us", 0, 0, -1),
-            ("invalid_large_microseconds", "PT1.000001S", 0, 0, 1_000_001),
-            ("invalid_zero_period", "P0D", 0, 0, 0),
-        ]
+            ("P-1M", -1, 0, 0),
+            ("PT-1S", 0, -1, 0),
+            ("PT-1us", 0, 0, -1),
+            ("PT1.000001S", 0, 0, 1_000_001),
+            ("P0D", 0, 0, 0),
+        ],
+        ids=[
+            "invalid_negative_months",
+            "invalid_negative_seconds",
+            "invalid_negative_microseconds",
+            "invalid_large_microseconds",
+            "invalid_zero_period",
+        ],
     )
-    def test_post_init_invalid(self, _: str, string: str, months: int, seconds: int, microseconds: int) -> None:
+    def test_post_init_invalid(self, string: str, months: int, seconds: int, microseconds: int) -> None:
         """Test __post_init__ method with invalid periods."""
-        with self.assertRaises(PeriodValidationError):
+        with pytest.raises(PeriodValidationError):
             p.MonthsSeconds(string, months, seconds, microseconds)
 
 
-class TestGetStepAndMultiplier(unittest.TestCase):
+class TestGetStepAndMultiplier:
     """Unit tests for the get_step_and_multiplier method."""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "string,months,seconds,microseconds,expected",
         [
-            ("months_only", "P1M", 1, 0, 0, (p._STEP_MONTHS, 1)),
-            ("seconds_only", "PT1S", 0, 1, 0, (p._STEP_SECONDS, 1)),
-            ("microseconds_only", "PT0.000001S", 0, 0, 1, (p._STEP_MICROSECONDS, 1)),
-        ]
+            ("P1M", 1, 0, 0, (p._STEP_MONTHS, 1)),
+            ("PT1S", 0, 1, 0, (p._STEP_SECONDS, 1)),
+            ("PT0.000001S", 0, 0, 1, (p._STEP_MICROSECONDS, 1)),
+        ],
+        ids=[
+            "months_only",
+            "seconds_only",
+            "microseconds_only",
+        ],
     )
     def test_get_step_and_multiplier_valid(
-        self, _: str, string: str, months: int, seconds: int, microseconds: int, expected: tuple
+        self, string: str, months: int, seconds: int, microseconds: int, expected: tuple
     ) -> None:
         """Test get_step_and_multiplier method with valid periods."""
         period = p.MonthsSeconds(string, months, seconds, microseconds)
-        self.assertEqual(period.get_step_and_multiplier(), expected)
+        assert period.get_step_and_multiplier() == expected
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "string,months,seconds,microseconds",
         [
-            ("invalid_combination", "P1M1S", 1, 1, 0),
-        ]
+            ("P1M1S", 1, 1, 0),
+        ],
+        ids=[
+            "invalid_combination",
+        ],
     )
-    def test_get_step_and_multiplier_invalid(
-        self, _: str, string: str, months: int, seconds: int, microseconds: int
-    ) -> None:
+    def test_get_step_and_multiplier_invalid(self, string: str, months: int, seconds: int, microseconds: int) -> None:
         """Test get_step_and_multiplier method with invalid periods."""
         period = p.MonthsSeconds(string, months, seconds, microseconds)
-        with self.assertRaises(PeriodValidationError):
+        with pytest.raises(PeriodValidationError):
             period.get_step_and_multiplier()
 
 
-class TestTotalMicroseconds(unittest.TestCase):
+class TestTotalMicroseconds:
     """Unit tests for the total_microseconds method."""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "string,months,seconds,microseconds,expected",
         [
-            ("seconds_only", "PT1S", 0, 1, 0, 1_000_000),
-            ("microseconds_only", "PT0.000001S", 0, 0, 1, 1),
-            ("seconds_and_microseconds", "PT1.000001S", 0, 1, 1, 1_000_001),
-        ]
+            ("PT1S", 0, 1, 0, 1_000_000),
+            ("PT0.000001S", 0, 0, 1, 1),
+            ("PT1.000001S", 0, 1, 1, 1_000_001),
+        ],
+        ids=[
+            "seconds_only",
+            "microseconds_only",
+            "seconds_and_microseconds",
+        ],
     )
-    def test_total_microseconds(
-        self, _: str, string: str, months: int, seconds: int, microseconds: int, expected: int
-    ) -> None:
+    def test_total_microseconds(self, string: str, months: int, seconds: int, microseconds: int, expected: int) -> None:
         """Test total_microseconds method with various periods."""
         period = p.MonthsSeconds(string, months, seconds, microseconds)
-        self.assertEqual(period.total_microseconds(), expected)
+        assert period.total_microseconds() == expected
 
 
-class TestMonthsSecondsGetBaseProperties(unittest.TestCase):
+class TestMonthsSecondsGetBaseProperties:
     """Unit tests for the get_base_properties method."""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "string,months,seconds,microseconds,expected",
         [
-            ("months_only", "P1M", 1, 0, 0, p.Properties(p._STEP_MONTHS, 1, 0, 0, None, 0)),
-            ("seconds_only", "PT1S", 0, 1, 0, p.Properties(p._STEP_SECONDS, 1, 0, 0, None, 0)),
-            ("microseconds_only", "PT0.000001S", 0, 0, 1, p.Properties(p._STEP_MICROSECONDS, 1, 0, 0, None, 0)),
-        ]
+            ("P1M", 1, 0, 0, p.Properties(p._STEP_MONTHS, 1, 0, 0, None, 0)),
+            ("PT1S", 0, 1, 0, p.Properties(p._STEP_SECONDS, 1, 0, 0, None, 0)),
+            ("PT0.000001S", 0, 0, 1, p.Properties(p._STEP_MICROSECONDS, 1, 0, 0, None, 0)),
+        ],
+        ids=[
+            "months_only",
+            "seconds_only",
+            "microseconds_only",
+        ],
     )
     def test_get_base_properties_valid(
-        self, _: str, string: str, months: int, seconds: int, microseconds: int, expected: p.Properties
+        self, string: str, months: int, seconds: int, microseconds: int, expected: p.Properties
     ) -> None:
         """Test get_base_properties method with valid periods."""
         period = p.MonthsSeconds(string, months, seconds, microseconds)
-        self.assertEqual(period.get_base_properties(), expected)
+        assert period.get_base_properties() == expected
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "string,months,seconds,microseconds",
         [
-            ("invalid_combination", "P1M1S", 1, 1, 0),
-        ]
+            ("P1M1S", 1, 1, 0),
+        ],
+        ids=[
+            "invalid_combination",
+        ],
     )
-    def test_get_base_properties_invalid(
-        self, _: str, string: str, months: int, seconds: int, microseconds: int
-    ) -> None:
+    def test_get_base_properties_invalid(self, string: str, months: int, seconds: int, microseconds: int) -> None:
         """Test get_base_properties method with invalid periods."""
         period = p.MonthsSeconds(string, months, seconds, microseconds)
-        with self.assertRaises(PeriodValidationError):
+        with pytest.raises(PeriodValidationError):
             period.get_base_properties()
 
 
-class TestPeriodFieldsPostInit(unittest.TestCase):
+class TestPeriodFieldsPostInit:
     """Unit tests for the __post_init__ method."""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "string,years,months,days,hours,minutes,seconds,microseconds",
         [
-            ("valid_period", "P1Y1M1DT1H1M1S", 1, 1, 1, 1, 1, 1, 1),
-        ]
+            ("P1Y1M1DT1H1M1S", 1, 1, 1, 1, 1, 1, 1),
+        ],
+        ids=[
+            "valid_period",
+        ],
     )
     def test_post_init_valid(
         self,
-        _: str,
         string: str,
         years: int,
         months: int,
@@ -2166,30 +2435,40 @@ class TestPeriodFieldsPostInit(unittest.TestCase):
     ) -> None:
         """Test __post_init__ method with valid periods."""
         period = p.PeriodFields(string, years, months, days, hours, minutes, seconds, microseconds)
-        self.assertEqual(period.string, string)
-        self.assertEqual(period.years, years)
-        self.assertEqual(period.months, months)
-        self.assertEqual(period.days, days)
-        self.assertEqual(period.hours, hours)
-        self.assertEqual(period.minutes, minutes)
-        self.assertEqual(period.seconds, seconds)
-        self.assertEqual(period.microseconds, microseconds)
+        assert period.string == string
+        assert period.years == years
+        assert period.months == months
+        assert period.days == days
+        assert period.hours == hours
+        assert period.minutes == minutes
+        assert period.seconds == seconds
+        assert period.microseconds == microseconds
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "string,years,months,days,hours,minutes,seconds,microseconds",
         [
-            ("invalid_negative_years", "P-1Y", -1, 0, 0, 0, 0, 0, 0),
-            ("invalid_negative_months", "P-1M", 0, -1, 0, 0, 0, 0, 0),
-            ("invalid_negative_days", "P-1D", 0, 0, -1, 0, 0, 0, 0),
-            ("invalid_negative_hours", "PT-1H", 0, 0, 0, -1, 0, 0, 0),
-            ("invalid_negative_minutes", "PT-1M", 0, 0, 0, 0, -1, 0, 0),
-            ("invalid_negative_seconds", "PT-1S", 0, 0, 0, 0, 0, -1, 0),
-            ("invalid_negative_microseconds", "PT-1us", 0, 0, 0, 0, 0, 0, -1),
-            ("invalid_large_microseconds", "PT1.000001S", 0, 0, 0, 0, 0, 0, 1_000_001),
-        ]
+            ("P-1Y", -1, 0, 0, 0, 0, 0, 0),
+            ("P-1M", 0, -1, 0, 0, 0, 0, 0),
+            ("P-1D", 0, 0, -1, 0, 0, 0, 0),
+            ("PT-1H", 0, 0, 0, -1, 0, 0, 0),
+            ("PT-1M", 0, 0, 0, 0, -1, 0, 0),
+            ("PT-1S", 0, 0, 0, 0, 0, -1, 0),
+            ("PT-1us", 0, 0, 0, 0, 0, 0, -1),
+            ("PT1.000001S", 0, 0, 0, 0, 0, 0, 1_000_001),
+        ],
+        ids=[
+            "invalid_negative_years",
+            "invalid_negative_months",
+            "invalid_negative_days",
+            "invalid_negative_hours",
+            "invalid_negative_minutes",
+            "invalid_negative_seconds",
+            "invalid_negative_microseconds",
+            "invalid_large_microseconds",
+        ],
     )
     def test_post_init_invalid(
         self,
-        _: str,
         string: str,
         years: int,
         months: int,
@@ -2200,21 +2479,24 @@ class TestPeriodFieldsPostInit(unittest.TestCase):
         microseconds: int,
     ) -> None:
         """Test __post_init__ method with invalid periods."""
-        with self.assertRaises(PeriodValidationError):
+        with pytest.raises(PeriodValidationError):
             p.PeriodFields(string, years, months, days, hours, minutes, seconds, microseconds)
 
 
-class TestGetMonthsSeconds(unittest.TestCase):
+class TestGetMonthsSeconds:
     """Unit tests for the get_months_seconds method."""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "string,years,months,days,hours,minutes,seconds,microseconds,expected",
         [
-            ("valid_period", "P1Y1M1DT1H1M1S", 1, 1, 1, 1, 1, 1, 1, p.MonthsSeconds("P1Y1M1DT1H1M1S", 13, 90061, 1)),
-        ]
+            ("P1Y1M1DT1H1M1S", 1, 1, 1, 1, 1, 1, 1, p.MonthsSeconds("P1Y1M1DT1H1M1S", 13, 90061, 1)),
+        ],
+        ids=[
+            "valid_period",
+        ],
     )
     def test_get_months_seconds(
         self,
-        _: str,
         string: str,
         years: int,
         months: int,
@@ -2227,17 +2509,17 @@ class TestGetMonthsSeconds(unittest.TestCase):
     ) -> None:
         """Test get_months_seconds method with valid periods."""
         period = p.PeriodFields(string, years, months, days, hours, minutes, seconds, microseconds)
-        self.assertEqual(period.get_months_seconds(), expected)
+        assert period.get_months_seconds() == expected
 
 
-class TestPeriodFieldsGetBaseProperties(unittest.TestCase):
+class TestPeriodFieldsGetBaseProperties:
     """Unit tests for the get_base_properties method."""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "string,years,months,days,hours,minutes,seconds,microseconds,expected",
         [
-            ("valid_period_months", "P1Y1M", 1, 1, 0, 0, 0, 0, 0, p.Properties(p._STEP_MONTHS, 13, 0, 0, None, 0)),
+            ("P1Y1M", 1, 1, 0, 0, 0, 0, 0, p.Properties(p._STEP_MONTHS, 13, 0, 0, None, 0)),
             (
-                "valid_period_seconds",
                 "P1DT1H1M1S",
                 0,
                 0,
@@ -2249,7 +2531,6 @@ class TestPeriodFieldsGetBaseProperties(unittest.TestCase):
                 p.Properties(p._STEP_SECONDS, 86_400 + 60 * 60 + 60 + 1, 0, 0, None, 0),
             ),
             (
-                "valid_period_microseconds",
                 "P1.234567S",
                 0,
                 0,
@@ -2260,11 +2541,15 @@ class TestPeriodFieldsGetBaseProperties(unittest.TestCase):
                 234_567,
                 p.Properties(p._STEP_MICROSECONDS, 1_234_567, 0, 0, None, 0),
             ),
-        ]
+        ],
+        ids=[
+            "valid_period_months",
+            "valid_period_seconds",
+            "valid_period_microseconds",
+        ],
     )
     def test_get_base_properties(
         self,
-        _: str,
         string: str,
         years: int,
         months: int,
@@ -2277,45 +2562,62 @@ class TestPeriodFieldsGetBaseProperties(unittest.TestCase):
     ) -> None:
         """Test get_base_properties method with valid periods."""
         period = p.PeriodFields(string, years, months, days, hours, minutes, seconds, microseconds)
-        self.assertEqual(period.get_base_properties(), expected)
+        assert period.get_base_properties() == expected
 
 
-class TestStr2Int(unittest.TestCase):
+class TestStr2Int:
     """Unit tests for the _str2int function."""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "num,default,expected",
         [
-            ("none_default_0", None, 0, 0),
-            ("none_default_5", None, 5, 5),
-            ("string_number", "10", 0, 10),
-            ("string_negative_number", "-10", 0, -10),
-            ("string_zero", "0", 0, 0),
-        ]
+            (None, 0, 0),
+            (None, 5, 5),
+            ("10", 0, 10),
+            ("-10", 0, -10),
+            ("0", 0, 0),
+        ],
+        ids=[
+            "none_default_0",
+            "none_default_5",
+            "string_number",
+            "string_negative_number",
+            "string_zero",
+        ],
     )
-    def test_str2int(self, _: str, num: str | None, default: int, expected: int) -> None:
+    def test_str2int(self, num: str | None, default: int, expected: int) -> None:
         """Test _str2int function with various inputs."""
-        self.assertEqual(p._str2int(num, default), expected)
+        assert p._str2int(num, default) == expected
 
 
-class TestStr2Microseconds(unittest.TestCase):
+class TestStr2Microseconds:
     """Unit tests for the _str2microseconds function."""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "num,default,expected",
         [
-            ("none_default_0", None, 0, 0),
-            ("none_default_5", None, 5, 5),
-            ("microseconds_3_digits", "123", 0, 123000),
-            ("microseconds_6_digits", "123456", 0, 123456),
-            ("microseconds_less_than_6_digits", "123", 0, 123000),
-            ("microseconds_more_than_6_digits", "1234567", 0, 123456),
-        ]
+            (None, 0, 0),
+            (None, 5, 5),
+            ("123", 0, 123000),
+            ("123456", 0, 123456),
+            ("123", 0, 123000),
+            ("1234567", 0, 123456),
+        ],
+        ids=[
+            "none_default_0",
+            "none_default_5",
+            "microseconds_3_digits",
+            "microseconds_6_digits",
+            "microseconds_less_than_6_digits",
+            "microseconds_more_than_6_digits",
+        ],
     )
-    def test_str2microseconds(self, _: str, num: str | None, default: int, expected: int) -> None:
+    def test_str2microseconds(self, num: str | None, default: int, expected: int) -> None:
         """Test _str2microseconds function with various inputs."""
-        self.assertEqual(p._str2microseconds(num, default), expected)
+        assert p._str2microseconds(num, default) == expected
 
 
-class TestPeriodMatch(unittest.TestCase):
+class TestPeriodMatch:
     """Unit tests for the _period_match function."""
 
     def test_period_match_valid(self) -> None:
@@ -2325,23 +2627,30 @@ class TestPeriodMatch(unittest.TestCase):
         )
         matcher = pattern.match("2023-10-25T01:02:03.456789")
         expected = p.PeriodFields("2023-10-25T01:02:03.456789", 2023, 10, 25, 1, 2, 3, 456789)
-        self.assertEqual(p._period_match("prefix", matcher), expected)
+        assert p._period_match("prefix", matcher) == expected
 
 
-class TestTotalMicroseconds2(unittest.TestCase):
+class TestTotalMicroseconds2:
     """Unit tests for the _total_microseconds function."""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "delta,expected",
         [
-            ("one_second", datetime.timedelta(seconds=1), 1_000_000),
-            ("one_day", datetime.timedelta(days=1), 86_400_000_000),
-            ("one_day_one_second", datetime.timedelta(days=1, seconds=1), 86_401_000_000),
-            ("one_day_one_microsecond", datetime.timedelta(days=1, microseconds=1), 86_400_000_001),
-        ]
+            (datetime.timedelta(seconds=1), 1_000_000),
+            (datetime.timedelta(days=1), 86_400_000_000),
+            (datetime.timedelta(days=1, seconds=1), 86_401_000_000),
+            (datetime.timedelta(days=1, microseconds=1), 86_400_000_001),
+        ],
+        ids=[
+            "one_second",
+            "one_day",
+            "one_day_one_second",
+            "one_day_one_microsecond",
+        ],
     )
-    def test_total_microseconds(self, _: str, delta: datetime.timedelta, expected: int) -> None:
+    def test_total_microseconds(self, delta: datetime.timedelta, expected: int) -> None:
         """Test _total_microseconds function with various inputs."""
-        self.assertEqual(p._total_microseconds(delta), expected)
+        assert p._total_microseconds(delta) == expected
 
 
 # A set of strings that yield valid Period objects when passed to the
@@ -2537,54 +2846,55 @@ _BAD_REPR = set(
 )
 
 
-class TestPeriodOf(unittest.TestCase):
+class TestPeriodOf:
     """Test Period.of"""
 
-    @parameterized.expand(sorted(_GOOD_ISO_DURATION | _GOOD_DURATION | _GOOD_DATE_AND_DURATION | _GOOD_REPR))
+    @pytest.mark.parametrize("text", sorted(_GOOD_ISO_DURATION | _GOOD_DURATION | _GOOD_DATE_AND_DURATION | _GOOD_REPR))
     def test_good(self, text: Any) -> None:
         """Test Period.of against a set of known good arguments"""
         period: Period = Period.of(text)
-        self.assertIsInstance(period, Period)
+        assert isinstance(period, Period)
 
-    @parameterized.expand(sorted(_BAD_ISO_DURATION | _BAD_DURATION))
+    @pytest.mark.parametrize("text", sorted(_BAD_ISO_DURATION | _BAD_DURATION))
     def test_bad(self, text: Any) -> None:
         """Test Period.of against a set of known bad arguments"""
-        with self.assertRaises((PeriodParsingError, PeriodValidationError)):  # type: ignore[arg-type]
+        with pytest.raises((PeriodParsingError, PeriodValidationError)):  # type: ignore[arg-type]
             Period.of(text)
 
 
-class TestPeriodOfIsoDuration(unittest.TestCase):
+class TestPeriodOfIsoDuration:
     """Test Period.of_iso_duration static method"""
 
-    @parameterized.expand(sorted(_GOOD_ISO_DURATION))
+    @pytest.mark.parametrize("text", sorted(_GOOD_ISO_DURATION))
     def test_good(self, text: Any) -> None:
         """Test Period.of_iso_duration against a set of known good arguments"""
         period: Period = Period.of_iso_duration(text)
-        self.assertIsInstance(period, Period)
+        assert isinstance(period, Period)
 
-    @parameterized.expand(sorted(_BAD_ISO_DURATION))
+    @pytest.mark.parametrize("text", sorted(_BAD_ISO_DURATION))
     def test_bad(self, text: Any) -> None:
         """Test Period.of_iso_duration against a set of known bad arguments"""
-        with self.assertRaises((PeriodParsingError, PeriodValidationError)):  # type: ignore[arg-type]
+        with pytest.raises((PeriodParsingError, PeriodValidationError)):  # type: ignore[arg-type]
             Period.of_iso_duration(text)
 
 
-class TestPeriodOfDuration(unittest.TestCase):
+class TestPeriodOfDuration:
     """Test Period.of_duration static method"""
 
-    @parameterized.expand(sorted(_GOOD_ISO_DURATION | _GOOD_DURATION))
+    @pytest.mark.parametrize("text", sorted(_GOOD_ISO_DURATION | _GOOD_DURATION))
     def test_good(self, text: Any) -> None:
         """Test Period.of_duration against a set of known good arguments"""
         period: Period = Period.of_duration(text)
-        self.assertIsInstance(period, Period)
+        assert isinstance(period, Period)
 
-    @parameterized.expand(sorted(_BAD_ISO_DURATION | _BAD_DURATION))
+    @pytest.mark.parametrize("text", sorted(_BAD_ISO_DURATION | _BAD_DURATION))
     def test_bad(self, text: Any) -> None:
         """Test Period.of_duration against a set of known bad arguments"""
-        with self.assertRaises((PeriodParsingError, PeriodValidationError)):  # type: ignore[arg-type]
+        with pytest.raises((PeriodParsingError, PeriodValidationError)):  # type: ignore[arg-type]
             Period.of_duration(text)
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,other_names",
         [
             ("P1Y", {"P12M"}),
             ("P2Y", {"P24M"}),
@@ -2592,64 +2902,65 @@ class TestPeriodOfDuration(unittest.TestCase):
             ("P2D", {"P48H", "PT2880M", "P172800S"}),
             ("P1H", {"PT60M", "P3600S"}),
             ("PT1M", {"P60S"}),
-        ]
+        ],
     )
     def test_equivalent(self, name: str, other_names: set[str]) -> None:
         """Test Period.with_month_offset method"""
         period: Period = Period.of_duration(name)
         for other_name in sorted(other_names):
             other: Period = Period.of_duration(other_name)
-            self.assertEqual(period, other)
+            assert period == other
 
 
-class TestPeriodOfDateAndDuration(unittest.TestCase):
+class TestPeriodOfDateAndDuration:
     """Test Period.of_date_and_duration static method"""
 
-    @parameterized.expand(sorted(_GOOD_DATE_AND_DURATION))
+    @pytest.mark.parametrize("text", sorted(_GOOD_DATE_AND_DURATION))
     def test_good(self, text: Any) -> None:
         """Test Period.of_date_and_duration against a set of known good arguments"""
         period: Period = Period.of_date_and_duration(text)
-        self.assertIsInstance(period, Period)
+        assert isinstance(period, Period)
 
-    @parameterized.expand(sorted(_BAD_DATE_AND_DURATION))
+    @pytest.mark.parametrize("text", sorted(_BAD_DATE_AND_DURATION))
     def test_bad(self, text: Any) -> None:
         """Test Period.of_date_and_duration against a set of known bad arguments"""
-        with self.assertRaises((PeriodParsingError, PeriodValidationError)):  # type: ignore[arg-type]
+        with pytest.raises((PeriodParsingError, PeriodValidationError)):  # type: ignore[arg-type]
             Period.of_date_and_duration(text)
 
 
-class TestPeriodOfRepr(unittest.TestCase):
+class TestPeriodOfRepr:
     """Test Period.of_repr static method"""
 
-    @parameterized.expand(sorted(_GOOD_REPR))
+    @pytest.mark.parametrize("text", sorted(_GOOD_REPR))
     def test_good(self, text: Any) -> None:
         """Test Period.of_repr against a set of known good arguments"""
         period: Period = Period.of_repr(text)
-        self.assertIsInstance(period, Period)
+        assert isinstance(period, Period)
 
-    @parameterized.expand(sorted(_BAD_REPR))
+    @pytest.mark.parametrize("text", sorted(_BAD_REPR))
     def test_bad(self, text: Any) -> None:
         """Test Period.of_repr against a set of known bad arguments"""
-        with self.assertRaises((PeriodParsingError, PeriodValidationError)):  # type: ignore[arg-type]
+        with pytest.raises((PeriodParsingError, PeriodValidationError)):  # type: ignore[arg-type]
             Period.of_repr(text)
 
 
-class TestPeriodOfYears(unittest.TestCase):
+class TestPeriodOfYears:
     """Test Period.of_years static method"""
 
-    @parameterized.expand([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 50, 100])
+    @pytest.mark.parametrize("years", [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 50, 100])
     def test_good(self, years: Any) -> None:
         """Test Period.of_years against a set of known good years values"""
         period: Period = Period.of_years(years)
-        self.assertIsInstance(period, Period)
+        assert isinstance(period, Period)
 
-    @parameterized.expand([-999, -1, 0])
+    @pytest.mark.parametrize("years", [-999, -1, 0])
     def test_bad(self, years: Any) -> None:
         """Test Period.of_years against a set of known bad years values"""
-        with self.assertRaises(PeriodValidationError):
+        with pytest.raises(PeriodValidationError):
             Period.of_years(years)
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,no_of_years",
         [
             ("P1Y", 1),
             ("P2Y", 2),
@@ -2657,31 +2968,32 @@ class TestPeriodOfYears(unittest.TestCase):
             ("P4Y", 4),
             ("P5Y", 5),
             ("P10Y", 10),
-        ]
+        ],
     )
     def test_iso_duration(self, name: str, no_of_years: int) -> None:
         """Test Period.of_years method"""
         period: Period = Period.of_iso_duration(name)
         year_period: Period = Period.of_years(no_of_years)
-        self.assertEqual(period, year_period)
+        assert period == year_period
 
 
-class TestPeriodOfMonths(unittest.TestCase):
+class TestPeriodOfMonths:
     """Test Period.of_months static method"""
 
-    @parameterized.expand([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 50, 100])
+    @pytest.mark.parametrize("months", [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 50, 100])
     def test_good(self, months: Any) -> None:
         """Test Period.of_months against a set of known good months values"""
         period: Period = Period.of_months(months)
-        self.assertIsInstance(period, Period)
+        assert isinstance(period, Period)
 
-    @parameterized.expand([-1, 0])
+    @pytest.mark.parametrize("months", [-1, 0])
     def test_bad(self, months: Any) -> None:
         """Test Period.of_months against a set of known bad months values"""
-        with self.assertRaises(PeriodValidationError):
+        with pytest.raises(PeriodValidationError):
             Period.of_months(months)
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,no_of_months",
         [
             ("P1M", 1),
             ("P2M", 2),
@@ -2691,31 +3003,32 @@ class TestPeriodOfMonths(unittest.TestCase):
             ("P6M", 6),
             ("P1Y", 12),
             ("P2Y", 24),
-        ]
+        ],
     )
     def test_iso_duration(self, name: str, no_of_months: int) -> None:
         """Test Period.of_months method"""
         period: Period = Period.of_iso_duration(name)
         month_period: Period = Period.of_months(no_of_months)
-        self.assertEqual(period, month_period)
+        assert period == month_period
 
 
-class TestPeriodOfDays(unittest.TestCase):
+class TestPeriodOfDays:
     """Test Period.of_days static method"""
 
-    @parameterized.expand([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 50, 100])
+    @pytest.mark.parametrize("days", [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 50, 100])
     def test_good(self, days: Any) -> None:
         """Test Period.of_days against a set of known good days values"""
         period: Period = Period.of_days(days)
-        self.assertIsInstance(period, Period)
+        assert isinstance(period, Period)
 
-    @parameterized.expand([-1, 0])
+    @pytest.mark.parametrize("days", [-1, 0])
     def test_bad(self, days: Any) -> None:
         """Test Period.of_days against a set of known bad days values"""
-        with self.assertRaises(PeriodValidationError):
+        with pytest.raises(PeriodValidationError):
             Period.of_days(days)
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,no_of_days",
         [
             ("P1D", 1),
             ("P2D", 2),
@@ -2723,31 +3036,32 @@ class TestPeriodOfDays(unittest.TestCase):
             ("P4D", 4),
             ("P5D", 5),
             ("P6D", 6),
-        ]
+        ],
     )
     def test_iso_duration(self, name: str, no_of_days: int) -> None:
         """Test Period.of_days method"""
         period: Period = Period.of_iso_duration(name)
         day_period: Period = Period.of_days(no_of_days)
-        self.assertEqual(period, day_period)
+        assert period == day_period
 
 
-class TestPeriodOfHours(unittest.TestCase):
+class TestPeriodOfHours:
     """Test Period.of_hours static method"""
 
-    @parameterized.expand([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 50, 100])
+    @pytest.mark.parametrize("hours", [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 50, 100])
     def test_good(self, hours: Any) -> None:
         """Test Period.of_hours against a set of known good hours values"""
         period: Period = Period.of_hours(hours)
-        self.assertIsInstance(period, Period)
+        assert isinstance(period, Period)
 
-    @parameterized.expand([-1, 0])
+    @pytest.mark.parametrize("hours", [-1, 0])
     def test_bad(self, hours: Any) -> None:
         """Test Period.of_hours against a set of known bad hours values"""
-        with self.assertRaises(PeriodValidationError):
+        with pytest.raises(PeriodValidationError):
             Period.of_hours(hours)
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,no_of_hours",
         [
             ("P1H", 1),
             ("P2H", 2),
@@ -2757,31 +3071,32 @@ class TestPeriodOfHours(unittest.TestCase):
             ("P6H", 6),
             ("P1D", 24),
             ("P2D", 48),
-        ]
+        ],
     )
     def test_iso_duration(self, name: str, no_of_hours: int) -> None:
         """Test Period.of_hours method"""
         period: Period = Period.of_iso_duration(name)
         hour_period: Period = Period.of_hours(no_of_hours)
-        self.assertEqual(period, hour_period)
+        assert period == hour_period
 
 
-class TestPeriodOfMinutes(unittest.TestCase):
+class TestPeriodOfMinutes:
     """Test Period.of_minutes static method"""
 
-    @parameterized.expand([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 50, 100])
+    @pytest.mark.parametrize("minutes", [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 50, 100])
     def test_good(self, minutes: Any) -> None:
         """Test Period.of_minutes against a set of known good minutes values"""
         period: Period = Period.of_minutes(minutes)
-        self.assertIsInstance(period, Period)
+        assert isinstance(period, Period)
 
-    @parameterized.expand([-1, 0])
+    @pytest.mark.parametrize("minutes", [-1, 0])
     def test_bad(self, minutes: Any) -> None:
         """Test Period.of_minutes against a set of known bad minutes values"""
-        with self.assertRaises(PeriodValidationError):
+        with pytest.raises(PeriodValidationError):
             Period.of_minutes(minutes)
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,no_of_minutes",
         [
             ("PT1M", 1),
             ("PT2M", 2),
@@ -2791,31 +3106,32 @@ class TestPeriodOfMinutes(unittest.TestCase):
             ("PT6M", 6),
             ("P1H", 60),
             ("P1D", 1_440),
-        ]
+        ],
     )
     def test_iso_duration(self, name: str, no_of_minutes: int) -> None:
         """Test Period.of_minutes method"""
         period: Period = Period.of_iso_duration(name)
         minute_period: Period = Period.of_minutes(no_of_minutes)
-        self.assertEqual(period, minute_period)
+        assert period == minute_period
 
 
-class TestPeriodOfSeconds(unittest.TestCase):
+class TestPeriodOfSeconds:
     """Test Period.of_seconds static method"""
 
-    @parameterized.expand([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 50, 100])
+    @pytest.mark.parametrize("seconds", [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 50, 100])
     def test_good(self, seconds: Any) -> None:
         """Test Period.of_seconds against a set of known good seconds values"""
         period: Period = Period.of_seconds(seconds)
-        self.assertIsInstance(period, Period)
+        assert isinstance(period, Period)
 
-    @parameterized.expand([-1, 0])
+    @pytest.mark.parametrize("seconds", [-1, 0])
     def test_bad(self, seconds: Any) -> None:
         """Test Period.of_seconds against a set of known bad seconds values"""
-        with self.assertRaises(PeriodValidationError):
+        with pytest.raises(PeriodValidationError):
             Period.of_seconds(seconds)
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,no_of_seconds",
         [
             ("P1S", 1),
             ("P2S", 2),
@@ -2826,31 +3142,32 @@ class TestPeriodOfSeconds(unittest.TestCase):
             ("PT1M", 60),
             ("P1H", 3_600),
             ("P1D", 86_400),
-        ]
+        ],
     )
     def test_iso_duration(self, name: str, no_of_seconds: int) -> None:
         """Test Period.of_seconds method"""
         period: Period = Period.of_iso_duration(name)
         second_period: Period = Period.of_seconds(no_of_seconds)
-        self.assertEqual(period, second_period)
+        assert period == second_period
 
 
-class TestPeriodOfMicroseconds(unittest.TestCase):
+class TestPeriodOfMicroseconds:
     """Test Period.of_microseconds static method"""
 
-    @parameterized.expand([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 50, 100])
+    @pytest.mark.parametrize("microseconds", [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 50, 100])
     def test_good(self, microseconds: Any) -> None:
         """Test Period.of_microseconds against a set of known good microseconds values"""
         period: Period = Period.of_microseconds(microseconds)
-        self.assertIsInstance(period, Period)
+        assert isinstance(period, Period)
 
-    @parameterized.expand([-1, 0])
+    @pytest.mark.parametrize("microseconds", [-1, 0])
     def test_bad(self, microseconds: Any) -> None:
         """Test Period.of_microseconds against a set of known bad microseconds values"""
-        with self.assertRaises(PeriodValidationError):
+        with pytest.raises(PeriodValidationError):
             Period.of_microseconds(microseconds)
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,no_of_microseconds",
         [
             ("P0.000001S", 1),
             ("P0.00001S", 10),
@@ -2862,45 +3179,48 @@ class TestPeriodOfMicroseconds(unittest.TestCase):
             ("PT1M", 60_000_000),
             ("P1H", 3_600_000_000),
             ("P1D", 86_400_000_000),
-        ]
+        ],
     )
     def test_iso_duration(self, name: str, no_of_microseconds: int) -> None:
         """Test Period.of_microseconds method"""
         period: Period = Period.of_iso_duration(name)
         microsecond_period: Period = Period.of_microseconds(no_of_microseconds)
-        self.assertEqual(period, microsecond_period)
+        assert period == microsecond_period
 
 
-class TestPeriodOfTimedelta(unittest.TestCase):
+class TestPeriodOfTimedelta:
     """Test Period.of_timedelta static method"""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "timedelta",
         [
             datetime.timedelta(days=1),
             datetime.timedelta(hours=1),
             datetime.timedelta(minutes=1),
             datetime.timedelta(microseconds=1),
-        ]
+        ],
     )
     def test_good(self, timedelta: Any) -> None:
         """Test Period.of_timedelta against a set of known good timedelta values"""
         period: Period = Period.of_timedelta(timedelta)
-        self.assertIsInstance(period, Period)
+        assert isinstance(period, Period)
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "timedelta",
         [
             datetime.timedelta(days=0),
             datetime.timedelta(days=-1),
             datetime.timedelta(microseconds=0),
             datetime.timedelta(microseconds=-1),
-        ]
+        ],
     )
     def test_bad(self, timedelta: Any) -> None:
         """Test Period.of_timedelta against a set of known bad timedelta values"""
-        with self.assertRaises(PeriodValidationError):
+        with pytest.raises(PeriodValidationError):
             Period.of_timedelta(timedelta)
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,delta",
         [
             ("P1D", datetime.timedelta(days=1)),
             ("P1H", datetime.timedelta(hours=1)),
@@ -2912,13 +3232,13 @@ class TestPeriodOfTimedelta(unittest.TestCase):
             ("PT2M", datetime.timedelta(minutes=2)),
             ("P2S", datetime.timedelta(seconds=2)),
             ("P0.000002S", datetime.timedelta(microseconds=2)),
-        ]
+        ],
     )
     def test_iso_duration(self, name: str, delta: datetime.timedelta) -> None:
         """Test Period.of_timedelta method"""
         period: Period = Period.of_iso_duration(name)
         delta_period: Period = Period.of_timedelta(delta)
-        self.assertEqual(period, delta_period)
+        assert period == delta_period
 
 
 # After applying this with the str.translate() method
@@ -2926,75 +3246,79 @@ class TestPeriodOfTimedelta(unittest.TestCase):
 _PERIOD_CHARS_TRANSLATE = str.maketrans("", "", "0123456789PYMDTHS.")
 
 
-class TestPeriodIsoDuration(unittest.TestCase):
+class TestPeriodIsoDuration:
     """Test Period.iso_duration property"""
 
-    @parameterized.expand(sorted(_GOOD_ISO_DURATION | _GOOD_DURATION | _GOOD_DATE_AND_DURATION | _GOOD_REPR))
+    @pytest.mark.parametrize("text", sorted(_GOOD_ISO_DURATION | _GOOD_DURATION | _GOOD_DATE_AND_DURATION | _GOOD_REPR))
     def test_is_valid(self, text: Any) -> None:
         """Test Period.iso_duration property is valid for a set of Period instances"""
         period: Period = Period.of(text)
         iso_duration: str = period.iso_duration
-        self.assertIsInstance(iso_duration, str)
-        self.assertTrue(iso_duration == iso_duration.upper())
-        self.assertTrue(iso_duration.startswith("P"))
-        self.assertEqual(iso_duration.translate(_PERIOD_CHARS_TRANSLATE), "")
+        assert isinstance(iso_duration, str)
+        assert iso_duration == iso_duration.upper()
+        assert iso_duration.startswith("P")
+        assert iso_duration.translate(_PERIOD_CHARS_TRANSLATE) == ""
 
 
-class TestPeriodTzinfo(unittest.TestCase):
+class TestPeriodTzinfo:
     """Test Period.tzinfo property"""
 
-    @parameterized.expand(sorted(_GOOD_ISO_DURATION | _GOOD_DURATION | _GOOD_DATE_AND_DURATION | _GOOD_REPR))
+    @pytest.mark.parametrize("text", sorted(_GOOD_ISO_DURATION | _GOOD_DURATION | _GOOD_DATE_AND_DURATION | _GOOD_REPR))
     def test_is_valid(self, text: Any) -> None:
         """Test Period.iso_duration property is valid for a set of Period instances"""
         period: Period = Period.of(text)
+
         period_no_tz: Period = period.with_tzinfo(None)
-        self.assertEqual(period_no_tz.tzinfo, None)
+        assert period_no_tz.tzinfo is None
+
         period_utc: Period = period.with_tzinfo(TZ_UTC)
-        self.assertEqual(period_utc.tzinfo, TZ_UTC)
+        assert period_utc.tzinfo == TZ_UTC
+
         period_no_tz2: Period = period_utc.with_tzinfo(None)
-        self.assertEqual(period_no_tz2.tzinfo, None)
+        assert period_no_tz2.tzinfo is None
 
 
-class TestPeriodMinOrdinal(unittest.TestCase):
+class TestPeriodMinOrdinal:
     """Test Period.min_ordinal property"""
 
-    @parameterized.expand(sorted(_GOOD_ISO_DURATION | _GOOD_DURATION | _GOOD_DATE_AND_DURATION | _GOOD_REPR))
+    @pytest.mark.parametrize("text", sorted(_GOOD_ISO_DURATION | _GOOD_DURATION | _GOOD_DATE_AND_DURATION | _GOOD_REPR))
     def test_is_valid(self, text: Any) -> None:
         """Test Period.min_ordinal property is valid for a set of Period instances"""
         period: Period = Period.of(text)
         min_ordinal: int = period.min_ordinal
-        self.assertIsInstance(min_ordinal, int)
-        self.assertIsInstance(period.datetime(min_ordinal), datetime.datetime)
+        assert isinstance(min_ordinal, int)
+        assert isinstance(period.datetime(min_ordinal), datetime.datetime)
 
 
-class TestPeriodMaxOrdinal(unittest.TestCase):
+class TestPeriodMaxOrdinal:
     """Test Period.max_ordinal property"""
 
-    @parameterized.expand(sorted(_GOOD_ISO_DURATION | _GOOD_DURATION | _GOOD_DATE_AND_DURATION | _GOOD_REPR))
+    @pytest.mark.parametrize("text", sorted(_GOOD_ISO_DURATION | _GOOD_DURATION | _GOOD_DATE_AND_DURATION | _GOOD_REPR))
     def test_is_valid(self, text: Any) -> None:
         """Test Period.max_ordinal property is valid for a set of Period instances"""
         period: Period = Period.of(text)
         max_ordinal: int = period.max_ordinal
-        self.assertIsInstance(max_ordinal, int)
-        self.assertIsInstance(period.datetime(max_ordinal), datetime.datetime)
+        assert isinstance(max_ordinal, int)
+        assert isinstance(period.datetime(max_ordinal), datetime.datetime)
 
 
-class TestPeriodTimedelta(unittest.TestCase):
+class TestPeriodTimedelta:
     """Test Period.timedelta property"""
 
-    @parameterized.expand(sorted(_GOOD_ISO_DURATION | _GOOD_DURATION | _GOOD_DATE_AND_DURATION | _GOOD_REPR))
+    @pytest.mark.parametrize("text", sorted(_GOOD_ISO_DURATION | _GOOD_DURATION | _GOOD_DATE_AND_DURATION | _GOOD_REPR))
     def test_is_valid(self, text: Any) -> None:
         """Test Period.timedelta property is valid for a set of Period instances"""
         period: Period = Period.of(text)
         delta: datetime.timedelta = period.timedelta
+
         if delta is None:
-            self.assertEqual(period._properties.step, p._STEP_MONTHS)
+            assert period._properties.step == p._STEP_MONTHS
         else:
             min_ordinal: int = period.min_ordinal
             d0: datetime.datetime = period.datetime(min_ordinal)
             d1: datetime.datetime = period.datetime(min_ordinal + 1)
             d_delta = d1 - d0
-            self.assertEqual(delta, d_delta)
+            assert delta == d_delta
 
 
 # After applying this with the str.translate() method
@@ -3002,43 +3326,46 @@ class TestPeriodTimedelta(unittest.TestCase):
 _PL_INTERVAL_CHARS_TRANSLATE = str.maketrans("", "", "0123456789mous")
 
 
-class TestPeriodPlInterval(unittest.TestCase):
+class TestPeriodPlInterval:
     """Test Period.pl_interval property"""
 
-    @parameterized.expand(sorted(_GOOD_ISO_DURATION | _GOOD_DURATION | _GOOD_DATE_AND_DURATION | _GOOD_REPR))
+    @pytest.mark.parametrize("text", sorted(_GOOD_ISO_DURATION | _GOOD_DURATION | _GOOD_DATE_AND_DURATION | _GOOD_REPR))
     def test_is_valid(self, text: Any) -> None:
         """Test Period.pl_interval property is valid for a set of Period instances"""
         period: Period = Period.of(text)
         pl_interval: str = period.pl_interval
-        self.assertIsInstance(pl_interval, str)
-        self.assertTrue(pl_interval == pl_interval.lower())
-        self.assertEqual(pl_interval.translate(_PL_INTERVAL_CHARS_TRANSLATE), "")
+
+        assert isinstance(pl_interval, str)
+        assert pl_interval == pl_interval.lower()
+        assert pl_interval.translate(_PL_INTERVAL_CHARS_TRANSLATE) == ""
 
 
-class TestPeriodPlOffset(unittest.TestCase):
+class TestPeriodPlOffset:
     """Test Period.pl_offset property"""
 
-    @parameterized.expand(sorted(_GOOD_ISO_DURATION | _GOOD_DURATION | _GOOD_DATE_AND_DURATION | _GOOD_REPR))
+    @pytest.mark.parametrize("text", sorted(_GOOD_ISO_DURATION | _GOOD_DURATION | _GOOD_DATE_AND_DURATION | _GOOD_REPR))
     def test_is_valid(self, text: Any) -> None:
         """Test Period.pl_offset property is valid for a set of Period instances"""
         period: Period = Period.of(text)
         pl_offset: str = period.pl_offset
-        self.assertIsInstance(pl_offset, str)
-        self.assertTrue(pl_offset == pl_offset.lower())
-        self.assertEqual(pl_offset.translate(_PL_INTERVAL_CHARS_TRANSLATE), "")
+
+        assert isinstance(pl_offset, str)
+        assert pl_offset == pl_offset.lower()
+        assert pl_offset.translate(_PL_INTERVAL_CHARS_TRANSLATE) == ""
 
 
-class TestPeriodIsEpochAgnostic(unittest.TestCase):
+class TestPeriodIsEpochAgnostic:
     """Test Period.is_epoch_agnostic method"""
 
-    @parameterized.expand(sorted(_GOOD_ISO_DURATION | _GOOD_DURATION | _GOOD_DATE_AND_DURATION | _GOOD_REPR))
+    @pytest.mark.parametrize("text", sorted(_GOOD_ISO_DURATION | _GOOD_DURATION | _GOOD_DATE_AND_DURATION | _GOOD_REPR))
     def test_is_valid(self, text: Any) -> None:
         """Test Period.is_epoch_agnostic method is valid for a set of Period instances"""
         period: Period = Period.of(text)
         epoch_agnostic: bool = period.is_epoch_agnostic()
-        self.assertIsInstance(epoch_agnostic, bool)
+        assert isinstance(epoch_agnostic, bool)
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,expected",
         [
             ("P1Y", True),
             ("P2Y", False),
@@ -3126,25 +3453,25 @@ class TestPeriodIsEpochAgnostic(unittest.TestCase):
             ("P0.000018S", True),
             ("P0.000019S", False),
             ("P0.000020S", True),
-        ]
+        ],
     )
     def test_iso_durations(self, name: str, expected: bool) -> None:
         """Test Period.is_epoch_agnostic method"""
         period: Period = Period.of_iso_duration(name)
-        self.assertEqual(period.is_epoch_agnostic(), expected)
+        assert period.is_epoch_agnostic() == expected
 
 
-class TestPeriodNaiveFormatter(unittest.TestCase):
+class TestPeriodNaiveFormatter:
     """Test Period.naive_formatter method"""
 
-    @parameterized.expand(sorted(_GOOD_ISO_DURATION | _GOOD_DURATION | _GOOD_DATE_AND_DURATION | _GOOD_REPR))
+    @pytest.mark.parametrize("text", sorted(_GOOD_ISO_DURATION | _GOOD_DURATION | _GOOD_DATE_AND_DURATION | _GOOD_REPR))
     def test_is_valid(self, text: Any) -> None:
         """Test Period.naive_formatter method is valid for a set of Period instances"""
         period: Period = Period.of(text)
         naive_formatter: Callable[[datetime], str] = period.naive_formatter()
-        self.assertTrue(callable(naive_formatter))
+        assert callable(naive_formatter)
 
-    @parameterized.expand(sorted(_GOOD_ISO_DURATION | _GOOD_DURATION | _GOOD_DATE_AND_DURATION | _GOOD_REPR))
+    @pytest.mark.parametrize("text", sorted(_GOOD_ISO_DURATION | _GOOD_DURATION | _GOOD_DATE_AND_DURATION | _GOOD_REPR))
     def test_good(self, text: Any) -> None:
         """Test Period.naive_formatter method with good arguments"""
         period: Period = Period.of(text)
@@ -3152,20 +3479,25 @@ class TestPeriodNaiveFormatter(unittest.TestCase):
         period.naive_formatter("T")
         period.naive_formatter("t")
 
-    @parameterized.expand(sorted(_GOOD_ISO_DURATION | _GOOD_DURATION | _GOOD_DATE_AND_DURATION | _GOOD_REPR))
+    @pytest.mark.parametrize("text", sorted(_GOOD_ISO_DURATION | _GOOD_DURATION | _GOOD_DATE_AND_DURATION | _GOOD_REPR))
     def test_bad(self, text: Any) -> None:
         """Test Period.naive_formatter method with bad arguments"""
         period: Period = Period.of(text)
-        with self.assertRaises((PeriodParsingError, PeriodValidationError)):  # type: ignore[arg-type]
+
+        with pytest.raises((PeriodParsingError, PeriodValidationError)):  # type: ignore[arg-type]
             period.naive_formatter("")
-        with self.assertRaises((PeriodParsingError, PeriodValidationError)):  # type: ignore[arg-type]
+
+        with pytest.raises((PeriodParsingError, PeriodValidationError)):  # type: ignore[arg-type]
             period.naive_formatter("x")
-        with self.assertRaises((PeriodParsingError, PeriodValidationError)):  # type: ignore[arg-type]
+
+        with pytest.raises((PeriodParsingError, PeriodValidationError)):  # type: ignore[arg-type]
             period.naive_formatter("  ")
-        with self.assertRaises((PeriodParsingError, PeriodValidationError)):  # type: ignore[arg-type]
+
+        with pytest.raises((PeriodParsingError, PeriodValidationError)):  # type: ignore[arg-type]
             period.naive_formatter("t ")
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,sep,dt,expected",
         [
             ("P1Y", " ", datetime.datetime(2023, 10, 20, 1, 2, 3, 456789), "2023"),
             ("P1Y", "T", datetime.datetime(2023, 10, 20, 1, 2, 3, 456789), "2023"),
@@ -3237,16 +3569,17 @@ class TestPeriodNaiveFormatter(unittest.TestCase):
                 datetime.datetime(2023, 10, 20, 1, 2, 3, 456789),
                 "2023-10-20T01:02:03.456789",
             ),
-        ]
+        ],
     )
     def test_iso_durations(self, name: str, sep: str, dt: datetime.datetime, expected: str) -> None:
         """Test Period.naive_formatter"""
         period: Period = Period.of_iso_duration(name)
         fmt = period.naive_formatter(sep)
         result = fmt(dt)
-        self.assertEqual(result, expected)
+        assert result == expected
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,sep,dt,expected",
         [
             (
                 "P1Y+1M",
@@ -3410,27 +3743,28 @@ class TestPeriodNaiveFormatter(unittest.TestCase):
                 datetime.datetime(2023, 10, 20, 1, 2, 3, 456789),
                 "2023-10-20 01:02:03.456789",
             ),
-        ]
+        ],
     )
     def test_offset_durations(self, name: str, sep: str, dt: datetime.datetime, expected: str) -> None:
         """Test Period.naive_formatter"""
         period: Period = Period.of_duration(name)
         fmt = period.naive_formatter(sep)
         result = fmt(dt)
-        self.assertEqual(result, expected)
+        assert result == expected
 
 
-class TestPeriodAwareFormatter(unittest.TestCase):
+class TestPeriodAwareFormatter:
     """Test Period.aware_formatter method"""
 
-    @parameterized.expand(sorted(_GOOD_ISO_DURATION | _GOOD_DURATION | _GOOD_DATE_AND_DURATION | _GOOD_REPR))
+    @pytest.mark.parametrize("text", sorted(_GOOD_ISO_DURATION | _GOOD_DURATION | _GOOD_DATE_AND_DURATION | _GOOD_REPR))
     def test_is_valid(self, text: Any) -> None:
         """Test Period.aware_formatter method is valid for a set of Period instances"""
         period: Period = Period.of(text)
         aware_formatter: Callable[[datetime], str] = period.aware_formatter()
-        self.assertTrue(callable(aware_formatter))
+        assert callable(aware_formatter)
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,sep,dt,expected",
         [
             (
                 "P1Y",
@@ -3522,16 +3856,17 @@ class TestPeriodAwareFormatter(unittest.TestCase):
                 datetime.datetime(2023, 10, 20, 1, 2, 3, 456789, TZ_UTC),
                 "2023-10-20T01:02:03.456789Z",
             ),
-        ]
+        ],
     )
     def test_iso_durations_utc(self, name: str, sep: str, dt: datetime.datetime, expected: str) -> None:
         """Test Period.aware_formatter"""
         period: Period = Period.of_iso_duration(name)
         fmt = period.aware_formatter(sep)
         result = fmt(dt)
-        self.assertEqual(result, expected)
+        assert result == expected
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,sep,dt,expected",
         [
             (
                 "P1Y+1M",
@@ -3695,27 +4030,28 @@ class TestPeriodAwareFormatter(unittest.TestCase):
                 datetime.datetime(2023, 10, 20, 1, 2, 3, 456789, TZ_UTC),
                 "2023-10-20 01:02:03.456789Z",
             ),
-        ]
+        ],
     )
     def test_offset_durations_utc(self, name: str, sep: str, dt: datetime.datetime, expected: str) -> None:
         """Test Period.aware_formatter"""
         period: Period = Period.of_duration(name)
         fmt = period.aware_formatter(sep)
         result = fmt(dt)
-        self.assertEqual(result, expected)
+        assert result == expected
 
 
-class TestPeriodFormatter(unittest.TestCase):
+class TestPeriodFormatter:
     """Test Period.formatter method"""
 
-    @parameterized.expand(sorted(_GOOD_ISO_DURATION | _GOOD_DURATION | _GOOD_DATE_AND_DURATION | _GOOD_REPR))
+    @pytest.mark.parametrize("text", sorted(_GOOD_ISO_DURATION | _GOOD_DURATION | _GOOD_DATE_AND_DURATION | _GOOD_REPR))
     def test_is_valid(self, text: Any) -> None:
         """Test Period.formatter method is valid for a set of Period instances"""
         period: Period = Period.of(text)
         formatter: Callable[[datetime], str] = period.formatter()
-        self.assertTrue(callable(formatter))
+        assert callable(formatter)
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,tz,sep,dt,expected",
         [
             (
                 "P1Y",
@@ -4137,7 +4473,7 @@ class TestPeriodFormatter(unittest.TestCase):
                 datetime.datetime(2023, 10, 20, 1, 2, 3, 456789, TZ_UTC),
                 "2023-10-20T01:02:03.456789Z",
             ),
-        ]
+        ],
     )
     def test_iso_durations_utc(
         self,
@@ -4151,9 +4487,10 @@ class TestPeriodFormatter(unittest.TestCase):
         period: Period = Period.of_iso_duration(name).with_tzinfo(tz)
         fmt = period.formatter(sep)
         result = fmt(dt)
-        self.assertEqual(result, expected)
+        assert result == expected
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,tz,sep,dt,expected",
         [
             (
                 "P1Y+1M",
@@ -4911,7 +5248,7 @@ class TestPeriodFormatter(unittest.TestCase):
                 datetime.datetime(2023, 10, 20, 1, 2, 3, 456789, TZ_UTC),
                 "2023-10-20 01:02:03.456789Z",
             ),
-        ]
+        ],
     )
     def test_offset_durations_utc(
         self,
@@ -4925,13 +5262,14 @@ class TestPeriodFormatter(unittest.TestCase):
         period: Period = Period.of_duration(name).with_tzinfo(tz)
         fmt = period.formatter(sep)
         result = fmt(dt)
-        self.assertEqual(result, expected)
+        assert result == expected
 
 
-class TestPeriodIsAligned(unittest.TestCase):
+class TestPeriodIsAligned:
     """Test Period.is_aligned method"""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,dt,expected",
         [
             ("P1Y", datetime.datetime(2024, 1, 1, 0, 0, 0, 0), True),
             ("P1Y", datetime.datetime(2024, 2, 1, 0, 0, 0, 0), False),
@@ -5018,14 +5356,15 @@ class TestPeriodIsAligned(unittest.TestCase):
             ("P3S", datetime.datetime(2024, 1, 1, 0, 0, 1, 0), False),
             ("P3S", datetime.datetime(2024, 1, 1, 0, 0, 2, 0), False),
             ("P3S", datetime.datetime(2024, 1, 1, 0, 0, 3, 0), True),
-        ]
+        ],
     )
     def test_iso_durations(self, name: str, dt: datetime.datetime, expected: bool) -> None:
         """Test Period.is_aligned method"""
         period: Period = Period.of_iso_duration(name)
-        self.assertEqual(period.is_aligned(dt), expected)
+        assert period.is_aligned(dt) == expected
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,dt,expected",
         [
             ("P1M+1D", datetime.datetime(2024, 1, 1, 0, 0, 0, 0), False),
             ("P1M+1D", datetime.datetime(2024, 1, 2, 0, 0, 0, 0), True),
@@ -5051,24 +5390,25 @@ class TestPeriodIsAligned(unittest.TestCase):
             ("P1Y+9M9H", datetime.datetime(2024, 1, 1, 0, 0, 0, 0), False),
             ("P1Y+9M9H", datetime.datetime(2024, 10, 1, 0, 0, 0, 0), False),
             ("P1Y+9M9H", datetime.datetime(2024, 10, 1, 9, 0, 0, 0), True),
-        ]
+        ],
     )
     def test_offset_durations(self, name: str, dt: datetime.datetime, expected: bool) -> None:
         """Test Period.is_aligned method"""
         period: Period = Period.of_duration(name)
-        self.assertEqual(period.is_aligned(dt), expected)
+        assert period.is_aligned(dt) == expected
 
 
-class TestPeriodBasePeriod(unittest.TestCase):
+class TestPeriodBasePeriod:
     """Test Period.base_period method"""
 
-    @parameterized.expand(sorted(_GOOD_ISO_DURATION))
+    @pytest.mark.parametrize("text", sorted(_GOOD_ISO_DURATION))
     def test_already_base(self, text: Any) -> None:
         """Test Period.base_period method returns same Period instance"""
         period: Period = Period.of(text)
-        self.assertEqual(period, period.base_period())
+        assert period == period.base_period()
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,base_name",
         [
             ("P1Y+1M", "P1Y"),
             ("P5Y+1Y", "P5Y"),
@@ -5092,18 +5432,19 @@ class TestPeriodBasePeriod(unittest.TestCase):
             ("P0.001S+0.000001S", "P0.001S"),
             ("P0.005S+0.001S", "P0.005S"),
             ("P0.005S+0.000001S", "P0.005S"),
-        ]
+        ],
     )
     def test_offset_durations(self, name: str, base_name: str) -> None:
         """Test Period.base_period method"""
         period: Period = Period.of_duration(name)
-        self.assertEqual(period.base_period(), Period.of_iso_duration(base_name))
+        assert period.base_period() == Period.of_iso_duration(base_name)
 
 
-class TestPeriodWithMultiplier(unittest.TestCase):
+class TestPeriodWithMultiplier:
     """Test Period.with_multiplier method"""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,multiplier,result_name",
         [
             ("P1Y", 2, "P2Y"),
             ("P1M", 12, "P1Y"),
@@ -5139,19 +5480,20 @@ class TestPeriodWithMultiplier(unittest.TestCase):
             ("P0.000001S", 60_000_000, "PT1M"),
             ("P0.000001S", 3_600_000_000, "P1H"),
             ("P0.000001S", 86_400_000_000, "P1D"),
-        ]
+        ],
     )
     def test_offset_durations(self, name: str, multiplier: int, result_name: str) -> None:
         """Test Period.with_multiplier method"""
         period: Period = Period.of_duration(name)
-        self.assertEqual(period.with_multiplier(multiplier), Period.of_duration(result_name))
-        self.assertEqual(period.with_multiplier(1), period)
+        assert period.with_multiplier(multiplier) == Period.of_duration(result_name)
+        assert period.with_multiplier(1) == period
 
 
-class TestPeriodWithYearOffset(unittest.TestCase):
+class TestPeriodWithYearOffset:
     """Test Period.with_year_offset method"""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,year_amount,result_name",
         [
             ("P1Y", 1, "P1Y"),
             ("P2Y", 1, "P2Y+1Y"),
@@ -5168,18 +5510,19 @@ class TestPeriodWithYearOffset(unittest.TestCase):
             ("P4Y", 2, "P4Y+2Y"),
             ("P5Y", 2, "P5Y+2Y"),
             ("P10Y", 2, "P10Y+2Y"),
-        ]
+        ],
     )
     def test_offset_durations(self, name: str, year_amount: int, result_name: str) -> None:
         """Test Period.with_year_offset method"""
         period: Period = Period.of_duration(name)
-        self.assertEqual(period.with_year_offset(year_amount), Period.of_duration(result_name))
+        assert period.with_year_offset(year_amount) == Period.of_duration(result_name)
 
 
-class TestPeriodWithMonthOffset(unittest.TestCase):
+class TestPeriodWithMonthOffset:
     """Test Period.with_month_offset method"""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,month_amount,result_name",
         [
             ("P1Y", 1, "P1Y+1M"),
             ("P1Y", 2, "P1Y+2M"),
@@ -5198,18 +5541,19 @@ class TestPeriodWithMonthOffset(unittest.TestCase):
             ("P4M", 2, "P4M+2M"),
             ("P5M", 2, "P5M+2M"),
             ("P6M", 2, "P6M+2M"),
-        ]
+        ],
     )
     def test_offset_durations(self, name: str, month_amount: int, result_name: str) -> None:
         """Test Period.with_month_offset method"""
         period: Period = Period.of_duration(name)
-        self.assertEqual(period.with_month_offset(month_amount), Period.of_duration(result_name))
+        assert period.with_month_offset(month_amount) == Period.of_duration(result_name)
 
 
-class TestPeriodWithDayOffset(unittest.TestCase):
+class TestPeriodWithDayOffset:
     """Test Period.with_day_offset method"""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,day_amount,result_name",
         [
             ("P1Y", 1, "P1Y+1D"),
             ("P1Y", 2, "P1Y+2D"),
@@ -5231,18 +5575,19 @@ class TestPeriodWithDayOffset(unittest.TestCase):
             ("P4D", 2, "P4D+2D"),
             ("P5D", 2, "P5D+2D"),
             ("P6D", 2, "P6D+2D"),
-        ]
+        ],
     )
     def test_offset_durations(self, name: str, day_amount: int, result_name: str) -> None:
         """Test Period.with_day_offset method"""
         period: Period = Period.of_duration(name)
-        self.assertEqual(period.with_day_offset(day_amount), Period.of_duration(result_name))
+        assert period.with_day_offset(day_amount) == Period.of_duration(result_name)
 
 
-class TestPeriodWithHourOffset(unittest.TestCase):
+class TestPeriodWithHourOffset:
     """Test Period.with_hour_offset method"""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,hour_amount,result_name",
         [
             ("P1Y", 1, "P1Y+1H"),
             ("P1Y", 2, "P1Y+2H"),
@@ -5267,18 +5612,19 @@ class TestPeriodWithHourOffset(unittest.TestCase):
             ("P4H", 2, "P4H+2H"),
             ("P5H", 2, "P5H+2H"),
             ("P6H", 2, "P6H+2H"),
-        ]
+        ],
     )
     def test_offset_durations(self, name: str, hour_amount: int, result_name: str) -> None:
         """Test Period.with_hour_offset method"""
         period: Period = Period.of_duration(name)
-        self.assertEqual(period.with_hour_offset(hour_amount), Period.of_duration(result_name))
+        assert period.with_hour_offset(hour_amount) == Period.of_duration(result_name)
 
 
-class TestPeriodWithMinuteOffset(unittest.TestCase):
+class TestPeriodWithMinuteOffset:
     """Test Period.with_minute_offset method"""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,minute_amount,result_name",
         [
             ("P1Y", 1, "P1Y+T1M"),
             ("P1Y", 2, "P1Y+T2M"),
@@ -5306,18 +5652,19 @@ class TestPeriodWithMinuteOffset(unittest.TestCase):
             ("PT4M", 2, "PT4M+T2M"),
             ("PT5M", 2, "PT5M+T2M"),
             ("PT6M", 2, "PT6M+T2M"),
-        ]
+        ],
     )
     def test_offset_durations(self, name: str, minute_amount: int, result_name: str) -> None:
         """Test Period.with_minute_offset method"""
         period: Period = Period.of_duration(name)
-        self.assertEqual(period.with_minute_offset(minute_amount), Period.of_duration(result_name))
+        assert period.with_minute_offset(minute_amount) == Period.of_duration(result_name)
 
 
-class TestPeriodWithSecondOffset(unittest.TestCase):
+class TestPeriodWithSecondOffset:
     """Test Period.with_second_offset method"""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,second_amount,result_name",
         [
             ("P1Y", 1, "P1Y+1S"),
             ("P1Y", 2, "P1Y+2S"),
@@ -5348,18 +5695,19 @@ class TestPeriodWithSecondOffset(unittest.TestCase):
             ("P4S", 2, "P4S+2S"),
             ("P5S", 2, "P5S+2S"),
             ("P6S", 2, "P6S+2S"),
-        ]
+        ],
     )
     def test_offset_durations(self, name: str, second_amount: int, result_name: str) -> None:
         """Test Period.with_second_offset method"""
         period: Period = Period.of_duration(name)
-        self.assertEqual(period.with_second_offset(second_amount), Period.of_duration(result_name))
+        assert period.with_second_offset(second_amount) == Period.of_duration(result_name)
 
 
-class TestPeriodWithMicrosecondOffset(unittest.TestCase):
+class TestPeriodWithMicrosecondOffset:
     """Test Period.with_microsecond_offset method"""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,microsecond_amount,result_name",
         [
             ("P1Y", 1, "P1Y+0.000001S"),
             ("P1Y", 2, "P1Y+0.000002S"),
@@ -5395,42 +5743,43 @@ class TestPeriodWithMicrosecondOffset(unittest.TestCase):
             ("P0.000006S", 2, "P0.000006S+0.000002S"),
             ("P1S", 1_000_000, "P1S"),
             ("P1S", 500_000, "P1S+0.5S"),
-        ]
+        ],
     )
     def test_offset_durations(self, name: str, microsecond_amount: int, result_name: str) -> None:
         """Test Period.with_microsecond_offset method"""
         period: Period = Period.of_duration(name)
-        self.assertEqual(
-            period.with_microsecond_offset(microsecond_amount),
-            Period.of_duration(result_name),
-        )
+        assert period.with_microsecond_offset(microsecond_amount) == Period.of_duration(result_name)
 
 
-class TestPeriodWithTzinfo(unittest.TestCase):
+class TestPeriodWithTzinfo:
     """Test Period.with_tzinfo method"""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,tz_info_list",
         [
             ("P1Y", [TZ_UTC, None]),
             ("P1M", [TZ_UTC, None]),
             ("P1D", [TZ_UTC, None]),
-        ]
+        ],
     )
     def test_offset_durations(self, name: str, tz_info_list: list[datetime.tzinfo | None]) -> None:
         """Test Period.with_microsecond_offset method"""
         period: Period = Period.of_duration(name)
         old_tz: datetime.tzinfo | None = None
         for new_tz in tz_info_list:
-            self.assertEqual(period.tzinfo, old_tz)
+            assert period.tzinfo == old_tz
+
             period = period.with_tzinfo(new_tz)
-            self.assertEqual(period.tzinfo, new_tz)
+            assert period.tzinfo == new_tz
+
             old_tz = new_tz
 
 
-class TestPeriodWithoutOffset(unittest.TestCase):
+class TestPeriodWithoutOffset:
     """Test Period.without_offset method"""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,result_name",
         [
             ("P1Y", "P1Y"),
             ("P1M", "P1M"),
@@ -5452,18 +5801,19 @@ class TestPeriodWithoutOffset(unittest.TestCase):
             ("P1H+T1M", "P1H"),
             ("PT1M+1S", "PT1M"),
             ("P1S+0.000001S", "P1S"),
-        ]
+        ],
     )
     def test_offset_durations(self, name: str, result_name: str) -> None:
         """Test Period.without_offset method"""
         period: Period = Period.of_duration(name)
-        self.assertEqual(period.without_offset(), Period.of_iso_duration(result_name))
+        assert period.without_offset() == Period.of_iso_duration(result_name)
 
 
-class TestPeriodWithoutOrdinalShift(unittest.TestCase):
+class TestPeriodWithoutOrdinalShift:
     """Test Period.without_ordinal_shift method"""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,origin_dt",
         [
             ("P1Y", datetime.datetime(1066, 1, 1)),
             ("P1Y", datetime.datetime(1980, 1, 1)),
@@ -5474,25 +5824,28 @@ class TestPeriodWithoutOrdinalShift(unittest.TestCase):
             ("P1D", datetime.datetime(1066, 1, 1)),
             ("P1D", datetime.datetime(1980, 1, 1)),
             ("P1D", datetime.datetime(4781, 1, 1)),
-        ]
+        ],
     )
     def test_offset_durations(self, name: str, origin_dt: datetime.datetime) -> None:
         """Test Period.without_ordinal_shift method"""
         period: Period = Period.of_duration(name)
-        self.assertEqual(period._properties.ordinal_shift, 0)
+        assert period._properties.ordinal_shift == 0
+
         period_with_origin: Period = period.with_origin(origin_dt)
-        self.assertNotEqual(period_with_origin._properties.ordinal_shift, 0)
-        self.assertNotEqual(period, period_with_origin)
+        assert period_with_origin._properties.ordinal_shift != 0
+        assert period != period_with_origin
+
         period_without_shift: Period = period_with_origin.without_ordinal_shift()
-        self.assertNotEqual(period_with_origin, period_without_shift)
-        self.assertEqual(period_without_shift._properties.ordinal_shift, 0)
-        self.assertEqual(period_without_shift, period)
+        assert period_with_origin != period_without_shift
+        assert period_without_shift._properties.ordinal_shift == 0
+        assert period_without_shift == period
 
 
-class TestPeriodWithOrigin(unittest.TestCase):
+class TestPeriodWithOrigin:
     """Test Period.with_origin method"""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,origin_dt,result",
         [
             ("P1Y", datetime.datetime(1066, 1, 1), "P1Y"),
             ("P1Y", datetime.datetime(1980, 1, 1), "P1Y"),
@@ -5522,761 +5875,778 @@ class TestPeriodWithOrigin(unittest.TestCase):
                 datetime.datetime(1457, 3, 6, 9, 8, 1, 123456),
                 "PT15M+T8M1.123456S",
             ),
-        ]
+        ],
     )
     def test_offset_durations(self, name: str, origin_dt: datetime.datetime, result: str) -> None:
         """Test Period.with_origin method"""
         period: Period = Period.of_duration(name)
         period_with_origin: Period = period.with_origin(origin_dt)
-        self.assertNotEqual(period, period_with_origin)
-        self.assertEqual(period_with_origin.ordinal(origin_dt), 0)
-        self.assertTrue(period_with_origin.is_aligned(origin_dt))
+
+        assert period != period_with_origin
+        assert period_with_origin.ordinal(origin_dt) == 0
+        assert period_with_origin.is_aligned(origin_dt)
+
         period_without_shift: Period = period_with_origin.without_ordinal_shift()
         result_period: Period = Period.of_duration(result)
-        self.assertNotEqual(period_with_origin, period_without_shift)
-        self.assertEqual(period_without_shift, result_period)
+
+        assert period_with_origin != period_without_shift
+        assert period_without_shift == result_period
 
 
-class TestYearPeriod(unittest.TestCase):
+class TestYearPeriod:
     """Test YearPeriod class"""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,test_dt,test_ordinal",
         [
             ("P1Y", datetime.datetime(1066, 1, 1), 1066),
             ("P1Y", datetime.datetime(1984, 1, 1), 1984),
             ("P1Y", datetime.datetime(5432, 1, 1), 5432),
-        ]
+        ],
     )
     def test_good(self, name: str, test_dt: datetime.datetime, test_ordinal: int) -> None:
         """Test legal YearPeriod instances"""
         period: Period = Period.of_duration(name)
-        self.assertTrue(
-            isinstance(period, p.YearPeriod),
-            f"Class mismatch: {period} is not of class {p.YearPeriod}",
-        )
-        ordinal: int = period.ordinal(test_dt)
-        self.assertEqual(ordinal, test_ordinal)
-        dt: datetime.datetime = period.datetime(ordinal)
-        self.assertEqual(dt.tzinfo, period.tzinfo)
-        self.assertEqual(dt, test_dt)
+        assert isinstance(period, p.YearPeriod), f"Class mismatch: {period} is not of class {p.YearPeriod}"
 
-    @parameterized.expand(
+        ordinal: int = period.ordinal(test_dt)
+        assert ordinal == test_ordinal
+
+        dt: datetime.datetime = period.datetime(ordinal)
+        assert dt.tzinfo == period.tzinfo
+        assert dt == test_dt
+
+    @pytest.mark.parametrize(
+        "name",
         [
-            ("P1Y+0.000001S",),
-            ("P1Y+1D",),
-            ("P2Y",),
-            ("P3Y",),
-            ("P4Y",),
-            ("P6M",),
-            ("P1D",),
-            ("P1H",),
-        ]
+            "P1Y+0.000001S",
+            "P1Y+1D",
+            "P2Y",
+            "P3Y",
+            "P4Y",
+            "P6M",
+            "P1D",
+            "P1H",
+        ],
     )
     def test_bad(self, name: str) -> None:
         """Test illegal YearPeriod instances"""
         period: Period = Period.of_duration(name)
-        self.assertFalse(
-            isinstance(period, p.YearPeriod),
-            f"Class mismatch: {period} is of class {p.YearPeriod}",
-        )
+        assert not isinstance(period, p.YearPeriod), f"Class mismatch: {period} is of class {p.YearPeriod}"
 
 
-class TestMultiYearPeriod(unittest.TestCase):
+class TestMultiYearPeriod:
     """Test MultiYearPeriod class"""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,test_dt,test_ordinal",
         [
             ("P2Y", datetime.datetime(1066, 1, 1), 533),
             ("P3Y", datetime.datetime(1983, 1, 1), 661),
             ("P4Y", datetime.datetime(5432, 1, 1), 1358),
-        ]
+        ],
     )
     def test_good(self, name: str, test_dt: datetime.datetime, test_ordinal: int) -> None:
         """Test legal MultiYearPeriod instances"""
         period: Period = Period.of_duration(name)
-        self.assertTrue(
-            isinstance(period, p.MultiYearPeriod),
-            f"Class mismatch: {period} is not of class {p.MultiYearPeriod}",
-        )
-        ordinal: int = period.ordinal(test_dt)
-        self.assertEqual(ordinal, test_ordinal)
-        dt: datetime.datetime = period.datetime(ordinal)
-        self.assertEqual(dt.tzinfo, period.tzinfo)
-        self.assertEqual(dt, test_dt)
+        assert isinstance(period, p.MultiYearPeriod), f"Class mismatch: {period} is not of class {p.MultiYearPeriod}"
 
-    @parameterized.expand(
+        ordinal: int = period.ordinal(test_dt)
+        assert ordinal == test_ordinal
+
+        dt: datetime.datetime = period.datetime(ordinal)
+        assert dt.tzinfo == period.tzinfo
+        assert dt == test_dt
+
+    @pytest.mark.parametrize(
+        "name",
         [
-            ("P1Y",),
-            ("P2Y+0.000001S",),
-            ("P3Y+1D",),
-            ("P4Y+1Y",),
-            ("P6M",),
-            ("P1D",),
-            ("P1H",),
-        ]
+            "P1Y",
+            "P2Y+0.000001S",
+            "P3Y+1D",
+            "P4Y+1Y",
+            "P6M",
+            "P1D",
+            "P1H",
+        ],
     )
     def test_bad(self, name: str) -> None:
         """Test illegal MultiYearPeriod instances"""
         period: Period = Period.of_duration(name)
-        self.assertFalse(
-            isinstance(period, p.MultiYearPeriod),
-            f"Class mismatch: {period} is of class {p.MultiYearPeriod}",
-        )
+
+        assert not isinstance(period, p.MultiYearPeriod), f"Class mismatch: {period} is of class {p.MultiYearPeriod}"
 
 
-class TestMonthPeriod(unittest.TestCase):
+class TestMonthPeriod:
     """Test MonthPeriod class"""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,test_dt,test_ordinal",
         [
             ("P1M", datetime.datetime(1066, 1, 1), 12792),
             ("P1M", datetime.datetime(1983, 1, 1), 23796),
             ("P1M", datetime.datetime(5432, 1, 1), 65184),
             ("P1M", datetime.datetime(2024, 10, 1), 24297),
-        ]
+        ],
     )
     def test_good(self, name: str, test_dt: datetime.datetime, test_ordinal: int) -> None:
         """Test legal MonthPeriod instances"""
         period: Period = Period.of_duration(name)
-        self.assertTrue(
-            isinstance(period, p.MonthPeriod),
-            f"Class mismatch: {period} is not of class {p.MonthPeriod}",
-        )
-        ordinal: int = period.ordinal(test_dt)
-        self.assertEqual(ordinal, test_ordinal)
-        dt: datetime.datetime = period.datetime(ordinal)
-        self.assertEqual(dt.tzinfo, period.tzinfo)
-        self.assertEqual(dt, test_dt)
+        assert isinstance(period, p.MonthPeriod), f"Class mismatch: {period} is not of class {p.MonthPeriod}"
 
-    @parameterized.expand(
+        ordinal: int = period.ordinal(test_dt)
+        assert ordinal == test_ordinal
+
+        dt: datetime.datetime = period.datetime(ordinal)
+        assert dt.tzinfo == period.tzinfo
+        assert dt == test_dt
+
+    @pytest.mark.parametrize(
+        "name",
         [
-            ("P1Y",),
-            ("P12M",),
-            ("P2M",),
-            ("P1M+0.000001S",),
-            ("P1M+1D",),
-            ("P4Y+1Y",),
-            ("P6M",),
-            ("P1D",),
-            ("P1H",),
-        ]
+            "P1Y",
+            "P12M",
+            "P2M",
+            "P1M+0.000001S",
+            "P1M+1D",
+            "P4Y+1Y",
+            "P6M",
+            "P1D",
+            "P1H",
+        ],
     )
     def test_bad(self, name: str) -> None:
         """Test illegal MonthPeriod instances"""
         period: Period = Period.of_duration(name)
-        self.assertFalse(
-            isinstance(period, p.MonthPeriod),
-            f"Class mismatch: {period} is of class {p.MonthPeriod}",
-        )
+
+        assert not isinstance(period, p.MonthPeriod), f"Class mismatch: {period} is of class {p.MonthPeriod}"
 
 
-class TestMultiMonthPeriod(unittest.TestCase):
+class TestMultiMonthPeriod:
     """Test MultiMonthPeriod class"""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,test_dt,test_ordinal",
         [
             ("P2M", datetime.datetime(1066, 1, 1), 6396),
             ("P3M", datetime.datetime(1983, 1, 1), 7932),
             ("P4M", datetime.datetime(5432, 1, 1), 16296),
             ("P6M", datetime.datetime(2024, 7, 1), 4049),
-        ]
+        ],
     )
     def test_good(self, name: str, test_dt: datetime.datetime, test_ordinal: int) -> None:
         """Test legal MultiMonthPeriod instances"""
         period: Period = Period.of_duration(name)
-        self.assertTrue(
-            isinstance(period, p.MultiMonthPeriod),
-            f"Class mismatch: {period} is not of class {p.MultiMonthPeriod}",
-        )
-        ordinal: int = period.ordinal(test_dt)
-        self.assertEqual(ordinal, test_ordinal)
-        dt: datetime.datetime = period.datetime(ordinal)
-        self.assertEqual(dt.tzinfo, period.tzinfo)
-        self.assertEqual(dt, test_dt)
+        assert isinstance(period, p.MultiMonthPeriod), f"Class mismatch: {period} is not of class {p.MultiMonthPeriod}"
 
-    @parameterized.expand(
+        ordinal: int = period.ordinal(test_dt)
+        assert ordinal == test_ordinal
+
+        dt: datetime.datetime = period.datetime(ordinal)
+        assert dt.tzinfo == period.tzinfo
+        assert dt == test_dt
+
+    @pytest.mark.parametrize(
+        "name",
         [
-            ("P1M",),
-            ("P1Y",),
-            ("P12M",),
-            ("P2M+0.000001S",),
-            ("P2M+1D",),
-            ("P2M+1H",),
-            ("P1D",),
-            ("P1H",),
-        ]
+            "P1M",
+            "P1Y",
+            "P12M",
+            "P2M+0.000001S",
+            "P2M+1D",
+            "P2M+1H",
+            "P1D",
+            "P1H",
+        ],
     )
     def test_bad(self, name: str) -> None:
         """Test illegal MultiMonthPeriod instances"""
         period: Period = Period.of_duration(name)
-        self.assertFalse(
-            isinstance(period, p.MultiMonthPeriod),
-            f"Class mismatch: {period} is of class {p.MultiMonthPeriod}",
-        )
+        assert not isinstance(period, p.MultiMonthPeriod), f"Class mismatch: {period} is of class {p.MultiMonthPeriod}"
 
 
-class TestNaiveDayPeriod(unittest.TestCase):
+class TestNaiveDayPeriod:
     """Test NaiveDayPeriod class"""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,test_dt,test_ordinal",
         [
             ("P1D", datetime.datetime(1066, 1, 1), 388984),
             ("P1D", datetime.datetime(1983, 1, 1), 723911),
             ("P1D", datetime.datetime(2024, 10, 10), 739169),
             ("P1D", datetime.datetime(5432, 2, 29), 1983691),
-        ]
+        ],
     )
     def test_good(self, name: str, test_dt: datetime.datetime, test_ordinal: int) -> None:
         """Test legal NaiveDayPeriod instances"""
         period: Period = Period.of_duration(name)
-        self.assertTrue(
-            isinstance(period, p.NaiveDayPeriod),
-            f"Class mismatch: {period} is not of class {p.NaiveDayPeriod}",
-        )
-        ordinal: int = period.ordinal(test_dt)
-        self.assertEqual(ordinal, test_ordinal)
-        dt: datetime.datetime = period.datetime(ordinal)
-        self.assertEqual(dt.tzinfo, period.tzinfo)
-        self.assertEqual(dt, test_dt)
+        assert isinstance(period, p.NaiveDayPeriod), f"Class mismatch: {period} is not of class {p.NaiveDayPeriod}"
 
-    @parameterized.expand(
+        ordinal: int = period.ordinal(test_dt)
+        assert ordinal == test_ordinal
+
+        dt: datetime.datetime = period.datetime(ordinal)
+        assert dt.tzinfo == period.tzinfo
+        assert dt == test_dt
+
+    @pytest.mark.parametrize(
+        "name",
         [
-            ("P1Y",),
-            ("P2Y",),
-            ("P1M",),
-            ("P2M",),
-            ("P12M",),
-            ("P1D+0.000001S",),
-            ("P1D+1H",),
-            ("P1D+T1M",),
-            ("P2D",),
-            ("P1H",),
-            ("PT1M",),
-        ]
+            "P1Y",
+            "P2Y",
+            "P1M",
+            "P2M",
+            "P12M",
+            "P1D+0.000001S",
+            "P1D+1H",
+            "P1D+T1M",
+            "P2D",
+            "P1H",
+            "PT1M",
+        ],
     )
     def test_bad(self, name: str) -> None:
         """Test illegal NaiveDayPeriod instances"""
         period: Period = Period.of_duration(name)
-        self.assertFalse(
-            isinstance(period, p.NaiveDayPeriod),
-            f"Class mismatch: {period} is of class {p.NaiveDayPeriod}",
-        )
+        assert not isinstance(period, p.NaiveDayPeriod), f"Class mismatch: {period} is of class {p.NaiveDayPeriod}"
 
 
-class TestAwareDayPeriod(unittest.TestCase):
+class TestAwareDayPeriod:
     """Test AwareDayPeriod class"""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,test_dt,test_ordinal",
         [
             ("P1D", datetime.datetime(1066, 1, 1), 388984),
             ("P1D", datetime.datetime(1983, 1, 1), 723911),
             ("P1D", datetime.datetime(2024, 10, 10), 739169),
             ("P1D", datetime.datetime(5432, 2, 29), 1983691),
-        ]
+        ],
     )
     def test_good(self, name: str, test_dt: datetime.datetime, test_ordinal: int) -> None:
         """Test legal AwareDayPeriod instances"""
         period: Period = Period.of_duration(name)
-        self.assertFalse(
-            isinstance(period, p.AwareDayPeriod),
-            f"Class mismatch: {period} is of class {p.AwareDayPeriod}",
-        )
-        period = period.with_tzinfo(TZ_UTC)
-        self.assertTrue(
-            isinstance(period, p.AwareDayPeriod),
-            f"Class mismatch: {period} is not of class {p.AwareDayPeriod}",
-        )
-        ordinal: int = period.ordinal(test_dt)
-        self.assertEqual(ordinal, test_ordinal)
-        dt: datetime.datetime = period.datetime(ordinal)
-        self.assertEqual(dt.tzinfo, period.tzinfo)
-        dt = dt.replace(tzinfo=None)
-        self.assertEqual(dt, test_dt)
 
-    @parameterized.expand(
+        assert not isinstance(period, p.AwareDayPeriod), f"Class mismatch: {period} is of class {p.AwareDayPeriod}"
+
+        period = period.with_tzinfo(TZ_UTC)
+        assert isinstance(period, p.AwareDayPeriod), f"Class mismatch: {period} is not of class {p.AwareDayPeriod}"
+
+        ordinal: int = period.ordinal(test_dt)
+        assert ordinal == test_ordinal
+
+        dt: datetime.datetime = period.datetime(ordinal)
+        assert dt.tzinfo == period.tzinfo
+
+        dt = dt.replace(tzinfo=None)
+        assert dt == test_dt
+
+    @pytest.mark.parametrize(
+        "name",
         [
-            ("P1Y",),
-            ("P2Y",),
-            ("P1M",),
-            ("P2M",),
-            ("P12M",),
-            ("P1D+0.000001S",),
-            ("P1D+1H",),
-            ("P1D+T1M",),
-            ("P2D",),
-            ("P1H",),
-            ("PT1M",),
-        ]
+            "P1Y",
+            "P2Y",
+            "P1M",
+            "P2M",
+            "P12M",
+            "P1D+0.000001S",
+            "P1D+1H",
+            "P1D+T1M",
+            "P2D",
+            "P1H",
+            "PT1M",
+        ],
     )
     def test_bad(self, name: str) -> None:
         """Test illegal AwareDayPeriod instances"""
         period: Period = Period.of_duration(name).with_tzinfo(TZ_UTC)
-        self.assertFalse(
-            isinstance(period, p.AwareDayPeriod),
-            f"Class mismatch: {period} is of class {p.AwareDayPeriod}",
-        )
+        assert not isinstance(period, p.AwareDayPeriod), f"Class mismatch: {period} is of class {p.AwareDayPeriod}"
 
 
-class TestNaiveMultiDayPeriod(unittest.TestCase):
+class TestNaiveMultiDayPeriod:
     """Test NaiveMultiDayPeriod class"""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,test_dt,test_ordinal",
         [
             ("P2D", datetime.datetime(1066, 1, 1), 194492),
             ("P3D", datetime.datetime(1983, 1, 2), 241304),
             ("P4D", datetime.datetime(2024, 10, 9), 184792),
             ("P5D", datetime.datetime(5432, 2, 28), 396738),
-        ]
+        ],
     )
     def test_good(self, name: str, test_dt: datetime.datetime, test_ordinal: int) -> None:
         """Test legal NaiveMultiDayPeriod instances"""
         period: Period = Period.of_duration(name)
-        self.assertTrue(
-            isinstance(period, p.NaiveMultiDayPeriod),
-            f"Class mismatch: {period} is not of class {p.NaiveMultiDayPeriod}",
-        )
-        ordinal: int = period.ordinal(test_dt)
-        self.assertEqual(ordinal, test_ordinal)
-        dt: datetime.datetime = period.datetime(ordinal)
-        self.assertEqual(dt.tzinfo, period.tzinfo)
-        self.assertEqual(dt, test_dt)
 
-    @parameterized.expand(
+        assert isinstance(period, p.NaiveMultiDayPeriod), (
+            f"Class mismatch: {period} is not of class {p.NaiveMultiDayPeriod}"
+        )
+
+        ordinal: int = period.ordinal(test_dt)
+        assert ordinal == test_ordinal
+
+        dt: datetime.datetime = period.datetime(ordinal)
+        assert dt.tzinfo == period.tzinfo
+        assert dt == test_dt
+
+    @pytest.mark.parametrize(
+        "name",
         [
-            ("P1Y",),
-            ("P2Y",),
-            ("P1M",),
-            ("P2M",),
-            ("P12M",),
-            ("P1D",),
-            ("P2D+0.000001S",),
-            ("P2D+1H",),
-            ("P2D+T1M",),
-            ("P1H",),
-            ("PT1M",),
-        ]
+            "P1Y",
+            "P2Y",
+            "P1M",
+            "P2M",
+            "P12M",
+            "P1D",
+            "P2D+0.000001S",
+            "P2D+1H",
+            "P2D+T1M",
+            "P1H",
+            "PT1M",
+        ],
     )
     def test_bad(self, name: str) -> None:
         """Test illegal NaiveMultiDayPeriod instances"""
         period: Period = Period.of_duration(name)
-        self.assertFalse(
-            isinstance(period, p.NaiveMultiDayPeriod),
-            f"Class mismatch: {period} is of class {p.NaiveMultiDayPeriod}",
+
+        assert not isinstance(period, p.NaiveMultiDayPeriod), (
+            f"Class mismatch: {period} is of class {p.NaiveMultiDayPeriod}"
         )
 
 
-class TestAwareMultiDayPeriod(unittest.TestCase):
+class TestAwareMultiDayPeriod:
     """Test AwareMultiDayPeriod class"""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,test_dt,test_ordinal",
         [
             ("P2D", datetime.datetime(1066, 1, 1), 194492),
             ("P3D", datetime.datetime(1983, 1, 2), 241304),
             ("P4D", datetime.datetime(2024, 10, 9), 184792),
             ("P5D", datetime.datetime(5432, 2, 28), 396738),
-        ]
+        ],
     )
     def test_good(self, name: str, test_dt: datetime.datetime, test_ordinal: int) -> None:
         """Test legal AwareMultiDayPeriod instances"""
         period: Period = Period.of_duration(name)
-        self.assertFalse(
-            isinstance(period, p.AwareMultiDayPeriod),
-            f"Class mismatch: {period} is of class {p.AwareMultiDayPeriod}",
+        assert not isinstance(period, p.AwareMultiDayPeriod), (
+            f"Class mismatch: {period} is of class {p.AwareMultiDayPeriod}"
         )
-        period = period.with_tzinfo(TZ_UTC)
-        self.assertTrue(
-            isinstance(period, p.AwareMultiDayPeriod),
-            f"Class mismatch: {period} is not of class {p.AwareMultiDayPeriod}",
-        )
-        ordinal: int = period.ordinal(test_dt)
-        self.assertEqual(ordinal, test_ordinal)
-        dt: datetime.datetime = period.datetime(ordinal)
-        self.assertEqual(dt.tzinfo, period.tzinfo)
-        dt = dt.replace(tzinfo=None)
-        self.assertEqual(dt, test_dt)
 
-    @parameterized.expand(
+        period = period.with_tzinfo(TZ_UTC)
+        assert isinstance(period, p.AwareMultiDayPeriod), (
+            f"Class mismatch: {period} is not of class {p.AwareMultiDayPeriod}"
+        )
+
+        ordinal: int = period.ordinal(test_dt)
+        assert ordinal == test_ordinal
+
+        dt: datetime.datetime = period.datetime(ordinal)
+        assert dt.tzinfo == period.tzinfo
+
+        dt = dt.replace(tzinfo=None)
+        assert dt == test_dt
+
+    @pytest.mark.parametrize(
+        "name",
         [
-            ("P1Y",),
-            ("P2Y",),
-            ("P1M",),
-            ("P2M",),
-            ("P12M",),
-            ("P1D",),
-            ("P2D+0.000001S",),
-            ("P2D+1H",),
-            ("P2D+T1M",),
-            ("P1H",),
-            ("PT1M",),
-        ]
+            "P1Y",
+            "P2Y",
+            "P1M",
+            "P2M",
+            "P12M",
+            "P1D",
+            "P2D+0.000001S",
+            "P2D+1H",
+            "P2D+T1M",
+            "P1H",
+            "PT1M",
+        ],
     )
     def test_bad(self, name: str) -> None:
         """Test illegal AwareMultiDayPeriod instances"""
         period: Period = Period.of_duration(name).with_tzinfo(TZ_UTC)
-        self.assertFalse(
-            isinstance(period, p.AwareMultiDayPeriod),
-            f"Class mismatch: {period} is of class {p.AwareMultiDayPeriod}",
+        assert not isinstance(period, p.AwareMultiDayPeriod), (
+            f"Class mismatch: {period} is of class {p.AwareMultiDayPeriod}"
         )
 
 
-class TestMultiHourPeriod(unittest.TestCase):
+class TestMultiHourPeriod:
     """Test MultiHourPeriod class"""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,test_dt,test_ordinal",
         [
             ("P1H", datetime.datetime(1066, 1, 1), 9335616),
             ("P2H", datetime.datetime(1983, 1, 1), 8686932),
             ("P3H", datetime.datetime(5432, 1, 1), 15869056),
             ("P4H", datetime.datetime(2024, 7, 1), 4434408),
-        ]
+        ],
     )
     def test_good(self, name: str, test_dt: datetime.datetime, test_ordinal: int) -> None:
         """Test legal MultiHourPeriod instances"""
         period: Period = Period.of_duration(name)
-        self.assertTrue(
-            isinstance(period, p.MultiHourPeriod),
-            f"Class mismatch: {period} is not of class {p.MultiHourPeriod}",
-        )
-        ordinal: int = period.ordinal(test_dt)
-        self.assertEqual(ordinal, test_ordinal)
-        dt: datetime.datetime = period.datetime(ordinal)
-        self.assertEqual(dt.tzinfo, period.tzinfo)
-        self.assertEqual(dt, test_dt)
+        assert isinstance(period, p.MultiHourPeriod), f"Class mismatch: {period} is not of class {p.MultiHourPeriod}"
 
-    @parameterized.expand(
+        ordinal: int = period.ordinal(test_dt)
+        assert ordinal == test_ordinal
+
+        dt: datetime.datetime = period.datetime(ordinal)
+        assert dt.tzinfo == period.tzinfo
+        assert dt == test_dt
+
+    @pytest.mark.parametrize(
+        "name",
         [
-            ("P1D",),
-            ("P1M",),
-            ("P1Y",),
-            ("P2D",),
-            ("P2M",),
-            ("P2Y",),
-            ("P12M",),
-            ("P1H+0.000001S",),
-            ("P1H+1S",),
-            ("P1H+T1M",),
-            ("P1H+T30M",),
-        ]
+            "P1D",
+            "P1M",
+            "P1Y",
+            "P2D",
+            "P2M",
+            "P2Y",
+            "P12M",
+            "P1H+0.000001S",
+            "P1H+1S",
+            "P1H+T1M",
+            "P1H+T30M",
+        ],
     )
     def test_bad(self, name: str) -> None:
         """Test illegal MultiHourPeriod instances"""
         period: Period = Period.of_duration(name)
-        self.assertFalse(
-            isinstance(period, p.MultiHourPeriod),
-            f"Class mismatch: {period} is of class {p.MultiHourPeriod}",
-        )
+        assert not isinstance(period, p.MultiHourPeriod), f"Class mismatch: {period} is of class {p.MultiHourPeriod}"
 
 
-class TestNaiveMultiMinutePeriod(unittest.TestCase):
+class TestNaiveMultiMinutePeriod:
     """Test NaiveMultiMinutePeriod class"""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,test_dt,test_ordinal",
         [
             ("PT1M", datetime.datetime(1066, 1, 1), 560136960),
             ("PT2M", datetime.datetime(1983, 1, 2), 521216640),
             ("PT3M", datetime.datetime(2024, 10, 9), 354800640),
             ("PT4M", datetime.datetime(5432, 2, 28), 714128400),
-        ]
+        ],
     )
     def test_good(self, name: str, test_dt: datetime.datetime, test_ordinal: int) -> None:
         """Test legal NaiveMultiMinutePeriod instances"""
         period: Period = Period.of_duration(name)
-        self.assertTrue(
-            isinstance(period, p.NaiveMultiMinutePeriod),
-            f"Class mismatch: {period} is not of class {p.NaiveMultiMinutePeriod}",
+        assert isinstance(period, p.NaiveMultiMinutePeriod), (
+            f"Class mismatch: {period} is not of class {p.NaiveMultiMinutePeriod}"
         )
-        ordinal: int = period.ordinal(test_dt)
-        self.assertEqual(ordinal, test_ordinal)
-        dt: datetime.datetime = period.datetime(ordinal)
-        self.assertEqual(dt.tzinfo, period.tzinfo)
-        self.assertEqual(dt, test_dt)
 
-    @parameterized.expand(
+        ordinal: int = period.ordinal(test_dt)
+        assert ordinal == test_ordinal
+        dt: datetime.datetime = period.datetime(ordinal)
+
+        assert dt.tzinfo == period.tzinfo
+        assert dt == test_dt
+
+    @pytest.mark.parametrize(
+        "name",
         [
-            ("P1Y",),
-            ("P2Y",),
-            ("P1M",),
-            ("P2M",),
-            ("P12M",),
-            ("P1D",),
-            ("PT1M+0.000001S",),
-            ("PT1M+30S",),
-            ("PT1M+1S",),
-            ("P1H",),
-        ]
+            "P1Y",
+            "P2Y",
+            "P1M",
+            "P2M",
+            "P12M",
+            "P1D",
+            "PT1M+0.000001S",
+            "PT1M+30S",
+            "PT1M+1S",
+            "P1H",
+        ],
     )
     def test_bad(self, name: str) -> None:
         """Test illegal NaiveMultiMinutePeriod instances"""
         period: Period = Period.of_duration(name)
-        self.assertFalse(
-            isinstance(period, p.NaiveMultiMinutePeriod),
-            f"Class mismatch: {period} is of class {p.NaiveMultiMinutePeriod}",
+        assert not isinstance(period, p.NaiveMultiMinutePeriod), (
+            f"Class mismatch: {period} is of class {p.NaiveMultiMinutePeriod}"
         )
 
 
-class TestAwareMultiMinutePeriod(unittest.TestCase):
+class TestAwareMultiMinutePeriod:
     """Test AwareMultiMinutePeriod class"""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,test_dt,test_ordinal",
         [
             ("PT1M", datetime.datetime(1066, 1, 1), 560136960),
             ("PT2M", datetime.datetime(1983, 1, 2), 521216640),
             ("PT3M", datetime.datetime(2024, 10, 9), 354800640),
             ("PT4M", datetime.datetime(5432, 2, 28), 714128400),
-        ]
+        ],
     )
     def test_good(self, name: str, test_dt: datetime.datetime, test_ordinal: int) -> None:
         """Test legal AwareMultiMinutePeriod instances"""
         period: Period = Period.of_duration(name)
-        self.assertFalse(
-            isinstance(period, p.AwareMultiMinutePeriod),
-            f"Class mismatch: {period} is of class {p.AwareMultiMinutePeriod}",
-        )
-        period = period.with_tzinfo(TZ_UTC)
-        self.assertTrue(
-            isinstance(period, p.AwareMultiMinutePeriod),
-            f"Class mismatch: {period} is not of class {p.AwareMultiMinutePeriod}",
-        )
-        ordinal: int = period.ordinal(test_dt)
-        self.assertEqual(ordinal, test_ordinal)
-        dt: datetime.datetime = period.datetime(ordinal)
-        self.assertEqual(dt.tzinfo, period.tzinfo)
-        dt = dt.replace(tzinfo=None)
-        self.assertEqual(dt, test_dt)
 
-    @parameterized.expand(
+        assert not isinstance(period, p.AwareMultiMinutePeriod), (
+            f"Class mismatch: {period} is of class {p.AwareMultiMinutePeriod}"
+        )
+
+        period = period.with_tzinfo(TZ_UTC)
+
+        assert isinstance(period, p.AwareMultiMinutePeriod), (
+            f"Class mismatch: {period} is not of class {p.AwareMultiMinutePeriod}"
+        )
+
+        ordinal: int = period.ordinal(test_dt)
+        assert ordinal == test_ordinal
+
+        dt: datetime.datetime = period.datetime(ordinal)
+        assert dt.tzinfo == period.tzinfo
+
+        dt = dt.replace(tzinfo=None)
+        assert dt == test_dt
+
+    @pytest.mark.parametrize(
+        "name",
         [
-            ("P1Y",),
-            ("P2Y",),
-            ("P1M",),
-            ("P2M",),
-            ("P12M",),
-            ("P1D",),
-            ("PT1M+0.000001S",),
-            ("PT1M+30S",),
-            ("PT1M+1S",),
-            ("P1H",),
-        ]
+            "P1Y",
+            "P2Y",
+            "P1M",
+            "P2M",
+            "P12M",
+            "P1D",
+            "PT1M+0.000001S",
+            "PT1M+30S",
+            "PT1M+1S",
+            "P1H",
+        ],
     )
     def test_bad(self, name: str) -> None:
         """Test illegal AwareMultiMinutePeriod instances"""
         period: Period = Period.of_duration(name).with_tzinfo(TZ_UTC)
-        self.assertFalse(
-            isinstance(period, p.AwareMultiMinutePeriod),
-            f"Class mismatch: {period} is of class {p.AwareMultiMinutePeriod}",
+        assert not isinstance(period, p.AwareMultiMinutePeriod), (
+            f"Class mismatch: {period} is of class {p.AwareMultiMinutePeriod}"
         )
 
 
-class TestNaiveMultiSecondPeriod(unittest.TestCase):
+class TestNaiveMultiSecondPeriod:
     """Test NaiveMultiSecondPeriod class"""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,test_dt,test_ordinal",
         [
             ("P1S", datetime.datetime(1066, 1, 1), 33608217600),
             ("P2S", datetime.datetime(1983, 1, 2), 31272998400),
             ("P3S", datetime.datetime(2024, 10, 9), 21288038400),
             ("P4S", datetime.datetime(5432, 2, 28), 42847704000),
-        ]
+        ],
     )
     def test_good(self, name: str, test_dt: datetime.datetime, test_ordinal: int) -> None:
         """Test legal NaiveMultiSecondPeriod instances"""
         period: Period = Period.of_duration(name)
-        self.assertTrue(
-            isinstance(period, p.NaiveMultiSecondPeriod),
-            f"Class mismatch: {period} is not of class {p.NaiveMultiSecondPeriod}",
+        assert isinstance(period, p.NaiveMultiSecondPeriod), (
+            f"Class mismatch: {period} is not of class {p.NaiveMultiSecondPeriod}"
         )
-        ordinal: int = period.ordinal(test_dt)
-        self.assertEqual(ordinal, test_ordinal)
-        dt: datetime.datetime = period.datetime(ordinal)
-        self.assertEqual(dt.tzinfo, period.tzinfo)
-        self.assertEqual(dt, test_dt)
 
-    @parameterized.expand(
+        ordinal: int = period.ordinal(test_dt)
+        assert ordinal == test_ordinal
+
+        dt: datetime.datetime = period.datetime(ordinal)
+        assert dt.tzinfo == period.tzinfo
+        assert dt == test_dt
+
+    @pytest.mark.parametrize(
+        "name",
         [
-            ("P1Y",),
-            ("P2Y",),
-            ("P1M",),
-            ("P2M",),
-            ("P12M",),
-            ("P1D",),
-            ("P1H",),
-            ("PT1M",),
-            ("P1S+0.000001S",),
-            ("P2S+0.5S",),
-            ("P3S+1S",),
-        ]
+            "P1Y",
+            "P2Y",
+            "P1M",
+            "P2M",
+            "P12M",
+            "P1D",
+            "P1H",
+            "PT1M",
+            "P1S+0.000001S",
+            "P2S+0.5S",
+            "P3S+1S",
+        ],
     )
     def test_bad(self, name: str) -> None:
         """Test illegal NaiveMultiSecondPeriod instances"""
         period: Period = Period.of_duration(name)
-        self.assertFalse(
-            isinstance(period, p.NaiveMultiSecondPeriod),
-            f"Class mismatch: {period} is of class {p.NaiveMultiSecondPeriod}",
+        assert not isinstance(period, p.NaiveMultiSecondPeriod), (
+            f"Class mismatch: {period} is of class {p.NaiveMultiSecondPeriod}"
         )
 
 
-class TestAwareMultiSecondPeriod(unittest.TestCase):
+class TestAwareMultiSecondPeriod:
     """Test AwareMultiSecondPeriod class"""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,test_dt,test_ordinal",
         [
             ("P1S", datetime.datetime(1066, 1, 1), 33608217600),
             ("P2S", datetime.datetime(1983, 1, 2), 31272998400),
             ("P3S", datetime.datetime(2024, 10, 9), 21288038400),
             ("P4S", datetime.datetime(5432, 2, 28), 42847704000),
-        ]
+        ],
     )
     def test_good(self, name: str, test_dt: datetime.datetime, test_ordinal: int) -> None:
         """Test legal AwareMultiSecondPeriod instances"""
         period: Period = Period.of_duration(name)
-        self.assertFalse(
-            isinstance(period, p.AwareMultiSecondPeriod),
-            f"Class mismatch: {period} is of class {p.AwareMultiSecondPeriod}",
+        assert not isinstance(period, p.AwareMultiSecondPeriod), (
+            f"Class mismatch: {period} is of class {p.AwareMultiSecondPeriod}"
         )
-        period = period.with_tzinfo(TZ_UTC)
-        self.assertTrue(
-            isinstance(period, p.AwareMultiSecondPeriod),
-            f"Class mismatch: {period} is not of class {p.AwareMultiSecondPeriod}",
-        )
-        ordinal: int = period.ordinal(test_dt)
-        self.assertEqual(ordinal, test_ordinal)
-        dt: datetime.datetime = period.datetime(ordinal)
-        self.assertEqual(dt.tzinfo, period.tzinfo)
-        dt = dt.replace(tzinfo=None)
-        self.assertEqual(dt, test_dt)
 
-    @parameterized.expand(
+        period = period.with_tzinfo(TZ_UTC)
+        assert isinstance(period, p.AwareMultiSecondPeriod), (
+            f"Class mismatch: {period} is not of class {p.AwareMultiSecondPeriod}"
+        )
+
+        ordinal: int = period.ordinal(test_dt)
+        assert ordinal == test_ordinal
+
+        dt: datetime.datetime = period.datetime(ordinal)
+        assert dt.tzinfo == period.tzinfo
+
+        dt = dt.replace(tzinfo=None)
+        assert dt == test_dt
+
+    @pytest.mark.parametrize(
+        "name",
         [
-            ("P1Y",),
-            ("P2Y",),
-            ("P1M",),
-            ("P2M",),
-            ("P12M",),
-            ("P1D",),
-            ("P1H",),
-            ("PT1M",),
-            ("P1S+0.000001S",),
-            ("P2S+0.5S",),
-            ("P3S+1S",),
-        ]
+            "P1Y",
+            "P2Y",
+            "P1M",
+            "P2M",
+            "P12M",
+            "P1D",
+            "P1H",
+            "PT1M",
+            "P1S+0.000001S",
+            "P2S+0.5S",
+            "P3S+1S",
+        ],
     )
     def test_bad(self, name: str) -> None:
         """Test illegal AwareMultiSecondPeriod instances"""
         period: Period = Period.of_duration(name).with_tzinfo(TZ_UTC)
-        self.assertFalse(
-            isinstance(period, p.AwareMultiSecondPeriod),
-            f"Class mismatch: {period} is of class {p.AwareMultiSecondPeriod}",
+        assert not isinstance(period, p.AwareMultiSecondPeriod), (
+            f"Class mismatch: {period} is of class {p.AwareMultiSecondPeriod}"
         )
 
 
-class TestNaiveMicroSecondPeriod(unittest.TestCase):
+class TestNaiveMicroSecondPeriod:
     """Test NaiveMicroSecondPeriod class"""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,test_dt,test_ordinal",
         [
             ("P0.000001S", datetime.datetime(1066, 1, 1), 33608217600000000),
             ("P0.001S", datetime.datetime(1983, 1, 2), 62545996800000),
             ("P0.04S", datetime.datetime(2024, 10, 9), 1596602880000),
             ("P0.5S", datetime.datetime(5432, 2, 28), 342781632000),
-        ]
+        ],
     )
     def test_good(self, name: str, test_dt: datetime.datetime, test_ordinal: int) -> None:
         """Test legal NaiveMicroSecondPeriod instances"""
         period: Period = Period.of_duration(name)
-        self.assertTrue(
-            isinstance(period, p.NaiveMicroSecondPeriod),
-            f"Class mismatch: {period} is not of class {p.NaiveMicroSecondPeriod}",
+        assert isinstance(period, p.NaiveMicroSecondPeriod), (
+            f"Class mismatch: {period} is not of class {p.NaiveMicroSecondPeriod}"
         )
-        ordinal: int = period.ordinal(test_dt)
-        self.assertEqual(ordinal, test_ordinal)
-        dt: datetime.datetime = period.datetime(ordinal)
-        self.assertEqual(dt.tzinfo, period.tzinfo)
-        self.assertEqual(dt, test_dt)
 
-    @parameterized.expand(
+        ordinal: int = period.ordinal(test_dt)
+        assert ordinal == test_ordinal
+
+        dt: datetime.datetime = period.datetime(ordinal)
+        assert dt.tzinfo == period.tzinfo
+        assert dt == test_dt
+
+    @pytest.mark.parametrize(
+        "name",
         [
-            ("P1Y",),
-            ("P2Y",),
-            ("P1M",),
-            ("P2M",),
-            ("P12M",),
-            ("P1D",),
-            ("P1H",),
-            ("PT1M",),
-            ("P1S",),
-            ("P0.5S+0.000001S",),
-            ("P0.04S+0.001S",),
-            ("P0.000002S+0.000001S",),
-        ]
+            "P1Y",
+            "P2Y",
+            "P1M",
+            "P2M",
+            "P12M",
+            "P1D",
+            "P1H",
+            "PT1M",
+            "P1S",
+            "P0.5S+0.000001S",
+            "P0.04S+0.001S",
+            "P0.000002S+0.000001S",
+        ],
     )
     def test_bad(self, name: str) -> None:
         """Test illegal NaiveMicroSecondPeriod instances"""
         period: Period = Period.of_duration(name)
-        self.assertFalse(
-            isinstance(period, p.NaiveMicroSecondPeriod),
-            f"Class mismatch: {period} is of class {p.NaiveMicroSecondPeriod}",
+
+        assert not isinstance(period, p.NaiveMicroSecondPeriod), (
+            f"Class mismatch: {period} is of class {p.NaiveMicroSecondPeriod}"
         )
 
 
-class TestAwareMicroSecondPeriod(unittest.TestCase):
+class TestAwareMicroSecondPeriod:
     """Test AwareMicroSecondPeriod class"""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,test_dt,test_ordinal",
         [
             ("P0.000001S", datetime.datetime(1066, 1, 1), 33608217600000000),
             ("P0.001S", datetime.datetime(1983, 1, 2), 62545996800000),
             ("P0.04S", datetime.datetime(2024, 10, 9), 1596602880000),
             ("P0.5S", datetime.datetime(5432, 2, 28), 342781632000),
-        ]
+        ],
     )
     def test_good(self, name: str, test_dt: datetime.datetime, test_ordinal: int) -> None:
         """Test legal AwareMicroSecondPeriod instances"""
         period: Period = Period.of_duration(name)
-        self.assertFalse(
-            isinstance(period, p.AwareMicroSecondPeriod),
-            f"Class mismatch: {period} is of class {p.AwareMicroSecondPeriod}",
+        assert not isinstance(period, p.AwareMicroSecondPeriod), (
+            f"Class mismatch: {period} is of class {p.AwareMicroSecondPeriod}"
         )
-        period = period.with_tzinfo(TZ_UTC)
-        self.assertTrue(
-            isinstance(period, p.AwareMicroSecondPeriod),
-            f"Class mismatch: {period} is not of class {p.AwareMicroSecondPeriod}",
-        )
-        ordinal: int = period.ordinal(test_dt)
-        self.assertEqual(ordinal, test_ordinal)
-        dt: datetime.datetime = period.datetime(ordinal)
-        self.assertEqual(dt.tzinfo, period.tzinfo)
-        dt = dt.replace(tzinfo=None)
-        self.assertEqual(dt, test_dt)
 
-    @parameterized.expand(
+        period = period.with_tzinfo(TZ_UTC)
+        assert isinstance(period, p.AwareMicroSecondPeriod), (
+            f"Class mismatch: {period} is not of class {p.AwareMicroSecondPeriod}"
+        )
+
+        ordinal: int = period.ordinal(test_dt)
+        assert ordinal == test_ordinal
+
+        dt: datetime.datetime = period.datetime(ordinal)
+        assert dt.tzinfo == period.tzinfo
+
+        dt = dt.replace(tzinfo=None)
+        assert dt == test_dt
+
+    @pytest.mark.parametrize(
+        "name",
         [
-            ("P1Y",),
-            ("P2Y",),
-            ("P1M",),
-            ("P2M",),
-            ("P12M",),
-            ("P1D",),
-            ("P1H",),
-            ("PT1M",),
-            ("P1S",),
-            ("P0.5S+0.000001S",),
-            ("P0.04S+0.001S",),
-            ("P0.000002S+0.000001S",),
-        ]
+            "P1Y",
+            "P2Y",
+            "P1M",
+            "P2M",
+            "P12M",
+            "P1D",
+            "P1H",
+            "PT1M",
+            "P1S",
+            "P0.5S+0.000001S",
+            "P0.04S+0.001S",
+            "P0.000002S+0.000001S",
+        ],
     )
     def test_bad(self, name: str) -> None:
         """Test illegal AwareMicroSecondPeriod instances"""
         period: Period = Period.of_duration(name).with_tzinfo(TZ_UTC)
-        self.assertFalse(
-            isinstance(period, p.AwareMicroSecondPeriod),
-            f"Class mismatch: {period} is of class {p.AwareMicroSecondPeriod}",
+        assert not isinstance(period, p.AwareMicroSecondPeriod), (
+            f"Class mismatch: {period} is of class {p.AwareMicroSecondPeriod}"
         )
 
 
-class TestGetPeriodTzinfo(unittest.TestCase):
+class TestGetPeriodTzinfo:
     """Test _get_period_tzinfo function"""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,tz,naive_class,aware_class,result_class",
         [
             ("P1D", None, p.NaiveDayPeriod, p.AwareDayPeriod, p.NaiveDayPeriod),
             ("P1D", TZ_UTC, p.NaiveDayPeriod, p.AwareDayPeriod, p.AwareDayPeriod),
@@ -6364,7 +6734,7 @@ class TestGetPeriodTzinfo(unittest.TestCase):
                 p.AwareMicroSecondPeriod,
                 p.AwareMicroSecondPeriod,
             ),
-        ]
+        ],
     )
     def test_calls(
         self,
@@ -6377,63 +6747,69 @@ class TestGetPeriodTzinfo(unittest.TestCase):
         """Test _get_period_tzinfo calls"""
         properties: p.Properties = Period.of_duration(name).with_tzinfo(tz)._properties
         result: Period = p._get_period_tzinfo(tz, properties, naive_class, aware_class)
-        self.assertTrue(
-            isinstance(result, result_class),
-            f"Class mismatch: {result} is not of class {result_class}",
-        )
+        assert isinstance(result, result_class), f"Class mismatch: {result} is not of class {result_class}"
 
 
-class TestGetShiftedPeriod(unittest.TestCase):
+class TestGetShiftedPeriod:
     """Test _get_shifted_period function"""
 
-    @parameterized.expand(sorted(_GOOD_ISO_DURATION))
+    @pytest.mark.parametrize("name", sorted(_GOOD_ISO_DURATION))
     def test_iso(self, name: str) -> None:
         base_period: Period = Period.of_iso_duration(name)
         base_properties: p.Properties = base_period._properties
-        self.assertEqual(base_period, p._get_shifted_period(base_properties))
+
+        assert base_period == p._get_shifted_period(base_properties)
+
         shifted_properties: p.Properties = base_properties.with_ordinal_shift(1)
         shifted_period: Period = p._get_shifted_period(shifted_properties)
-        self.assertTrue(isinstance(shifted_period, p.ShiftedPeriod))
-        self.assertEqual(base_period, shifted_period.base_period())
+
+        assert isinstance(shifted_period, p.ShiftedPeriod)
+        assert base_period == shifted_period.base_period()
 
 
-class TestGetOffsetPeriod(unittest.TestCase):
+class TestGetOffsetPeriod:
     """Test _get_offset_period function"""
 
-    @parameterized.expand(sorted(_GOOD_ISO_DURATION))
+    @pytest.mark.parametrize("name", sorted(_GOOD_ISO_DURATION))
     def test_iso(self, name: str) -> None:
         base_period: Period = Period.of_iso_duration(name)
         base_properties: p.Properties = base_period._properties
-        self.assertEqual(base_period, p._get_offset_period(base_properties))
+
+        assert base_period == p._get_offset_period(base_properties)
+
         shifted_properties: p.Properties = base_properties.with_ordinal_shift(1)
-        with self.assertRaises(PeriodValidationError):
+        with pytest.raises(PeriodValidationError):
             p._get_offset_period(shifted_properties)
+
         offset_properties: p.Properties = base_properties.with_microsecond_offset(1)
         offset_period: Period = p._get_offset_period(offset_properties)
-        self.assertTrue(isinstance(offset_period, p.OffsetPeriod))
-        self.assertEqual(base_period, offset_period.base_period())
+
+        assert isinstance(offset_period, p.OffsetPeriod)
+        assert base_period == offset_period.base_period()
 
 
-class TestGetBasePeriod(unittest.TestCase):
+class TestGetBasePeriod:
     """Test _get_base_period function"""
 
-    @parameterized.expand(sorted(_GOOD_ISO_DURATION))
+    @pytest.mark.parametrize("name", sorted(_GOOD_ISO_DURATION))
     def test_iso(self, name: str) -> None:
         base_period: Period = Period.of_iso_duration(name)
         base_properties: p.Properties = base_period._properties
-        self.assertEqual(base_period, p._get_base_period(base_properties))
+        assert base_period == p._get_base_period(base_properties)
+
         shifted_properties: p.Properties = base_properties.with_ordinal_shift(1)
-        with self.assertRaises(PeriodValidationError):
+        with pytest.raises(PeriodValidationError):
             p._get_base_period(shifted_properties)
+
         offset_properties: p.Properties = base_properties.with_microsecond_offset(1)
-        with self.assertRaises(PeriodValidationError):
+        with pytest.raises(PeriodValidationError):
             p._get_base_period(offset_properties)
 
 
 # A list of tuples used to test that offset periods are created with
 # the correct properties.
 #
-# Used with @parameterized.expand
+# Used with @pytest.mark.parametrize
 _OFFSET_PARAMS = [
     (
         "P1Y+1M",
@@ -6578,10 +6954,10 @@ _OFFSET_PARAMS = [
 ]
 
 
-class TestOffsetPeriod(unittest.TestCase):
+class TestOffsetPeriod:
     """Test OffsetPeriod class"""
 
-    @parameterized.expand(_OFFSET_PARAMS)
+    @pytest.mark.parametrize("name,tz,test_dt,test_ordinal,base_p_class", _OFFSET_PARAMS)
     def test_good(
         self,
         name: Any,
@@ -6592,54 +6968,49 @@ class TestOffsetPeriod(unittest.TestCase):
     ) -> None:
         """Test legal OffsetPeriod instances"""
         period: Period = Period.of_duration(name).with_tzinfo(tz)
-        self.assertTrue(
-            isinstance(period, p.OffsetPeriod),
-            f"Class mismatch: {period} is not of class {p.OffsetPeriod}",
-        )
-        ordinal: int = period.ordinal(test_dt)
-        self.assertEqual(ordinal, test_ordinal)
-        dt: datetime.datetime = period.datetime(ordinal)
-        self.assertEqual(dt.tzinfo, period.tzinfo)
-        self.assertEqual(dt, test_dt)
-        base_p: Period = period.base_period()
-        self.assertTrue(
-            isinstance(base_p, base_p_class),
-            f"Class mismatch: Base period {period} is not of class {base_p_class}",
-        )
+        assert isinstance(period, p.OffsetPeriod), f"Class mismatch: {period} is not of class {p.OffsetPeriod}"
 
-    @parameterized.expand(
+        ordinal: int = period.ordinal(test_dt)
+        assert ordinal == test_ordinal
+
+        dt: datetime.datetime = period.datetime(ordinal)
+        assert dt.tzinfo == period.tzinfo
+        assert dt == test_dt
+
+        base_p: Period = period.base_period()
+        assert isinstance(base_p, base_p_class), f"Class mismatch: Base period {period} is not of class {base_p_class}"
+
+    @pytest.mark.parametrize(
+        "name",
         [
-            ("P2Y",),
-            ("P1Y",),
-            ("P2M",),
-            ("P1M",),
-            ("P2D",),
-            ("P1D",),
-            ("P2H",),
-            ("P1H",),
-            ("PT2M",),
-            ("PT1M",),
-            ("P2S",),
-            ("P1S",),
-            ("P0.002S",),
-            ("P0.001S",),
-            ("P0.000002S",),
-            ("P0.000001S",),
-        ]
+            "P2Y",
+            "P1Y",
+            "P2M",
+            "P1M",
+            "P2D",
+            "P1D",
+            "P2H",
+            "P1H",
+            "PT2M",
+            "PT1M",
+            "P2S",
+            "P1S",
+            "P0.002S",
+            "P0.001S",
+            "P0.000002S",
+            "P0.000001S",
+        ],
     )
     def test_bad(self, name: str) -> None:
         """Test illegal OffsetPeriod instances"""
         period: Period = Period.of_duration(name)
-        self.assertFalse(
-            isinstance(period, p.OffsetPeriod),
-            f"Class mismatch: {period} is of class {p.OffsetPeriod}",
-        )
+        assert not isinstance(period, p.OffsetPeriod), f"Class mismatch: {period} is of class {p.OffsetPeriod}"
 
 
 # A list of tuples used to test that ordinal shifted periods are
 # created with the correct properties.
 #
-# Used with @parameterized.expand
+# Used with @pytest.mark.parametrize
 _BASE_PARAMS = [
     ("P1Y", None, datetime.datetime(1066, 2, 1, 0, 0, 0, 0, None), 1066, p.YearPeriod),
     (
@@ -6778,10 +7149,10 @@ _BASE_PARAMS = [
 ]
 
 
-class TestShiftedPeriod(unittest.TestCase):
+class TestShiftedPeriod:
     """Test ShiftedPeriod class"""
 
-    @parameterized.expand(_OFFSET_PARAMS)
+    @pytest.mark.parametrize("name,tz,test_dt,_,base_p_class", _OFFSET_PARAMS)
     def test_good_offset(
         self,
         name: Any,
@@ -6792,29 +7163,29 @@ class TestShiftedPeriod(unittest.TestCase):
     ) -> None:
         """Test ShiftedPeriod instances"""
         offset_period: Period = Period.of_duration(name).with_tzinfo(tz)
-        self.assertTrue(
-            isinstance(offset_period, p.OffsetPeriod),
-            f"Class mismatch: {offset_period} is not of class {p.OffsetPeriod}",
-        )
-        shifted_period: Period = offset_period.with_origin(test_dt)
-        ordinal: int = shifted_period.ordinal(test_dt)
-        self.assertEqual(ordinal, 0)
-        dt: datetime.datetime = shifted_period.datetime(ordinal)
-        self.assertEqual(dt.tzinfo, shifted_period.tzinfo)
-        self.assertEqual(dt, test_dt)
-        base_p_offset: Period = offset_period.base_period()
-        base_p_shifted: Period = shifted_period.base_period()
-        self.assertEqual(
-            base_p_offset,
-            base_p_shifted,
-            f"ShiftedPeriod: Base period mismatch: {base_p_offset} != {base_p_shifted}",
-        )
-        self.assertTrue(
-            isinstance(base_p_shifted, base_p_class),
-            f"Class mismatch: {base_p_shifted} is not of class {base_p_class}",
+        assert isinstance(offset_period, p.OffsetPeriod), (
+            f"Class mismatch: {offset_period} is not of class {p.OffsetPeriod}"
         )
 
-    @parameterized.expand(_BASE_PARAMS)
+        shifted_period: Period = offset_period.with_origin(test_dt)
+        ordinal: int = shifted_period.ordinal(test_dt)
+        assert ordinal == 0
+
+        dt: datetime.datetime = shifted_period.datetime(ordinal)
+        assert dt.tzinfo == shifted_period.tzinfo
+        assert dt == test_dt
+
+        base_p_offset: Period = offset_period.base_period()
+        base_p_shifted: Period = shifted_period.base_period()
+        assert base_p_offset == base_p_shifted, (
+            f"ShiftedPeriod: Base period mismatch: {base_p_offset} != {base_p_shifted}"
+        )
+
+        assert isinstance(base_p_shifted, base_p_class), (
+            f"Class mismatch: {base_p_shifted} is not of class {base_p_class}"
+        )
+
+    @pytest.mark.parametrize("name,tz,test_dt,_,base_p_class", _BASE_PARAMS)
     def test_good_base(
         self,
         name: Any,
@@ -6827,25 +7198,23 @@ class TestShiftedPeriod(unittest.TestCase):
         base_period: Period = Period.of_duration(name).with_tzinfo(tz)
         shifted_period: Period = base_period.with_origin(test_dt)
         ordinal: int = shifted_period.ordinal(test_dt)
-        self.assertEqual(ordinal, 0)
+
+        assert ordinal == 0
         dt: datetime.datetime = shifted_period.datetime(ordinal)
-        self.assertEqual(dt.tzinfo, shifted_period.tzinfo)
-        self.assertEqual(dt, test_dt)
+
+        assert dt.tzinfo == shifted_period.tzinfo
+        assert dt == test_dt
         base_p_shifted: Period = shifted_period.base_period()
-        self.assertEqual(
-            base_p_shifted,
-            base_period,
-            f"ShiftedPeriod: Base period mismatch: {base_p_shifted} != {base_period}",
-        )
-        self.assertTrue(
-            isinstance(base_p_shifted, base_p_class),
-            f"Class mismatch: {base_p_shifted} is not of class {base_p_class}",
+        assert base_p_shifted == base_period, f"ShiftedPeriod: Base period mismatch: {base_p_shifted} != {base_period}"
+
+        assert isinstance(base_p_shifted, base_p_class), (
+            f"Class mismatch: {base_p_shifted} is not of class {base_p_class}"
         )
 
 
 # A list of tuples used to test datetime parsing.
 #
-# Used with @parameterized.expand
+# Used with @pytest.mark.parametrize
 _DATE_TIME_PARSE = [
     ("1980", datetime.date(1980, 1, 1), datetime.time(0, 0, 0, 0, None)),
     ("1980-01", datetime.date(1980, 1, 1), datetime.time(0, 0, 0, 0, None)),
@@ -6908,36 +7277,41 @@ _DATE_TIME_PARSE = [
 ]
 
 
-class TestDateMatch(unittest.TestCase):
+class TestDateMatch:
     """Test _date_match function"""
 
-    @parameterized.expand(_DATE_TIME_PARSE)
+    @pytest.mark.parametrize("text,d,_", _DATE_TIME_PARSE)
     def test_good(self, text: Any, d: datetime.date, _: datetime.time) -> None:
         prefix: str = "d"
         regex = re.compile(p._datetime_regex(prefix))
         matcher: re.Match[str] | None = regex.match(text)
-        self.assertNotEqual(matcher, None)
+
+        assert matcher is not None
+
         dt: datetime.date = p._date_match(prefix, matcher)
-        self.assertEqual(dt, d)
+        assert dt == d
 
 
-class TestTimeMatch(unittest.TestCase):
+class TestTimeMatch:
     """Test _time_match function"""
 
-    @parameterized.expand(_DATE_TIME_PARSE)
+    @pytest.mark.parametrize("text, _, t", _DATE_TIME_PARSE)
     def test_good(self, text: Any, _: datetime.date, t: datetime.time) -> None:
         prefix = "d"
         regex = re.compile(p._datetime_regex(prefix))
         matcher = regex.match(text)
-        self.assertNotEqual(matcher, None)
+
+        assert matcher is not None
+
         tm = p._time_match(prefix, matcher)
-        self.assertEqual(tm, t)
+        assert tm == t
 
 
-class TestTimezone(unittest.TestCase):
+class TestTimezone:
     """Test _timezone function"""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "text,tz",
         [
             (None, None),
             ("Z", datetime.timezone(datetime.timedelta(hours=0, minutes=0))),
@@ -6948,43 +7322,48 @@ class TestTimezone(unittest.TestCase):
             ("+01:00", datetime.timezone(datetime.timedelta(hours=1, minutes=0))),
             ("+01:30", datetime.timezone(datetime.timedelta(hours=1, minutes=30))),
             ("-01:30", datetime.timezone(datetime.timedelta(hours=-1, minutes=-30))),
-        ]
+        ],
     )
     def test_good(self, text: Any, tz: datetime.tzinfo | None) -> None:
-        self.assertEqual(tz, p._timezone(text))
+        assert tz == p._timezone(text)
 
 
-class TestTzinfoMatch(unittest.TestCase):
+class TestTzinfoMatch:
     """Test _tzinfo_match function"""
 
-    @parameterized.expand(_DATE_TIME_PARSE)
+    @pytest.mark.parametrize("text,_,t", _DATE_TIME_PARSE)
     def test_good(self, text: Any, _: datetime.date, t: datetime.time) -> None:
         prefix = "d"
         regex = re.compile(p._datetime_regex(prefix))
         matcher = regex.match(text)
-        self.assertNotEqual(matcher, None)
+
+        assert matcher is not None
+
         tz = p._tzinfo_match(prefix, matcher)
-        self.assertEqual(tz, t.tzinfo)
+        assert tz == t.tzinfo
 
 
-class TestDatetimeMatch(unittest.TestCase):
+class TestDatetimeMatch:
     """Test _datetime_match function"""
 
-    @parameterized.expand(_DATE_TIME_PARSE)
+    @pytest.mark.parametrize("text,d,t", _DATE_TIME_PARSE)
     def test_good(self, text: Any, d: datetime.date, t: datetime.time) -> None:
         prefix = "d"
         regex = re.compile(p._datetime_regex(prefix))
         matcher = regex.match(text)
-        self.assertNotEqual(matcher, None)
+
+        assert matcher is not None
+
         dt = p._datetime_match(prefix, matcher)
         answer = datetime.datetime.combine(date=d, time=t)
-        self.assertEqual(dt, answer)
+        assert dt == answer
 
 
-class TestMatchPeriod(unittest.TestCase):
+class TestMatchPeriod:
     """Test _match_period function"""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "text,iso",
         [
             ("1Y", "P1Y"),
             ("1y", "P1Y"),
@@ -6994,20 +7373,23 @@ class TestMatchPeriod(unittest.TestCase):
             ("1m", "P1M"),
             ("2M", "P2M"),
             ("2m", "P2M"),
-        ]
+        ],
     )
     def test_good(self, text: Any, iso: str) -> None:
         regex = re.compile(p._period_regex("period"))
         matcher: re.Match[str] | None = regex.match(text)
-        self.assertNotEqual(matcher, None)
+
+        assert matcher is not None
+
         period: Period = p._match_period(matcher)
-        self.assertEqual(period, Period.of_iso_duration(iso))
+        assert period == Period.of_iso_duration(iso)
 
 
-class TestMatchPeriodOffset(unittest.TestCase):
+class TestMatchPeriodOffset:
     """Test _match_period_offset function"""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "text,duration",
         [
             ("1Y -- 1D", "P1Y+1D"),
             ("2Y -- 2M", "P2Y+2M"),
@@ -7018,20 +7400,22 @@ class TestMatchPeriodOffset(unittest.TestCase):
             ("1H -- T5M", "P1H+T5M"),
             ("T1M -- 5S", "PT1M+5S"),
             ("T1S -- 0.005S", "P1S+0.005S"),
-        ]
+        ],
     )
     def test_good(self, text: Any, duration: str) -> None:
         regex = re.compile(p._period_regex("period") + " -- " + p._period_regex("offset"))
         matcher: re.Match[str] | None = regex.match(text)
-        self.assertNotEqual(matcher, None)
+        assert matcher is not None
+
         period: Period = p._match_period_offset(matcher)
-        self.assertEqual(period, Period.of_duration(duration))
+        assert period == Period.of_duration(duration)
 
 
-class TestMatchDatetimePeriod(unittest.TestCase):
+class TestMatchDatetimePeriod:
     """Test _match_datetime_period function"""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "text,match_period",
         [
             (
                 "1980 -- 1Y",
@@ -7061,14 +7445,15 @@ class TestMatchDatetimePeriod(unittest.TestCase):
                 "1980-08-05 -- 0.005S",
                 Period.of_microseconds(5000).with_origin(datetime.datetime(1980, 8, 5)),
             ),
-        ]
+        ],
     )
     def test_good(self, text: Any, match_period: Period) -> None:
         regex = re.compile(p._datetime_regex("d") + r" -- " + p._period_regex("period"))
         matcher: re.Match[str] | None = regex.match(text)
-        self.assertNotEqual(matcher, None)
+        assert matcher is not None
+
         period: Period = p._match_datetime_period(matcher)
-        self.assertEqual(period, match_period)
+        assert period == match_period
 
 
 # A regular expression used for testing the _match_repr function
@@ -7086,10 +7471,11 @@ _REPR_RE_STR: str = (
 _REPR_REGEX = re.compile(_REPR_RE_STR)
 
 
-class TestMatchRepr(unittest.TestCase):
+class TestMatchRepr:
     """Test _match_repr function"""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "text,match_period",
         [
             ("1Y,,,", Period.of_years(1)),
             ("5Y,,,", Period.of_years(5)),
@@ -7112,28 +7498,32 @@ class TestMatchRepr(unittest.TestCase):
             ("12H,,,", Period.of_hours(12)),
             ("1H,+T30M,,", Period.of_hours(1).with_minute_offset(30)),
             ("12H,+T10M,,", Period.of_hours(12).with_minute_offset(10)),
-        ]
+        ],
     )
     def test_good(self, text: Any, match_period: Period) -> None:
         matcher: re.Match[str] | None = _REPR_REGEX.match(text)
-        self.assertNotEqual(matcher, None)
+        assert matcher is not None
+
         period: Period = p._match_repr(matcher)
-        self.assertEqual(period, match_period)
+        assert period == match_period
+
         shift_date: datetime.datetime = datetime.datetime(1980, 1, 1)
         ordinal: int = period.ordinal(shift_date)
         origin_date: datetime.datetime = period.datetime(ordinal)
         shift_amount: int = 0 - ordinal
         matcher2: re.Match[str] | None = _REPR_REGEX.match(f"{text}{shift_amount}")
-        self.assertNotEqual(matcher2, None)
+        assert matcher2 is not None
+
         shifted_period: Period = p._match_repr(matcher2)
         ordinal2: int = shifted_period.ordinal(origin_date)
-        self.assertEqual(ordinal2, 0)
+        assert ordinal2 == 0
 
 
-class TestCount(unittest.TestCase):
+class TestCount:
     """Test Period.count method"""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "_, inner_period,outer_period,expected_count",
         [
             ("tz", Period.of_microseconds(1).with_tzinfo(TZ_UTC), Period.of_microseconds(1).with_tzinfo(TZ_UTC), 1),
             ("tz", Period.of_microseconds(1).with_tzinfo(None), Period.of_microseconds(1).with_tzinfo(TZ_UTC), -1),
@@ -7264,17 +7654,18 @@ class TestCount(unittest.TestCase):
             ("month/month", Period.of_duration("P2M+1M1S"), Period.of_duration("P1Y+1M1S"), 6),
             ("month/month", Period.of_duration("P2M+1M1S"), Period.of_duration("P1Y+2M1S"), -1),
             ("month/month", Period.of_duration("P2M+1S"), Period.of_duration("P1Y+2M1S"), 6),
-        ]
+        ],
     )
     def test_count(self, _: str, inner_period: Period, outer_period: Period, expected_count: int) -> None:
         count: int = inner_period.count(outer_period)
-        self.assertEqual(count, expected_count)
+        assert count == expected_count
 
 
-class TestIsSubperiodOf(unittest.TestCase):
+class TestIsSubperiodOf:
     """Test Period.is_subperiod_of method"""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "_,inner_period,outer_period",
         [
             ("tz", Period.of_microseconds(1).with_tzinfo(TZ_UTC), Period.of_microseconds(1).with_tzinfo(TZ_UTC)),
             ("micro/micro", Period.of_microseconds(1), Period.of_microseconds(1)),
@@ -7344,12 +7735,13 @@ class TestIsSubperiodOf(unittest.TestCase):
             ("month/month", Period.of_duration("P2M+1S"), Period.of_duration("P1Y+1S")),
             ("month/month", Period.of_duration("P2M+1M1S"), Period.of_duration("P1Y+1M1S")),
             ("month/month", Period.of_duration("P2M+1S"), Period.of_duration("P1Y+2M1S")),
-        ]
+        ],
     )
     def test_is_subperiod(self, _: str, inner_period: Period, outer_period: Period) -> None:
-        self.assertTrue(inner_period.is_subperiod_of(outer_period))
+        assert inner_period.is_subperiod_of(outer_period)
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "_,inner_period,outer_period",
         [
             ("tz", Period.of_microseconds(1).with_tzinfo(None), Period.of_microseconds(1).with_tzinfo(TZ_UTC)),
             ("micro/micro", Period.of_microseconds(10), Period.of_microseconds(1)),
@@ -7407,10 +7799,10 @@ class TestIsSubperiodOf(unittest.TestCase):
             ("month/month", Period.of_duration("P3M+2M"), Period.of_duration("P1Y+4M")),
             ("month/month", Period.of_duration("P2M+1M1S"), Period.of_duration("P1Y+1S")),
             ("month/month", Period.of_duration("P2M+1M1S"), Period.of_duration("P1Y+2M1S")),
-        ]
+        ],
     )
     def test_is_not_subperiod(self, _: str, inner_period: Period, outer_period: Period) -> None:
-        self.assertFalse(inner_period.is_subperiod_of(outer_period))
+        assert not inner_period.is_subperiod_of(outer_period)
 
 
 S_YYYY: str = r"\d{4}"
@@ -8073,85 +8465,67 @@ def _get_test_ordinal_list(period: Period) -> list[int]:
     return sorted(ordinal_set)
 
 
-class TestPeriodItems(unittest.TestCase):
-    @parameterized.expand(PARAMS_ITEM)
+class TestPeriodItems:
+    @pytest.mark.parametrize("_,item", PARAMS_ITEM)
     def test_create(self, _: Any, item: Item) -> None:
         """Check all creation methods produce the same Period object"""
         naive_list: list[Period] = _create_all_no_tz(item)
         naive_set: set[Period] = set(naive_list)
-        self.assertEqual(len(naive_set), 1, f"Multiple periods in set: {naive_set}")
+        assert len(naive_set) == 1, f"Multiple periods in set: {naive_set}"
 
         utc_list: list[Period] = _create_all_with_tz(item, TZ_UTC)
         utc_set: set[Period] = set(utc_list)
-        self.assertEqual(len(utc_set), 1, f"Multiple periods in set: {utc_set}")
+        assert len(utc_set) == 1, f"Multiple periods in set: {utc_set}"
 
-    @parameterized.expand(PARAMS_ITEM)
+    @pytest.mark.parametrize("_,item", PARAMS_ITEM)
     def test_repr_create(self, _: Any, item: Item) -> None:
         """Check repr creation method"""
         p1: Period = Period.of_iso_duration(item.iso_duration)
         repr_string: str = repr(p1)
         p2: Period = Period.of_repr(repr_string)
-        self.assertEqual(p1, p2, f"Repr period mismatch: {p1} {p2}")
+        assert p1 == p2, f"Repr period mismatch: {p1} {p2}"
 
-    @parameterized.expand(PARAMS_ITEM)
+    @pytest.mark.parametrize("_,item", PARAMS_ITEM)
     def test_step(self, _: Any, item: Item) -> None:
         """Check the step property"""
         period: Period = Period.of_iso_duration(item.iso_duration)
-        self.assertEqual(period._properties.step, item.step, f"Step mismatch: {period} != {item}")
+        assert period._properties.step == item.step, f"Step mismatch: {period} != {item}"
 
-    @parameterized.expand(PARAMS_ITEM)
+    @pytest.mark.parametrize("_,item", PARAMS_ITEM)
     def test_multiplier(self, _: Any, item: Item) -> None:
         """Check the multiplier property"""
         period: Period = Period.of_iso_duration(item.iso_duration)
-        self.assertEqual(
-            period._properties.multiplier,
-            item.multiplier,
-            f"Multiplier mismatch: {period} != {item}",
-        )
+        assert period._properties.multiplier == item.multiplier, f"Multiplier mismatch: {period} != {item}"
 
-    @parameterized.expand(PARAMS_ITEM)
+    @pytest.mark.parametrize("_,item", PARAMS_ITEM)
     def test_naive_class(self, _: Any, item: Item) -> None:
         """Check the naive class"""
         period: Period = Period.of_iso_duration(item.iso_duration)
-        self.assertTrue(
-            isinstance(period, item.naive_class),
-            f"Naive class mismatch: {period} != {item}",
-        )
+        assert isinstance(period, item.naive_class), f"Naive class mismatch: {period} != {item}"
 
-    @parameterized.expand(PARAMS_ITEM)
+    @pytest.mark.parametrize("_,item", PARAMS_ITEM)
     def test_aware_class(self, _: Any, item: Item) -> None:
         """Check the aware class"""
         period: Period = Period.of_iso_duration(item.iso_duration).with_tzinfo(TZ_UTC)
-        self.assertTrue(
-            isinstance(period, item.aware_class),
-            f"Aware class mismatch: {period} != {item}",
-        )
+        assert isinstance(period, item.aware_class), f"Aware class mismatch: {period} != {item}"
 
-    @parameterized.expand(PARAMS_ITEM)
+    @pytest.mark.parametrize("_,item", PARAMS_ITEM)
     def test_min_ordinal(self, _: Any, item: Item) -> None:
         """Check the min_ordinal property"""
         period: Period = Period.of_iso_duration(item.iso_duration)
         min_ordinal: int = period.min_ordinal
         dt: datetime.datetime = period.datetime(min_ordinal)
-        self.assertEqual(
-            min_ordinal,
-            period.ordinal(dt),
-            f"min_ordinal error: {min_ordinal} != {period.ordinal(dt)}",
-        )
+        assert min_ordinal == period.ordinal(dt), f"min_ordinal error: {min_ordinal} != {period.ordinal(dt)}"
 
-    @parameterized.expand(PARAMS_ITEM)
+    @pytest.mark.parametrize("_,item", PARAMS_ITEM)
     def test_max_ordinal(self, _: Any, item: Item) -> None:
         """Check the max_ordinal property"""
         period: Period = Period.of_iso_duration(item.iso_duration)
         max_ordinal: int = period.max_ordinal
         dt: datetime.datetime = period.datetime(max_ordinal)
-        self.assertEqual(
-            max_ordinal,
-            period.ordinal(dt),
-            f"max_ordinal error: {max_ordinal} != {period.ordinal(dt)}",
-        )
+        assert max_ordinal == period.ordinal(dt), f"max_ordinal error: {max_ordinal} != {period.ordinal(dt)}"
 
-    @parameterized.expand(PARAMS_ITEM)
+    @pytest.mark.parametrize("_,item", PARAMS_ITEM)
     def test_sample_ordinals(self, _: Any, item: Item) -> None:
         """Check some sample ordinals"""
         period: Period = Period.of_iso_duration(item.iso_duration)
@@ -8159,20 +8533,13 @@ class TestPeriodItems(unittest.TestCase):
             for tzinfo in [None, TZ_UTC]:
                 dt: datetime.datetime = period.datetime(ordinal)
                 naive_ordinal: int = period.ordinal(dt)
-                self.assertEqual(
-                    ordinal,
-                    naive_ordinal,
-                    f"ordinal error: {ordinal} != {naive_ordinal}",
-                )
+                assert ordinal == naive_ordinal, f"ordinal error: {ordinal} != {naive_ordinal}"
+
                 tz_dt: datetime.datetime = dt.replace(tzinfo=tzinfo)
                 tz_ordinal: int = period.ordinal(tz_dt)
-                self.assertEqual(
-                    ordinal,
-                    tz_ordinal,
-                    f"ordinal error: {tzinfo}: {ordinal} != {tz_ordinal}",
-                )
+                assert ordinal == tz_ordinal, f"ordinal error: {tzinfo}: {ordinal} != {tz_ordinal}"
 
-    @parameterized.expand(PARAMS_ITEM)
+    @pytest.mark.parametrize("_,item", PARAMS_ITEM)
     def test_naive_format(self, _: Any, item: Item) -> None:
         """Check naive date format"""
         period: Period = Period.of_iso_duration(item.iso_duration)
@@ -8180,12 +8547,9 @@ class TestPeriodItems(unittest.TestCase):
         for ordinal in _get_test_ordinal_list(period):
             dt: datetime.datetime = period.datetime(ordinal)
             dt_str: str = fmt(dt)
-            self.assertTrue(
-                isinstance(item.naive_regex.fullmatch(dt_str), re.Match),
-                f"Format error: {period}: {dt_str}",
-            )
+            assert isinstance(item.naive_regex.fullmatch(dt_str), re.Match), f"Format error: {period}: {dt_str}"
 
-    @parameterized.expand(PARAMS_ITEM)
+    @pytest.mark.parametrize("_,item", PARAMS_ITEM)
     def test_utc_format(self, _: Any, item: Item) -> None:
         """Check UTC date format"""
         period: Period = Period.of_iso_duration(item.iso_duration).with_tzinfo(TZ_UTC)
@@ -8193,74 +8557,51 @@ class TestPeriodItems(unittest.TestCase):
         for ordinal in _get_test_ordinal_list(period):
             dt: datetime.datetime = period.datetime(ordinal)
             dt_str: str = fmt(dt)
-            self.assertTrue(
-                isinstance(item.aware_regex.fullmatch(dt_str), re.Match),
-                f"Format error: {period}: {dt_str}",
-            )
-            self.assertTrue(dt_str.endswith("Z"), f"Format error: {period}: {dt_str}")
+            assert isinstance(item.aware_regex.fullmatch(dt_str), re.Match), f"Format error: {period}: {dt_str}"
 
-    @parameterized.expand(PARAMS_ITEM)
+            assert dt_str.endswith("Z"), f"Format error: {period}: {dt_str}"
+
+    @pytest.mark.parametrize("_,item", PARAMS_ITEM)
     def test_tzinfo_property(self, _: Any, item: Item) -> None:
         """Test tzinfo property"""
         for tzinfo in [None, TZ_UTC]:
             period: Period = Period.of_iso_duration(item.iso_duration).with_tzinfo(tzinfo)
-            self.assertEqual(
-                tzinfo,
-                period.tzinfo,
-                f"tzinfo property error: {tzinfo}: {period.tzinfo}",
-            )
+            assert tzinfo == period.tzinfo, f"tzinfo property error: {tzinfo}: {period.tzinfo}"
 
-    @parameterized.expand(PARAMS_ITEM)
+    @pytest.mark.parametrize("_,item", PARAMS_ITEM)
     def test_timedelta_property(self, _: Any, item: Item) -> None:
         """Test timedelta property"""
         period: Period = Period.of_iso_duration(item.iso_duration)
+
         if item.step == p._STEP_MONTHS:
-            self.assertEqual(
-                period.timedelta,
-                None,
-                f"Month step timedelta property error: {period.timedelta}",
-            )
+            assert period.timedelta is None, f"Month step timedelta property error: {period.timedelta}"
         else:
-            self.assertTrue(
-                isinstance(period.timedelta, datetime.timedelta),
-                f"Second/microsecond step timedelta property error: {period.timedelta}",
-            )
-            period2: Period = Period.of_timedelta(period.timedelta)
-            self.assertEqual(
-                period,
-                period2,
-                f"Second/microsecond step timedelta property error: {period.timedelta}",
+            assert isinstance(period.timedelta, datetime.timedelta), (
+                f"Second/microsecond step timedelta property error: {period.timedelta}"
             )
 
-    @parameterized.expand(PARAMS_ITEM)
+            period2: Period = Period.of_timedelta(period.timedelta)
+            assert period == period2, f"Second/microsecond step timedelta property error: {period.timedelta}"
+
+    @pytest.mark.parametrize("_,item", PARAMS_ITEM)
     def test_pl_interval_property(self, _: Any, item: Item) -> None:
         """Test pl_interval property"""
         period: Period = Period.of_iso_duration(item.iso_duration)
-        self.assertTrue(
-            isinstance(period.pl_interval, str),
-            f"pl_interval property error: {period.pl_interval}",
-        )
+        assert isinstance(period.pl_interval, str), f"pl_interval property error: {period.pl_interval}"
 
-    @parameterized.expand(PARAMS_ITEM)
+    @pytest.mark.parametrize("_,item", PARAMS_ITEM)
     def test_pl_offset_property(self, _: Any, item: Item) -> None:
         """Test pl_offset property"""
         period: Period = Period.of_iso_duration(item.iso_duration)
-        self.assertTrue(
-            isinstance(period.pl_offset, str),
-            f"pl_offset property error: {period.pl_offset}",
-        )
+        assert isinstance(period.pl_offset, str), f"pl_offset property error: {period.pl_offset}"
 
-    @parameterized.expand(PARAMS_ITEM)
+    @pytest.mark.parametrize("_,item", PARAMS_ITEM)
     def test_epoch_agnostic1(self, _: Any, item: Item) -> None:
         """Test is_epoch_agnostic property"""
         period: Period = Period.of_iso_duration(item.iso_duration)
-        self.assertEqual(
-            period.is_epoch_agnostic(),
-            item.epoch_agnostic,
-            f"epoch_agnostic error: {period}",
-        )
+        assert period.is_epoch_agnostic() == item.epoch_agnostic, f"epoch_agnostic error: {period}"
 
-    @parameterized.expand(PARAMS_ITEM)
+    @pytest.mark.parametrize("_,item", PARAMS_ITEM)
     def test_epoch_agnostic2(self, _: Any, item: Item) -> None:
         """Test is_epoch_agnostic property"""
         period: Period = Period.of_iso_duration(item.iso_duration)
@@ -8279,9 +8620,9 @@ class TestPeriodItems(unittest.TestCase):
             else:
                 nomatch_years += 1
         if period.is_epoch_agnostic():
-            self.assertTrue(match_years == len(years), f"Period {period} is not epoch agnostic")
+            assert match_years == len(years), f"Period {period} is not epoch agnostic"
         else:
-            self.assertTrue(match_years < len(years), f"Period {period} is epoch agnostic")
+            assert match_years < len(years), f"Period {period} is epoch agnostic"
 
 
 # A list of tuples containing "equaivalent periods".
@@ -8484,15 +8825,11 @@ _EQUIVALENT_PERIODS = [
 ]
 
 
-class TestEquivalentPeriods(unittest.TestCase):
+class TestEquivalentPeriods:
     """Test equivalent periods"""
 
-    @parameterized.expand(_EQUIVALENT_PERIODS)
+    @pytest.mark.parametrize("name,period_list", _EQUIVALENT_PERIODS)
     def test_equivalent(self, name: str, period_list: list[Period]) -> None:
         """Test all periods in list are the same period"""
         period_set: set[Period] = set(period_list)
-        self.assertEqual(len(period_set), 1, f"Multiple periods in set: {name}: {period_set}")
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert len(period_set) == 1, f"Multiple periods in set: {name}: {period_set}"
