@@ -391,28 +391,30 @@ class AltData(InfillMethod):
         """
         if self.alt_df is None:
             check_columns_in_dataframe(df, [self.alt_data_column])
+            return df.with_columns(
+                pl.when(pl.col(infill_column).is_null())
+                .then(pl.col(self.alt_data_column) * self.correction_factor)
+                .otherwise(pl.col(infill_column))
+                .alias(self._infilled_column_name(infill_column))
+            )
         else:
             time_column_name = ctx.time_name
             check_columns_in_dataframe(self.alt_df, [time_column_name, self.alt_data_column])
-
-            if self.alt_data_column in df.columns:
-                raise ValueError(f"Column {self.alt_data_column} already exists in the main dataframe.")
+            internal_alt_data_column = f"__ALT_DATA__{self.alt_data_column}"
+            self.alt_df = self.alt_df.select([time_column_name, self.alt_data_column]).rename(
+                {self.alt_data_column: internal_alt_data_column}
+            )
 
             df = df.join(
-                self.alt_df.select([time_column_name, self.alt_data_column]),
+                self.alt_df.select([time_column_name, internal_alt_data_column]),
                 on=time_column_name,
                 how="left",
                 suffix="_alt",
             )
 
-        infilled = df.with_columns(
-            pl.when(pl.col(infill_column).is_null())
-            .then(pl.col(self.alt_data_column) * self.correction_factor)
-            .otherwise(pl.col(infill_column))
-            .alias(self._infilled_column_name(infill_column))
-        )
-
-        if self.alt_df is not None:
-            infilled = infilled.drop(self.alt_data_column)
-
-        return infilled
+            return df.with_columns(
+                pl.when(pl.col(infill_column).is_null())
+                .then(pl.col(internal_alt_data_column) * self.correction_factor)
+                .otherwise(pl.col(infill_column))
+                .alias(self._infilled_column_name(infill_column))
+            ).drop(internal_alt_data_column)

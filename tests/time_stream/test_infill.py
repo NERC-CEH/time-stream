@@ -544,10 +544,11 @@ class TestAltData(unittest.TestCase):
         alt_df = pl.DataFrame(
             {
                 "timestamp": self.df["timestamp"],
-                "alt_values": [11.0, 22.0, 33.0, 44.0, 55.0],
+                "values": [11.0, 22.0, 33.0, 44.0, 55.0],
             }
         )
-        infiller = AltData(alt_data_column="alt_values", alt_df=alt_df)
+        infiller = AltData(alt_data_column="values", alt_df=alt_df)
 
-        with self.assertRaises(ValueError):
-            infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
+        result_df = infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
+        expected_df = self.df.with_columns(pl.Series("values", [1.0, 22.0, 3.0, 44.0, 5.0]))
+        assert_frame_equal(result_df, expected_df, check_column_order=False)
