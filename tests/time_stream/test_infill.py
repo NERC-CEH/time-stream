@@ -8,7 +8,7 @@ import polars as pl
 from parameterized import parameterized
 from polars.testing import assert_frame_equal, assert_series_equal
 
-from time_stream import TimeFrame
+from time_stream import Period, TimeFrame
 from time_stream.exceptions import (
     ColumnNotFoundError,
     InfillInsufficientValuesError,
@@ -28,6 +28,9 @@ from time_stream.infill import (
     QuadraticInterpolation,
 )
 from time_stream.utils import gap_size_count
+
+TIME_COLUMN = "timestamp"
+PERIODICITY = Period.of_days(1)
 
 # Data used through the tests
 LINEAR = pl.DataFrame({"values": [1.0, None, 3.0, None, 5.0]})  # Linear progression
@@ -176,7 +179,8 @@ class TestLinearInterpolation(unittest.TestCase):
     )
     def test_linear_interpolation_known_result(self, input_data: pl.DataFrame, expected_data: list) -> None:
         """Test linear interpolation with known data."""
-        result = LinearInterpolation()._fill(input_data, "values")
+        ctx = InfillCtx(input_data, TIME_COLUMN, PERIODICITY)
+        result = LinearInterpolation()._fill(input_data, "values", ctx)
         expected = pl.Series("values_linear", expected_data)
         assert_series_equal(result["values_linear"], expected)
 
@@ -188,12 +192,14 @@ class TestLinearInterpolation(unittest.TestCase):
     )
     def test_insufficient_data_raises_error(self, _: str, input_data: pl.DataFrame) -> None:
         """Test that insufficient data raises InfillInsufficientValuesError."""
+        ctx = InfillCtx(input_data, TIME_COLUMN, PERIODICITY)
         with self.assertRaises(InfillInsufficientValuesError):
-            LinearInterpolation()._fill(input_data, "values")
+            LinearInterpolation()._fill(input_data, "values", ctx)
 
     def test_complete_data_unchanged(self) -> None:
         """Test that complete data is unchanged."""
-        result = LinearInterpolation()._fill(COMPLETE, "values")
+        ctx = InfillCtx(COMPLETE, TIME_COLUMN, PERIODICITY)
+        result = LinearInterpolation()._fill(COMPLETE, "values", ctx)
         expected = pl.Series("values_linear", COMPLETE)
         assert_series_equal(result["values_linear"], expected)
 
@@ -207,7 +213,8 @@ class TestQuadraticInterpolation(unittest.TestCase):
     )
     def test_quadratic_interpolation_known_result(self, input_data: pl.DataFrame, expected_data: list) -> None:
         """Test quadratic interpolation with known data."""
-        result = QuadraticInterpolation()._fill(input_data, "values")
+        ctx = InfillCtx(input_data, TIME_COLUMN, PERIODICITY)
+        result = QuadraticInterpolation()._fill(input_data, "values", ctx)
 
         expected = pl.Series("values_quadratic", expected_data)
         assert_series_equal(result["values_quadratic"], expected)
@@ -215,12 +222,14 @@ class TestQuadraticInterpolation(unittest.TestCase):
     @parameterized.expand([("1 data points", INSUFFICIENT_DATA), ("0 data points", ALL_MISSING)])
     def test_insufficient_data_raises_error(self, _: str, input_data: pl.DataFrame) -> None:
         """Test that insufficient data raises InfillInsufficientValuesError."""
+        ctx = InfillCtx(input_data, TIME_COLUMN, PERIODICITY)
         with self.assertRaises(InfillInsufficientValuesError):
-            QuadraticInterpolation()._fill(input_data, "values")
+            QuadraticInterpolation()._fill(input_data, "values", ctx)
 
     def test_complete_data_unchanged(self) -> None:
         """Test that complete data is unchanged."""
-        result = QuadraticInterpolation()._fill(COMPLETE, "values")
+        ctx = InfillCtx(COMPLETE, TIME_COLUMN, PERIODICITY)
+        result = QuadraticInterpolation()._fill(COMPLETE, "values", ctx)
         expected = pl.Series("values_quadratic", COMPLETE)
         assert_series_equal(result["values_quadratic"], expected)
 
@@ -233,7 +242,8 @@ class TestCubicInterpolation(unittest.TestCase):
     )
     def test_cubic_interpolation_known_result(self, input_data: pl.DataFrame, expected_data: list) -> None:
         """Test cubic interpolation with known data."""
-        result = CubicInterpolation()._fill(input_data, "values")
+        ctx = InfillCtx(input_data, TIME_COLUMN, PERIODICITY)
+        result = CubicInterpolation()._fill(input_data, "values", ctx)
 
         expected = pl.Series("values_cubic", expected_data)
         assert_series_equal(result["values_cubic"], expected)
@@ -243,12 +253,14 @@ class TestCubicInterpolation(unittest.TestCase):
     )
     def test_insufficient_data_raises_error(self, _: str, input_data: pl.DataFrame) -> None:
         """Test that insufficient data raises InfillInsufficientValuesError."""
+        ctx = InfillCtx(input_data, TIME_COLUMN, PERIODICITY)
         with self.assertRaises(InfillInsufficientValuesError):
-            CubicInterpolation()._fill(input_data, "values")
+            CubicInterpolation()._fill(input_data, "values", ctx)
 
     def test_complete_data_unchanged(self) -> None:
         """Test that complete data is unchanged."""
-        result = CubicInterpolation()._fill(COMPLETE, "values")
+        ctx = InfillCtx(COMPLETE, TIME_COLUMN, PERIODICITY)
+        result = CubicInterpolation()._fill(COMPLETE, "values", ctx)
         expected = pl.Series("values_cubic", COMPLETE)
         assert_series_equal(result["values_cubic"], expected)
 
@@ -270,7 +282,8 @@ class TestAkimaInterpolation(unittest.TestCase):
 
     def test_akima_interpolation_with_sufficient_data(self) -> None:
         """Test akima interpolation works when there is sufficient data (at least 5 points)."""
-        result = AkimaInterpolation()._fill(CUBIC, "values")
+        ctx = InfillCtx(CUBIC, TIME_COLUMN, PERIODICITY)
+        result = AkimaInterpolation()._fill(CUBIC, "values", ctx)
         self.assertIn("values_akima", result.columns)
 
     @parameterized.expand(
@@ -283,12 +296,14 @@ class TestAkimaInterpolation(unittest.TestCase):
     )
     def test_insufficient_data_raises_error(self, _: str, input_data: pl.DataFrame) -> None:
         """Test that insufficient data raises InfillInsufficientValuesError."""
+        ctx = InfillCtx(input_data, TIME_COLUMN, PERIODICITY)
         with self.assertRaises(InfillInsufficientValuesError):
-            AkimaInterpolation()._fill(input_data, "values")
+            AkimaInterpolation()._fill(input_data, "values", ctx)
 
     def test_complete_data_unchanged(self) -> None:
         """Test that complete data is unchanged."""
-        result = AkimaInterpolation()._fill(COMPLETE, "values")
+        ctx = InfillCtx(COMPLETE, TIME_COLUMN, PERIODICITY)
+        result = AkimaInterpolation()._fill(COMPLETE, "values", ctx)
         expected = pl.Series("values_akima", COMPLETE)
         assert_series_equal(result["values_akima"], expected)
 
@@ -310,14 +325,16 @@ class TestPchipInterpolation(unittest.TestCase):
 
     def test_pchip_interpolation_with_sufficient_data(self) -> None:
         """Test akima interpolation works when there is sufficient data (at least 2 points)."""
-        result = PchipInterpolation()._fill(LINEAR, "values")
+        ctx = InfillCtx(LINEAR, TIME_COLUMN, PERIODICITY)
+        result = PchipInterpolation()._fill(LINEAR, "values", ctx)
         self.assertIn("values_pchip", result.columns)
 
     @parameterized.expand([("1 data points", INSUFFICIENT_DATA), ("0 data points", ALL_MISSING)])
     def test_insufficient_data_raises_error(self, _: str, input_data: pl.DataFrame) -> None:
         """Test that insufficient data raises InfillInsufficientValuesError."""
+        ctx = InfillCtx(input_data, TIME_COLUMN, PERIODICITY)
         with self.assertRaises(InfillInsufficientValuesError):
-            PchipInterpolation()._fill(input_data, "values")
+            PchipInterpolation()._fill(input_data, "values", ctx)
 
     @parameterized.expand(
         [
@@ -328,7 +345,8 @@ class TestPchipInterpolation(unittest.TestCase):
     )
     def test_pchip_monotonic_preservation(self, input_data: pl.DataFrame) -> None:
         """Part of the pchip behaviour is that it should preserve local monotonicity if the input data is monotonic."""
-        result = PchipInterpolation()._fill(input_data, "values")
+        ctx = InfillCtx(input_data, TIME_COLUMN, PERIODICITY)
+        result = PchipInterpolation()._fill(input_data, "values", ctx)
         interpolated = result["values_pchip"].to_numpy()
 
         # Check that result is monotonically increasing
@@ -336,7 +354,8 @@ class TestPchipInterpolation(unittest.TestCase):
 
     def test_complete_data_unchanged(self) -> None:
         """Test that complete data is unchanged."""
-        result = PchipInterpolation()._fill(COMPLETE, "values")
+        ctx = InfillCtx(COMPLETE, TIME_COLUMN, PERIODICITY)
+        result = PchipInterpolation()._fill(COMPLETE, "values", ctx)
         expected = pl.Series("values_pchip", COMPLETE)
         assert_series_equal(result["values_pchip"], expected)
 
