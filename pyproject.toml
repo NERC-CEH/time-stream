@@ -35,7 +35,7 @@ readme = "README.md"
 license = "GPL-3.0-only"
 
 [dependency-groups]
-test = ["pytest", "pytest-cov", "parameterized", "freezegun", "pytest-benchmark", "pytest-benchmark[histogram]"]
+test = ["pytest", "pytest-cov",  "freezegun", "pytest-benchmark", "pytest-benchmark[histogram]"]
 docs = ["sphinx", "sphinx-copybutton", "sphinx-rtd-theme", "nbsphinx", "jupyter_sphinx", "snowballstemmer<3"]
 lint = ["ruff"]
 dev = [
