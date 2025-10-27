@@ -35,7 +35,7 @@ class AggregationFunction(Operation, ABC):
     """Base class for aggregation functions."""
 
     @abstractmethod
-    def expr(self, _ctx: AggregationCtx, _columns: list[str], **kwargs) -> list[pl.Expr]:
+    def expr(self, _ctx: AggregationCtx, _columns: list[str]) -> list[pl.Expr]:
         """Return the Polars expressions for this aggregation."""
         raise NotImplementedError
 
@@ -53,7 +53,6 @@ class AggregationFunction(Operation, ABC):
         columns: str | list[str],
         aggregation_time_anchor: TimeAnchor,
         missing_criteria: tuple[str, float | int] | None = None,
-        **kwargs,
     ) -> pl.DataFrame:
         """Run the aggregation pipeline.
 
@@ -79,7 +78,6 @@ class AggregationFunction(Operation, ABC):
             columns,
             aggregation_time_anchor,
             missing_criteria,
-            **kwargs,
         )
         return pipeline.execute()
 
@@ -381,14 +379,27 @@ class Percentile(AggregationFunction):
 
     name = "percentile"
 
-    def expr(self, ctx: AggregationCtx, columns: list[str], p: int) -> list[pl.Expr]:
+    def __init__(self, p: int, **kwargs):
+        """
+        Initialise Percentile aggregation:
+
+        Args:
+            p: The integer percentile value to apply.
+            **kwargs: Any additional parameters to be passed through.
+
+        """
+        super().__init__(**kwargs)
+
+        self.p = p
+
+    def expr(self, ctx: AggregationCtx, columns: list[str]) -> list[pl.Expr]:
         """Return the 'Polars' expression for calculating the percentile"""
 
         # If the percentile value is between 0 -100 divide it by 100 to convert it to the quantile equivalent.
-        if (p != 0 and p < 1) or (p > 100):
+        if not self.p.is_integer() or not (0 <= self.p <= 100):
             raise ValueError("The percentile value must be provided as an integer value from 0 to 100")
 
-        quantile = p / 100
+        quantile = self.p / 100
 
         expressions = []
         for col in columns:

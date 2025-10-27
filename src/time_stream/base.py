@@ -509,6 +509,7 @@ class TimeFrame:
         columns: str | list[str] | None = None,
         missing_criteria: tuple[str, float | int] | None = None,
         aggregation_time_anchor: TimeAnchor | None = None,
+        **kwargs,
     ) -> Self:
         """Apply an aggregation function to a column in this TimeFrame, check the aggregation satisfies user
         requirements and return a new derived TimeFrame containing the aggregated data.
@@ -519,12 +520,13 @@ class TimeFrame:
             columns: The column(s) containing the data to be aggregated. If omitted, will use all data columns.
             missing_criteria: How the aggregation handles missing data
             aggregation_time_anchor: The time anchor for the aggregation result.
+            **kwargs: Parameters specific to the aggregation function.
 
         Returns:
             A TimeFrame containing the aggregated data.
         """
         # Get the aggregation function instance and run the apply method
-        agg_func = AggregationFunction.get(aggregation_function)
+        agg_func = AggregationFunction.get(aggregation_function, **kwargs)
         aggregation_period = configure_period_object(aggregation_period)
         aggregation_time_anchor = TimeAnchor(aggregation_time_anchor) if aggregation_time_anchor else self.time_anchor
 

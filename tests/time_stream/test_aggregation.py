@@ -368,7 +368,7 @@ class TestSimpleAggregations:
         """Test aggregations of microsecond-based (i.e., 1 day or less) resolution data, to another
         microsecond-based resolution."""
         expected_df = generate_expected_df(timestamps, aggregator, column, values, counts, counts, timestamps_of)
-        result = aggregator().apply(
+        result = aggregator(**kwargs).apply(
             input_tf.df,
             input_tf.time_name,
             input_tf.time_anchor,
@@ -376,7 +376,6 @@ class TestSimpleAggregations:
             target_period,
             column,
             input_tf.time_anchor,
-            **kwargs,
         )
         assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False)
 
@@ -473,7 +472,7 @@ class TestSimpleAggregations:
     ) -> None:
         """Test aggregations of microsecond-based (i.e., 1-day or less) resolution data, to a month-based resolution."""
         expected_df = generate_expected_df(timestamps, aggregator, column, values, counts, counts, timestamps_of)
-        result = aggregator().apply(
+        result = aggregator(**kwargs).apply(
             input_tf.df,
             input_tf.time_name,
             input_tf.time_anchor,
@@ -481,7 +480,6 @@ class TestSimpleAggregations:
             target_period,
             column,
             input_tf.time_anchor,
-            **kwargs,
         )
         assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False)
 
@@ -578,7 +576,7 @@ class TestSimpleAggregations:
     ) -> None:
         """Test aggregations of month-based resolution data, to a month-based resolution."""
         expected_df = generate_expected_df(timestamps, aggregator, column, values, counts, counts, timestamps_of)
-        result = aggregator().apply(
+        result = aggregator(**kwargs).apply(
             input_tf.df,
             input_tf.time_name,
             input_tf.time_anchor,
@@ -586,7 +584,6 @@ class TestSimpleAggregations:
             target_period,
             column,
             input_tf.time_anchor,
-            **kwargs,
         )
         assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False)
 
@@ -682,7 +679,7 @@ class TestSimpleAggregations:
         kwargs: dict[str, Any],
     ) -> None:
         expected_df = generate_expected_df(timestamps, aggregator, column, values, counts, counts, timestamps_of)
-        result = aggregator().apply(
+        result = aggregator(**kwargs).apply(
             input_tf.df,
             input_tf.time_name,
             input_tf.time_anchor,
@@ -690,7 +687,6 @@ class TestSimpleAggregations:
             target_period,
             column,
             input_tf.time_anchor,
-            **kwargs,
         )
         assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False)
 
@@ -1375,7 +1371,7 @@ class TestPercentileAggregation:
         counts = [24, 24]
 
         expected_df = generate_expected_df(timestamps, Percentile, column, expected_values, counts, counts, None)
-        result = Percentile().apply(
+        result = Percentile(p=percentile).apply(
             df=input_tf.df,
             time_name=input_tf.time_name,
             time_anchor=input_tf.time_anchor,
@@ -1383,18 +1379,17 @@ class TestPercentileAggregation:
             aggregation_period=P1D,
             columns="value",
             aggregation_time_anchor=input_tf.time_anchor,
-            p=percentile,
         )
         assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False)
 
-    @pytest.mark.parametrize("percentile", [0.000000001, 0.999999, 101, 10000])
+    @pytest.mark.parametrize("percentile", [0.000000001, 0.999999, 101, 10000, 1.1, -1, -0.000000000001])
     def test_invalid_percentile(self, percentile: float) -> None:
         input_tf = TS_PT1H_2DAYS
 
         expected_error = "The percentile value must be provided as an integer value from 0 to 100"
 
         with pytest.raises(ValueError, match=expected_error):
-            Percentile().apply(
+            Percentile(p=percentile).apply(
                 df=input_tf.df,
                 time_name=input_tf.time_name,
                 time_anchor=input_tf.time_anchor,
@@ -1402,5 +1397,4 @@ class TestPercentileAggregation:
                 aggregation_period=P1D,
                 columns="value",
                 aggregation_time_anchor=input_tf.time_anchor,
-                p=percentile,
             )

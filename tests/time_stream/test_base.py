@@ -6,6 +6,7 @@ import polars as pl
 import pytest
 from polars.testing import assert_frame_equal, assert_frame_not_equal, assert_series_equal
 
+from time_stream.aggregation import Percentile
 from time_stream.base import TimeFrame
 from time_stream.bitwise import BitwiseFlag
 from time_stream.exceptions import ColumnNotFoundError, MetadataError
@@ -717,3 +718,32 @@ class TestTimeSeriesEquality:
     def test_different_object(self, non_tf: Any) -> None:
         """Test that comparing against a non TimeSeries objects are not equal."""
         assert self.tf_original != non_tf
+
+
+class TestAggregate:
+    def test_aggregate_periodicity(self) -> None:
+        period = Period.of_hours(1)
+        length = 48
+        df = pl.DataFrame(
+            {
+                "timestamp": [period.datetime(period.ordinal(datetime(2025, 1, 1)) + i) for i in range(length)],
+                "value": list(range(length)),
+            }
+        )
+        tf = TimeFrame(df=df, time_name="timestamp", resolution=period, periodicity=period)
+
+        expected_df = pl.DataFrame(
+            {
+                "timestamp": [datetime(2025, 1, 1, 0, 0, 0), datetime(2025, 1, 2, 0, 0, 0)],
+                "percentile_value": [22, 46],
+                "count_value": [24, 24],
+                "expected_count_timestamp": [24, 24],
+                "valid_value": [True, True],
+            }
+        )
+
+        aggregated_tf = tf.aggregate(
+            aggregation_period=Period.of_days(1), aggregation_function=Percentile, columns="value", p=95
+        )
+
+        assert_frame_equal(aggregated_tf.df, expected_df, check_dtypes=False)
