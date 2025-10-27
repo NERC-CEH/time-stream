@@ -1,9 +1,8 @@
-import unittest
+import re
 from datetime import datetime
 
 import polars as pl
 import pytest
-from parameterized import parameterized
 from polars.testing import assert_series_equal
 
 from time_stream import Period
@@ -20,15 +19,14 @@ from time_stream.utils import (
 )
 
 
-class TestCheckColumnsInDataframe(unittest.TestCase):
-    def setUp(self) -> None:
-        self.df = pl.DataFrame(
-            {
-                "a": [1, 2, 3],
-                "b": [4, 5, 6],
-                "c": [7, 8, 9],
-            }
-        )
+class TestCheckColumnsInDataframe:
+    df = pl.DataFrame(
+        {
+            "a": [1, 2, 3],
+            "b": [4, 5, 6],
+            "c": [7, 8, 9],
+        }
+    )
 
     def test_all_columns_exist(self) -> None:
         """Test error not raised when all requested columns exist."""
@@ -36,43 +34,45 @@ class TestCheckColumnsInDataframe(unittest.TestCase):
 
     def test_single_missing_column(self) -> None:
         """Should raise when one column is missing."""
-        with self.assertRaises(ColumnNotFoundError) as err:
+        expected_error = "Columns not found in dataframe: ['x']"
+
+        with pytest.raises(ColumnNotFoundError, match=re.escape(expected_error)):
             check_columns_in_dataframe(self.df, ["a", "x"])
-        self.assertEqual("Columns not found in dataframe: ['x']", str(err.exception))
 
     def test_multiple_missing_columns(self) -> None:
         """Should raise when multiple columns are missing."""
-        with self.assertRaises(ColumnNotFoundError) as err:
+        expected_error = "Columns not found in dataframe: ['x', 'y']"
+
+        with pytest.raises(ColumnNotFoundError, match=re.escape(expected_error)):
             check_columns_in_dataframe(self.df, ["a", "x", "y"])
-        self.assertEqual("Columns not found in dataframe: ['x', 'y']", str(err.exception))
 
     def test_empty_columns_list(self) -> None:
         """Test that empty list passes without error."""
         check_columns_in_dataframe(self.df, [])
 
 
-class TestGetDateFilter(unittest.TestCase):
+class TestGetDateFilter:
     df = pl.DataFrame({"timestamp": [datetime(2025, m, 1) for m in range(1, 8)]})
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "observation_interval,expected_eval",
         [
             (
-                "some_within",
                 (datetime(2025, 1, 1), datetime(2025, 4, 1)),
                 [True, True, True, True, False, False, False],
             ),
-            ("all_within", (datetime(2024, 1, 1), datetime(2026, 1, 1)), [True, True, True, True, True, True, True]),
+            ((datetime(2024, 1, 1), datetime(2026, 1, 1)), [True, True, True, True, True, True, True]),
             (
-                "all_out",
                 (datetime(2026, 1, 1), datetime(2027, 1, 1)),
                 [False, False, False, False, False, False, False],
             ),
-            ("start_only", datetime(2025, 3, 1), [False, False, True, True, True, True, True]),
-            ("start_only_with_none", (datetime(2025, 3, 1), None), [False, False, True, True, True, True, True]),
-        ]
+            (datetime(2025, 3, 1), [False, False, True, True, True, True, True]),
+            ((datetime(2025, 3, 1), None), [False, False, True, True, True, True, True]),
+        ],
+        ids=["some_within", "all_within", "all_out", "start_only", "start_only_with_none"],
     )
     def test_get_date_filter(
-        self, _: str, observation_interval: datetime | tuple[datetime, datetime | None], expected_eval: list
+        self, observation_interval: datetime | tuple[datetime, datetime | None], expected_eval: list
     ) -> None:
         date_filter = get_date_filter("timestamp", observation_interval)
         result = self.df.select(date_filter).to_series()
@@ -80,7 +80,7 @@ class TestGetDateFilter(unittest.TestCase):
         assert_series_equal(result, expected)
 
 
-class TestTruncateToPeriod(unittest.TestCase):
+class TestTruncateToPeriod:
     dt = pl.Series(
         [
             datetime(2020, 6, 1, 8, 10, 5, 2001),
@@ -91,10 +91,10 @@ class TestTruncateToPeriod(unittest.TestCase):
         ]
     )
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "period,anchor,expected",
         [
             (
-                "simple yearly",
                 Period.of_years(1),
                 TimeAnchor.START,
                 pl.Series(
@@ -108,7 +108,6 @@ class TestTruncateToPeriod(unittest.TestCase):
                 ),
             ),
             (
-                "yearly with offset",
                 Period.of_years(1).with_month_offset(2),
                 TimeAnchor.START,
                 pl.Series(
@@ -122,7 +121,6 @@ class TestTruncateToPeriod(unittest.TestCase):
                 ),
             ),
             (
-                "simple yearly end anchor",
                 Period.of_years(1),
                 TimeAnchor.END,
                 pl.Series(
@@ -136,7 +134,6 @@ class TestTruncateToPeriod(unittest.TestCase):
                 ),
             ),
             (
-                "yearly with offset end anchor",
                 Period.of_years(1).with_month_offset(2),
                 TimeAnchor.END,
                 pl.Series(
@@ -149,17 +146,23 @@ class TestTruncateToPeriod(unittest.TestCase):
                     ]
                 ),
             ),
-        ]
+        ],
+        ids=[
+            "simple yearly",
+            "yearly with offset",
+            "simple yearly end anchor",
+            "yearly with offset end anchor",
+        ],
     )
-    def test_truncate_to_year_period(self, _: str, period: Period, anchor: TimeAnchor, expected: list) -> None:
+    def test_truncate_to_year_period(self, period: Period, anchor: TimeAnchor, expected: list) -> None:
         """Test that truncating a time series to a given year period works as expected."""
         result = truncate_to_period(self.dt, period, anchor)
         assert_series_equal(result, expected)
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "period,anchor,expected",
         [
             (
-                "simple monthly",
                 Period.of_months(1),
                 TimeAnchor.START,
                 pl.Series(
@@ -173,7 +176,6 @@ class TestTruncateToPeriod(unittest.TestCase):
                 ),
             ),
             (
-                "3 monthly (quarterly)",
                 Period.of_months(3),
                 TimeAnchor.START,
                 pl.Series(
@@ -187,7 +189,6 @@ class TestTruncateToPeriod(unittest.TestCase):
                 ),
             ),
             (
-                "monthly with offset",
                 Period.of_months(1).with_hour_offset(9),
                 TimeAnchor.START,
                 pl.Series(
@@ -201,7 +202,6 @@ class TestTruncateToPeriod(unittest.TestCase):
                 ),
             ),
             (
-                "simple monthly end anchor",
                 Period.of_months(1),
                 TimeAnchor.END,
                 pl.Series(
@@ -215,7 +215,6 @@ class TestTruncateToPeriod(unittest.TestCase):
                 ),
             ),
             (
-                "3 monthly (quarterly) end anchor",
                 Period.of_months(3),
                 TimeAnchor.END,
                 pl.Series(
@@ -229,7 +228,6 @@ class TestTruncateToPeriod(unittest.TestCase):
                 ),
             ),
             (
-                "monthly with offset end anchor",
                 Period.of_months(1).with_hour_offset(9),
                 TimeAnchor.END,
                 pl.Series(
@@ -242,17 +240,25 @@ class TestTruncateToPeriod(unittest.TestCase):
                     ]
                 ),
             ),
-        ]
+        ],
+        ids=[
+            "simple monthly",
+            "3 monthly (quarterly)",
+            "monthly with offset",
+            "simple monthly end anchor",
+            "3 monthly (quarterly) end anchor",
+            "monthly with offset end anchor",
+        ],
     )
-    def test_truncate_to_month_period(self, _: str, period: Period, anchor: TimeAnchor, expected: list) -> None:
+    def test_truncate_to_month_period(self, period: Period, anchor: TimeAnchor, expected: list) -> None:
         """Test that truncating a time series to a given month period works as expected."""
         result = truncate_to_period(self.dt, period, anchor)
         assert_series_equal(result, pl.Series(expected))
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "period,anchor,expected",
         [
             (
-                "simple daily",
                 Period.of_days(1),
                 TimeAnchor.START,
                 pl.Series(
@@ -266,7 +272,6 @@ class TestTruncateToPeriod(unittest.TestCase):
                 ),
             ),
             (
-                "daily with offset",
                 Period.of_days(1).with_hour_offset(9),
                 TimeAnchor.START,
                 pl.Series(
@@ -280,7 +285,6 @@ class TestTruncateToPeriod(unittest.TestCase):
                 ),
             ),
             (
-                "simple daily end anchor",
                 Period.of_days(1),
                 TimeAnchor.END,
                 pl.Series(
@@ -294,7 +298,6 @@ class TestTruncateToPeriod(unittest.TestCase):
                 ),
             ),
             (
-                "daily with offset end anchor",
                 Period.of_days(1).with_hour_offset(9),
                 TimeAnchor.END,
                 pl.Series(
@@ -307,17 +310,23 @@ class TestTruncateToPeriod(unittest.TestCase):
                     ]
                 ),
             ),
-        ]
+        ],
+        ids=[
+            "simple daily",
+            "daily with offset",
+            "simple daily end anchor",
+            "daily with offset end anchor",
+        ],
     )
-    def test_truncate_to_day_period(self, _: str, period: Period, anchor: TimeAnchor, expected: list) -> None:
+    def test_truncate_to_day_period(self, period: Period, anchor: TimeAnchor, expected: list) -> None:
         """Test that truncating a time series to a given day period works as expected."""
         result = truncate_to_period(self.dt, period, anchor)
         assert_series_equal(result, pl.Series(expected))
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "period,anchor,expected",
         [
             (
-                "simple hourly",
                 Period.of_hours(1),
                 TimeAnchor.START,
                 pl.Series(
@@ -331,7 +340,6 @@ class TestTruncateToPeriod(unittest.TestCase):
                 ),
             ),
             (
-                "12 hourly",
                 Period.of_hours(12),
                 TimeAnchor.START,
                 pl.Series(
@@ -345,7 +353,6 @@ class TestTruncateToPeriod(unittest.TestCase):
                 ),
             ),
             (
-                "hourly with offset",
                 Period.of_hours(1).with_minute_offset(30),
                 TimeAnchor.START,
                 pl.Series(
@@ -359,7 +366,6 @@ class TestTruncateToPeriod(unittest.TestCase):
                 ),
             ),
             (
-                "simple hourly end anchor",
                 Period.of_hours(1),
                 TimeAnchor.END,
                 pl.Series(
@@ -373,7 +379,6 @@ class TestTruncateToPeriod(unittest.TestCase):
                 ),
             ),
             (
-                "12 hourly end anchor",
                 Period.of_hours(12),
                 TimeAnchor.END,
                 pl.Series(
@@ -387,7 +392,6 @@ class TestTruncateToPeriod(unittest.TestCase):
                 ),
             ),
             (
-                "hourly with offset end anchor",
                 Period.of_hours(1).with_minute_offset(30),
                 TimeAnchor.END,
                 pl.Series(
@@ -400,17 +404,25 @@ class TestTruncateToPeriod(unittest.TestCase):
                     ]
                 ),
             ),
-        ]
+        ],
+        ids=[
+            "simple hourly",
+            "12 hourly",
+            "hourly with offset",
+            "simple hourly end anchor",
+            "12 hourly end anchor",
+            "hourly with offset end anchor",
+        ],
     )
-    def test_truncate_to_hour_period(self, _: str, period: Period, anchor: TimeAnchor, expected: list) -> None:
+    def test_truncate_to_hour_period(self, period: Period, anchor: TimeAnchor, expected: list) -> None:
         """Test that truncating a time series to a given hour period works as expected."""
         result = truncate_to_period(self.dt, period, anchor)
         assert_series_equal(result, pl.Series(expected))
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "period,anchor,expected",
         [
             (
-                "simple minutes",
                 Period.of_minutes(1),
                 TimeAnchor.START,
                 pl.Series(
@@ -424,7 +436,6 @@ class TestTruncateToPeriod(unittest.TestCase):
                 ),
             ),
             (
-                "15 minutes",
                 Period.of_minutes(15),
                 TimeAnchor.START,
                 pl.Series(
@@ -438,7 +449,6 @@ class TestTruncateToPeriod(unittest.TestCase):
                 ),
             ),
             (
-                "minutes with offset",
                 Period.of_minutes(1).with_second_offset(45),
                 TimeAnchor.START,
                 pl.Series(
@@ -452,7 +462,6 @@ class TestTruncateToPeriod(unittest.TestCase):
                 ),
             ),
             (
-                "simple minutes end anchor",
                 Period.of_minutes(1),
                 TimeAnchor.END,
                 pl.Series(
@@ -466,7 +475,6 @@ class TestTruncateToPeriod(unittest.TestCase):
                 ),
             ),
             (
-                "15 minutes end anchor",
                 Period.of_minutes(15),
                 TimeAnchor.END,
                 pl.Series(
@@ -480,7 +488,6 @@ class TestTruncateToPeriod(unittest.TestCase):
                 ),
             ),
             (
-                "minutes with offset end anchor",
                 Period.of_minutes(1).with_second_offset(45),
                 TimeAnchor.END,
                 pl.Series(
@@ -493,17 +500,25 @@ class TestTruncateToPeriod(unittest.TestCase):
                     ]
                 ),
             ),
-        ]
+        ],
+        ids=[
+            "simple minutes",
+            "15 minutes",
+            "minutes with offset",
+            "simple minutes end anchor",
+            "15 minutes end anchor",
+            "minutes with offset end anchor",
+        ],
     )
-    def test_truncate_to_minute_period(self, _: str, period: Period, anchor: TimeAnchor, expected: list) -> None:
+    def test_truncate_to_minute_period(self, period: Period, anchor: TimeAnchor, expected: list) -> None:
         """Test that truncating a time series to a given minute period works as expected."""
         result = truncate_to_period(self.dt, period, anchor)
         assert_series_equal(result, pl.Series(expected))
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "period,anchor,expected",
         [
             (
-                "simple seconds",
                 Period.of_seconds(1),
                 TimeAnchor.START,
                 pl.Series(
@@ -517,7 +532,6 @@ class TestTruncateToPeriod(unittest.TestCase):
                 ),
             ),
             (
-                "3 seconds",
                 Period.of_seconds(3),
                 TimeAnchor.START,
                 pl.Series(
@@ -531,7 +545,6 @@ class TestTruncateToPeriod(unittest.TestCase):
                 ),
             ),
             (
-                "seconds with offset",
                 Period.of_seconds(1).with_microsecond_offset(5000),
                 TimeAnchor.START,
                 pl.Series(
@@ -545,7 +558,6 @@ class TestTruncateToPeriod(unittest.TestCase):
                 ),
             ),
             (
-                "simple seconds end anchor",
                 Period.of_seconds(1),
                 TimeAnchor.END,
                 pl.Series(
@@ -559,7 +571,6 @@ class TestTruncateToPeriod(unittest.TestCase):
                 ),
             ),
             (
-                "3 seconds end anchor",
                 Period.of_seconds(3),
                 TimeAnchor.END,
                 pl.Series(
@@ -573,7 +584,6 @@ class TestTruncateToPeriod(unittest.TestCase):
                 ),
             ),
             (
-                "seconds with offset end anchor",
                 Period.of_seconds(1).with_microsecond_offset(5000),
                 TimeAnchor.END,
                 pl.Series(
@@ -586,17 +596,25 @@ class TestTruncateToPeriod(unittest.TestCase):
                     ]
                 ),
             ),
-        ]
+        ],
+        ids=[
+            "simple seconds",
+            "3 seconds",
+            "seconds with offset",
+            "simple seconds end anchor",
+            "3 seconds end anchor",
+            "seconds with offset end anchor",
+        ],
     )
-    def test_truncate_to_second_period(self, _: str, period: Period, anchor: TimeAnchor, expected: list) -> None:
+    def test_truncate_to_second_period(self, period: Period, anchor: TimeAnchor, expected: list) -> None:
         """Test that truncating a time series to a given second period works as expected."""
         result = truncate_to_period(self.dt, period, anchor)
         assert_series_equal(result, pl.Series(expected))
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "period,anchor,expected",
         [
             (
-                "simple microseconds",
                 Period.of_microseconds(250),
                 TimeAnchor.START,
                 pl.Series(
@@ -610,7 +628,6 @@ class TestTruncateToPeriod(unittest.TestCase):
                 ),
             ),
             (
-                "simple microseconds end anchor",
                 Period.of_microseconds(250),
                 TimeAnchor.END,
                 pl.Series(
@@ -623,50 +640,59 @@ class TestTruncateToPeriod(unittest.TestCase):
                     ]
                 ),
             ),
-        ]
+        ],
+        ids=[
+            "simple microseconds",
+            "simple microseconds end anchor",
+        ],
     )
-    def test_truncate_to_microsecond_period(self, _: str, period: Period, anchor: TimeAnchor, expected: list) -> None:
+    def test_truncate_to_microsecond_period(self, period: Period, anchor: TimeAnchor, expected: list) -> None:
         """Test that truncating a time series to a given microsecond period works as expected."""
         result = truncate_to_period(self.dt, period, anchor)
         assert_series_equal(result, pl.Series(expected))
 
 
-class TestPadTime(unittest.TestCase):
-    simple_test_cases = (
-        (
+class TestPadTime:
+    simple_test_cases = {
+        "argnames": "time_stamps,periodicity",
+        "argvalues": [
+            (
+                pl.datetime_range(datetime(2025, 1, 1), datetime(2025, 1, 1, 0, 0, 1), interval="20us", eager=True),
+                Period.of_microseconds(20),
+            ),
+            (
+                pl.datetime_range(datetime(2025, 1, 1), datetime(2025, 1, 2), interval="1s", eager=True),
+                Period.of_seconds(1),
+            ),
+            (
+                pl.datetime_range(datetime(2025, 1, 1), datetime(2025, 2, 1), interval="1m", eager=True),
+                Period.of_minutes(1),
+            ),
+            (
+                pl.datetime_range(datetime(2025, 1, 1), datetime(2030, 1, 1), interval="1d", eager=True),
+                Period.of_days(1),
+            ),
+            (
+                pl.datetime_range(datetime(2025, 1, 1), datetime(2035, 1, 1), interval="1mo", eager=True),
+                Period.of_months(1),
+            ),
+            (
+                pl.datetime_range(datetime(2025, 1, 1), datetime(2125, 1, 1), interval="1y", eager=True),
+                Period.of_years(1),
+            ),
+        ],
+        "ids": [
             "microsecond_data",
-            pl.datetime_range(datetime(2025, 1, 1), datetime(2025, 1, 1, 0, 0, 1), interval="20us", eager=True),
-            Period.of_microseconds(20),
-        ),
-        (
             "second_data",
-            pl.datetime_range(datetime(2025, 1, 1), datetime(2025, 1, 2), interval="1s", eager=True),
-            Period.of_seconds(1),
-        ),
-        (
             "minute_data",
-            pl.datetime_range(datetime(2025, 1, 1), datetime(2025, 2, 1), interval="1m", eager=True),
-            Period.of_minutes(1),
-        ),
-        (
             "daily_data",
-            pl.datetime_range(datetime(2025, 1, 1), datetime(2030, 1, 1), interval="1d", eager=True),
-            Period.of_days(1),
-        ),
-        (
             "monthly_data",
-            pl.datetime_range(datetime(2025, 1, 1), datetime(2035, 1, 1), interval="1mo", eager=True),
-            Period.of_months(1),
-        ),
-        (
             "yearly_data",
-            pl.datetime_range(datetime(2025, 1, 1), datetime(2125, 1, 1), interval="1y", eager=True),
-            Period.of_years(1),
-        ),
-    )
+        ],
+    }
 
-    @parameterized.expand(simple_test_cases)
-    def test_simple_cases(self, _: str, time_stamps: list, periodicity: Period) -> None:
+    @pytest.mark.parametrize(**simple_test_cases)
+    def test_simple_cases(self, time_stamps: list, periodicity: Period) -> None:
         """Test that the padding of missing time values works for simple periodicity and resolution cases"""
         df = pl.DataFrame({"time": time_stamps})
         # Remove some rows - but not the first or last!
@@ -677,8 +703,8 @@ class TestPadTime(unittest.TestCase):
         result = pad_time(df_to_pad, "time", periodicity)
         pl.testing.assert_frame_equal(result, df)
 
-    @parameterized.expand(simple_test_cases)
-    def test_no_missing_simple_cases(self, _: str, time_stamps: list, periodicity: Period) -> None:
+    @pytest.mark.parametrize(**simple_test_cases)
+    def test_no_missing_simple_cases(self, time_stamps: list, periodicity: Period) -> None:
         """Test that the padding of missing time values works for simple periodicity and resolution cases
         when there are no missing rows (shouldn't alter the time series)
         """
@@ -687,66 +713,71 @@ class TestPadTime(unittest.TestCase):
         result = pad_time(df, "time", periodicity)
         pl.testing.assert_frame_equal(result, df)
 
-    complex_test_cases = (
-        (
+    complex_test_cases = {
+        "argnames": "time_stamps,expected,periodicity",
+        "argvalues": [
+            (
+                [
+                    datetime(2020, 5, 1, 17, 15, 0),
+                    datetime(2022, 1, 30, 2, 45, 0),
+                    datetime(2024, 9, 1, 10, 30, 0),
+                    datetime(2025, 12, 4, 14, 20, 0),
+                ],
+                [
+                    datetime(2020, 5, 1, 17, 15, 0),
+                    datetime(2021, 1, 1, 0, 0, 0),
+                    datetime(2022, 1, 30, 2, 45, 0),
+                    datetime(2023, 1, 1, 0, 0, 0),
+                    datetime(2024, 9, 1, 10, 30, 0),
+                    datetime(2025, 12, 4, 14, 20, 0),
+                ],
+                Period.of_years(1),
+            ),
+            (
+                [
+                    datetime(2020, 5, 1, 17, 15, 30),
+                    datetime(2022, 1, 30, 2, 45, 30),
+                    datetime(2024, 9, 1, 10, 30, 30),
+                    datetime(2025, 12, 4, 14, 20, 30),
+                ],
+                [
+                    datetime(2020, 5, 1, 17, 15, 30),
+                    datetime(2021, 1, 1, 0, 0, 30),
+                    datetime(2022, 1, 30, 2, 45, 30),
+                    datetime(2023, 1, 1, 0, 0, 30),
+                    datetime(2024, 9, 1, 10, 30, 30),
+                    datetime(2025, 12, 4, 14, 20, 30),
+                ],
+                Period.of_years(1).with_second_offset(30),
+            ),
+            (
+                [
+                    datetime(2020, 5, 1, 17, 15, 0),
+                    datetime(2022, 1, 30, 2, 45, 0),
+                    datetime(2024, 9, 1, 10, 30, 0),
+                    datetime(2025, 12, 4, 14, 20, 0),
+                ],
+                [
+                    datetime(2020, 5, 1, 17, 15, 0),
+                    datetime(2020, 10, 1, 9, 0, 0),
+                    datetime(2022, 1, 30, 2, 45, 0),
+                    datetime(2022, 10, 1, 9, 0, 0),
+                    datetime(2024, 9, 1, 10, 30, 0),
+                    datetime(2024, 10, 1, 9, 0, 0),
+                    datetime(2025, 12, 4, 14, 20, 0),
+                ],
+                Period.of_years(1).with_month_offset(9).with_hour_offset(9),
+            ),
+        ],
+        "ids": [
             "annual_periodicity_15minute_resolution",
-            [
-                datetime(2020, 5, 1, 17, 15, 0),
-                datetime(2022, 1, 30, 2, 45, 0),
-                datetime(2024, 9, 1, 10, 30, 0),
-                datetime(2025, 12, 4, 14, 20, 0),
-            ],
-            [
-                datetime(2020, 5, 1, 17, 15, 0),
-                datetime(2021, 1, 1, 0, 0, 0),
-                datetime(2022, 1, 30, 2, 45, 0),
-                datetime(2023, 1, 1, 0, 0, 0),
-                datetime(2024, 9, 1, 10, 30, 0),
-                datetime(2025, 12, 4, 14, 20, 0),
-            ],
-            Period.of_years(1),
-        ),
-        (
             "annual_periodicity_15minute_resolution_with_simple_offset",
-            [
-                datetime(2020, 5, 1, 17, 15, 30),
-                datetime(2022, 1, 30, 2, 45, 30),
-                datetime(2024, 9, 1, 10, 30, 30),
-                datetime(2025, 12, 4, 14, 20, 30),
-            ],
-            [
-                datetime(2020, 5, 1, 17, 15, 30),
-                datetime(2021, 1, 1, 0, 0, 30),
-                datetime(2022, 1, 30, 2, 45, 30),
-                datetime(2023, 1, 1, 0, 0, 30),
-                datetime(2024, 9, 1, 10, 30, 30),
-                datetime(2025, 12, 4, 14, 20, 30),
-            ],
-            Period.of_years(1).with_second_offset(30),
-        ),
-        (
             "water_year_periodicity_15minute_resolution",
-            [
-                datetime(2020, 5, 1, 17, 15, 0),
-                datetime(2022, 1, 30, 2, 45, 0),
-                datetime(2024, 9, 1, 10, 30, 0),
-                datetime(2025, 12, 4, 14, 20, 0),
-            ],
-            [
-                datetime(2020, 5, 1, 17, 15, 0),
-                datetime(2020, 10, 1, 9, 0, 0),
-                datetime(2022, 1, 30, 2, 45, 0),
-                datetime(2022, 10, 1, 9, 0, 0),
-                datetime(2024, 9, 1, 10, 30, 0),
-                datetime(2024, 10, 1, 9, 0, 0),
-                datetime(2025, 12, 4, 14, 20, 0),
-            ],
-            Period.of_years(1).with_month_offset(9).with_hour_offset(9),
-        ),
-    )
+        ],
+    }
 
-    @parameterized.expand(complex_test_cases)
-    def test_complex_cases(self, _: str, time_stamps: list, expected: list, periodicity: Period) -> None:
+    @pytest.mark.parametrize(**complex_test_cases)
+    def test_complex_cases(self, time_stamps: list, expected: list, periodicity: Period) -> None:
         """Test that the padding of missing time values works for more complex periodicity cases"""
         df = pl.DataFrame({"time": time_stamps})
         df_expected = pl.DataFrame({"time": expected})
@@ -754,8 +785,8 @@ class TestPadTime(unittest.TestCase):
         result = pad_time(df, "time", periodicity)
         pl.testing.assert_frame_equal(result, df_expected)
 
-    @parameterized.expand(complex_test_cases)
-    def test_no_missing_complex_cases(self, _: str, __: list, expected: list, periodicity: Period) -> None:
+    @pytest.mark.parametrize(**complex_test_cases)
+    def test_no_missing_complex_cases(self, time_stamps: list, expected: list, periodicity: Period) -> None:
         """Test that the padding of missing time values works for complex periodicity cases
         when there are no missing rows (shouldn't alter the time series)
         """
@@ -763,19 +794,22 @@ class TestPadTime(unittest.TestCase):
         result = pad_time(df, "time", periodicity)
         pl.testing.assert_frame_equal(result, df)
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "start_date,end_date",
         [
-            # Start date after end_date
             (
                 datetime(2025, 1, 1, 12, 5, 0),
                 datetime(2025, 1, 1, 12, 2, 0),
             ),
-            # Start date the same as end date
             (
                 datetime(2025, 1, 1, 12, 5, 0),
                 datetime(2025, 1, 1, 12, 2, 0),
             ),
-        ]
+        ],
+        ids=[
+            "start date after end date",
+            "start date the same as end date",
+        ],
     )
     def test_invalid_start_end_dates(self, start_date: datetime, end_date: datetime) -> None:
         df = pl.DataFrame(
@@ -791,37 +825,40 @@ class TestPadTime(unittest.TestCase):
         with pytest.raises(ValueError, match=expected_error):
             pad_time(df, "time", periodicity, start=start_date, end=end_date)
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "start_date,end_date,expected_start_date,expected_end_date",
         [
-            # Start date before df, end date within df range
             (
                 datetime(2025, 1, 1, 11, 55, 0),
                 datetime(2025, 1, 1, 11, 59, 0),
                 datetime(2025, 1, 1, 11, 55, 0),
                 datetime(2025, 1, 1, 12, 10, 0),
             ),
-            # Start and end dates outside df range
             (
                 datetime(2025, 1, 1, 11, 55, 0),
                 datetime(2025, 1, 1, 12, 20, 0),
                 datetime(2025, 1, 1, 11, 55, 0),
                 datetime(2025, 1, 1, 12, 20, 0),
             ),
-            # Start date within df range, end date after
             (
                 datetime(2025, 1, 1, 12, 5, 0),
                 datetime(2025, 1, 1, 12, 20, 0),
                 datetime(2025, 1, 1, 12, 0, 0),
                 datetime(2025, 1, 1, 12, 20, 0),
             ),
-            # Start and end dates within df range
             (
                 datetime(2025, 1, 1, 12, 2, 0),
                 datetime(2025, 1, 1, 12, 9, 0),
                 datetime(2025, 1, 1, 12, 0, 0),
                 datetime(2025, 1, 1, 12, 10, 0),
             ),
-        ]
+        ],
+        ids=[
+            "start date before dataframe range, end date within dataframe range",
+            "start and end dates outside of dataframe range",
+            "start date within dataframe range, end date after dataframe range",
+            "start and end dates within dataframe range",
+        ],
     )
     def test_valid_start_end_dates(
         self, start_date: datetime, end_date: datetime, expected_start_date: datetime, expected_end_date: datetime
@@ -841,37 +878,40 @@ class TestPadTime(unittest.TestCase):
         result = pad_time(df, "time", periodicity, start=start_date, end=end_date)
         pl.testing.assert_frame_equal(expected, result)
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "start_date,end_date,expected_start_date,expected_end_date",
         [
-            # Start date before df, end date within df range
             (
                 datetime(2025, 1, 1, 11, 55, 0),
                 datetime(2025, 1, 1, 11, 59, 0),
                 datetime(2025, 1, 1, 11, 55, 0),
                 datetime(2025, 1, 1, 12, 10, 0),
             ),
-            # Start and end dates outside df range
             (
                 datetime(2025, 1, 1, 11, 55, 0),
                 datetime(2025, 1, 1, 12, 20, 0),
                 datetime(2025, 1, 1, 11, 55, 0),
                 datetime(2025, 1, 1, 12, 20, 0),
             ),
-            # Start date within df range, end date after
             (
                 datetime(2025, 1, 1, 12, 5, 0),
                 datetime(2025, 1, 1, 12, 20, 0),
                 datetime(2025, 1, 1, 12, 0, 0),
                 datetime(2025, 1, 1, 12, 20, 0),
             ),
-            # Start and end dates within df range
             (
                 datetime(2025, 1, 1, 12, 2, 0),
                 datetime(2025, 1, 1, 12, 9, 0),
                 datetime(2025, 1, 1, 12, 0, 0),
                 datetime(2025, 1, 1, 12, 10, 0),
             ),
-        ]
+        ],
+        ids=[
+            "start date before dataframe range, end date within dataframe range",
+            "start and end dates outside dataframe range",
+            "start date within dataframe range, end date after dataframe range",
+            "start and end dates within dataframe range",
+        ],
     )
     def test_valid_start_end_dates_with_missing_rows(
         self, start_date: datetime, end_date: datetime, expected_start_date: datetime, expected_end_date: datetime
@@ -893,26 +933,21 @@ class TestPadTime(unittest.TestCase):
         missing_times = set(df_to_pad["time"]) - set(expected["time"])
         expected_df = pl.concat([expected, pl.DataFrame({"time": sorted(missing_times)})]).sort(by="time")
 
-        """ NOTES - DELETE LATER
-        All dates within start and end should be padded
-        Select dates outside of that
-
-        """
-
         result = pad_time(df_to_pad, "time", periodicity, start=start_date, end=end_date)
         pl.testing.assert_frame_equal(expected_df, result)
 
 
-class TestCheckAlignment(unittest.TestCase):
+class TestCheckAlignment:
     def _check_success(self, _: str, times: list, resolution: Period, time_anchor: TimeAnchor) -> None:
         """Test that a check_alignment call returns True"""
-        self.assertTrue(check_alignment(pl.Series("time", times), resolution, time_anchor))
+        assert check_alignment(pl.Series("time", times), resolution, time_anchor)
 
     def _check_failure(self, _: str, times: list, resolution: Period, time_anchor: TimeAnchor) -> None:
         """Test that a .check_alignment call returns False"""
-        self.assertFalse(check_alignment(pl.Series("time", times), resolution, time_anchor))
+        assert not check_alignment(pl.Series("time", times), resolution, time_anchor)
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,times,alignment,time_anchor",
         [
             (
                 "simple yearly",
@@ -938,7 +973,7 @@ class TestCheckAlignment(unittest.TestCase):
                 Period.of_years(1).with_month_offset(9).with_hour_offset(9),
                 TimeAnchor.START,
             ),
-        ]
+        ],
     )
     def test_check_year_alignment_success(
         self, name: str, times: list, alignment: Period, time_anchor: TimeAnchor
@@ -946,7 +981,8 @@ class TestCheckAlignment(unittest.TestCase):
         """Test that a year based time series that does conform to the given alignment passes the check."""
         self._check_success(name, times, alignment, time_anchor)
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,times,alignment,time_anchor",
         [
             (
                 "simple yearly error",
@@ -960,7 +996,7 @@ class TestCheckAlignment(unittest.TestCase):
                 Period.of_years(1).with_month_offset(9).with_hour_offset(9),
                 TimeAnchor.START,
             ),
-        ]
+        ],
     )
     def test_check_year_alignment_failure(
         self, name: str, times: list, alignment: Period, time_anchor: TimeAnchor
@@ -968,7 +1004,8 @@ class TestCheckAlignment(unittest.TestCase):
         """Test that a year based time series that doesn't conform to the given alignment fails the check."""
         self._check_failure(name, times, alignment, time_anchor)
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,times,alignment,time_anchor",
         [
             (
                 "simple monthly",
@@ -1018,7 +1055,7 @@ class TestCheckAlignment(unittest.TestCase):
                 Period.of_months(1).with_hour_offset(9),
                 TimeAnchor.START,
             ),
-        ]
+        ],
     )
     def test_check_month_alignment_success(
         self, name: str, times: list, alignment: Period, time_anchor: TimeAnchor
@@ -1026,7 +1063,8 @@ class TestCheckAlignment(unittest.TestCase):
         """Test that a month based time series that does conform to the given alignment passes the check."""
         self._check_success(name, times, alignment, time_anchor)
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,times,alignment,time_anchor",
         [
             (
                 "simple monthly",
@@ -1040,7 +1078,7 @@ class TestCheckAlignment(unittest.TestCase):
                 Period.of_months(1).with_hour_offset(9),
                 TimeAnchor.START,
             ),
-        ]
+        ],
     )
     def test_check_month_alignment_failure(
         self, name: str, times: list, alignment: Period, time_anchor: TimeAnchor
@@ -1048,7 +1086,8 @@ class TestCheckAlignment(unittest.TestCase):
         """Test that a month based time series that doesn't conform to the given alignment fails the check."""
         self._check_failure(name, times, alignment, time_anchor)
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,times,alignment,time_anchor",
         [
             (
                 "simple daily",
@@ -1080,7 +1119,7 @@ class TestCheckAlignment(unittest.TestCase):
                 Period.of_days(1),
                 TimeAnchor.START,
             ),
-        ]
+        ],
     )
     def test_check_day_alignment_success(
         self, name: str, times: list, alignment: Period, time_anchor: TimeAnchor
@@ -1088,7 +1127,8 @@ class TestCheckAlignment(unittest.TestCase):
         """Test that a day based time series that does conform to the given alignment passes the check."""
         self._check_success(name, times, alignment, time_anchor)
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,times,alignment,time_anchor",
         [
             (
                 "simple daily error",
@@ -1102,7 +1142,7 @@ class TestCheckAlignment(unittest.TestCase):
                 Period.of_days(1).with_hour_offset(9),
                 TimeAnchor.START,
             ),
-        ]
+        ],
     )
     def test_check_day_alignment_failure(
         self, name: str, times: list, alignment: Period, time_anchor: TimeAnchor
@@ -1110,7 +1150,8 @@ class TestCheckAlignment(unittest.TestCase):
         """Test that a day based time series that doesn't conform to the given alignment fails the check."""
         self._check_failure(name, times, alignment, time_anchor)
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,times,alignment,time_anchor",
         [
             (
                 "simple hourly",
@@ -1154,7 +1195,7 @@ class TestCheckAlignment(unittest.TestCase):
                 Period.of_hours(1),
                 TimeAnchor.START,
             ),
-        ]
+        ],
     )
     def test_check_hour_alignment_success(
         self, name: str, times: list, alignment: Period, time_anchor: TimeAnchor
@@ -1162,7 +1203,8 @@ class TestCheckAlignment(unittest.TestCase):
         """Test that an hour based time series that does conform to the given alignment passes the check."""
         self._check_success(name, times, alignment, time_anchor)
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,times,alignment,time_anchor",
         [
             (
                 "simple hourly",
@@ -1176,7 +1218,7 @@ class TestCheckAlignment(unittest.TestCase):
                 Period.of_hours(1).with_minute_offset(30),
                 TimeAnchor.START,
             ),
-        ]
+        ],
     )
     def test_check_hour_alignment_failure(
         self, name: str, times: list, alignment: Period, time_anchor: TimeAnchor
@@ -1184,7 +1226,8 @@ class TestCheckAlignment(unittest.TestCase):
         """Test that an hour based time series that doesn't conform to the given alignment fails the check."""
         self._check_failure(name, times, alignment, time_anchor)
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,times,alignment,time_anchor",
         [
             (
                 "simple minute",
@@ -1227,7 +1270,7 @@ class TestCheckAlignment(unittest.TestCase):
                 Period.of_minutes(5).with_second_offset(30),
                 TimeAnchor.START,
             ),
-        ]
+        ],
     )
     def test_check_minute_alignment_success(
         self, name: str, times: list, alignment: Period, time_anchor: TimeAnchor
@@ -1235,7 +1278,8 @@ class TestCheckAlignment(unittest.TestCase):
         """Test that a minute based time series that does conform to the given alignment passes the check."""
         self._check_success(name, times, alignment, time_anchor)
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,times,alignment,time_anchor",
         [
             (
                 "simple minute",
@@ -1249,7 +1293,7 @@ class TestCheckAlignment(unittest.TestCase):
                 Period.of_minutes(5).with_second_offset(30),
                 TimeAnchor.START,
             ),
-        ]
+        ],
     )
     def test_check_minute_alignment_failure(
         self, name: str, times: list, alignment: Period, time_anchor: TimeAnchor
@@ -1257,7 +1301,8 @@ class TestCheckAlignment(unittest.TestCase):
         """Test that a minute based time series that doesn't conform to the given alignment fails the check."""
         self._check_failure(name, times, alignment, time_anchor)
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,times,alignment,time_anchor",
         [
             (
                 "simple seconds",
@@ -1299,7 +1344,7 @@ class TestCheckAlignment(unittest.TestCase):
                 Period.of_seconds(30).with_microsecond_offset(40),
                 TimeAnchor.START,
             ),
-        ]
+        ],
     )
     def test_check_second_alignment_success(
         self, name: str, times: list, alignment: Period, time_anchor: TimeAnchor
@@ -1307,7 +1352,8 @@ class TestCheckAlignment(unittest.TestCase):
         """Test that a second based time series that does conform to the given alignment passes the check."""
         self._check_success(name, times, alignment, time_anchor)
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,times,alignment,time_anchor",
         [
             (
                 "simple seconds",
@@ -1325,7 +1371,7 @@ class TestCheckAlignment(unittest.TestCase):
                 Period.of_seconds(30).with_microsecond_offset(40),
                 TimeAnchor.START,
             ),
-        ]
+        ],
     )
     def test_check_second_alignment_failure(
         self, name: str, times: list, alignment: Period, time_anchor: TimeAnchor
@@ -1333,7 +1379,8 @@ class TestCheckAlignment(unittest.TestCase):
         """Test that a second based time series that doesn't conform to the given alignment fails the check."""
         self._check_failure(name, times, alignment, time_anchor)
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,times,alignment,time_anchor",
         [
             (
                 "simple microseconds",
@@ -1381,7 +1428,7 @@ class TestCheckAlignment(unittest.TestCase):
                 Period.of_microseconds(1_000_000),
                 TimeAnchor.START,
             ),
-        ]
+        ],
     )
     def test_check_microsecond_alignment_success(
         self, name: str, times: list, alignment: Period, time_anchor: TimeAnchor
@@ -1389,7 +1436,8 @@ class TestCheckAlignment(unittest.TestCase):
         """Test that a microsecond based time series that does conform to the given alignment passes the check."""
         self._check_success(name, times, alignment, time_anchor)
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,times,alignment,time_anchor",
         [
             (
                 "40Hz",
@@ -1401,7 +1449,7 @@ class TestCheckAlignment(unittest.TestCase):
                 Period.of_microseconds(25_000),
                 TimeAnchor.START,
             ),
-        ]
+        ],
     )
     def test_check_microsecond_alignment_failure(
         self, name: str, times: list, alignment: Period, time_anchor: TimeAnchor
@@ -1410,16 +1458,17 @@ class TestCheckAlignment(unittest.TestCase):
         self._check_failure(name, times, alignment, time_anchor)
 
 
-class TestCheckPeriodicity(unittest.TestCase):
+class TestCheckPeriodicity:
     def _check_success(self, _: str, times: list, periodicity: Period, time_anchor: TimeAnchor) -> None:
         """Test that a check_periodicity call returns True"""
-        self.assertTrue(check_periodicity(pl.Series("time", times), periodicity, time_anchor))
+        assert check_periodicity(pl.Series("time", times), periodicity, time_anchor)
 
     def _check_failure(self, _: str, times: list, periodicity: Period, time_anchor: TimeAnchor) -> None:
         """Test that a check_periodicity call returns False"""
-        self.assertFalse(check_periodicity(pl.Series("time", times), periodicity, time_anchor))
+        assert not check_periodicity(pl.Series("time", times), periodicity, time_anchor)
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,times,periodicity,time_anchor",
         [
             (
                 "simple yearly",
@@ -1463,7 +1512,7 @@ class TestCheckPeriodicity(unittest.TestCase):
                 Period.of_years(1),
                 TimeAnchor.END,
             ),
-        ]
+        ],
     )
     def test_check_year_periodicity_success(
         self, name: str, times: list, periodicity: Period, time_anchor: TimeAnchor
@@ -1471,7 +1520,8 @@ class TestCheckPeriodicity(unittest.TestCase):
         """Test that a year based time series that does conform to the given periodicity passes the check."""
         self._check_success(name, times, periodicity, time_anchor)
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,times,periodicity,time_anchor",
         [
             (
                 "simple yearly",
@@ -1497,7 +1547,7 @@ class TestCheckPeriodicity(unittest.TestCase):
                 Period.of_years(1),
                 TimeAnchor.END,
             ),
-        ]
+        ],
     )
     def test_check_year_periodicity_failure(
         self, name: str, times: list, periodicity: Period, time_anchor: TimeAnchor
@@ -1505,7 +1555,8 @@ class TestCheckPeriodicity(unittest.TestCase):
         """Test that a year based time series that doesn't conform to the given periodicity fails the check."""
         self._check_failure(name, times, periodicity, time_anchor)
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,times,periodicity,time_anchor",
         [
             (
                 "simple monthly",
@@ -1555,7 +1606,7 @@ class TestCheckPeriodicity(unittest.TestCase):
                 Period.of_months(1).with_hour_offset(9),
                 TimeAnchor.END,
             ),
-        ]
+        ],
     )
     def test_check_month_periodicity_success(
         self, name: str, times: list, periodicity: Period, time_anchor: TimeAnchor
@@ -1563,7 +1614,8 @@ class TestCheckPeriodicity(unittest.TestCase):
         """Test that a month based time series that does conform to the given periodicity passes the check."""
         self._check_success(name, times, periodicity, time_anchor)
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,times,periodicity,time_anchor",
         [
             (
                 "simple monthly",
@@ -1589,7 +1641,7 @@ class TestCheckPeriodicity(unittest.TestCase):
                 Period.of_months(1).with_hour_offset(9),
                 TimeAnchor.END,
             ),
-        ]
+        ],
     )
     def test_check_month_periodicity_failure(
         self, name: str, times: list, periodicity: Period, time_anchor: TimeAnchor
@@ -1597,7 +1649,8 @@ class TestCheckPeriodicity(unittest.TestCase):
         """Test that a month based time series that doesn't conform to the given periodicity fails the check."""
         self._check_failure(name, times, periodicity, time_anchor)
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,times,periodicity,time_anchor",
         [
             (
                 "simple daily",
@@ -1641,7 +1694,7 @@ class TestCheckPeriodicity(unittest.TestCase):
                 Period.of_days(1).with_hour_offset(9),
                 TimeAnchor.END,
             ),
-        ]
+        ],
     )
     def test_check_day_periodicity_success(
         self, name: str, times: list, periodicity: Period, time_anchor: TimeAnchor
@@ -1649,7 +1702,8 @@ class TestCheckPeriodicity(unittest.TestCase):
         """Test that a day based time series that does conform to the given periodicity passes the check."""
         self._check_success(name, times, periodicity, time_anchor)
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,times,periodicity,time_anchor",
         [
             (
                 "simple daily",
@@ -1675,7 +1729,7 @@ class TestCheckPeriodicity(unittest.TestCase):
                 Period.of_days(1).with_hour_offset(9),
                 TimeAnchor.END,
             ),
-        ]
+        ],
     )
     def test_check_day_periodicity_failure(
         self, name: str, times: list, periodicity: Period, time_anchor: TimeAnchor
@@ -1683,7 +1737,8 @@ class TestCheckPeriodicity(unittest.TestCase):
         """Test that a day based time series that doesn't conform to the given periodicity fails the check."""
         self._check_failure(name, times, periodicity, time_anchor)
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,times,periodicity,time_anchor",
         [
             (
                 "simple hourly",
@@ -1720,7 +1775,7 @@ class TestCheckPeriodicity(unittest.TestCase):
                 Period.of_hours(1),
                 TimeAnchor.START,
             ),
-        ]
+        ],
     )
     def test_check_hour_periodicity_success(
         self, name: str, times: list, periodicity: Period, time_anchor: TimeAnchor
@@ -1728,7 +1783,8 @@ class TestCheckPeriodicity(unittest.TestCase):
         """Test that an hour based time series that does conform to the given periodicity passes the check."""
         self._check_success(name, times, periodicity, time_anchor)
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,times,periodicity,time_anchor",
         [
             (
                 "simple hourly",
@@ -1747,7 +1803,7 @@ class TestCheckPeriodicity(unittest.TestCase):
                 Period.of_hours(1),
                 TimeAnchor.END,
             ),
-        ]
+        ],
     )
     def test_check_hour_periodicity_failure(
         self, name: str, times: list, periodicity: Period, time_anchor: TimeAnchor
@@ -1755,7 +1811,8 @@ class TestCheckPeriodicity(unittest.TestCase):
         """Test that an hour based time series that doesn't conform to the given periodicity fails the check."""
         self._check_failure(name, times, periodicity, time_anchor)
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,times,periodicity,time_anchor",
         [
             (
                 "simple minute",
@@ -1787,7 +1844,7 @@ class TestCheckPeriodicity(unittest.TestCase):
                 Period.of_minutes(5).with_second_offset(30),
                 TimeAnchor.START,
             ),
-        ]
+        ],
     )
     def test_check_minute_periodicity_success(
         self, name: str, times: list, periodicity: Period, time_anchor: TimeAnchor
@@ -1795,7 +1852,8 @@ class TestCheckPeriodicity(unittest.TestCase):
         """Test that a minute based time series that does conform to the given periodicity passes the check."""
         self._check_success(name, times, periodicity, time_anchor)
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,times,periodicity,time_anchor",
         [
             (
                 "simple minute",
@@ -1809,7 +1867,7 @@ class TestCheckPeriodicity(unittest.TestCase):
                 Period.of_minutes(1),
                 TimeAnchor.END,
             ),
-        ]
+        ],
     )
     def test_check_minute_periodicity_failure(
         self, name: str, times: list, periodicity: Period, time_anchor: TimeAnchor
@@ -1817,7 +1875,8 @@ class TestCheckPeriodicity(unittest.TestCase):
         """Test that a minute based time series that doesn't conform to the given periodicity fails the check."""
         self._check_failure(name, times, periodicity, time_anchor)
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,times,periodicity,time_anchor",
         [
             (
                 "simple seconds",
@@ -1857,7 +1916,7 @@ class TestCheckPeriodicity(unittest.TestCase):
                 Period.of_seconds(30).with_microsecond_offset(40),
                 TimeAnchor.START,
             ),
-        ]
+        ],
     )
     def test_check_second_periodicity_success(
         self, name: str, times: list, periodicity: Period, time_anchor: TimeAnchor
@@ -1865,7 +1924,8 @@ class TestCheckPeriodicity(unittest.TestCase):
         """Test that a second based time series that does conform to the given periodicity passes the check."""
         self._check_success(name, times, periodicity, time_anchor)
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,times,periodicity,time_anchor",
         [
             (
                 "simple seconds",
@@ -1883,7 +1943,7 @@ class TestCheckPeriodicity(unittest.TestCase):
                 Period.of_seconds(1),
                 TimeAnchor.END,
             ),
-        ]
+        ],
     )
     def test_check_second_periodicity_failure(
         self, name: str, times: list, periodicity: Period, time_anchor: TimeAnchor
@@ -1891,7 +1951,8 @@ class TestCheckPeriodicity(unittest.TestCase):
         """Test that a second based time series that doesn't conform to the given periodicity fails the check."""
         self._check_failure(name, times, periodicity, time_anchor)
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,times,periodicity,time_anchor",
         [
             (
                 "simple microseconds",
@@ -1923,7 +1984,7 @@ class TestCheckPeriodicity(unittest.TestCase):
                 Period.of_microseconds(1),
                 TimeAnchor.START,
             ),
-        ]
+        ],
     )
     def test_check_microsecond_periodicity_success(
         self, name: str, times: list, periodicity: Period, time_anchor: TimeAnchor
@@ -1931,7 +1992,8 @@ class TestCheckPeriodicity(unittest.TestCase):
         """Test that a microsecond based time series that does conform to the given periodicity passes the check."""
         self._check_success(name, times, periodicity, time_anchor)
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,times,periodicity,time_anchor",
         [
             (
                 "40Hz",
@@ -1943,7 +2005,7 @@ class TestCheckPeriodicity(unittest.TestCase):
                 Period.of_microseconds(25_000),
                 TimeAnchor.START,
             ),
-        ]
+        ],
     )
     def test_check_microsecond_periodicity_failure(
         self, name: str, times: list, periodicity: Period, time_anchor: TimeAnchor
@@ -1952,8 +2014,9 @@ class TestCheckPeriodicity(unittest.TestCase):
         self._check_failure(name, times, periodicity, time_anchor)
 
 
-class TestEpochCheck(unittest.TestCase):
-    @parameterized.expand(
+class TestEpochCheck:
+    @pytest.mark.parametrize(
+        "period",
         [
             Period.of_years(2),
             Period.of_years(7),
@@ -1976,14 +2039,15 @@ class TestEpochCheck(unittest.TestCase):
             Period.of_minutes(11),
             Period.of_minutes(50),
             Period.of_minutes(61),
-        ]
+        ],
     )
     def test_non_epoch_agnostic_period_fails(self, period: Period) -> None:
         """Test that non epoch agnostic Periods fail the epoch check."""
-        with self.assertRaises(NotImplementedError):
+        with pytest.raises(NotImplementedError):
             epoch_check(period)
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "period",
         [
             Period.of_years(1),
             Period.of_months(1),
@@ -2002,7 +2066,7 @@ class TestEpochCheck(unittest.TestCase):
             Period.of_minutes(15),
             Period.of_minutes(30),
             Period.of_minutes(60),
-        ]
+        ],
     )
     def test_epoch_agnostic_period_passes(self, period: Period) -> None:
         """Test that epoch agnostic Periods pass the epoch check."""
