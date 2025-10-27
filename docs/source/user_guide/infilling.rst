@@ -77,21 +77,33 @@ In more detail
 ==============
 
 The :meth:`~time_stream.TimeFrame.infill` method is the entry point for infilling your
-timeseries data in **Time-Stream**. It delegates to well established methods from the `SciPy data science library
-<https://docs.scipy.org/doc/scipy/reference/interpolate.html>`_, combined with the time-integrity of your **TimeFrame**.
+timeseries data in **Time-Stream**. There are various infill methods available; from using alternative data from
+another source, to delegating to well established methods from the `SciPy data science library
+<https://docs.scipy.org/doc/scipy/reference/interpolate.html>`_. All methods are combined with the time-integrity
+of your **TimeFrame**.
+
+Let's look at the method in more detail:
+
+.. automethod:: time_stream.TimeFrame.infill
 
 Infill methods
 --------------
 
-Choose how missing values are estimated by passing a method name as a string. Each method has its strengths,
-depending on your data.
+The ``infill_method`` parameter lets you choose how missing values are estimated by passing a method name as a string.
+Each method has its strengths, depending on your data. The currently available methods are:
+
+Simple infilling techniques
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+- ``"alt_data"`` - **infill using data from an alternative source.**
+
+  Either another column in your TimeFrame, or data from a different DataFrame entirely.
 
 Polynomial interpolation
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
 - ``"linear"`` - **straight-line interpolation between neighbouring points.**
 
-  Simple and neutral; best for very short gaps (1–2 steps).
+  Simple and neutral; best for short gaps.
 
 - ``"quadratic"`` - **second-order polynomial curve.**
 
@@ -103,7 +115,7 @@ Polynomial interpolation
 
 - ``"bspline"`` - **B-spline interpolation (configurable order).**
 
-  Flexible piecewise polynomials; user decides.*
+  Flexible piecewise polynomials; user decides.
 
 Shape-preserving methods
 ~~~~~~~~~~~~~~~~~~~~~~~~
@@ -123,25 +135,21 @@ Shape-preserving methods
 
 .. note::
 
-    NaN values at the very beginning and very end of a timeseries will remain NaN; there is no pre- or post- data to
-    constrain the infilling method.
+    For infill methods using interpolation techniques, NaN values at the very beginning and very end of a timeseries
+    will remain NaN; there is no pre- or post- data to constrain the infilling method.
 
 Column selection
 ----------------
 
-Specify which column to infill; only this column will be used by the infill function.
-
-
-Column selection
-----------------
-
-Specify which column to infill; only this column will be used by the infill function.
+The ``column_name`` parameter lets you specify which column to infill; only this column will be used by the infill
+function.
 
 
 Observation interval
 --------------------
 
-Specify an observation interval to restrict infilling to a **specific time window**. This is useful when:
+The ``observation_interval`` parameter lets you specify an observation interval to restrict infilling
+to a **specific time window**. This is useful when:
 
 - You only want to work with a subset of data (e.g. one hydrological year).
 - You want to fill recent gaps without touching the historical record.
@@ -164,7 +172,7 @@ This will only attempt infilling **between January to Decemeber 2024**; gaps out
 Max gap size
 ------------
 
-Use the maximum gap size to prevent **over-eager interpolation**. Only gaps less than this
+Use the ``max_gap_size`` parameter to prevent **over-eager interpolation**. Only gaps less than this
 (measured in consecutive missing **steps**) will be infilled.
 
 Example:
@@ -183,6 +191,9 @@ Example:
    At 15-minute resolution, ``max_gap_size=2`` = 30 minutes; at daily resolution,
    ``max_gap_size=2`` = 2 days.
 
+Examples
+========
+
 Alternative data infilling
 --------------------------
 
@@ -197,34 +208,54 @@ You can specify the alternative data in two ways:
 
 In both cases, you can also apply a ``correction_factor`` to the alternative data before it's used for infilling.
 
-Example: Infilling from a separate DataFrame
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Infilling from a separate DataFrame
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Let's say you have a primary dataset with missing "flow" values, and a separate ``alt_df`` with "alt_data" that
 can be used to infill these gaps.
 
+**Input:**
+
+.. tab-set::
+    :class: outline padded-tabs
+
+    .. tab-item:: Main Data
+
+        .. jupyter-execute::
+            :hide-code:
+
+            import examples_infilling
+            ts = examples_infilling.alt_data_main()
+
+    .. tab-item:: Alternative Data
+
+        .. jupyter-execute::
+            :hide-code:
+
+            import examples_infilling
+            ts = examples_infilling.alt_data_alt()
+
 **Code:**
 
-.. code-block:: python
+.. literalinclude:: ../../../src/time_stream/examples/examples_infilling.py
+    :language: python
+    :start-after: [start_block_2]
+    :end-before: [end_block_2]
+    :dedent:
 
-   alt_df = pl.DataFrame({
-       "time": [pd.Timestamp("2020-09-01 00:15:00")],
-       "alt_values": [ 1.0 ]
-   })
+**Output:**
 
-   tf_infill = tf.infill(
-       "alt_data",
-       "flow",
-       alt_df=alt_df,
-       correction_factor=0.5,
-       alt_data_column="alt_values"
-   )
+.. jupyter-execute::
+    :hide-code:
 
-Visualisation of methods
-========================
+    import examples_infilling
+    ts = examples_infilling.alt_data_infill()
 
-A quick visualisation of the results from the different infill methods is sometimes useful. However, bear in mind
-that this is a very simplistic example and the correct method to use is dependent on your data.
+Visualisation of interpolation methods
+======================================
+
+A quick visualisation of the results from the different interpolation infill methods is sometimes useful. However,
+bear in mind that this is a very simplistic example and the correct method to use is dependent on your data.
 You should do your research into which is most appropriate.
 
 .. jupyter-execute::
