@@ -179,7 +179,8 @@ Choose how values inside each window are summarised. Pass a **string** correspon
 
 - ``"percentile"`` - **The 'nth' percentile value for the period.**
 
-  The percentile value to be calculated is provided as an integer parameter from 0 to 100 (inclusive).
+  Useful for capturing extremes within a given period, such as the 5th or 95th percentile of streamflow.
+  The percentile value to be calculated is provided as an integer parameter (p) from 0 to 100 (inclusive).
 
 
 Column selection
