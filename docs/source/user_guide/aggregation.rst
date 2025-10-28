@@ -177,6 +177,11 @@ Choose how values inside each window are summarised. Pass a **string** correspon
 
   Common in hydrology for annual maxima (AMAX) or flood frequency analysis.
 
+- ``"percentile"`` - **The 'nth' percentile value for the period.**
+
+  The percentile value to be calculated is provided as an integer parameter from 0 to 100 (inclusive).
+
+
 Column selection
 ----------------
 

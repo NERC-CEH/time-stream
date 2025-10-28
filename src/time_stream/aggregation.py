@@ -93,7 +93,6 @@ class AggregationPipeline:
         columns: str | list[str],
         aggregation_time_anchor: TimeAnchor,
         missing_criteria: tuple[str, float | int] | None = None,
-        **kwargs,
     ):
         self.agg_func = agg_func
         self.ctx = ctx
@@ -101,7 +100,6 @@ class AggregationPipeline:
         self.aggregation_time_anchor = aggregation_time_anchor
         self.columns = [columns] if isinstance(columns, str) else columns
         self.missing_criteria = missing_criteria
-        self.kwargs = kwargs
 
     def execute(self) -> pl.DataFrame:
         """The general `Polars` method used for aggregating data is::
@@ -130,7 +128,7 @@ class AggregationPipeline:
 
         # Build expressions to go in the .agg method
         agg_expressions = []
-        agg_expressions.extend(self.agg_func.expr(self.ctx, self.columns, **self.kwargs))
+        agg_expressions.extend(self.agg_func.expr(self.ctx, self.columns))
         agg_expressions.extend(self._actual_count_expr())
 
         # Do the aggregation function
@@ -379,7 +377,7 @@ class Percentile(AggregationFunction):
 
     name = "percentile"
 
-    def __init__(self, p: int, **kwargs):
+    def __init__(self, p: int):
         """
         Initialise Percentile aggregation:
 
@@ -388,7 +386,7 @@ class Percentile(AggregationFunction):
             **kwargs: Any additional parameters to be passed through.
 
         """
-        super().__init__(**kwargs)
+        super().__init__()
 
         self.p = p
 
@@ -401,8 +399,6 @@ class Percentile(AggregationFunction):
 
         quantile = self.p / 100
 
-        expressions = []
-        for col in columns:
-            expressions.extend([pl.col(col).quantile(quantile).alias(f"{self.name}_{col}")])
+        expressions = [(pl.col(col).quantile(quantile).alias(f"{self.name}_{col}")) for col in columns]
 
         return expressions
