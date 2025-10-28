@@ -468,7 +468,6 @@ class TestApply:
 
 
 class TestAltData:
-    
     df = pl.DataFrame(
         {
             "timestamp": [
