@@ -391,18 +391,13 @@ class AltData(InfillMethod):
         """
         if self.alt_df is None:
             check_columns_in_dataframe(df, [self.alt_data_column])
-            return df.with_columns(
-                pl.when(pl.col(infill_column).is_null())
-                .then(pl.col(self.alt_data_column) * self.correction_factor)
-                .otherwise(pl.col(infill_column))
-                .alias(self._infilled_column_name(infill_column))
-            )
+            alt_data_column_name = self.alt_data_column
         else:
             time_column_name = ctx.time_name
             check_columns_in_dataframe(self.alt_df, [time_column_name, self.alt_data_column])
-            internal_alt_data_column = f"__ALT_DATA__{self.alt_data_column}"
+            alt_data_column_name = f"__ALT_DATA__{self.alt_data_column}"
             alt_df = self.alt_df.select([time_column_name, self.alt_data_column]).rename(
-                {self.alt_data_column: internal_alt_data_column}
+                {self.alt_data_column: alt_data_column_name}
             )
 
             df = df.join(
@@ -412,9 +407,14 @@ class AltData(InfillMethod):
                 suffix="_alt",
             )
 
-            return df.with_columns(
-                pl.when(pl.col(infill_column).is_null())
-                .then(pl.col(internal_alt_data_column) * self.correction_factor)
-                .otherwise(pl.col(infill_column))
-                .alias(self._infilled_column_name(infill_column))
-            ).drop(internal_alt_data_column)
+        infilled = df.with_columns(
+            pl.when(pl.col(infill_column).is_null())
+            .then(pl.col(alt_data_column_name) * self.correction_factor)
+            .otherwise(pl.col(infill_column))
+            .alias(self._infilled_column_name(infill_column))
+        )
+
+        if self.alt_df is not None:
+            infilled = infilled.drop(alt_data_column_name)
+
+        return infilled
