@@ -8,10 +8,16 @@ import polars as pl
 from parameterized import parameterized
 from polars.testing import assert_frame_equal, assert_series_equal
 
-from time_stream import TimeFrame
-from time_stream.exceptions import InfillInsufficientValuesError, RegistryKeyTypeError, UnknownRegistryKeyError
+from time_stream import Period, TimeFrame
+from time_stream.exceptions import (
+    ColumnNotFoundError,
+    InfillInsufficientValuesError,
+    RegistryKeyTypeError,
+    UnknownRegistryKeyError,
+)
 from time_stream.infill import (
     AkimaInterpolation,
+    AltData,
     BSplineInterpolation,
     CubicInterpolation,
     InfillCtx,
@@ -22,6 +28,9 @@ from time_stream.infill import (
     QuadraticInterpolation,
 )
 from time_stream.utils import gap_size_count
+
+TIME_COLUMN = "timestamp"
+PERIODICITY = Period.of_days(1)
 
 # Data used through the tests
 LINEAR = pl.DataFrame({"values": [1.0, None, 3.0, None, 5.0]})  # Linear progression
@@ -170,7 +179,8 @@ class TestLinearInterpolation(unittest.TestCase):
     )
     def test_linear_interpolation_known_result(self, input_data: pl.DataFrame, expected_data: list) -> None:
         """Test linear interpolation with known data."""
-        result = LinearInterpolation()._fill(input_data, "values")
+        ctx = InfillCtx(input_data, TIME_COLUMN, PERIODICITY)
+        result = LinearInterpolation()._fill(input_data, "values", ctx)
         expected = pl.Series("values_linear", expected_data)
         assert_series_equal(result["values_linear"], expected)
 
@@ -182,12 +192,14 @@ class TestLinearInterpolation(unittest.TestCase):
     )
     def test_insufficient_data_raises_error(self, _: str, input_data: pl.DataFrame) -> None:
         """Test that insufficient data raises InfillInsufficientValuesError."""
+        ctx = InfillCtx(input_data, TIME_COLUMN, PERIODICITY)
         with self.assertRaises(InfillInsufficientValuesError):
-            LinearInterpolation()._fill(input_data, "values")
+            LinearInterpolation()._fill(input_data, "values", ctx)
 
     def test_complete_data_unchanged(self) -> None:
         """Test that complete data is unchanged."""
-        result = LinearInterpolation()._fill(COMPLETE, "values")
+        ctx = InfillCtx(COMPLETE, TIME_COLUMN, PERIODICITY)
+        result = LinearInterpolation()._fill(COMPLETE, "values", ctx)
         expected = pl.Series("values_linear", COMPLETE)
         assert_series_equal(result["values_linear"], expected)
 
@@ -201,7 +213,8 @@ class TestQuadraticInterpolation(unittest.TestCase):
     )
     def test_quadratic_interpolation_known_result(self, input_data: pl.DataFrame, expected_data: list) -> None:
         """Test quadratic interpolation with known data."""
-        result = QuadraticInterpolation()._fill(input_data, "values")
+        ctx = InfillCtx(input_data, TIME_COLUMN, PERIODICITY)
+        result = QuadraticInterpolation()._fill(input_data, "values", ctx)
 
         expected = pl.Series("values_quadratic", expected_data)
         assert_series_equal(result["values_quadratic"], expected)
@@ -209,12 +222,14 @@ class TestQuadraticInterpolation(unittest.TestCase):
     @parameterized.expand([("1 data points", INSUFFICIENT_DATA), ("0 data points", ALL_MISSING)])
     def test_insufficient_data_raises_error(self, _: str, input_data: pl.DataFrame) -> None:
         """Test that insufficient data raises InfillInsufficientValuesError."""
+        ctx = InfillCtx(input_data, TIME_COLUMN, PERIODICITY)
         with self.assertRaises(InfillInsufficientValuesError):
-            QuadraticInterpolation()._fill(input_data, "values")
+            QuadraticInterpolation()._fill(input_data, "values", ctx)
 
     def test_complete_data_unchanged(self) -> None:
         """Test that complete data is unchanged."""
-        result = QuadraticInterpolation()._fill(COMPLETE, "values")
+        ctx = InfillCtx(COMPLETE, TIME_COLUMN, PERIODICITY)
+        result = QuadraticInterpolation()._fill(COMPLETE, "values", ctx)
         expected = pl.Series("values_quadratic", COMPLETE)
         assert_series_equal(result["values_quadratic"], expected)
 
@@ -227,7 +242,8 @@ class TestCubicInterpolation(unittest.TestCase):
     )
     def test_cubic_interpolation_known_result(self, input_data: pl.DataFrame, expected_data: list) -> None:
         """Test cubic interpolation with known data."""
-        result = CubicInterpolation()._fill(input_data, "values")
+        ctx = InfillCtx(input_data, TIME_COLUMN, PERIODICITY)
+        result = CubicInterpolation()._fill(input_data, "values", ctx)
 
         expected = pl.Series("values_cubic", expected_data)
         assert_series_equal(result["values_cubic"], expected)
@@ -237,12 +253,14 @@ class TestCubicInterpolation(unittest.TestCase):
     )
     def test_insufficient_data_raises_error(self, _: str, input_data: pl.DataFrame) -> None:
         """Test that insufficient data raises InfillInsufficientValuesError."""
+        ctx = InfillCtx(input_data, TIME_COLUMN, PERIODICITY)
         with self.assertRaises(InfillInsufficientValuesError):
-            CubicInterpolation()._fill(input_data, "values")
+            CubicInterpolation()._fill(input_data, "values", ctx)
 
     def test_complete_data_unchanged(self) -> None:
         """Test that complete data is unchanged."""
-        result = CubicInterpolation()._fill(COMPLETE, "values")
+        ctx = InfillCtx(COMPLETE, TIME_COLUMN, PERIODICITY)
+        result = CubicInterpolation()._fill(COMPLETE, "values", ctx)
         expected = pl.Series("values_cubic", COMPLETE)
         assert_series_equal(result["values_cubic"], expected)
 
@@ -264,7 +282,8 @@ class TestAkimaInterpolation(unittest.TestCase):
 
     def test_akima_interpolation_with_sufficient_data(self) -> None:
         """Test akima interpolation works when there is sufficient data (at least 5 points)."""
-        result = AkimaInterpolation()._fill(CUBIC, "values")
+        ctx = InfillCtx(CUBIC, TIME_COLUMN, PERIODICITY)
+        result = AkimaInterpolation()._fill(CUBIC, "values", ctx)
         self.assertIn("values_akima", result.columns)
 
     @parameterized.expand(
@@ -277,12 +296,14 @@ class TestAkimaInterpolation(unittest.TestCase):
     )
     def test_insufficient_data_raises_error(self, _: str, input_data: pl.DataFrame) -> None:
         """Test that insufficient data raises InfillInsufficientValuesError."""
+        ctx = InfillCtx(input_data, TIME_COLUMN, PERIODICITY)
         with self.assertRaises(InfillInsufficientValuesError):
-            AkimaInterpolation()._fill(input_data, "values")
+            AkimaInterpolation()._fill(input_data, "values", ctx)
 
     def test_complete_data_unchanged(self) -> None:
         """Test that complete data is unchanged."""
-        result = AkimaInterpolation()._fill(COMPLETE, "values")
+        ctx = InfillCtx(COMPLETE, TIME_COLUMN, PERIODICITY)
+        result = AkimaInterpolation()._fill(COMPLETE, "values", ctx)
         expected = pl.Series("values_akima", COMPLETE)
         assert_series_equal(result["values_akima"], expected)
 
@@ -304,14 +325,16 @@ class TestPchipInterpolation(unittest.TestCase):
 
     def test_pchip_interpolation_with_sufficient_data(self) -> None:
         """Test akima interpolation works when there is sufficient data (at least 2 points)."""
-        result = PchipInterpolation()._fill(LINEAR, "values")
+        ctx = InfillCtx(LINEAR, TIME_COLUMN, PERIODICITY)
+        result = PchipInterpolation()._fill(LINEAR, "values", ctx)
         self.assertIn("values_pchip", result.columns)
 
     @parameterized.expand([("1 data points", INSUFFICIENT_DATA), ("0 data points", ALL_MISSING)])
     def test_insufficient_data_raises_error(self, _: str, input_data: pl.DataFrame) -> None:
         """Test that insufficient data raises InfillInsufficientValuesError."""
+        ctx = InfillCtx(input_data, TIME_COLUMN, PERIODICITY)
         with self.assertRaises(InfillInsufficientValuesError):
-            PchipInterpolation()._fill(input_data, "values")
+            PchipInterpolation()._fill(input_data, "values", ctx)
 
     @parameterized.expand(
         [
@@ -322,7 +345,8 @@ class TestPchipInterpolation(unittest.TestCase):
     )
     def test_pchip_monotonic_preservation(self, input_data: pl.DataFrame) -> None:
         """Part of the pchip behaviour is that it should preserve local monotonicity if the input data is monotonic."""
-        result = PchipInterpolation()._fill(input_data, "values")
+        ctx = InfillCtx(input_data, TIME_COLUMN, PERIODICITY)
+        result = PchipInterpolation()._fill(input_data, "values", ctx)
         interpolated = result["values_pchip"].to_numpy()
 
         # Check that result is monotonically increasing
@@ -330,7 +354,8 @@ class TestPchipInterpolation(unittest.TestCase):
 
     def test_complete_data_unchanged(self) -> None:
         """Test that complete data is unchanged."""
-        result = PchipInterpolation()._fill(COMPLETE, "values")
+        ctx = InfillCtx(COMPLETE, TIME_COLUMN, PERIODICITY)
+        result = PchipInterpolation()._fill(COMPLETE, "values", ctx)
         expected = pl.Series("values_pchip", COMPLETE)
         assert_series_equal(result["values_pchip"], expected)
 
@@ -419,3 +444,111 @@ class TestApply(unittest.TestCase):
         )
         expected = self.create_tf(pl.DataFrame({"values": expected}))
         assert_frame_equal(result, expected.df, check_column_order=False)
+
+
+class TestAltData(unittest.TestCase):
+    def setUp(self) -> None:
+        self.df = pl.DataFrame(
+            {
+                "timestamp": [
+                    datetime(2025, 1, 1),
+                    datetime(2025, 1, 2),
+                    datetime(2025, 1, 3),
+                    datetime(2025, 1, 4),
+                    datetime(2025, 1, 5),
+                ],
+                "values": [1.0, None, 3.0, None, 5.0],
+                "alt_values": [10.0, 20.0, 30.0, 40.0, 50.0],
+                "alt_with_missing": [10.0, None, 30.0, 40.0, None],
+            }
+        )
+        self.tf = TimeFrame(self.df, "timestamp", "P1D")
+
+    def test_alt_data_infill(self) -> None:
+        """Test basic infilling from an alternative column."""
+        infiller = AltData(alt_data_column="alt_values")
+        result_df = infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
+        expected_df = self.df.with_columns(pl.Series("values", [1.0, 20.0, 3.0, 40.0, 5.0]))
+        assert_frame_equal(result_df, expected_df, check_column_order=False)
+
+    def test_alt_data_infill_with_correction(self) -> None:
+        """Test infilling with a correction factor."""
+        infiller = AltData(alt_data_column="alt_values", correction_factor=0.1)
+        result_df = infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
+        expected_df = self.df.with_columns(pl.Series("values", [1.0, 2.0, 3.0, 4.0, 5.0]))
+        assert_frame_equal(result_df, expected_df, check_column_order=False)
+
+    def test_alt_data_infill_no_missing_data(self) -> None:
+        """Test that nothing happens when there is no missing data."""
+        df_complete = self.df.with_columns(pl.Series("values", [1.0, 2.0, 3.0, 4.0, 5.0]))
+        tf_complete = TimeFrame(df_complete, "timestamp", "P1D")
+        infiller = AltData(alt_data_column="alt_values")
+        result_df = infiller.apply(tf_complete.df, tf_complete.time_name, tf_complete.periodicity, "values")
+        assert_frame_equal(result_df, tf_complete.df, check_column_order=False)
+
+    def test_alt_data_infill_missing_alt_data(self) -> None:
+        """Test that missing data in the alternative column is not used for infilling."""
+        infiller = AltData(alt_data_column="alt_with_missing")
+        result_df = infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
+        expected_df = self.df.with_columns(pl.Series("values", [1.0, None, 3.0, 40.0, 5.0]))
+        assert_frame_equal(result_df, expected_df, check_column_order=False)
+
+    def test_alt_data_infill_missing_alt_data_column_column(self) -> None:
+        """Test that an error is raised if the alt_data_column column is missing."""
+        infiller = AltData(alt_data_column="non_existent_column")
+        with self.assertRaises(ColumnNotFoundError):
+            infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
+
+    def test_alt_data_infill_restricting_date_range(self) -> None:
+        """Test that only data in the observation_interval is infilled."""
+        infiller = AltData(alt_data_column="alt_values")
+        result_df = infiller.apply(
+            self.tf.df,
+            self.tf.time_name,
+            self.tf.periodicity,
+            "values",
+            observation_interval=(datetime(2025, 1, 1), datetime(2025, 1, 2)),
+        )
+        expected_df = self.df.with_columns(pl.Series("values", [1.0, 20.0, 3.0, None, 5.0]))
+        assert_frame_equal(result_df, expected_df, check_column_order=False)
+
+    def test_alt_data_infill_with_alt_data_provided(self) -> None:
+        """Test infilling from a provided alternative DataFrame."""
+        alt_df = pl.DataFrame(
+            {
+                "timestamp": self.df["timestamp"],
+                "alt_values_df": [11.0, 22.0, 33.0, 44.0, 55.0],
+            }
+        )
+        infiller = AltData(alt_data_column="alt_values_df", alt_df=alt_df)
+        result_df = infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
+        expected_df = self.df.with_columns(pl.Series("values", [1.0, 22.0, 3.0, 44.0, 5.0]))
+        assert_frame_equal(result_df, expected_df, check_column_order=False)
+
+    def test_alt_data_infill_with_alt_data_missing_time_column(self) -> None:
+        """Test error when provided alt_data is missing the time column."""
+        alt_df = pl.DataFrame({"alt_values_df": [11.0, 22.0, 33.0, 44.0, 55.0]})
+        infiller = AltData(alt_data_column="alt_values", alt_df=alt_df)
+        with self.assertRaises(ColumnNotFoundError):
+            infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
+
+    def test_alt_data_infill_with_alt_data_missing_data_column(self) -> None:
+        """Test error when provided alt_data is missing the data column."""
+        alt_df = pl.DataFrame({"time": self.df["timestamp"]})
+        infiller = AltData(alt_data_column="non_existent_column", alt_df=alt_df)
+        with self.assertRaises(ColumnNotFoundError):
+            infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
+
+    def test_alt_data_infill_with_alt_data_and_column_in_main_df(self) -> None:
+        """Test that alt_data is prioritized when column name exists in main df."""
+        alt_df = pl.DataFrame(
+            {
+                "timestamp": self.df["timestamp"],
+                "values": [11.0, 22.0, 33.0, 44.0, 55.0],
+            }
+        )
+        infiller = AltData(alt_data_column="values", alt_df=alt_df)
+
+        result_df = infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
+        expected_df = self.df.with_columns(pl.Series("values", [1.0, 22.0, 3.0, 44.0, 5.0]))
+        assert_frame_equal(result_df, expected_df, check_column_order=False)
