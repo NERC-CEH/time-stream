@@ -1,11 +1,10 @@
 import importlib
 import inspect
 import pkgutil
-import unittest
 from types import ModuleType
 from typing import Callable, Iterator
 
-from parameterized import parameterized
+import pytest
 
 import time_stream.examples as examples
 
@@ -32,8 +31,8 @@ def all_example_funcs() -> Iterator[tuple[str, Callable]]:
             yield f"{module.__name__.split('.')[-1]}.{func.__name__}", func
 
 
-class TestExampleFunctions(unittest.TestCase):
-    @parameterized.expand(all_example_funcs())
-    def test_examples(self, _: str, func: Callable) -> None:
+class TestExampleFunctions:
+    @pytest.mark.parametrize("name,func", all_example_funcs())
+    def test_examples(self, name: str, func: Callable) -> None:
         """Test that each example function can be called without errors."""
         func()

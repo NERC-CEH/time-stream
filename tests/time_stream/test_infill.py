@@ -1,11 +1,10 @@
-import unittest
 from datetime import datetime
 from typing import Any
 from unittest.mock import Mock, patch
 
 import numpy as np
 import polars as pl
-from parameterized import parameterized
+import pytest
 from polars.testing import assert_frame_equal, assert_series_equal
 
 from time_stream import Period, TimeFrame
@@ -48,49 +47,52 @@ END_GAP_WITH_MID_GAP = pl.DataFrame({"values": [1.0, 2.0, 3.0, None, 5.0, None]}
 ALL_NULL = pl.DataFrame({"values": [None, None, None, None]})
 
 
-class TestInfillMethod(unittest.TestCase):
+class TestInfillMethod:
     """Test the base InfillMethod class."""
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "get_input,expected",
         [
             ("linear", LinearInterpolation),
             ("cubic", CubicInterpolation),
             ("akima", AkimaInterpolation),
-        ]
+        ],
     )
     def test_get_with_string(self, get_input: str, expected: type[InfillMethod]) -> None:
         """Test QCCheck.get() with string input."""
         infill = InfillMethod.get(get_input)
-        self.assertIsInstance(infill, expected)
+        assert isinstance(infill, expected)
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "get_input,expected",
         [
             (LinearInterpolation, LinearInterpolation),
             (CubicInterpolation, CubicInterpolation),
             (AkimaInterpolation, AkimaInterpolation),
-        ]
+        ],
     )
     def test_get_with_class(self, get_input: type[InfillMethod], expected: type[InfillMethod]) -> None:
         """Test InfillMethod.get() with class input."""
         infill = InfillMethod.get(get_input)
-        self.assertIsInstance(infill, expected)
+        assert isinstance(infill, expected)
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "get_input,expected",
         [
             (LinearInterpolation(), LinearInterpolation),
             (CubicInterpolation(), CubicInterpolation),
             (AkimaInterpolation(), AkimaInterpolation),
-        ]
+        ],
     )
     def test_get_with_instance(self, get_input: InfillMethod, expected: type[InfillMethod]) -> None:
         """Test InfillMethod.get() with instance input."""
         infill = InfillMethod.get(get_input)
-        self.assertIsInstance(infill, expected)
+        assert isinstance(infill, expected)
 
-    @parameterized.expand(["dummy", "RANGE", "123"])
+    @pytest.mark.parametrize("get_input", ["dummy", "RANGE", "123"])
     def test_get_with_invalid_string(self, get_input: str) -> None:
         """Test InfillMethod.get() with invalid string."""
-        with self.assertRaises(UnknownRegistryKeyError):
+        with pytest.raises(UnknownRegistryKeyError):
             InfillMethod.get(get_input)
 
     def test_get_with_invalid_class(self) -> None:
@@ -99,18 +101,19 @@ class TestInfillMethod(unittest.TestCase):
         class InvalidClass:
             pass
 
-        with self.assertRaises(RegistryKeyTypeError):
+        with pytest.raises(RegistryKeyTypeError):
             InfillMethod.get(InvalidClass)  # noqa - expecting type warning
 
-    @parameterized.expand([(123,), ([LinearInterpolation, QuadraticInterpolation],), ({AkimaInterpolation},)])
+    @pytest.mark.parametrize("get_input", [123, [LinearInterpolation, QuadraticInterpolation], {AkimaInterpolation}])
     def test_get_with_invalid_type(self, get_input: Any) -> None:
         """Test InfillMethod.get() with invalid type."""
-        with self.assertRaises(RegistryKeyTypeError):
+        with pytest.raises(RegistryKeyTypeError):
             InfillMethod.get(get_input)
 
 
-class TestInfillMethodPipeline(unittest.TestCase):
-    @parameterized.expand(
+class TestInfillMethodPipeline:
+    @pytest.mark.parametrize(
+        "df,max_gap_size,observation_interval,expected",
         [
             (COMPLETE, 1, None, False),
             (COMPLETE, None, None, False),
@@ -132,7 +135,7 @@ class TestInfillMethodPipeline(unittest.TestCase):
             (START_GAP_WITH_MID_GAP, None, None, True),
             (END_GAP_WITH_MID_GAP, None, None, True),
             (ALL_NULL, None, None, False),
-        ]
+        ],
     )
     def test_infill_mask(
         self,
@@ -153,29 +156,30 @@ class TestInfillMethodPipeline(unittest.TestCase):
         # Apply the mask
         df = gap_size_count(df, "values")
         result = not df.filter(mask).is_empty()
-        self.assertEqual(result, expected)
+        assert result == expected
 
 
-class TestBSplineInterpolation(unittest.TestCase):
+class TestBSplineInterpolation:
     def test_initialization(self) -> None:
         """Test BSplineInterpolation initialization."""
         # Custom order
         interp = BSplineInterpolation(order=2)
-        self.assertEqual(interp.order, 2)
-        self.assertEqual(interp.min_points_required, 3)
+        assert interp.order == 2
+        assert interp.min_points_required == 3
 
         # With scipy kwargs
         interp = BSplineInterpolation(order=1, bc_type="clamped")
-        self.assertEqual(interp.scipy_kwargs["bc_type"], "clamped")
+        assert interp.scipy_kwargs["bc_type"] == "clamped"
 
 
-class TestLinearInterpolation(unittest.TestCase):
-    @parameterized.expand(
+class TestLinearInterpolation:
+    @pytest.mark.parametrize(
+        "input_data,expected_data",
         [
             (LINEAR, [1.0, 2.0, 3.0, 4.0, 5.0]),
             (QUADRATIC, [0.0, 2.0, 4.0, 10.0, 16.0, 26.0, 36.0]),
             (CUBIC, [0.0, 4.0, 8.0, 36.0, 64.0, 140.0, 216.0, 364.0, 512.0]),
-        ]
+        ],
     )
     def test_linear_interpolation_known_result(self, input_data: pl.DataFrame, expected_data: list) -> None:
         """Test linear interpolation with known data."""
@@ -184,16 +188,18 @@ class TestLinearInterpolation(unittest.TestCase):
         expected = pl.Series("values_linear", expected_data)
         assert_series_equal(result["values_linear"], expected)
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "input_data",
         [
-            ("1 data points", INSUFFICIENT_DATA),
-            ("0 data points", ALL_MISSING),
-        ]
+            INSUFFICIENT_DATA,
+            ALL_MISSING,
+        ],
+        ids=["1 data points", "0 data points"],
     )
-    def test_insufficient_data_raises_error(self, _: str, input_data: pl.DataFrame) -> None:
+    def test_insufficient_data_raises_error(self, input_data: pl.DataFrame) -> None:
         """Test that insufficient data raises InfillInsufficientValuesError."""
         ctx = InfillCtx(input_data, TIME_COLUMN, PERIODICITY)
-        with self.assertRaises(InfillInsufficientValuesError):
+        with pytest.raises(InfillInsufficientValuesError):
             LinearInterpolation()._fill(input_data, "values", ctx)
 
     def test_complete_data_unchanged(self) -> None:
@@ -204,12 +210,13 @@ class TestLinearInterpolation(unittest.TestCase):
         assert_series_equal(result["values_linear"], expected)
 
 
-class TestQuadraticInterpolation(unittest.TestCase):
-    @parameterized.expand(
+class TestQuadraticInterpolation:
+    @pytest.mark.parametrize(
+        "input_data,expected_data",
         [
             (LINEAR, [1.0, 2.0, 3.0, 4.0, 5.0]),
             (QUADRATIC, [0.0, 1.0, 4.0, 9.0, 16.0, 25.0, 36.0]),
-        ]
+        ],
     )
     def test_quadratic_interpolation_known_result(self, input_data: pl.DataFrame, expected_data: list) -> None:
         """Test quadratic interpolation with known data."""
@@ -219,11 +226,11 @@ class TestQuadraticInterpolation(unittest.TestCase):
         expected = pl.Series("values_quadratic", expected_data)
         assert_series_equal(result["values_quadratic"], expected)
 
-    @parameterized.expand([("1 data points", INSUFFICIENT_DATA), ("0 data points", ALL_MISSING)])
-    def test_insufficient_data_raises_error(self, _: str, input_data: pl.DataFrame) -> None:
+    @pytest.mark.parametrize("input_data", [INSUFFICIENT_DATA, ALL_MISSING], ids=["1 data points", "0 data points"])
+    def test_insufficient_data_raises_error(self, input_data: pl.DataFrame) -> None:
         """Test that insufficient data raises InfillInsufficientValuesError."""
         ctx = InfillCtx(input_data, TIME_COLUMN, PERIODICITY)
-        with self.assertRaises(InfillInsufficientValuesError):
+        with pytest.raises(InfillInsufficientValuesError):
             QuadraticInterpolation()._fill(input_data, "values", ctx)
 
     def test_complete_data_unchanged(self) -> None:
@@ -234,11 +241,12 @@ class TestQuadraticInterpolation(unittest.TestCase):
         assert_series_equal(result["values_quadratic"], expected)
 
 
-class TestCubicInterpolation(unittest.TestCase):
-    @parameterized.expand(
+class TestCubicInterpolation:
+    @pytest.mark.parametrize(
+        "input_data,expected_data",
         [
             (CUBIC, [0.0, 1.0, 8.0, 27.0, 64.0, 125.0, 216.0, 343.0, 512.0]),
-        ]
+        ],
     )
     def test_cubic_interpolation_known_result(self, input_data: pl.DataFrame, expected_data: list) -> None:
         """Test cubic interpolation with known data."""
@@ -248,13 +256,13 @@ class TestCubicInterpolation(unittest.TestCase):
         expected = pl.Series("values_cubic", expected_data)
         assert_series_equal(result["values_cubic"], expected)
 
-    @parameterized.expand(
-        [("3 data points", LINEAR), ("1 data points", INSUFFICIENT_DATA), ("0 data points", ALL_MISSING)]
+    @pytest.mark.parametrize(
+        "input_data", [LINEAR, INSUFFICIENT_DATA, ALL_MISSING], ids=["3 data points", "1 data points", "0 data points"]
     )
-    def test_insufficient_data_raises_error(self, _: str, input_data: pl.DataFrame) -> None:
+    def test_insufficient_data_raises_error(self, input_data: pl.DataFrame) -> None:
         """Test that insufficient data raises InfillInsufficientValuesError."""
         ctx = InfillCtx(input_data, TIME_COLUMN, PERIODICITY)
-        with self.assertRaises(InfillInsufficientValuesError):
+        with pytest.raises(InfillInsufficientValuesError):
             CubicInterpolation()._fill(input_data, "values", ctx)
 
     def test_complete_data_unchanged(self) -> None:
@@ -265,7 +273,7 @@ class TestCubicInterpolation(unittest.TestCase):
         assert_series_equal(result["values_cubic"], expected)
 
 
-class TestAkimaInterpolation(unittest.TestCase):
+class TestAkimaInterpolation:
     # Manually calculating the Akima interpolation isn't practical.
     #   Let's assume that SciPy is well tested and the Akima interpolation results are correct and let's just test
     #   behaviours of the interpolation class
@@ -273,31 +281,33 @@ class TestAkimaInterpolation(unittest.TestCase):
     def test_initialization(self) -> None:
         """Test Akima initialization."""
         interp = AkimaInterpolation()
-        self.assertEqual(interp.min_points_required, 5)
-        self.assertEqual(interp.name, "akima")
+        assert interp.min_points_required == 5
+        assert interp.name == "akima"
 
         # With scipy kwargs
         interp = AkimaInterpolation(extrapolate=True)
-        self.assertEqual(interp.scipy_kwargs["extrapolate"], True)
+        assert interp.scipy_kwargs["extrapolate"]
 
     def test_akima_interpolation_with_sufficient_data(self) -> None:
         """Test akima interpolation works when there is sufficient data (at least 5 points)."""
         ctx = InfillCtx(CUBIC, TIME_COLUMN, PERIODICITY)
         result = AkimaInterpolation()._fill(CUBIC, "values", ctx)
-        self.assertIn("values_akima", result.columns)
+        assert "values_akima" in result.columns
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "input_data",
         [
-            ("4 data points", QUADRATIC),
-            ("3 data points", LINEAR),
-            ("1 data points", INSUFFICIENT_DATA),
-            ("0 data points", ALL_MISSING),
-        ]
+            QUADRATIC,
+            LINEAR,
+            INSUFFICIENT_DATA,
+            ALL_MISSING,
+        ],
+        ids=["4 data points", "3 data points", "1 data points", "0 data points"],
     )
-    def test_insufficient_data_raises_error(self, _: str, input_data: pl.DataFrame) -> None:
+    def test_insufficient_data_raises_error(self, input_data: pl.DataFrame) -> None:
         """Test that insufficient data raises InfillInsufficientValuesError."""
         ctx = InfillCtx(input_data, TIME_COLUMN, PERIODICITY)
-        with self.assertRaises(InfillInsufficientValuesError):
+        with pytest.raises(InfillInsufficientValuesError):
             AkimaInterpolation()._fill(input_data, "values", ctx)
 
     def test_complete_data_unchanged(self) -> None:
@@ -308,7 +318,7 @@ class TestAkimaInterpolation(unittest.TestCase):
         assert_series_equal(result["values_akima"], expected)
 
 
-class TestPchipInterpolation(unittest.TestCase):
+class TestPchipInterpolation:
     # Manually calculating the Pchip interpolation isn't practical.
     #   Let's assume that SciPy is well tested and the Pchip interpolation results are correct and let's just test
     #   behaviours of the interpolation class
@@ -316,32 +326,40 @@ class TestPchipInterpolation(unittest.TestCase):
     def test_initialization(self) -> None:
         """Test Akima initialization."""
         interp = PchipInterpolation()
-        self.assertEqual(interp.min_points_required, 2)
-        self.assertEqual(interp.name, "pchip")
+        assert interp.min_points_required == 2
+        assert interp.name == "pchip"
 
         # With scipy kwargs
         interp = PchipInterpolation(extrapolate=True)
-        self.assertEqual(interp.scipy_kwargs["extrapolate"], True)
+        assert interp.scipy_kwargs["extrapolate"]
 
     def test_pchip_interpolation_with_sufficient_data(self) -> None:
         """Test akima interpolation works when there is sufficient data (at least 2 points)."""
         ctx = InfillCtx(LINEAR, TIME_COLUMN, PERIODICITY)
         result = PchipInterpolation()._fill(LINEAR, "values", ctx)
-        self.assertIn("values_pchip", result.columns)
+        assert "values_pchip" in result.columns
 
-    @parameterized.expand([("1 data points", INSUFFICIENT_DATA), ("0 data points", ALL_MISSING)])
-    def test_insufficient_data_raises_error(self, _: str, input_data: pl.DataFrame) -> None:
+    @pytest.mark.parametrize(
+        "input_data",
+        [INSUFFICIENT_DATA, ALL_MISSING],
+        ids=[
+            "1 data points",
+            "0 data points",
+        ],
+    )
+    def test_insufficient_data_raises_error(self, input_data: pl.DataFrame) -> None:
         """Test that insufficient data raises InfillInsufficientValuesError."""
         ctx = InfillCtx(input_data, TIME_COLUMN, PERIODICITY)
-        with self.assertRaises(InfillInsufficientValuesError):
+        with pytest.raises(InfillInsufficientValuesError):
             PchipInterpolation()._fill(input_data, "values", ctx)
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "input_data",
         [
-            (LINEAR,),
-            (QUADRATIC,),
-            (CUBIC,),
-        ]
+            LINEAR,
+            QUADRATIC,
+            CUBIC,
+        ],
     )
     def test_pchip_monotonic_preservation(self, input_data: pl.DataFrame) -> None:
         """Part of the pchip behaviour is that it should preserve local monotonicity if the input data is monotonic."""
@@ -350,7 +368,7 @@ class TestPchipInterpolation(unittest.TestCase):
         interpolated = result["values_pchip"].to_numpy()
 
         # Check that result is monotonically increasing
-        self.assertTrue(np.all(np.diff(interpolated) > 0))
+        assert np.all(np.diff(interpolated) > 0)
 
     def test_complete_data_unchanged(self) -> None:
         """Test that complete data is unchanged."""
@@ -360,14 +378,15 @@ class TestPchipInterpolation(unittest.TestCase):
         assert_series_equal(result["values_pchip"], expected)
 
 
-class TestApply(unittest.TestCase):
+class TestApply:
     @staticmethod
     def create_tf(df: pl.DataFrame) -> TimeFrame:
         df = df.with_columns(pl.Series("timestamp", [datetime(2025, 1, d) for d in range(1, len(df) + 1)]))
         tf = TimeFrame(df, "timestamp", "P1D")
         return tf
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "interpolator,df,expected",
         [
             (LinearInterpolation(), LINEAR, [1.0, 2.0, 3.0, 4.0, 5.0]),
             (LinearInterpolation(), QUADRATIC, [0.0, 2.0, 4.0, 10.0, 16.0, 26.0, 36.0]),
@@ -375,7 +394,7 @@ class TestApply(unittest.TestCase):
             (QuadraticInterpolation(), LINEAR, [1.0, 2.0, 3.0, 4.0, 5.0]),
             (QuadraticInterpolation(), QUADRATIC, [0.0, 1.0, 4.0, 9.0, 16.0, 25.0, 36.0]),
             (CubicInterpolation(), CUBIC, [0.0, 1.0, 8.0, 27.0, 64.0, 125.0, 216.0, 343.0, 512.0]),
-        ]
+        ],
     )
     def test_apply(self, interpolator: InfillMethod, df: pl.DataFrame, expected: list) -> None:
         """Test that the apply method works as expected with good data."""
@@ -384,7 +403,8 @@ class TestApply(unittest.TestCase):
         expected = self.create_tf(pl.DataFrame({"values": expected}))
         assert_frame_equal(result, expected.df, check_column_order=False)
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "df,max_gap_size,observation_interval",
         [
             (COMPLETE, None, None),
             (START_GAP, None, None),
@@ -392,15 +412,15 @@ class TestApply(unittest.TestCase):
             (GAP_OF_TWO, 1, None),
             (VARYING_GAPS, None, (datetime(2025, 1, 3), datetime(2025, 1, 6))),
             (VARYING_GAPS, 1, (datetime(2025, 1, 6), datetime(2025, 1, 9))),
-        ]
+        ],
     )
     @patch.object(InfillMethod, "_fill")
     def test_apply_nothing_to_infill(
         self,
+        mock_fill: Mock,
         df: pl.DataFrame,
         max_gap_size: int,
         observation_interval: datetime | tuple[datetime, datetime | None] | None,
-        mock_fill: Mock,
     ) -> None:
         """Test that the apply method works when there is nothing to infill."""
         tf = self.create_tf(df)
@@ -415,7 +435,8 @@ class TestApply(unittest.TestCase):
         expected = self.create_tf(df)
         assert_frame_equal(result, expected.df, check_column_order=False)
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "df,max_gap_size,observation_interval,expected",
         [
             (START_GAP_WITH_MID_GAP, None, None, [None, 2.0, 3.0, 4.0, 5.0, 6.0]),
             (END_GAP_WITH_MID_GAP, None, None, [1.0, 2.0, 3.0, 4.0, 5.0, None]),
@@ -432,7 +453,7 @@ class TestApply(unittest.TestCase):
                 datetime(2025, 1, 3),
                 [1.0, None, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, None, None, None, 13.0],
             ),
-        ]
+        ],
     )
     def test_apply_edge_cases(
         self, df: pl.DataFrame, max_gap_size: int, observation_interval: datetime, expected: list
@@ -446,23 +467,22 @@ class TestApply(unittest.TestCase):
         assert_frame_equal(result, expected.df, check_column_order=False)
 
 
-class TestAltData(unittest.TestCase):
-    def setUp(self) -> None:
-        self.df = pl.DataFrame(
-            {
-                "timestamp": [
-                    datetime(2025, 1, 1),
-                    datetime(2025, 1, 2),
-                    datetime(2025, 1, 3),
-                    datetime(2025, 1, 4),
-                    datetime(2025, 1, 5),
-                ],
-                "values": [1.0, None, 3.0, None, 5.0],
-                "alt_values": [10.0, 20.0, 30.0, 40.0, 50.0],
-                "alt_with_missing": [10.0, None, 30.0, 40.0, None],
-            }
-        )
-        self.tf = TimeFrame(self.df, "timestamp", "P1D")
+class TestAltData:
+    df = pl.DataFrame(
+        {
+            "timestamp": [
+                datetime(2025, 1, 1),
+                datetime(2025, 1, 2),
+                datetime(2025, 1, 3),
+                datetime(2025, 1, 4),
+                datetime(2025, 1, 5),
+            ],
+            "values": [1.0, None, 3.0, None, 5.0],
+            "alt_values": [10.0, 20.0, 30.0, 40.0, 50.0],
+            "alt_with_missing": [10.0, None, 30.0, 40.0, None],
+        }
+    )
+    tf = TimeFrame(df, "timestamp", "P1D")
 
     def test_alt_data_infill(self) -> None:
         """Test basic infilling from an alternative column."""
@@ -496,7 +516,7 @@ class TestAltData(unittest.TestCase):
     def test_alt_data_infill_missing_alt_data_column_column(self) -> None:
         """Test that an error is raised if the alt_data_column column is missing."""
         infiller = AltData(alt_data_column="non_existent_column")
-        with self.assertRaises(ColumnNotFoundError):
+        with pytest.raises(ColumnNotFoundError):
             infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
 
     def test_alt_data_infill_restricting_date_range(self) -> None:
@@ -529,14 +549,14 @@ class TestAltData(unittest.TestCase):
         """Test error when provided alt_data is missing the time column."""
         alt_df = pl.DataFrame({"alt_values_df": [11.0, 22.0, 33.0, 44.0, 55.0]})
         infiller = AltData(alt_data_column="alt_values", alt_df=alt_df)
-        with self.assertRaises(ColumnNotFoundError):
+        with pytest.raises(ColumnNotFoundError):
             infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
 
     def test_alt_data_infill_with_alt_data_missing_data_column(self) -> None:
         """Test error when provided alt_data is missing the data column."""
         alt_df = pl.DataFrame({"time": self.df["timestamp"]})
         infiller = AltData(alt_data_column="non_existent_column", alt_df=alt_df)
-        with self.assertRaises(ColumnNotFoundError):
+        with pytest.raises(ColumnNotFoundError):
             infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
 
     def test_alt_data_infill_with_alt_data_and_column_in_main_df(self) -> None:
