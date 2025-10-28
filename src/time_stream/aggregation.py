@@ -72,7 +72,12 @@ class AggregationFunction(Operation, ABC):
         """
         ctx = AggregationCtx(df, time_name, time_anchor, periodicity)
         pipeline = AggregationPipeline(
-            self, ctx, aggregation_period, columns, aggregation_time_anchor, missing_criteria
+            self,
+            ctx,
+            aggregation_period,
+            columns,
+            aggregation_time_anchor,
+            missing_criteria,
         )
         return pipeline.execute()
 
@@ -363,4 +368,37 @@ class Max(AggregationFunction):
                     pl.col(ctx.time_name).get(pl.col(col).arg_max()).alias(f"{ctx.time_name}_of_{self.name}_{col}"),
                 ]
             )
+        return expressions
+
+
+@AggregationFunction.register
+class Percentile(AggregationFunction):
+    """An aggregation class to find the nth percentile of values within each aggregation period."""
+
+    name = "percentile"
+
+    def __init__(self, p: int):
+        """
+        Initialise Percentile aggregation:
+
+        Args:
+            p: The integer percentile value to apply.
+            **kwargs: Any additional parameters to be passed through.
+
+        """
+        super().__init__()
+
+        self.p = p
+
+    def expr(self, ctx: AggregationCtx, columns: list[str]) -> list[pl.Expr]:
+        """Return the 'Polars' expression for calculating the percentile"""
+
+        # If the percentile value is between 0 -100 divide it by 100 to convert it to the quantile equivalent.
+        if not self.p.is_integer() or not (0 <= self.p <= 100):
+            raise ValueError("The percentile value must be provided as an integer value from 0 to 100")
+
+        quantile = self.p / 100
+
+        expressions = [(pl.col(col).quantile(quantile).alias(f"{self.name}_{col}")) for col in columns]
+
         return expressions

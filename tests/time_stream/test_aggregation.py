@@ -15,6 +15,7 @@ from time_stream.aggregation import (
     Mean,
     MeanSum,
     Min,
+    Percentile,
     Sum,
 )
 from time_stream.base import TimeFrame
@@ -274,7 +275,7 @@ class TestSimpleAggregations:
     no missing data"""
 
     @pytest.mark.parametrize(
-        "input_tf,aggregator,target_period,column,timestamps,counts,values,timestamps_of",
+        "input_tf,aggregator,target_period,column,timestamps,counts,values,timestamps_of,kwargs",
         [
             (
                 TS_PT1H_2DAYS,
@@ -285,6 +286,7 @@ class TestSimpleAggregations:
                 [24, 24],
                 {"value": [11.5, 35.5]},
                 None,
+                {},
             ),
             (
                 TS_PT1H_2DAYS,
@@ -295,6 +297,7 @@ class TestSimpleAggregations:
                 [24, 24],
                 {"value": [23, 47]},
                 [datetime(2025, 1, 1, 23), datetime(2025, 1, 2, 23)],
+                {},
             ),
             (
                 TS_PT1H_2DAYS,
@@ -305,6 +308,7 @@ class TestSimpleAggregations:
                 [24, 24],
                 {"value": [0, 24]},
                 [datetime(2025, 1, 1), datetime(2025, 1, 2)],
+                {},
             ),
             (
                 TS_PT1H_2DAYS,
@@ -315,6 +319,7 @@ class TestSimpleAggregations:
                 [24, 24],
                 {"value": [276, 852]},
                 None,
+                {},
             ),
             (
                 TS_PT1H_2DAYS,
@@ -325,6 +330,18 @@ class TestSimpleAggregations:
                 [24, 24],
                 {"value": [276, 852]},
                 None,
+                {},
+            ),
+            (
+                TS_PT1H_2DAYS,
+                Percentile,
+                P1D,
+                "value",
+                [datetime(2025, 1, 1), datetime(2025, 1, 2)],
+                [24, 24],
+                {"value": [22, 46]},
+                None,
+                {"p": 95},
             ),
         ],
         ids=[
@@ -333,6 +350,7 @@ class TestSimpleAggregations:
             "hourly to daily min",
             "hourly to daily mean_sum",
             "hourly to daily sum",
+            "hourly_to_daily_95_percentile",
         ],
     )
     def test_microsecond_to_microsecond(
@@ -345,11 +363,12 @@ class TestSimpleAggregations:
         counts: list,
         values: dict,
         timestamps_of: list | None,
+        kwargs: dict[str, Any] | None,
     ) -> None:
         """Test aggregations of microsecond-based (i.e., 1 day or less) resolution data, to another
         microsecond-based resolution."""
         expected_df = generate_expected_df(timestamps, aggregator, column, values, counts, counts, timestamps_of)
-        result = aggregator().apply(
+        result = aggregator(**kwargs).apply(
             input_tf.df,
             input_tf.time_name,
             input_tf.time_anchor,
@@ -361,7 +380,7 @@ class TestSimpleAggregations:
         assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False)
 
     @pytest.mark.parametrize(
-        "input_tf,aggregator,target_period,column,timestamps,counts,values,timestamps_of",
+        "input_tf,aggregator,target_period,column,timestamps,counts,values,timestamps_of,kwargs",
         [
             (
                 TS_PT1H_2MONTH,
@@ -372,6 +391,7 @@ class TestSimpleAggregations:
                 [744, 672],
                 {"value": [371.5, 1079.5]},
                 None,
+                {},
             ),
             (
                 TS_PT1H_2MONTH,
@@ -382,6 +402,7 @@ class TestSimpleAggregations:
                 [744, 672],
                 {"value": [743, 1415]},
                 [datetime(2025, 1, 31, 23), datetime(2025, 2, 28, 23)],
+                {},
             ),
             (
                 TS_PT1H_2MONTH,
@@ -392,6 +413,7 @@ class TestSimpleAggregations:
                 [744, 672],
                 {"value": [0, 744]},
                 [datetime(2025, 1, 1), datetime(2025, 2, 1)],
+                {},
             ),
             (
                 TS_PT1H_2MONTH,
@@ -402,6 +424,7 @@ class TestSimpleAggregations:
                 [744, 672],
                 {"value": [276396, 725424]},
                 None,
+                {},
             ),
             (
                 TS_PT1H_2MONTH,
@@ -412,6 +435,18 @@ class TestSimpleAggregations:
                 [744, 672],
                 {"value": [276396, 725424]},
                 None,
+                {},
+            ),
+            (
+                TS_PT1H_2MONTH,
+                Percentile,
+                P1M,
+                "value",
+                [datetime(2025, 1, 1), datetime(2025, 2, 1)],
+                [744, 672],
+                {"value": [557, 1247]},
+                None,
+                {"p": 75},
             ),
         ],
         ids=[
@@ -420,6 +455,7 @@ class TestSimpleAggregations:
             "hourly to monthly min",
             "hourly to monthly mean_sum",
             "hourly to monthly sum",
+            "hourly_to_monthly_75_percentile",
         ],
     )
     def test_microsecond_to_month(
@@ -432,10 +468,11 @@ class TestSimpleAggregations:
         counts: list,
         values: dict,
         timestamps_of: list | None,
+        kwargs: dict[str, Any],
     ) -> None:
         """Test aggregations of microsecond-based (i.e., 1-day or less) resolution data, to a month-based resolution."""
         expected_df = generate_expected_df(timestamps, aggregator, column, values, counts, counts, timestamps_of)
-        result = aggregator().apply(
+        result = aggregator(**kwargs).apply(
             input_tf.df,
             input_tf.time_name,
             input_tf.time_anchor,
@@ -447,7 +484,7 @@ class TestSimpleAggregations:
         assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False)
 
     @pytest.mark.parametrize(
-        "input_tf,aggregator,target_period,column,timestamps,counts,values,timestamps_of",
+        "input_tf,aggregator,target_period,column,timestamps,counts,values,timestamps_of,kwargs",
         [
             (
                 TS_P1M_2YEARS,
@@ -458,6 +495,7 @@ class TestSimpleAggregations:
                 [12, 12],
                 {"value": [5.5, 17.5]},
                 None,
+                {},
             ),
             (
                 TS_P1M_2YEARS,
@@ -468,6 +506,7 @@ class TestSimpleAggregations:
                 [12, 12],
                 {"value": [11, 23]},
                 [datetime(2025, 12, 1), datetime(2026, 12, 1)],
+                {},
             ),
             (
                 TS_P1M_2YEARS,
@@ -478,6 +517,7 @@ class TestSimpleAggregations:
                 [12, 12],
                 {"value": [0, 12]},
                 [datetime(2025, 1, 1), datetime(2026, 1, 1)],
+                {},
             ),
             (
                 TS_P1M_2YEARS,
@@ -488,6 +528,7 @@ class TestSimpleAggregations:
                 [12, 12],
                 {"value": [66, 210]},
                 None,
+                {},
             ),
             (
                 TS_P1M_2YEARS,
@@ -498,6 +539,18 @@ class TestSimpleAggregations:
                 [12, 12],
                 {"value": [66, 210]},
                 None,
+                {},
+            ),
+            (
+                TS_P1M_2YEARS,
+                Percentile,
+                P1Y,
+                "value",
+                [datetime(2025, 1, 1), datetime(2026, 1, 1)],
+                [12, 12],
+                {"value": [3, 15]},
+                None,
+                {"p": 25},
             ),
         ],
         ids=[
@@ -506,6 +559,7 @@ class TestSimpleAggregations:
             "monthly to yearly min",
             "monthly to yearly mean_sum",
             "monthly to yearly sum",
+            "monthly_to_yearly_25_percentile",
         ],
     )
     def test_month_to_month(
@@ -518,10 +572,11 @@ class TestSimpleAggregations:
         counts: list,
         values: dict,
         timestamps_of: list | None,
+        kwargs: dict[str, Any] | None,
     ) -> None:
         """Test aggregations of month-based resolution data, to a month-based resolution."""
         expected_df = generate_expected_df(timestamps, aggregator, column, values, counts, counts, timestamps_of)
-        result = aggregator().apply(
+        result = aggregator(**kwargs).apply(
             input_tf.df,
             input_tf.time_name,
             input_tf.time_anchor,
@@ -533,7 +588,7 @@ class TestSimpleAggregations:
         assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False)
 
     @pytest.mark.parametrize(
-        "input_tf,aggregator,target_period,column,timestamps,counts,values,timestamps_of",
+        "input_tf,aggregator,target_period,column,timestamps,counts,values,timestamps_of,kwargs",
         [
             (
                 TS_PT1H_2DAYS,
@@ -544,6 +599,7 @@ class TestSimpleAggregations:
                 [24, 24],
                 {"value": [11.5, 35.5], "value_plus1": [12.5, 36.5], "value_times2": [23, 71]},
                 None,
+                {},
             ),
             (
                 TS_PT1H_2DAYS,
@@ -554,6 +610,7 @@ class TestSimpleAggregations:
                 [24, 24],
                 {"value": [23, 47], "value_plus1": [24, 48], "value_times2": [46, 94]},
                 [datetime(2025, 1, 1, 23), datetime(2025, 1, 2, 23)],
+                {},
             ),
             (
                 TS_PT1H_2DAYS,
@@ -564,6 +621,7 @@ class TestSimpleAggregations:
                 [24, 24],
                 {"value": [0, 24], "value_plus1": [1, 25], "value_times2": [0, 48]},
                 [datetime(2025, 1, 1), datetime(2025, 1, 2)],
+                {},
             ),
             (
                 TS_PT1H_2DAYS,
@@ -574,6 +632,7 @@ class TestSimpleAggregations:
                 [24, 24],
                 {"value": [276, 852], "value_plus1": [300, 876], "value_times2": [552, 1704]},
                 None,
+                {},
             ),
             (
                 TS_PT1H_2DAYS,
@@ -584,6 +643,18 @@ class TestSimpleAggregations:
                 [24, 24],
                 {"value": [276, 852], "value_plus1": [300, 876], "value_times2": [552, 1704]},
                 None,
+                {},
+            ),
+            (
+                TS_PT1H_2DAYS,
+                Percentile,
+                P1D,
+                ["value", "value_plus1", "value_times2"],
+                [datetime(2025, 1, 1), datetime(2025, 1, 2)],
+                [24, 24],
+                {"value": [12, 36], "value_plus1": [13, 37], "value_times2": [24, 72]},
+                None,
+                {"p": 50},
             ),
         ],
         ids=[
@@ -592,6 +663,7 @@ class TestSimpleAggregations:
             "mult column min",
             "mult column mean_sum",
             "mult column sum",
+            "multi_column_50_percentile",
         ],
     )
     def test_multi_column(
@@ -604,9 +676,10 @@ class TestSimpleAggregations:
         counts: list,
         values: dict,
         timestamps_of: list | None,
+        kwargs: dict[str, Any],
     ) -> None:
         expected_df = generate_expected_df(timestamps, aggregator, column, values, counts, counts, timestamps_of)
-        result = aggregator().apply(
+        result = aggregator(**kwargs).apply(
             input_tf.df,
             input_tf.time_name,
             input_tf.time_anchor,
@@ -1275,3 +1348,53 @@ class TestAggregationWithMetadata:
 
         result = tf.aggregate(Period.of_months(1), "mean", "value")
         assert result.metadata == {}
+
+
+class TestPercentileAggregation:
+    @pytest.mark.parametrize(
+        "percentile,expected_values",
+        [
+            (0, {"value": [0, 24]}),
+            (1, {"value": [0, 24]}),
+            (5, {"value": [1, 25]}),
+            (25, {"value": [6, 30]}),
+            (50, {"value": [12, 36]}),
+            (75, {"value": [17, 41]}),
+            (95, {"value": [22, 46]}),
+            (100, {"value": [23, 47]}),
+        ],
+    )
+    def test_percentile_aggregation(self, percentile: int, expected_values: list[int]) -> None:
+        input_tf = TS_PT1H_2DAYS
+        column = "value"
+        timestamps = [datetime(2025, 1, 1), datetime(2025, 1, 2)]
+        counts = [24, 24]
+
+        expected_df = generate_expected_df(timestamps, Percentile, column, expected_values, counts, counts, None)
+        result = Percentile(p=percentile).apply(
+            df=input_tf.df,
+            time_name=input_tf.time_name,
+            time_anchor=input_tf.time_anchor,
+            periodicity=input_tf.periodicity,
+            aggregation_period=P1D,
+            columns="value",
+            aggregation_time_anchor=input_tf.time_anchor,
+        )
+        assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False)
+
+    @pytest.mark.parametrize("percentile", [0.000000001, 0.999999, 101, 10000, 1.1, -1, -0.000000000001])
+    def test_invalid_percentile(self, percentile: float) -> None:
+        input_tf = TS_PT1H_2DAYS
+
+        expected_error = "The percentile value must be provided as an integer value from 0 to 100"
+
+        with pytest.raises(ValueError, match=expected_error):
+            Percentile(p=percentile).apply(
+                df=input_tf.df,
+                time_name=input_tf.time_name,
+                time_anchor=input_tf.time_anchor,
+                periodicity=input_tf.periodicity,
+                aggregation_period=P1D,
+                columns="value",
+                aggregation_time_anchor=input_tf.time_anchor,
+            )
