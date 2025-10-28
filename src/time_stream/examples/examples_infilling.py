@@ -61,6 +61,34 @@ def create_simple_time_series_with_gaps() -> ts.TimeFrame:
     return tf
 
 
+def alt_data_main() -> pl.DataFrame:
+    with suppress_output():
+        df = get_example_df(library="polars")
+    print(df)
+    return df
+
+
+def alt_data_alt() -> pl.DataFrame:
+    with suppress_output():
+        alt_df = get_example_df(library="polars", complete=True)
+    alt_df = alt_df.with_columns(pl.col("flow").mul(1.25).alias("alt_flow")).drop("flow")
+    print(alt_df)
+    return alt_df
+
+
+def alt_data_infill() -> None:
+    with suppress_output():
+        df = alt_data_main()
+        alt_df = alt_data_alt()
+
+    tf = ts.TimeFrame(df, "time", resolution="PT15M", periodicity="PT15M")
+
+    # [start_block_2]
+    tf_infill = tf.infill("alt_data", "flow", alt_df=alt_df, correction_factor=0.75, alt_data_column="alt_flow")
+    # [end_block_2]
+    print(tf_infill.df)
+
+
 def all_infills() -> pl.DataFrame:
     with suppress_output():
         tf = create_simple_time_series_with_gaps()

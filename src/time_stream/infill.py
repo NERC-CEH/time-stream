@@ -44,12 +44,13 @@ class InfillMethod(Operation, ABC):
         return f"{infill_column}_{self.name}"
 
     @abstractmethod
-    def _fill(self, df: pl.DataFrame, infill_column: str) -> pl.DataFrame:
+    def _fill(self, df: pl.DataFrame, infill_column: str, ctx: InfillCtx) -> pl.DataFrame:
         """Return the Polars dataframe containing infilled data.
 
         Args:
             df: The DataFrame to infill.
             infill_column: The column to infill.
+            ctx: The infill context.
 
         Returns:
             pl.DataFrame with infilled values
@@ -119,7 +120,7 @@ class InfillMethodPipeline:
             return self.ctx.df
 
         # Apply the specific infill logic from the child class
-        df_infilled = self.infill_method._fill(df, self.column)
+        df_infilled = self.infill_method._fill(df, self.column, self.ctx)
         infilled_column = self.infill_method._infilled_column_name(self.column)
 
         # Limit the infilled data to where the infill mask is True
@@ -215,7 +216,7 @@ class ScipyInterpolation(InfillMethod, ABC):
         """Minimum number of data points required for this interpolation method."""
         pass
 
-    def _fill(self, df: pl.DataFrame, infill_column: str) -> pl.DataFrame:
+    def _fill(self, df: pl.DataFrame, infill_column: str, ctx: InfillCtx) -> pl.DataFrame:
         """Apply scipy interpolation to fill missing values in the specified column.
 
         This method handles the common scipy interpolation workflow:
@@ -229,6 +230,7 @@ class ScipyInterpolation(InfillMethod, ABC):
         Args:
             df: The DataFrame to infill.
             infill_column: The column to infill.
+            ctx: The infill context.
 
         Returns:
             pl.DataFrame with infilled values
@@ -356,3 +358,63 @@ class PchipInterpolation(ScipyInterpolation):
     def _create_interpolator(self, x_valid: np.ndarray, y_valid: np.ndarray) -> Any:
         """Create scipy PCHIP interpolator."""
         return PchipInterpolator(x_valid, y_valid, **self.scipy_kwargs)
+
+
+@InfillMethod.register
+class AltData(InfillMethod):
+    """Infill from an alternative data source, with optional correction factor."""
+
+    name = "alt_data"
+
+    def __init__(self, alt_data_column: str, correction_factor: float = 1.0, alt_df: pl.DataFrame | None = None):
+        """Initialize the alternative data infill method.
+
+        Args:
+            alt_data_column: The name of the column providing the alternative data.
+            correction_factor: An optional correction factor to apply to the alternative data.
+            alt_df: The DataFrame containing the alternative data.
+        """
+        self.alt_data_column = alt_data_column
+        self.correction_factor = correction_factor
+        self.alt_df = alt_df
+
+    def _fill(self, df: pl.DataFrame, infill_column: str, ctx: InfillCtx) -> pl.DataFrame:
+        """Fill missing values using data from the alternative column.
+
+        Args:
+            df: The DataFrame to infill.
+            infill_column: The column to infill.
+            ctx: The infill context.
+
+        Returns:
+            pl.DataFrame with infilled values.
+        """
+        if self.alt_df is None:
+            check_columns_in_dataframe(df, [self.alt_data_column])
+            alt_data_column_name = self.alt_data_column
+        else:
+            time_column_name = ctx.time_name
+            check_columns_in_dataframe(self.alt_df, [time_column_name, self.alt_data_column])
+            alt_data_column_name = f"__ALT_DATA__{self.alt_data_column}"
+            alt_df = self.alt_df.select([time_column_name, self.alt_data_column]).rename(
+                {self.alt_data_column: alt_data_column_name}
+            )
+
+            df = df.join(
+                alt_df,
+                on=time_column_name,
+                how="left",
+                suffix="_alt",
+            )
+
+        infilled = df.with_columns(
+            pl.when(pl.col(infill_column).is_null())
+            .then(pl.col(alt_data_column_name) * self.correction_factor)
+            .otherwise(pl.col(infill_column))
+            .alias(self._infilled_column_name(infill_column))
+        )
+
+        if self.alt_df is not None:
+            infilled = infilled.drop(alt_data_column_name)
+
+        return infilled
