@@ -42,7 +42,7 @@ With Time Properties
 ====================
 
 The :class:`~time_stream.TimeFrame` object can configure important properties about the time aspect of your data.
-More information about these properties and concepts can be found on the :doc:`concepts page <concepts>` page.
+More information about these properties and concepts can be found on the :doc:`concepts page <concepts>`.
 
 Here, we will show some basic usage of these time properties.
 
@@ -72,7 +72,7 @@ These properties can be provided as an ISO 8601 duration string, e.g. **P1D** (1
 
 The ``time_anchor`` property can be set to **start**, **end**, or **point**.
 
-Again, more detail can be found on the :doc:`concepts page <concepts>` page about all these properties.
+Again, more detail can be found on the :doc:`concepts page <concepts>` about all these properties.
 
 Resolution
 ~~~~~~~~~~

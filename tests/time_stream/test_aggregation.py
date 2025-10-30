@@ -1,6 +1,6 @@
 import re
 from datetime import datetime
-from typing import Any
+from typing import Any, Callable
 from unittest.mock import Mock
 
 import polars as pl
@@ -11,10 +11,12 @@ from time_stream.aggregation import (
     AggregationCtx,
     AggregationFunction,
     AggregationPipeline,
+    ConditionalCount,
     Max,
     Mean,
     MeanSum,
     Min,
+    PeaksOverThreshold,
     Percentile,
     Sum,
 )
@@ -56,7 +58,7 @@ def generate_time_series(
     )
 
     if missing_data:
-        df = df.remove(pl.col("value") % 7 == 0)
+        df = df.filter(pl.col("value") % 7 != 0)
 
     tf = TimeFrame(df=df, time_name="timestamp", resolution=resolution, offset=offset, periodicity=periodicity)
     return tf
@@ -343,6 +345,17 @@ class TestSimpleAggregations:
                 None,
                 {"p": 95},
             ),
+            (
+                TS_PT1H_2DAYS,
+                PeaksOverThreshold,
+                P1D,
+                "value",
+                [datetime(2025, 1, 1), datetime(2025, 1, 2)],
+                [24, 24],
+                {"value": [3, 24]},
+                None,
+                {"threshold": 20},
+            ),
         ],
         ids=[
             "hourly to daily mean",
@@ -351,6 +364,7 @@ class TestSimpleAggregations:
             "hourly to daily mean_sum",
             "hourly to daily sum",
             "hourly_to_daily_95_percentile",
+            "hourly_to_daily_pot",
         ],
     )
     def test_microsecond_to_microsecond(
@@ -448,6 +462,17 @@ class TestSimpleAggregations:
                 None,
                 {"p": 75},
             ),
+            (
+                TS_PT1H_2MONTH,
+                PeaksOverThreshold,
+                P1M,
+                "value",
+                [datetime(2025, 1, 1), datetime(2025, 2, 1)],
+                [744, 672],
+                {"value": [643, 672]},
+                None,
+                {"threshold": 100},
+            ),
         ],
         ids=[
             "hourly to monthly mean",
@@ -456,6 +481,7 @@ class TestSimpleAggregations:
             "hourly to monthly mean_sum",
             "hourly to monthly sum",
             "hourly_to_monthly_75_percentile",
+            "hourly_to_monthly_pot",
         ],
     )
     def test_microsecond_to_month(
@@ -552,6 +578,17 @@ class TestSimpleAggregations:
                 None,
                 {"p": 25},
             ),
+            (
+                TS_P1M_2YEARS,
+                PeaksOverThreshold,
+                P1Y,
+                "value",
+                [datetime(2025, 1, 1), datetime(2026, 1, 1)],
+                [12, 12],
+                {"value": [1, 12]},
+                None,
+                {"threshold": 10},
+            ),
         ],
         ids=[
             "monthly to yearly mean",
@@ -560,6 +597,7 @@ class TestSimpleAggregations:
             "monthly to yearly mean_sum",
             "monthly to yearly sum",
             "monthly_to_yearly_25_percentile",
+            "monthly_to_yearly_pot",
         ],
     )
     def test_month_to_month(
@@ -656,6 +694,17 @@ class TestSimpleAggregations:
                 None,
                 {"p": 50},
             ),
+            (
+                TS_PT1H_2DAYS,
+                PeaksOverThreshold,
+                P1D,
+                ["value", "value_plus1", "value_times2"],
+                [datetime(2025, 1, 1), datetime(2025, 1, 2)],
+                [24, 24],
+                {"value": [8, 24], "value_plus1": [9, 24], "value_times2": [16, 24]},
+                None,
+                {"threshold": 15},
+            ),
         ],
         ids=[
             "mult column mean",
@@ -664,6 +713,7 @@ class TestSimpleAggregations:
             "mult column mean_sum",
             "mult column sum",
             "multi_column_50_percentile",
+            "multi_column_pot",
         ],
     )
     def test_multi_column(
@@ -753,7 +803,7 @@ class TestComplexPeriodicityAggregations:
     """
 
     @pytest.mark.parametrize(
-        "input_tf,aggregator,target_period,column,timestamps,expected_counts,actual_counts,values,timestamps_of",
+        "input_tf,aggregator,target_period,column,timestamps,expected_counts,actual_counts,values,timestamps_of,kwargs",
         [
             (
                 TS_PT1H_2DAYS,
@@ -765,6 +815,7 @@ class TestComplexPeriodicityAggregations:
                 [9, 24, 15],
                 {"value": [4.0, 20.5, 40.0]},
                 None,
+                {},
             ),
             (
                 TS_PT1H_2DAYS,
@@ -776,11 +827,25 @@ class TestComplexPeriodicityAggregations:
                 [9, 24, 15],
                 {"value": [8, 32, 47]},
                 [datetime(2025, 1, 1, 8), datetime(2025, 1, 2, 8), datetime(2025, 1, 2, 23)],
+                {},
+            ),
+            (
+                TS_PT1H_2DAYS,
+                PeaksOverThreshold,
+                P1D_OFF,
+                "value",
+                [datetime(2024, 12, 31, 9), datetime(2025, 1, 1, 9), datetime(2025, 1, 2, 9)],
+                [24, 24, 24],
+                [9, 24, 15],
+                {"value": [0, 12, 15]},
+                None,
+                {"threshold": 20},
             ),
         ],
         ids=[
             "hourly to day offset mean",
             "hourly to day offset max",
+            "hourly to day offset pot",
         ],
     )
     def test_microsecond_to_microsecond_offset(
@@ -794,13 +859,14 @@ class TestComplexPeriodicityAggregations:
         actual_counts: list,
         values: dict,
         timestamps_of: list | None,
+        kwargs: dict[str, Any],
     ) -> None:
         """Test aggregations of microsecond-based (i.e., 1 day or less) resolution data, to another
         microsecond-based resolution with an offset."""
         expected_df = generate_expected_df(
             timestamps, aggregator, column, values, expected_counts, actual_counts, timestamps_of
         )
-        result = aggregator().apply(
+        result = aggregator(**kwargs).apply(
             input_tf.df,
             input_tf.time_name,
             input_tf.time_anchor,
@@ -812,7 +878,7 @@ class TestComplexPeriodicityAggregations:
         assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False)
 
     @pytest.mark.parametrize(
-        "input_tf,aggregator,target_period,column,timestamps,expected_counts,actual_counts,values,timestamps_of",
+        "input_tf,aggregator,target_period,column,timestamps,expected_counts,actual_counts,values,timestamps_of,kwargs",
         [
             (
                 TS_PT1H_2MONTH,
@@ -824,6 +890,7 @@ class TestComplexPeriodicityAggregations:
                 [9, 744, 663],
                 {"value": [4.0, 380.5, 1084.0]},
                 None,
+                {},
             ),
             (
                 TS_PT1H_2MONTH,
@@ -835,12 +902,22 @@ class TestComplexPeriodicityAggregations:
                 [9, 744, 663],
                 {"value": [8, 752, 1415]},
                 [datetime(2025, 1, 1, 8), datetime(2025, 2, 1, 8), datetime(2025, 2, 28, 23)],
+                {},
+            ),
+            (
+                TS_PT1H_2MONTH,
+                PeaksOverThreshold,
+                P1M_OFF,
+                "value",
+                [datetime(2024, 12, 1, 9), datetime(2025, 1, 1, 9), datetime(2025, 2, 1, 9)],
+                [744, 744, 672],
+                [9, 744, 663],
+                {"value": [0, 732, 663]},
+                None,
+                {"threshold": 20},
             ),
         ],
-        ids=[
-            "hourly to month offset mean",
-            "hourly to month offset max",
-        ],
+        ids=["hourly to month offset mean", "hourly to month offset max", "hourly to month offset pot"],
     )
     def test_microsecond_to_month_offset(
         self,
@@ -853,13 +930,14 @@ class TestComplexPeriodicityAggregations:
         actual_counts: list,
         values: dict,
         timestamps_of: list | None,
+        kwargs: dict[str, Any],
     ) -> None:
         """Test aggregations of microsecond-based (i.e., 1-day or less) resolution data, to a month-based resolution
         with an offset."""
         expected_df = generate_expected_df(
             timestamps, aggregator, column, values, expected_counts, actual_counts, timestamps_of
         )
-        result = aggregator().apply(
+        result = aggregator(**kwargs).apply(
             input_tf.df,
             input_tf.time_name,
             input_tf.time_anchor,
@@ -871,7 +949,7 @@ class TestComplexPeriodicityAggregations:
         assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False)
 
     @pytest.mark.parametrize(
-        "input_tf,aggregator,target_period,column,timestamps,expected_counts,actual_counts,values,timestamps_of",
+        "input_tf,aggregator,target_period,column,timestamps,expected_counts,actual_counts,values,timestamps_of,kwargs",
         [
             (
                 TS_P1D_OFF_2MONTH,
@@ -883,6 +961,7 @@ class TestComplexPeriodicityAggregations:
                 [1, 31, 27],
                 {"value": [0.0, 16.0, 45.0]},
                 None,
+                {},
             ),
             (
                 TS_P1D_OFF_2MONTH,
@@ -894,11 +973,25 @@ class TestComplexPeriodicityAggregations:
                 [1, 31, 27],
                 {"value": [0, 31, 58]},
                 [datetime(2024, 12, 31, 9), datetime(2025, 1, 31, 9), datetime(2025, 2, 27, 9)],
+                {},
+            ),
+            (
+                TS_P1D_OFF_2MONTH,
+                PeaksOverThreshold,
+                P1M_OFF,
+                "value",
+                [datetime(2024, 12, 1, 9), datetime(2025, 1, 1, 9), datetime(2025, 2, 1, 9)],
+                [31, 31, 28],
+                [1, 31, 27],
+                {"value": [0, 1, 27]},
+                None,
+                {"threshold": 30},
             ),
         ],
         ids=[
             "daily_offset_to_month_offset_mean",
             "daily_offset_to_month_offset_max",
+            "daily_offset_to_month_offset_pot",
         ],
     )
     def test_microsecond_offset_to_month_offset(
@@ -912,13 +1005,14 @@ class TestComplexPeriodicityAggregations:
         actual_counts: list,
         values: dict,
         timestamps_of: list | None,
+        kwargs: dict[str, Any],
     ) -> None:
         """Test aggregations of microsecond-based (i.e., 1-day or less) resolution data that has an offset,
         to a month-based resolution with an offset."""
         expected_df = generate_expected_df(
             timestamps, aggregator, column, values, expected_counts, actual_counts, timestamps_of
         )
-        result = aggregator().apply(
+        result = aggregator(**kwargs).apply(
             input_tf.df,
             input_tf.time_name,
             input_tf.time_anchor,
@@ -930,7 +1024,7 @@ class TestComplexPeriodicityAggregations:
         assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False)
 
     @pytest.mark.parametrize(
-        "input_tf,aggregator,target_period,column,timestamps,expected_counts,actual_counts,values,timestamps_of",
+        "input_tf,aggregator,target_period,column,timestamps,expected_counts,actual_counts,values,timestamps_of,kwargs",
         [
             (
                 TS_P1M_OFF_2YEARS,
@@ -942,6 +1036,7 @@ class TestComplexPeriodicityAggregations:
                 [10, 12, 2],
                 {"value": [4.5, 15.5, 22.5]},
                 None,
+                {},
             ),
             (
                 TS_P1M_OFF_2YEARS,
@@ -953,11 +1048,25 @@ class TestComplexPeriodicityAggregations:
                 [10, 12, 2],
                 {"value": [9, 21, 23]},
                 [datetime(2025, 9, 1, 9), datetime(2026, 9, 1, 9), datetime(2026, 11, 1, 9)],
+                {},
+            ),
+            (
+                TS_P1M_OFF_2YEARS,
+                PeaksOverThreshold,
+                P1Y_OFF,
+                "value",
+                [datetime(2024, 10, 1, 9), datetime(2025, 10, 1, 9), datetime(2026, 10, 1, 9)],
+                [12, 12, 12],
+                [10, 12, 2],
+                {"value": [0, 11, 2]},
+                None,
+                {"threshold": 10},
             ),
         ],
         ids=[
             "month_offset_to_month_offset_mean",
             "month_offset_to_month_offset_max",
+            "month_offset_to_month_offset_pot",
         ],
     )
     def test_month_offset_to_month_offset(
@@ -971,13 +1080,14 @@ class TestComplexPeriodicityAggregations:
         actual_counts: list,
         values: dict,
         timestamps_of: list | None,
+        kwargs: dict[str, Any],
     ) -> None:
         """Test aggregations of month-based resolution data that has an offset,
         to a month-based resolution with an offset."""
         expected_df = generate_expected_df(
             timestamps, aggregator, column, values, expected_counts, actual_counts, timestamps_of
         )
-        result = aggregator().apply(
+        result = aggregator(**kwargs).apply(
             input_tf.df,
             input_tf.time_name,
             input_tf.time_anchor,
@@ -1364,7 +1474,7 @@ class TestPercentileAggregation:
             (100, {"value": [23, 47]}),
         ],
     )
-    def test_percentile_aggregation(self, percentile: int, expected_values: list[int]) -> None:
+    def test_percentile_aggregation(self, percentile: int, expected_values: dict[str, list[int]]) -> None:
         input_tf = TS_PT1H_2DAYS
         column = "value"
         timestamps = [datetime(2025, 1, 1), datetime(2025, 1, 2)]
@@ -1398,3 +1508,82 @@ class TestPercentileAggregation:
                 columns="value",
                 aggregation_time_anchor=input_tf.time_anchor,
             )
+
+
+class TestConditionalCount:
+    @pytest.mark.parametrize(
+        "input_tf,condition,target_period,column,timestamps,expected_counts,actual_counts,values",
+        [
+            (
+                TS_PT1H_2DAYS,
+                lambda col: (col >= 5) & (col <= 30),
+                P1D,
+                "value",
+                [datetime(2025, 1, 1), datetime(2025, 1, 2)],
+                [24, 24],
+                [24, 24],
+                {"value": [19, 7]},
+            ),
+            (
+                TS_PT1H_2DAYS,
+                lambda col: col.is_in([20, 30, 40]),
+                P1D,
+                "value",
+                [datetime(2025, 1, 1), datetime(2025, 1, 2)],
+                [24, 24],
+                [24, 24],
+                {"value": [1, 2]},
+            ),
+        ],
+        ids=["custom_between", "custom_is_in"],
+    )
+    def test_custom_condition(
+        self,
+        input_tf: TimeFrame,
+        condition: Callable,
+        target_period: Period,
+        column: str,
+        timestamps: list,
+        expected_counts: list,
+        actual_counts: list,
+        values: dict,
+    ) -> None:
+        """Test that a "non-standard" custom condition works as expected"""
+        expected_df = generate_expected_df(
+            timestamps, ConditionalCount, column, values, expected_counts, actual_counts, None
+        )
+
+        result = ConditionalCount(condition).apply(
+            df=input_tf.df,
+            time_name=input_tf.time_name,
+            time_anchor=input_tf.time_anchor,
+            periodicity=input_tf.periodicity,
+            aggregation_period=target_period,
+            columns="value",
+            aggregation_time_anchor=input_tf.time_anchor,
+        )
+        assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False, check_exact=False)
+
+    def test_count_null(self) -> None:
+        """Test that a condition interrogating null values works as expected"""
+        padded_tf = TS_PT1H_2DAYS_MISSING.pad()
+        expected_df = generate_expected_df(
+            [datetime(2025, 1, 1), datetime(2025, 1, 2)],
+            ConditionalCount,
+            "value",
+            {"value": [3, 3]},
+            [24, 24],
+            [20, 21],
+            None,
+        )
+
+        result = ConditionalCount(lambda col: col.is_null()).apply(
+            df=padded_tf.df,
+            time_name=padded_tf.time_name,
+            time_anchor=padded_tf.time_anchor,
+            periodicity=padded_tf.periodicity,
+            aggregation_period=P1D,
+            columns="value",
+            aggregation_time_anchor=padded_tf.time_anchor,
+        )
+        assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False, check_exact=False)

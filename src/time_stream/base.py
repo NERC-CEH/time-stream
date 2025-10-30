@@ -378,7 +378,7 @@ class TimeFrame:
         """Sort the TimeFrame DataFrame by the time column."""
         self._df = self.df.sort(self.time_name)
 
-    def pad(self, start: datetime | None = None, end: datetime | None = None) -> None:
+    def pad(self, start: datetime | None = None, end: datetime | None = None) -> Self:
         """Pad the time series with missing datetime rows, filling in NULLs for missing values.
 
         Args:
@@ -387,6 +387,8 @@ class TimeFrame:
             end: The final datetime value to pad time values to (inclusive). If not provided then the beginning of the
                 dataframe will be used.
 
+        Returns:
+            Padded TimeFrame
         """
         tf = self.copy()
         tf._df = pad_time(
