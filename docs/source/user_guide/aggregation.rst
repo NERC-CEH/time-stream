@@ -185,7 +185,7 @@ Choose how values inside each window are summarised. Pass a **string** correspon
 
     **Additional args:** None.
 
-    **Example usage:** ``tf_agg = tf.aggregate("P1D", "sum", "concentration")``
+    **Example usage:** ``tf_agg = tf.aggregate("P1D", "mean", "concentration")``
 
 ``min``
 ^^^^^^^^
