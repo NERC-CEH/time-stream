@@ -159,29 +159,107 @@ Common examples:
 Aggregation methods
 -------------------
 
-Choose how values inside each window are summarised. Pass a **string** corresponding to one of the built-in functions:
+Choose how values inside each window are summarised. Pass a **string** corresponding to one of the built-in functions.
 
-- ``"sum"`` - **Add up all values in each period.**
 
-  Use this for quantities that accumulate over time, such as precipitation.
+``sum``
+^^^^^^^
+:class:`time_stream.aggregation.Sum`
 
-- ``"mean"`` - **Average of all values in each period.**
+    **What it does:** Adds up all values in each period.
 
-  Useful for variables like temperature or concentration, where the average represents the period well.
+    **When to use:** Use this for quantities that accumulate over time, such as precipitation.
 
-- ``"min"`` - **Smallest value observed in the period.**
+    **Additional args:** None.
 
-  Often used to track minimum daily temperature, or low flows in rivers.
+    **Example usage:** ``tf_agg = tf.aggregate("P1D", "sum", "precip")``
 
-- ``"max"`` - **Largest value observed in the period.**
+``mean``
+^^^^^^^^
+:class:`time_stream.aggregation.Mean`
 
-  Common in hydrology for annual maxima (AMAX) or flood frequency analysis.
+    **What it does:** Averages all values in each period.
 
-- ``"percentile"`` - **The 'nth' percentile value for the period.**
+    **When to use:** Useful for variables like temperature or concentration, where the average represents
+    the period well.
 
-  Useful for capturing extremes within a given period, such as the 5th or 95th percentile of streamflow.
-  The percentile value to be calculated is provided as an integer parameter (p) from 0 to 100 (inclusive).
+    **Additional args:** None.
 
+    **Example usage:** ``tf_agg = tf.aggregate("P1D", "mean", "concentration")``
+
+``min``
+^^^^^^^^
+:class:`time_stream.aggregation.Min`
+
+    **What it does:** Finds the smallest value observed in each period.
+
+    **When to use:** Often used to track minimum daily temperature, or low flows in rivers.
+
+    **Additional args:** None.
+
+    **Example usage:** ``tf_agg = tf.aggregate("P1D", "min", "temperature")``
+
+``max``
+^^^^^^^^
+:class:`time_stream.aggregation.Max`
+
+    **What it does:** Finds the largest value observed in each period.
+
+    **When to use:** Common in hydrology for annual maxima (AMAX) or flood frequency analysis.
+
+    **Additional args:** None.
+
+    **Example usage:** ``tf_agg = tf.aggregate("P1D", "max", "flow")``
+
+``percentile``
+^^^^^^^^^^^^^^
+:class:`time_stream.aggregation.Percentile`
+
+    **What it does:** Finds the 'nth' percentile value for each period.
+
+    **When to use:** Useful for capturing extremes within a period, such as the 5th or 95th percentile of streamflow.
+
+    **Additional args:**
+        ``p``: The percentile value to be calculated, provided as an integer parameter from 0 to 100 (inclusive).
+
+    **Example usage:** ``tf_agg = tf.aggregate("P1D", "percentile", "flow", p=95)``
+
+pot
+^^^
+:class:`time_stream.aggregation.PeaksOverThreshold`
+
+    **What it does:** "Peaks over threshold" calculation - counts number of values above a given threshold.
+
+    **When to use:** `Commonly used in hydrology
+    <https://nrfa.ceh.ac.uk/data/about-data/peak-flow-data/data-types/peaks-over-threshold-pot>`_ to extract extreme
+    events in a given year.
+
+    **Additional args:**
+        ``threshold``: The threshold over which to count.
+
+    **Example usage:** ``tf_agg = tf.aggregate("P1Y", "pot", "flow", threshold=65.8)``
+
+``conditional_count``
+^^^^^^^^^^^^^^^^^^^^^
+:class:`time_stream.aggregation.ConditionalCount`
+
+    **What it does:** Count values that meet a specific condition within each period.
+
+    **When to use:** When you need flexibility in the condition that you need to count. Any Polars expressions can be
+    used. Examples may include:
+
+        1. Count of where a value increases compared to the previous value (change detection)
+        2. Count of sudden jumps greater than a threshold (spike detection)
+        3. Count of categorical data
+
+    **Additional args:**
+        ``condition``: A function that takes a Polars expression and returns a boolean expression.
+
+    **Example usage:** For the examples given above:
+
+        1. ``tf_agg = tf.aggregate("P1Y", "conditional_count", "flow", condition=lambda col: (col - col.shift(1)) > 0)``
+        2. ``tf_agg = tf.aggregate("P1Y", "conditional_count", "flow", condition=lambda col: col.diff().abs() > 5)``
+        3. ``tf_agg = tf.aggregate("P1Y", "conditional_count", "flow", condition=lambda col: col.is_in(["ok", "good"]))``
 
 Column selection
 ----------------

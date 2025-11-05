@@ -11,6 +11,7 @@ period-based grouping.
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import timedelta
+from typing import Callable
 
 import polars as pl
 
@@ -378,16 +379,12 @@ class Percentile(AggregationFunction):
     name = "percentile"
 
     def __init__(self, p: int):
-        """
-        Initialise Percentile aggregation:
+        """Initialise Percentile aggregation.
 
         Args:
             p: The integer percentile value to apply.
-            **kwargs: Any additional parameters to be passed through.
-
         """
         super().__init__()
-
         self.p = p
 
     def expr(self, ctx: AggregationCtx, columns: list[str]) -> list[pl.Expr]:
@@ -402,3 +399,40 @@ class Percentile(AggregationFunction):
         expressions = [(pl.col(col).quantile(quantile).alias(f"{self.name}_{col}")) for col in columns]
 
         return expressions
+
+
+@AggregationFunction.register
+class ConditionalCount(AggregationFunction):
+    """An aggregation class to count values that meet a given condition within each aggregation period."""
+
+    name = "conditional_count"
+
+    def __init__(self, condition: Callable[[pl.Expr], pl.Expr]):
+        """Initialise the conditional count aggregation.
+
+        Args:
+            condition: A function that takes a Polars expression and returns a boolean expression.
+                      Examples:
+                        - lambda col: col > 100
+                        - lambda col: (col > 10) & (col <= 50)
+                        - lambda col: col.is_not_null() & (col > 0)
+        """
+        super().__init__()
+        self.condition = condition
+
+    def expr(self, ctx: AggregationCtx, columns: list[str]) -> list[pl.Expr]:
+        """Return the `Polars` expression for calculating the conditional count in an aggregation period."""
+        return [self.condition(pl.col(col)).sum().alias(f"{self.name}_{col}") for col in columns]
+
+
+@AggregationFunction.register
+class PeaksOverThreshold(ConditionalCount):
+    name = "pot"
+
+    def __init__(self, threshold: int | float):
+        """Initialise Peaks Over Threshold aggregation.
+
+        Args:
+            threshold: The threshold to count peaks over.
+        """
+        super().__init__(lambda col: col > threshold)
