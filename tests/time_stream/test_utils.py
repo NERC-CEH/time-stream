@@ -68,14 +68,16 @@ class TestGetDateFilter:
             ),
             (datetime(2025, 3, 1), [False, False, True, True, True, True, True]),
             ((datetime(2025, 3, 1), None), [False, False, True, True, True, True, True]),
+            ((None, datetime(2025, 3, 1)), [True, True, True, False, False, False, False]),
+            ((None, None), [True, True, True, True, True, True, True]),
         ],
-        ids=["some_within", "all_within", "all_out", "start_only", "start_only_with_none"],
+        ids=["some_within", "all_within", "all_out", "start_only", "start_only_with_none", "end_only", "both_none"],
     )
     def test_get_date_filter(
         self, observation_interval: datetime | tuple[datetime, datetime | None], expected_eval: list
     ) -> None:
         date_filter = get_date_filter("timestamp", observation_interval)
-        result = self.df.select(date_filter).to_series()
+        result = self.df.with_columns(date_filter).to_series()
         expected = pl.Series("timestamp", expected_eval)
         assert_series_equal(result, expected)
 

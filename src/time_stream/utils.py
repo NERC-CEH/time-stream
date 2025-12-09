@@ -14,7 +14,9 @@ from time_stream.enums import DuplicateOption, TimeAnchor
 from time_stream.exceptions import ColumnNotFoundError, DuplicateValueError, UnhandledEnumError
 
 
-def get_date_filter(time_name: str, observation_interval: datetime | tuple[datetime, datetime | None]) -> pl.Expr:
+def get_date_filter(
+    time_name: str, observation_interval: datetime | tuple[datetime | None, datetime | None]
+) -> pl.Expr:
     """Get Polars expression for observation date interval filtering.
 
     Args:
@@ -30,10 +32,16 @@ def get_date_filter(time_name: str, observation_interval: datetime | tuple[datet
     else:
         start_date, end_date = observation_interval
 
-    if end_date is None:
+    if start_date is None and end_date is None:
+        return pl.lit(True).alias(time_name)
+
+    if start_date is not None and end_date is None:
         return pl.col(time_name) >= start_date
-    else:
-        return pl.col(time_name).is_between(start_date, end_date)
+
+    if start_date is None and end_date is not None:
+        return pl.col(time_name) <= end_date
+
+    return pl.col(time_name).is_between(start_date, end_date)
 
 
 def truncate_to_period(date_times: pl.Series, period: Period, time_anchor: TimeAnchor | None = None) -> pl.Series:
