@@ -77,7 +77,7 @@ class TestGetDateFilter:
         self, observation_interval: datetime | tuple[datetime, datetime | None], expected_eval: list
     ) -> None:
         date_filter = get_date_filter("timestamp", observation_interval)
-        result = self.df.select(date_filter).to_series()
+        result = self.df.with_columns(date_filter).to_series()
         expected = pl.Series("timestamp", expected_eval)
         assert_series_equal(result, expected)
 

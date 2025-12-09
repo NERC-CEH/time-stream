@@ -33,7 +33,7 @@ def get_date_filter(
         start_date, end_date = observation_interval
 
     if start_date is None and end_date is None:
-        return pl.lit(True)
+        return pl.lit(True).alias(time_name)
 
     if start_date is not None and end_date is None:
         return pl.col(time_name) >= start_date
