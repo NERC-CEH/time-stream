@@ -20,6 +20,7 @@ from time_stream.exceptions import (
 from time_stream.time_manager import TimeManager
 
 
+
 @pytest.fixture
 def tm() -> TimeManager:
     tm = object.__new__(TimeManager)  # skips __init__
@@ -318,13 +319,6 @@ class TestCheckTimeIntegrity:
 
 
 class TestConfigurePeriodProperties:
-    # def setUp(self) -> None:
-    #     tm = object.__new__(TimeManager)  # skips __init__
-    #     tm._resolution = None
-    #     tm._offset = None
-    #     tm._alignment = None
-    #     tm._periodicity = None
-
     def test_resolution_str_no_offset_defaults_periodicity_to_alignment(self, tm: TimeManager) -> None:
         tm._resolution = "PT15M"
         tm._configure_period_properties()
@@ -430,3 +424,32 @@ class TestConfigurePeriodProperties:
         tm._periodicity = "NOT_A_PERIOD"
         with pytest.raises(PeriodParsingError):
             tm._configure_period_properties()
+
+class TestTimeManagerResolutionContiguity:
+    def test_contiguous_time_series(self)-> None:
+        """Test validation passes when the time series is continuously the same resolution."""
+        pass
+
+    def test_multiple_time_resolutions(self) -> None:
+        # PT30M with PT1M section within it
+
+        df = pl.DataFrame(
+            {
+                "timestamp": [
+                    datetime(2020,1,1,0,0,0),
+                    datetime(2020,1,1,0,30,0),
+                    datetime(2020,1,1,1,0,0),
+                    datetime(2020,1,1,1,30,0),
+                    datetime(2020,1,1,1,31,0),
+                    datetime(2020,1,1,1,32,0),
+                    datetime(2020,1,1,1,33,0),
+                    datetime(2020,1,1,2,0,0),
+                    datetime(2020,1,1,2,30,0),
+                ]
+            }
+        )
+        period = Period.of_minutes(30)
+        time_manager = TimeManager(time_name="timestamp", resolution=period, offset=None, periodicity=period )
+        time_manager._check_time_resolution_contiguity(df)
+
+    

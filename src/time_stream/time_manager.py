@@ -240,3 +240,12 @@ class TimeManager:
         # Polars aggregate methods can change the order due to how it optimises the functionality, so sort times after
         new_df = new_df.sort(self._time_name)
         return new_df
+
+    def _check_time_resolution_contiguity(self, df: pl.DataFrame) -> None:
+        # Calculate the timedelta between timestamps.
+        annotated_df = df.with_columns(pl.col(self.time_name).diff(n=1).alias("timedelta"))
+        timedelta_differences = annotated_df.with_columns(pl.col("timedelta").diff(n=1).alias("timedelta_diff"))
+        
+
+
+ 
