@@ -1,12 +1,9 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime
 from typing import TYPE_CHECKING
 
 import polars as pl
-
-from time_stream.utils import get_date_filter
 
 if TYPE_CHECKING:
     from time_stream.base import TimeFrame
@@ -22,7 +19,6 @@ RESOLUTION_MAPPING = {
 
 def calculate_min_max_envelope(
     tf: TimeFrame,
-    observation_interval: datetime | tuple[datetime, datetime | None] | None = None,
 ) -> TimeFrame:
     """Calculate the min-max envelope for a TimeFrame.
 
@@ -35,8 +31,6 @@ def calculate_min_max_envelope(
 
     Args:
         tf: TimeFrame object to calculate the min-max envelope for.
-        observation_interval: A tuple containing the upper and lower bounds (inclusive) of the date range to calculate
-            the min-max bounds for.
 
     Returns:
         A new polars DataFrame containing the original data alongside the calculated min-max envelope.
@@ -48,19 +42,10 @@ def calculate_min_max_envelope(
     if not date_columns:
         raise ValueError("The resolution of the TimeFrame is not supported.")
 
-    df = tf.df
-    # Apply observation interval if required
-    if observation_interval:
-        date_filter = get_date_filter(tf.time_name, observation_interval)
-        df = tf.df.filter(date_filter)
-
-        if df.is_empty():
-            raise ValueError("The observation interval is outside the bounds of the TimeFrame.")
-
     # Construct the expressions to split out each date component into it's own column. Note that the name of the date
     # column is expected to match the corresponding datetime function name used to extract out the relevant data.
     exprs = [eval(f"pl.col('{tf.time_name}').dt.{date_col}().alias('{date_col}')") for date_col in date_columns]
-    df = df.with_columns(exprs)
+    df = tf.df.with_columns(exprs)
 
     # Calculate the min-max values for each date by grouping by the date column combination and merging back to the
     # original dataframe so each date-time value has a corresponding min max
