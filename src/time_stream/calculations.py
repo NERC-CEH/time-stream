@@ -9,6 +9,7 @@ if TYPE_CHECKING:
     from time_stream.base import TimeFrame
 
 RESOLUTION_MAPPING = {
+    r"P\d+M": ["month"],  # Month
     r"P\d+D": ["day", "month"],  # Day
     r"PT\d+H": ["day", "month", "hour"],  # Hours
     r"PT\d+M": ["day", "month", "hour", "minute"],  # Minutes
@@ -22,10 +23,12 @@ def calculate_min_max_envelope(
 ) -> TimeFrame:
     """Calculate the min-max envelope for a TimeFrame.
 
-    For each unique date-time find the historical min and max values across the time series. For example,
-    for a daily time series, the min-max envelope would be calculated from every instance of 01-Jan.
+    For each unique date-time find the historical min and max values across the time series. For example, for a daily
+    time series that covers two years and contains all 365 days in each one, the max-min envelope for 01-Jan would be
+    calculated from both instances of 01-Jan, the max-min envelope for 02-Jan would be calculated from both instances
+    of 02-Jan etc
 
-    For sub-daily time series, the min-max envelope is calculated from ever instance of the day-time across the
+    For sub-daily time series, the min-max envelope is calculated from every instance of the day-time across the
     time series. For example, for hourly resolution, the min-max envelope would be calculated for all instances of
     01-Jan 00:00, 01-Jan 01:00 etc.
 
@@ -56,12 +59,28 @@ def calculate_min_max_envelope(
     merged_df = df.join(min_max_df, on=date_columns, how="left")
 
     # Remove the date columns from the final output
-    output_df = merged_df.select(set(merged_df.columns) - set(date_columns))
+    output_df = merged_df.drop(date_columns)
 
     return output_df
 
 
 def get_date_columns(tf: TimeFrame) -> list[str] | None:
+    """Identify the separate date-related columns to extract from the time column.
+
+    Using the resolution of the time frame, the various components of the date are split out into separate column names
+    This allows grouping by the date components in order to calculate various properties of the data across each
+    instance of that date-component-combination. For example, extracting every temperature value occurring on 1st Jan
+    over a 10 year time series and calculating the maximum temperature value.
+
+    Note that the date columns returned are expected to also match the corresponding datetime function name used to
+    extract the relevant data. For example (datetime.minute()).
+
+    Args:
+        tf: TimeFrame to extract the resolution information from.
+
+    Returns:
+        List of date-component columns.
+    """
     iso_duration = tf.resolution.iso_duration
     for iso_regex, date_columns in RESOLUTION_MAPPING.items():
         if re.fullmatch(iso_regex, iso_duration):
