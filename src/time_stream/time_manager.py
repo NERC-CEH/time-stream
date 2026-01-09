@@ -10,6 +10,11 @@ This module defines and enforces integrity rules for the temporal aspects of a T
 - Prevents mutation of time values between DataFrame operations.
 """
 
+import itertools
+import logging
+import re
+from datetime import timedelta
+
 import polars as pl
 
 from time_stream import Period
@@ -30,6 +35,13 @@ from time_stream.utils import (
     epoch_check,
     handle_duplicates,
 )
+
+logger = logging.getLogger(__name__)
+
+TIMEDELTA_MAPPING = {
+    r"P\d+M": [timedelta(28), timedelta(29), timedelta(30), timedelta(31)],
+    r"P\d+Y": [timedelta(365), timedelta(366)],
+}
 
 
 class TimeManager:
@@ -242,10 +254,61 @@ class TimeManager:
         return new_df
 
     def _check_time_resolution_contiguity(self, df: pl.DataFrame) -> None:
+        """Check the time resolution contiguity
+
+        Identify rows within the time series which have a different resolution to that expected (e.g. rows of PT1M
+        data within a PT30M dataset).
+
+        It also searches for gaps within the data, and will log these as warnings. For example where the dataset
+        stops, and is restarted again later in the year, but with no change in resolution.
+
+        Args:
+            df: DataFrame containing the timeseries to check the resolution contiguity for.
+
+        Raises:
+            ResolutionError: Rows have been found with an unexpected resolution.
+
+        """
         # Calculate the timedelta between timestamps.
-        annotated_df = df.with_columns(pl.col(self.time_name).diff(n=1).alias("timedelta"))
-        timedelta_differences = annotated_df.with_columns(pl.col("timedelta").diff(n=1).alias("timedelta_diff"))
-        
+        timedelta_df = df.with_columns(pl.col(self.time_name).diff(n=1).alias("timedelta"))
 
+        # Identify the timedelta values which are expected for valid data
+        expected_timedelta = [self.resolution.timedelta]
+        if expected_timedelta[0] is None:
+            # Find out if the resolution is months or years
+            for iso_regex, timedeltas in TIMEDELTA_MAPPING.items():
+                if re.fullmatch(iso_regex, self.resolution.iso_duration):
+                    expected_timedelta = timedeltas
+                    break
 
- 
+        # Identify any gaps in the timeseries and record the corresponding timestamps
+        mask_list = timedelta_df.with_columns(~pl.col("timedelta").is_in(expected_timedelta))["timedelta"].to_list()[1:]
+        # The mask flags any rows with an unexpected timedelta as True
+        index = 0
+        gap_indices = []
+        for invalid_timedelta_flag, group in itertools.groupby(mask_list):
+            group_size = len([item for item in group])
+            index += group_size
+            if invalid_timedelta_flag & (group_size == 1):
+                gap_indices.append(index)
+
+        gaps_df = timedelta_df.with_row_index().filter(pl.col("index").is_in(gap_indices))
+        gap_timestamps = gaps_df[self.time_name].to_list()
+
+        # Identify rows which have an unexpected timedelta value that haven't been recorded as a gap
+        filtered_df = timedelta_df.filter(
+            ~pl.col("timedelta").is_in(expected_timedelta) & ~pl.col(self.time_name).is_in(gap_timestamps)
+        )
+
+        if not filtered_df.is_empty():
+            invalid_timestamps = [item.strftime("%Y-%m-%d %H:%M:%S") for item in filtered_df[self.time_name].to_list()]
+            raise ResolutionError(
+                f"The following timestamps do not conform to the expected resolution of "
+                f"{self.resolution.iso_duration}: `{invalid_timestamps}`"
+            )
+
+        # Log any gaps found within the valid timeseries. If there were invalid resolutions present, these the gap
+        # timestamps would have been raised as part of the main error.
+        if gap_timestamps:
+            formatted_gap_timestamps = [item.strftime("%Y-%m-%d %H:%M:%S") for item in gap_timestamps]
+            logger.warning(f"Gaps were found in the timeseries at the following points: `{formatted_gap_timestamps}")
