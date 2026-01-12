@@ -65,6 +65,7 @@ Operations
     ~TimeFrame.aggregate
     ~TimeFrame.infill
     ~TimeFrame.qc_check
+    ~TimeFrame.calculate_min_max_envelope
 
 Flagging
 --------

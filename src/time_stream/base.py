@@ -38,6 +38,7 @@ import polars as pl
 
 from time_stream.aggregation import AggregationFunction
 from time_stream.bitwise import BitwiseFlag
+from time_stream.calculations import calculate_min_max_envelope
 from time_stream.enums import DuplicateOption, TimeAnchor
 from time_stream.exceptions import ColumnNotFoundError, MetadataError
 from time_stream.flag_manager import FlagColumn, FlagManager, FlagSystemType
@@ -715,6 +716,26 @@ class TimeFrame:
 
         tf._flag_manager = new_flag_manager
         tf._column_metadata.sync()
+        return tf
+
+    def calculate_min_max_envelope(self) -> Self:
+        """Calculate the min-max envelope for the TimeFrame.
+
+        For each unique date-time find the historical min and max values across the time series. For example,
+        for a daily time series, the min-max envelope would be calculated from every instance of 01-Jan.
+
+        For sub-daily time series, the min-max envelope is calculated from ever instance of the day-time across the
+        time series. For example, for hourly resolution, the min-max envelope would be calculated for all instances of
+        01-Jan 00:00, 01-Jan 01:00 etc.
+
+
+        Returns:
+            Self: A new copy of the TimeFrame instance with an updated df attribute.
+
+        """
+        df_with_min_max = calculate_min_max_envelope(self)
+        tf = self.with_df(df_with_min_max)
+
         return tf
 
     def __getitem__(self, key: str | Sequence[str]) -> Self:

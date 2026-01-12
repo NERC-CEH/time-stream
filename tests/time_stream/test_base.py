@@ -747,3 +747,47 @@ class TestAggregate:
         )
 
         assert_frame_equal(aggregated_tf.df, expected_df, check_dtypes=False)
+
+
+class TestCalculateMinMaxEnvelope:
+    def test_calculate_min_max_envelope(self) -> None:
+        period = Period.of_days(1)
+        df = pl.DataFrame(
+            {
+                "timestamp": [
+                    datetime(2020, 1, 1),
+                    datetime(2020, 1, 2),
+                    datetime(2020, 1, 3),
+                    datetime(2021, 1, 1),
+                    datetime(2021, 1, 2),
+                    datetime(2021, 1, 3),
+                    datetime(2021, 1, 4),
+                    datetime(2022, 1, 5),
+                ],
+                "value": [1, 2, 3, 4, 5, 6, 7, 8],
+            }
+        )
+
+        expected_df = pl.DataFrame(
+            {
+                "timestamp": [
+                    datetime(2020, 1, 1),
+                    datetime(2020, 1, 2),
+                    datetime(2020, 1, 3),
+                    datetime(2021, 1, 1),
+                    datetime(2021, 1, 2),
+                    datetime(2021, 1, 3),
+                    datetime(2021, 1, 4),
+                    datetime(2022, 1, 5),
+                ],
+                "value": [1, 2, 3, 4, 5, 6, 7, 8],
+                "min": [1, 2, 3, 1, 2, 3, 7, 8],
+                "max": [4, 5, 6, 4, 5, 6, 7, 8],
+            }
+        )
+
+        tf = TimeFrame(df=df, time_name="timestamp", resolution=period, periodicity=period)
+
+        actual_tf = tf.calculate_min_max_envelope()
+
+        assert_frame_equal(expected_df, actual_tf.df, check_column_order=False)
