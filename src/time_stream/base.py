@@ -718,7 +718,7 @@ class TimeFrame:
         tf._column_metadata.sync()
         return tf
 
-    def calculate_min_max_envelope(self) -> Self:
+    def calculate_min_max_envelope(self, columns: list[str] = None) -> Self:
         """Calculate the min-max envelope for the TimeFrame.
 
         For each unique date-time find the historical min and max values across the time series. For example,
@@ -728,12 +728,14 @@ class TimeFrame:
         time series. For example, for hourly resolution, the min-max envelope would be calculated for all instances of
         01-Jan 00:00, 01-Jan 01:00 etc.
 
+        Args:
+            columns: The columns to calculate the min-max envelope on. If None, then all data columns will be used.
 
         Returns:
             Self: A new copy of the TimeFrame instance with an updated df attribute.
 
         """
-        df_with_min_max = calculate_min_max_envelope(self)
+        df_with_min_max = calculate_min_max_envelope(tf=self, columns=columns)
         tf = self.with_df(df_with_min_max)
 
         return tf
