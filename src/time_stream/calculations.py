@@ -40,7 +40,7 @@ def calculate_min_max_envelope(tf: TimeFrame, columns: list[str] = None) -> pl.D
     """
     if columns is None:
         # Use a list comprehension to keep the same column ordering
-        columns = [col for col in tf.df.data_columns if col != tf.time_name]
+        columns = tf.data_columns
 
     # Identify the resolution of the TimeFrame, and fetch the list of date related columns to group on (e.g. day, month)
     date_columns = get_date_columns(tf)
