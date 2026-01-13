@@ -18,9 +18,7 @@ RESOLUTION_MAPPING = {
 }
 
 
-def calculate_min_max_envelope(
-    tf: TimeFrame,
-) -> TimeFrame:
+def calculate_min_max_envelope(tf: TimeFrame, columns: list[str] = None) -> pl.DataFrame:
     """Calculate the min-max envelope for a TimeFrame.
 
     For each unique date-time find the historical min and max values across the time series. For example, for a daily
@@ -34,11 +32,16 @@ def calculate_min_max_envelope(
 
     Args:
         tf: TimeFrame object to calculate the min-max envelope for.
+        columns: The columns to calculate the min-max envelope on.
 
     Returns:
         A new polars DataFrame containing the original data alongside the calculated min-max envelope.
 
     """
+    if columns is None:
+        # Use a list comprehension to keep the same column ordering
+        columns = [col for col in tf.df.columns if col != tf.time_name]
+
     # Identify the resolution of the TimeFrame, and fetch the list of date related columns to group on (e.g. day, month)
     date_columns = get_date_columns(tf)
 
@@ -52,9 +55,10 @@ def calculate_min_max_envelope(
 
     # Calculate the min-max values for each date by grouping by the date column combination and merging back to the
     # original dataframe so each date-time value has a corresponding min max
-    min_max_df = df.group_by(date_columns, maintain_order=True).agg(
-        [pl.max("value").alias("max"), pl.min("value").alias("min")]
-    )
+    aggregation_exprs = [pl.max(col).alias(f"{col}_max") for col in columns] + [
+        pl.min(col).alias(f"{col}_min") for col in columns
+    ]
+    min_max_df = df.group_by(date_columns, maintain_order=True).agg(aggregation_exprs)
 
     merged_df = df.join(min_max_df, on=date_columns, how="left")
 

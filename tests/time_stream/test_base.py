@@ -781,8 +781,8 @@ class TestCalculateMinMaxEnvelope:
                     datetime(2022, 1, 5),
                 ],
                 "value": [1, 2, 3, 4, 5, 6, 7, 8],
-                "min": [1, 2, 3, 1, 2, 3, 7, 8],
-                "max": [4, 5, 6, 4, 5, 6, 7, 8],
+                "value_min": [1, 2, 3, 1, 2, 3, 7, 8],
+                "value_max": [4, 5, 6, 4, 5, 6, 7, 8],
             }
         )
 
