@@ -11,7 +11,6 @@ This module defines and enforces integrity rules for the temporal aspects of a T
 """
 
 import logging
-from datetime import timedelta
 
 import polars as pl
 
@@ -42,6 +41,7 @@ class TimeManager:
         offset: str | None = None,
         periodicity: str | Period | None = None,
         on_duplicates: str | DuplicateOption = DuplicateOption.ERROR,
+        on_misaligned_rows: str | ValidationErrorOptions = ValidationErrorOptions.ERROR,
         time_anchor: str | TimeAnchor = TimeAnchor.START,
     ):
         """Initialise the time manager.
@@ -62,6 +62,7 @@ class TimeManager:
         self._alignment = None
         self._periodicity = periodicity
         self._on_duplicates = DuplicateOption(on_duplicates)
+        self._on_misaligned_rows = ValidationErrorOptions(on_misaligned_rows)
         self._time_anchor = TimeAnchor(time_anchor)
 
         self._configure_period_properties()
@@ -147,7 +148,6 @@ class TimeManager:
         dt = df[self.time_name]
         self._validate_alignment(dt)
         self._validate_periodicity(dt)
-        self._check_time_resolution_contiguity(df)
 
     def _validate_alignment(self, dt: pl.Series) -> None:
         """Validate that the time values of the time series align to the steps along the timeline
@@ -242,6 +242,16 @@ class TimeManager:
         new_df = new_df.sort(self._time_name)
         return new_df
 
+    def _handle_misaligned_rows(self, df: pl.DataFrame) -> pl.DataFrame:
+        if self._on_misaligned_rows == ValidationErrorOptions.ERROR:
+            self._validate_alignment(df[self.time_name])
+        elif self._on_misaligned_rows == ValidationErrorOptions.RESOLVE:
+            # No need to run _validate_alignment as the row removal logic will cover the same checks and any
+            # invalid rows will be logged before being removed
+            df = self._remove_rows_with_invalid_resolution(df)
+
+        return df
+
     def _check_time_resolution_contiguity(
         self, df: pl.DataFrame, error_method: ValidationErrorOptions = ValidationErrorOptions.ERROR
     ) -> pl.DataFrame | None:
@@ -296,3 +306,43 @@ class TimeManager:
             )
             valid_data = df.filter(~mask)
             return valid_data
+
+    def _remove_rows_with_invalid_resolution(self, df: pl.DataFrame) -> pl.DataFrame | None:
+        """Check the time resolution contiguity
+
+        Identify rows within the time series which have a different resolution to that expected (e.g. rows of PT1M
+        data within a PT30M dataset).
+
+        It also searches for gaps within the data, and will log these as warnings. For example where the dataset
+        stops, and is restarted again later in the year, but with no change in resolution.
+
+        Args:
+            df: DataFrame containing the timeseries to check the resolution contiguity for.
+            error_method: Strategy for handling duplicates:
+                - ERROR: Raise an error.
+                - WARN: Log a warining.
+                - RESOLVE: Remove the erroneous rows.
+
+        Raises:
+            ResolutionError: Rows have been found with an unexpected resolution and the error_method is set to `ERROR`.
+
+        Returns:
+            DataFrame with invalid rows removed if the error_method is RESOLVE
+
+        """
+        mask = df[self.time_name] != truncate_to_period(
+            date_times=df[self.time_name], period=self.alignment, time_anchor=self.time_anchor
+        )
+        invalid_timestamps = df[self.time_name].filter(mask)
+
+        # If no invalid timestamps have been found, exit early as there is nothing else to do.
+        if invalid_timestamps.is_empty():
+            return df
+
+        formatted_timestamps = [item.strftime("%Y-%m-%d %H:%M:%S") for item in invalid_timestamps.to_list()]
+        logger.info(
+            f"Removing the following timestamps which were found to not conform to the expected resolution of "
+            f"{self.resolution.iso_duration}: `{formatted_timestamps}`"
+        )
+        valid_data = df.filter(~mask)
+        return valid_data

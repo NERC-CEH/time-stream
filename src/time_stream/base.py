@@ -39,7 +39,7 @@ import polars as pl
 from time_stream.aggregation import AggregationFunction
 from time_stream.bitwise import BitwiseFlag
 from time_stream.calculations import calculate_min_max_envelope
-from time_stream.enums import DuplicateOption, TimeAnchor
+from time_stream.enums import DuplicateOption, TimeAnchor, ValidationErrorOptions
 from time_stream.exceptions import ColumnNotFoundError, MetadataError
 from time_stream.flag_manager import FlagColumn, FlagManager, FlagSystemType
 from time_stream.formatting import timeframe_repr
@@ -153,6 +153,7 @@ class TimeFrame:
         periodicity: Period | str | None = None,
         time_anchor: TimeAnchor | str = TimeAnchor.START,
         on_duplicates: DuplicateOption | str = DuplicateOption.ERROR,
+        on_misaligned_rows: ValidationErrorOptions | str = ValidationErrorOptions.ERROR,
     ) -> None:
         self._time_manager = TimeManager(
             time_name=time_name,
@@ -160,6 +161,7 @@ class TimeFrame:
             offset=offset,
             periodicity=periodicity,
             on_duplicates=on_duplicates,
+            on_misaligned_rows=on_misaligned_rows,
             time_anchor=time_anchor,
         )
 
