@@ -1,3 +1,4 @@
+import logging
 import re
 from datetime import datetime
 
@@ -6,7 +7,7 @@ import pytest
 from polars.testing import assert_frame_equal
 
 from time_stream import Period
-from time_stream.enums import DuplicateOption, TimeAnchor
+from time_stream.enums import DuplicateOption, TimeAnchor, ValidationErrorOptions
 from time_stream.exceptions import (
     ColumnNotFoundError,
     ColumnTypeError,
@@ -425,6 +426,83 @@ class TestConfigurePeriodProperties:
             tm._configure_period_properties()
 
 
+invalid_resolution_test_cases = (
+    pytest.param(
+        [
+            datetime(2020, 1, 1, 0, 0, 0),
+            datetime(2020, 1, 1, 0, 30, 0),
+            datetime(2020, 1, 1, 1, 0, 0),
+            datetime(2021, 1, 1, 0, 0, 0),  # Gap of 1 year
+            datetime(2021, 1, 1, 0, 1, 0),  # 1 min
+            datetime(2021, 1, 1, 0, 2, 0),  # 1 min
+            datetime(2021, 1, 1, 0, 3, 0),  # 1 min
+            datetime(2021, 1, 1, 0, 30, 0),
+            datetime(2021, 1, 1, 1, 0, 0),
+            datetime(2021, 1, 2, 0, 0, 0),  # Gap of 1 day
+            datetime(2021, 1, 2, 0, 30, 0),
+            datetime(2021, 1, 2, 1, 0, 0),
+        ],
+        Period.of_minutes(30),
+        ["2021-01-01 00:01:00", "2021-01-01 00:02:00", "2021-01-01 00:03:00"],
+        id="complex_with_gaps",
+    ),
+    pytest.param(
+        [
+            datetime(2020, 1, 1, 0, 0, 0),
+            datetime(2020, 1, 1, 0, 30, 0),
+            datetime(2020, 1, 1, 1, 0, 0),
+            datetime(2020, 1, 1, 1, 30, 0),
+            datetime(2020, 1, 1, 1, 31, 0),  # 1min
+            datetime(2020, 1, 1, 1, 32, 0),  # 1min
+            datetime(2020, 1, 1, 1, 33, 0),  # 1min
+            datetime(2020, 1, 1, 2, 0, 0),
+            datetime(2020, 1, 1, 2, 30, 0),
+        ],
+        Period.of_minutes(30),
+        ["2020-01-01 01:31:00", "2020-01-01 01:32:00", "2020-01-01 01:33:00"],
+        id="multiple_time_resolutions",
+    ),
+    pytest.param(
+        [
+            datetime(2020, 1, 1, 0, 0, 0),
+            datetime(2020, 1, 1, 0, 30, 0),
+            datetime(2020, 1, 1, 1, 0, 0),
+            datetime(2020, 1, 1, 1, 30, 0),
+            datetime(2020, 1, 1, 1, 31, 0),  # 1min
+            datetime(2020, 1, 1, 2, 0, 0),
+            datetime(2020, 1, 1, 2, 30, 0),
+        ],
+        Period.of_minutes(30),
+        ["2020-01-01 01:31:00"],
+        id="single_invalid_row",
+    ),
+    pytest.param(
+        [
+            datetime(2020, 1, 1),  # Daily
+            datetime(2020, 1, 2),  # Daily
+            datetime(2020, 1, 3),  # Daily
+            datetime(2020, 2, 1),  # Monthly
+            datetime(2020, 3, 1),  # Monthly
+        ],
+        Period.of_days(1),
+        ["2020-01-01 01:31:00"],
+        id="P1M present in P1D",
+    ),
+    pytest.param(
+        [
+            datetime(2020, 1, 1),  # Daily
+            datetime(2020, 1, 2),  # Daily
+            datetime(2020, 1, 3),  # Daily
+            datetime(2020, 2, 1),  # Monthly
+            datetime(2020, 3, 1),  # Monthly
+        ],
+        Period.of_months(1),
+        ["2020-01-01 01:31:00"],
+        id="P1D present in P1M",
+    ),
+)
+
+
 class TestTimeManagerResolutionContiguity:
     def make_df_from_period(self, period: Period, length: int) -> pl.DataFrame:
         df = pl.DataFrame(
@@ -505,85 +583,96 @@ class TestTimeManagerResolutionContiguity:
         except ResolutionError as err:
             pytest.fail(f"No ResolutionError was expected to be raised. Error:{str(err)}")
 
-    def test_invalid_with_complex_gaps(self) -> None:
-        """An error should be raised for the PT1M rows within PT30M data but not for the second gap."""
-        df = pl.DataFrame(
-            {
-                "timestamp": [
-                    datetime(2020, 1, 1, 0, 0, 0),
-                    datetime(2020, 1, 1, 0, 30, 0),
-                    datetime(2020, 1, 1, 1, 0, 0),
-                    datetime(2021, 1, 1, 0, 0, 0),  # Gap of 1 year
-                    datetime(2021, 1, 1, 0, 1, 0),  # 1 min
-                    datetime(2021, 1, 1, 0, 2, 0),  # 1 min
-                    datetime(2021, 1, 1, 0, 3, 0),  # 1 min
-                    datetime(2021, 1, 1, 0, 30, 0),
-                    datetime(2021, 1, 1, 1, 0, 0),
-                    datetime(2021, 1, 2, 0, 0, 0),  # Gap of 1 day
-                    datetime(2021, 1, 2, 0, 30, 0),
-                    datetime(2021, 1, 2, 1, 0, 0),
-                ]
-            }
-        )
-        period = Period.of_minutes(30)
+    @pytest.mark.parametrize("input_timestamps, period, error_dates", invalid_resolution_test_cases)
+    def test_invalid_with_error(self, input_timestamps: list[datetime], period: Period, error_dates: list[str]) -> None:
+        """An error should be raised for the invalid data."""
+        df = pl.DataFrame({"timestamp": input_timestamps})
         time_manager = TimeManager(time_name="timestamp", resolution=period, offset=None, periodicity=period)
-        expected_error = (
-            "The following timestamps do not conform to the expected resolution of PT30M: `['2021-01-01 00:00:00', "
-            "'2021-01-01 00:01:00', '2021-01-01 00:02:00', '2021-01-01 00:03:00', '2021-01-01 00:30:00']`"
-        )
+
+        expected_error = f"The following timestamps do not conform to the expected resolution of PT30M: `{error_dates}`"
         with pytest.raises(ResolutionError, match=re.escape(expected_error)):
             time_manager._check_time_resolution_contiguity(df)
 
-    def test_multiple_time_resolutions(self) -> None:
-        """An error should be raised for each of the PT1M rows within PT30M data."""
+    @pytest.mark.parametrize("input_timestamps, period, error_dates", invalid_resolution_test_cases)
+    def test_invalid_with_warn(
+        self, input_timestamps: list[datetime], period: Period, error_dates: list[str], caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """A warning should be logged for the invalid data."""
+        df = pl.DataFrame({"timestamp": input_timestamps})
+        time_manager = TimeManager(time_name="timestamp", resolution=period, offset=None, periodicity=period)
 
+        expected_log_message = (
+            f"The following timestamps do not conform to the expected resolution of PT30M: `{error_dates}`"
+        )
+        with caplog.at_level(logging.INFO):
+            time_manager._check_time_resolution_contiguity(df, error_method=ValidationErrorOptions.WARN)
+
+            assert caplog.messages[0] == expected_log_message
+
+    @pytest.mark.parametrize("input_timestamps, period, error_dates", invalid_resolution_test_cases)
+    def test_invalid_with_resolve(
+        self, input_timestamps: list[datetime], period: Period, error_dates: list[str], caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """The invalid data should be removed with a log message to indicate which rows are considered invalid."""
+        df = pl.DataFrame({"timestamp": input_timestamps})
+        time_manager = TimeManager(time_name="timestamp", resolution=period, offset=None, periodicity=period)
+
+        expected_log_message = (
+            f"Removing the following timestamps which were found to not conform to the expected resolution of "
+            f"PT30M: `{error_dates}`"
+        )
+
+        timestamps_to_remove = [datetime.strptime(item, "%Y-%m-%d %H:%M:%S") for item in error_dates]
+        expected_df = df.filter(~pl.col("timestamp").is_in(timestamps_to_remove))
+        with caplog.at_level(logging.INFO):
+            actual_df = time_manager._check_time_resolution_contiguity(df, error_method=ValidationErrorOptions.RESOLVE)
+
+            assert caplog.messages[0] == expected_log_message
+
+        assert_frame_equal(expected_df, actual_df)
+
+    def test_no_initial_resolution_valid(self) -> None:
+        """Check a TimeManager instance with no initial resolution is handled correctly.
+
+        If no resolution period is provided then the TimeManager will be an initialised with a resolution of 1
+        microsecond causing the validation to pass by default.
+
+        """
+        df = pl.DataFrame(
+            {
+                "timestamp": [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)],
+                "value": [1, 2, 3],
+            }
+        )
+
+        time_manager = TimeManager(time_name="timestamp", resolution=None, offset=None, periodicity=None)
+        try:
+            time_manager._check_time_resolution_contiguity(df)
+        except ResolutionError as err:
+            pytest.fail(f"No ResolutionError was expected to be raised. Error:{str(err)}")
+
+    def test_no_initial_resolution_invalid(self) -> None:
+        """Check a TimeManager instance with no initial resolution is handled correctly.
+
+        If no resolution period is provided then the TimeManager will be an initialised with a resolution of 1
+        microsecond causing the validation to pass by default even if invalid rows are present.
+
+        """
         df = pl.DataFrame(
             {
                 "timestamp": [
-                    datetime(2020, 1, 1, 0, 0, 0),
-                    datetime(2020, 1, 1, 0, 30, 0),
-                    datetime(2020, 1, 1, 1, 0, 0),
-                    datetime(2020, 1, 1, 1, 30, 0),
-                    datetime(2020, 1, 1, 1, 31, 0),  # 1min
-                    datetime(2020, 1, 1, 1, 32, 0),  # 1min
-                    datetime(2020, 1, 1, 1, 33, 0),  # 1min
-                    datetime(2020, 1, 1, 2, 0, 0),
-                    datetime(2020, 1, 1, 2, 30, 0),
-                ]
+                    datetime(2020, 1, 1),  # Daily
+                    datetime(2020, 1, 2),  # Daily
+                    datetime(2020, 1, 3),  # Daily
+                    datetime(2020, 2, 1),  # Monthly
+                    datetime(2020, 3, 1),  # Monthly
+                ],
+                "value": [1, 2, 3, 4, 5],
             }
         )
-        period = Period.of_minutes(30)
-        time_manager = TimeManager(time_name="timestamp", resolution=period, offset=None, periodicity=period)
 
-        expected_error = (
-            "The following timestamps do not conform to the expected resolution of PT30M: `['2020-01-01 01:31:00', "
-            "'2020-01-01 01:32:00', '2020-01-01 01:33:00', '2020-01-01 02:00:00']`"
-        )
-        with pytest.raises(ResolutionError, match=re.escape(expected_error)):
+        time_manager = TimeManager(time_name="timestamp", resolution=None, offset=None, periodicity=None)
+        try:
             time_manager._check_time_resolution_contiguity(df)
-
-    def test_invalid_single_row(self) -> None:
-        """An error should be raised for the single PT1M row within PT30M data."""
-
-        df = pl.DataFrame(
-            {
-                "timestamp": [
-                    datetime(2020, 1, 1, 0, 0, 0),
-                    datetime(2020, 1, 1, 0, 30, 0),
-                    datetime(2020, 1, 1, 1, 0, 0),
-                    datetime(2020, 1, 1, 1, 30, 0),
-                    datetime(2020, 1, 1, 1, 31, 0),  # 1min
-                    datetime(2020, 1, 1, 2, 0, 0),
-                    datetime(2020, 1, 1, 2, 30, 0),
-                ]
-            }
-        )
-        period = Period.of_minutes(30)
-        time_manager = TimeManager(time_name="timestamp", resolution=period, offset=None, periodicity=period)
-
-        expected_error = (
-            "The following timestamps do not conform to the expected resolution of PT30M: `['2020-01-01 01:31:00', "
-            "'2020-01-01 02:00:00']`"
-        )
-        with pytest.raises(ResolutionError, match=re.escape(expected_error)):
-            time_manager._check_time_resolution_contiguity(df)
+        except ResolutionError as err:
+            pytest.fail(f"No ResolutionError was expected to be raised. Error:{str(err)}")

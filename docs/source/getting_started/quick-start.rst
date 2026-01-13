@@ -229,6 +229,13 @@ approach that preserves the first non-null value for each column.
    import examples_timeseries_basics
    examples_timeseries_basics.duplicate_row_example_merge()
 
+
+Checks for resolution contiguity
+================================
+
+
+
+
 With Metadata
 =============
 

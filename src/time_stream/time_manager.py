@@ -10,15 +10,13 @@ This module defines and enforces integrity rules for the temporal aspects of a T
 - Prevents mutation of time values between DataFrame operations.
 """
 
-import itertools
 import logging
-import re
 from datetime import timedelta
 
 import polars as pl
 
 from time_stream import Period
-from time_stream.enums import DuplicateOption, TimeAnchor
+from time_stream.enums import DuplicateOption, TimeAnchor, ValidationErrorOptions
 from time_stream.exceptions import (
     ColumnNotFoundError,
     ColumnTypeError,
@@ -29,19 +27,9 @@ from time_stream.exceptions import (
     ResolutionError,
     TimeMutatedError,
 )
-from time_stream.utils import (
-    check_alignment,
-    check_periodicity,
-    epoch_check,
-    handle_duplicates,
-)
+from time_stream.utils import check_alignment, check_periodicity, epoch_check, handle_duplicates, truncate_to_period
 
 logger = logging.getLogger(__name__)
-
-TIMEDELTA_MAPPING = {
-    r"P\d+M": [timedelta(28), timedelta(29), timedelta(30), timedelta(31)],
-    r"P\d+Y": [timedelta(365), timedelta(366)],
-}
 
 
 class TimeManager:
@@ -159,6 +147,7 @@ class TimeManager:
         dt = df[self.time_name]
         self._validate_alignment(dt)
         self._validate_periodicity(dt)
+        self._check_time_resolution_contiguity(df)
 
     def _validate_alignment(self, dt: pl.Series) -> None:
         """Validate that the time values of the time series align to the steps along the timeline
@@ -253,7 +242,9 @@ class TimeManager:
         new_df = new_df.sort(self._time_name)
         return new_df
 
-    def _check_time_resolution_contiguity(self, df: pl.DataFrame) -> None:
+    def _check_time_resolution_contiguity(
+        self, df: pl.DataFrame, error_method: ValidationErrorOptions = ValidationErrorOptions.ERROR
+    ) -> pl.DataFrame | None:
         """Check the time resolution contiguity
 
         Identify rows within the time series which have a different resolution to that expected (e.g. rows of PT1M
@@ -264,51 +255,44 @@ class TimeManager:
 
         Args:
             df: DataFrame containing the timeseries to check the resolution contiguity for.
+            error_method: Strategy for handling duplicates:
+                - ERROR: Raise an error.
+                - WARN: Log a warining.
+                - RESOLVE: Remove the erroneous rows.
 
         Raises:
-            ResolutionError: Rows have been found with an unexpected resolution.
+            ResolutionError: Rows have been found with an unexpected resolution and the error_method is set to `ERROR`.
+
+        Returns:
+            DataFrame with invalid rows removed if the error_method is RESOLVE
 
         """
-        # Calculate the timedelta between timestamps.
-        timedelta_df = df.with_columns(pl.col(self.time_name).diff(n=1).alias("timedelta"))
+        mask = df[self.time_name] != truncate_to_period(
+            date_times=df[self.time_name], period=self.alignment, time_anchor=self.time_anchor
+        )
+        invalid_timestamps = df[self.time_name].filter(mask)
 
-        # Identify the timedelta values which are expected for valid data
-        expected_timedelta = [self.resolution.timedelta]
-        if expected_timedelta[0] is None:
-            # Find out if the resolution is months or years
-            for iso_regex, timedeltas in TIMEDELTA_MAPPING.items():
-                if re.fullmatch(iso_regex, self.resolution.iso_duration):
-                    expected_timedelta = timedeltas
-                    break
+        # If no invalid timestamps have been found, exit early as there is nothing else to do.
+        if invalid_timestamps.is_empty():
+            return
 
-        # Identify any gaps in the timeseries and record the corresponding timestamps
-        mask_list = timedelta_df.with_columns(~pl.col("timedelta").is_in(expected_timedelta))["timedelta"].to_list()[1:]
-        # The mask flags any rows with an unexpected timedelta as True
-        index = 0
-        gap_indices = []
-        for invalid_timedelta_flag, group in itertools.groupby(mask_list):
-            group_size = len([item for item in group])
-            index += group_size
-            if invalid_timedelta_flag & (group_size == 1):
-                gap_indices.append(index)
-
-        gaps_df = timedelta_df.with_row_index().filter(pl.col("index").is_in(gap_indices))
-        gap_timestamps = gaps_df[self.time_name].to_list()
-
-        # Identify rows which have an unexpected timedelta value that haven't been recorded as a gap
-        filtered_df = timedelta_df.filter(
-            ~pl.col("timedelta").is_in(expected_timedelta) & ~pl.col(self.time_name).is_in(gap_timestamps)
+        formatted_timestamps = [item.strftime("%Y-%m-%d %H:%M:%S") for item in invalid_timestamps.to_list()]
+        error_message = (
+            f"The following timestamps do not conform to the expected resolution of "
+            f"{self.resolution.iso_duration}: `{formatted_timestamps}`"
         )
 
-        if not filtered_df.is_empty():
-            invalid_timestamps = [item.strftime("%Y-%m-%d %H:%M:%S") for item in filtered_df[self.time_name].to_list()]
-            raise ResolutionError(
-                f"The following timestamps do not conform to the expected resolution of "
-                f"{self.resolution.iso_duration}: `{invalid_timestamps}`"
-            )
+        if error_method == ValidationErrorOptions.ERROR:
+            raise ResolutionError(error_message)
 
-        # Log any gaps found within the valid timeseries. If there were invalid resolutions present, these the gap
-        # timestamps would have been raised as part of the main error.
-        if gap_timestamps:
-            formatted_gap_timestamps = [item.strftime("%Y-%m-%d %H:%M:%S") for item in gap_timestamps]
-            logger.warning(f"Gaps were found in the timeseries at the following points: `{formatted_gap_timestamps}")
+        if error_method == ValidationErrorOptions.WARN:
+            logger.warning(error_message)
+            return
+
+        if error_method == ValidationErrorOptions.RESOLVE:
+            logger.info(
+                f"Removing the following timestamps which were found to not conform to the expected resolution of "
+                f"{self.resolution.iso_duration}: `{formatted_timestamps}`"
+            )
+            valid_data = df.filter(~mask)
+            return valid_data
