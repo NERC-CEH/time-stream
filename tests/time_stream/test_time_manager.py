@@ -476,18 +476,7 @@ invalid_resolution_test_cases = (
         ["2020-01-01 01:31:00"],
         id="single_invalid_row",
     ),
-    pytest.param(
-        [
-            datetime(2020, 1, 1),  # Daily
-            datetime(2020, 1, 2),  # Daily
-            datetime(2020, 1, 3),  # Daily
-            datetime(2020, 2, 1),  # Monthly
-            datetime(2020, 3, 1),  # Monthly
-        ],
-        Period.of_days(1),
-        ["2020-01-01 01:31:00"],
-        id="P1M present in P1D",
-    ),
+    # 01/01/2020 won't be picked up as daily as once it's rounded it's the same as monthly data.
     pytest.param(
         [
             datetime(2020, 1, 1),  # Daily
@@ -497,13 +486,13 @@ invalid_resolution_test_cases = (
             datetime(2020, 3, 1),  # Monthly
         ],
         Period.of_months(1),
-        ["2020-01-01 01:31:00"],
+        ["2020-01-02 00:00:00", "2020-01-03 00:00:00"],
         id="P1D present in P1M",
     ),
 )
 
 
-class TestTimeManagerResolutionContiguity:
+class TestHandleMisalignedRows:
     def make_df_from_period(self, period: Period, length: int) -> pl.DataFrame:
         df = pl.DataFrame(
             {
@@ -525,18 +514,20 @@ class TestTimeManagerResolutionContiguity:
         ids=["P1Y", "P1M", "P1D", "PT1H", "PT30M"],
     )
     def test_contiguous_time_series_no_gaps(self, period: Period, length: int) -> None:
-        """Test validation passes when the time series is continuously the same resolution with no gaps."""
+        """The input dataframe should be returned unmodified."""
         df = self.make_df_from_period(period=period, length=length)
 
         time_manager = TimeManager(time_name="timestamp", resolution=period, offset=None, periodicity=period)
 
         try:
-            time_manager._check_time_resolution_contiguity(df)
+            actual_df = time_manager._handle_misaligned_rows(df)
         except ResolutionError as err:
             pytest.fail(f"No ResolutionError was expected to be raised. Error:{str(err)}")
 
+        assert_frame_equal(actual_df, df)
+
     def test_valid_PT30M_resolution_with_yearly_gaps(self) -> None:
-        """No errors should be raised for gaps within valid PT30M data."""
+        """No modifications should be made data with gaps within valid PT30M data."""
         df = pl.DataFrame(
             {
                 "timestamp": [
@@ -554,13 +545,16 @@ class TestTimeManagerResolutionContiguity:
         )
         period = Period.of_minutes(30)
         time_manager = TimeManager(time_name="timestamp", resolution=period, offset=None, periodicity=period)
+
         try:
-            time_manager._check_time_resolution_contiguity(df)
+            actual_df = time_manager._handle_misaligned_rows(df)
         except ResolutionError as err:
             pytest.fail(f"No ResolutionError was expected to be raised. Error:{str(err)}")
 
+        assert_frame_equal(actual_df, df)
+
     def test_valid_monthly_resolution_with_yearly_gaps(self) -> None:
-        """No error should be raised for gaps within valid monthly resolution data."""
+        """No modifications should be made data with gaps within valid monthly resolution data."""
         df = pl.DataFrame(
             {
                 "timestamp": [
@@ -577,37 +571,36 @@ class TestTimeManagerResolutionContiguity:
             }
         )
         period = Period.of_months(1)
-        time_manager = TimeManager(time_name="timestamp", resolution=period, offset=None, periodicity=period)
+        time_manager = TimeManager(
+            time_name="timestamp",
+            resolution=period,
+            offset=None,
+            periodicity=period,
+            on_misaligned_rows=ValidationErrorOptions.ERROR,
+        )
+
         try:
-            time_manager._check_time_resolution_contiguity(df)
+            actual_df = time_manager._handle_misaligned_rows(df)
         except ResolutionError as err:
             pytest.fail(f"No ResolutionError was expected to be raised. Error:{str(err)}")
+
+        assert_frame_equal(actual_df, df)
 
     @pytest.mark.parametrize("input_timestamps, period, error_dates", invalid_resolution_test_cases)
     def test_invalid_with_error(self, input_timestamps: list[datetime], period: Period, error_dates: list[str]) -> None:
         """An error should be raised for the invalid data."""
         df = pl.DataFrame({"timestamp": input_timestamps})
-        time_manager = TimeManager(time_name="timestamp", resolution=period, offset=None, periodicity=period)
-
-        expected_error = f"The following timestamps do not conform to the expected resolution of PT30M: `{error_dates}`"
-        with pytest.raises(ResolutionError, match=re.escape(expected_error)):
-            time_manager._check_time_resolution_contiguity(df)
-
-    @pytest.mark.parametrize("input_timestamps, period, error_dates", invalid_resolution_test_cases)
-    def test_invalid_with_warn(
-        self, input_timestamps: list[datetime], period: Period, error_dates: list[str], caplog: pytest.LogCaptureFixture
-    ) -> None:
-        """A warning should be logged for the invalid data."""
-        df = pl.DataFrame({"timestamp": input_timestamps})
-        time_manager = TimeManager(time_name="timestamp", resolution=period, offset=None, periodicity=period)
-
-        expected_log_message = (
-            f"The following timestamps do not conform to the expected resolution of PT30M: `{error_dates}`"
+        time_manager = TimeManager(
+            time_name="timestamp",
+            resolution=period,
+            offset=None,
+            periodicity=period,
+            on_misaligned_rows=ValidationErrorOptions.ERROR,
         )
-        with caplog.at_level(logging.INFO):
-            time_manager._check_time_resolution_contiguity(df, error_method=ValidationErrorOptions.WARN)
 
-            assert caplog.messages[0] == expected_log_message
+        expected_error = f"Time values are not aligned to resolution[+offset]: {period.iso_duration}"
+        with pytest.raises(ResolutionError, match=re.escape(expected_error)):
+            time_manager._handle_misaligned_rows(df)
 
     @pytest.mark.parametrize("input_timestamps, period, error_dates", invalid_resolution_test_cases)
     def test_invalid_with_resolve(
@@ -615,17 +608,25 @@ class TestTimeManagerResolutionContiguity:
     ) -> None:
         """The invalid data should be removed with a log message to indicate which rows are considered invalid."""
         df = pl.DataFrame({"timestamp": input_timestamps})
-        time_manager = TimeManager(time_name="timestamp", resolution=period, offset=None, periodicity=period)
+        time_manager = TimeManager(
+            time_name="timestamp",
+            resolution=period,
+            offset=None,
+            periodicity=period,
+            on_misaligned_rows=ValidationErrorOptions.RESOLVE,
+        )
 
         expected_log_message = (
             f"Removing the following timestamps which were found to not conform to the expected resolution of "
-            f"PT30M: `{error_dates}`"
+            f"{period.iso_duration}: `{error_dates}`"
         )
 
         timestamps_to_remove = [datetime.strptime(item, "%Y-%m-%d %H:%M:%S") for item in error_dates]
         expected_df = df.filter(~pl.col("timestamp").is_in(timestamps_to_remove))
         with caplog.at_level(logging.INFO):
-            actual_df = time_manager._check_time_resolution_contiguity(df, error_method=ValidationErrorOptions.RESOLVE)
+            actual_df = time_manager._handle_misaligned_rows(
+                df,
+            )
 
             assert caplog.messages[0] == expected_log_message
 
@@ -645,9 +646,15 @@ class TestTimeManagerResolutionContiguity:
             }
         )
 
-        time_manager = TimeManager(time_name="timestamp", resolution=None, offset=None, periodicity=None)
+        time_manager = TimeManager(
+            time_name="timestamp",
+            resolution=None,
+            offset=None,
+            periodicity=None,
+            on_misaligned_rows=ValidationErrorOptions.ERROR,
+        )
         try:
-            time_manager._check_time_resolution_contiguity(df)
+            time_manager._remove_misaligned_rows(df)
         except ResolutionError as err:
             pytest.fail(f"No ResolutionError was expected to be raised. Error:{str(err)}")
 
@@ -671,8 +678,14 @@ class TestTimeManagerResolutionContiguity:
             }
         )
 
-        time_manager = TimeManager(time_name="timestamp", resolution=None, offset=None, periodicity=None)
+        time_manager = TimeManager(
+            time_name="timestamp",
+            resolution=None,
+            offset=None,
+            periodicity=None,
+            on_misaligned_rows=ValidationErrorOptions.ERROR,
+        )
         try:
-            time_manager._check_time_resolution_contiguity(df)
+            time_manager._handle_misaligned_rows(df)
         except ResolutionError as err:
             pytest.fail(f"No ResolutionError was expected to be raised. Error:{str(err)}")

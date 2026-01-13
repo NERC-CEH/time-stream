@@ -230,10 +230,22 @@ approach that preserves the first non-null value for each column.
    examples_timeseries_basics.duplicate_row_example_merge()
 
 
-Checks for resolution contiguity
-================================
+Misaligned Row Detection
+------------------------
 
+As part of the resolution checks, misaligned rows (rows with a different resolution to that expected) are detected 
+automatically. By default an error is raised, however if ``on_misaligned_rows="resolve"`` is set on creation of the 
+TimeFrame, then any misaligned rows will be automatically removed. 
 
+The example below shows how an input timeseries with misaligned rows is modified when ``on_misaligned_rows="resolve"``
+is provided during creation of the TimeFrame. Three rows with 1 minute resolution located in the centre of the 
+timeseries have been identified and removed.
+
+.. jupyter-execute::
+   :hide-code:
+
+   import examples_timeseries_basics
+   examples_timeseries_basics.create_misaligned_row_example()
 
 
 With Metadata

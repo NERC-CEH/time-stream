@@ -243,91 +243,38 @@ class TimeManager:
         return new_df
 
     def _handle_misaligned_rows(self, df: pl.DataFrame) -> pl.DataFrame:
+        """Handle misaligned rows.
+
+        If the _on_misaligned_rows property is set to "ERROR" then alignment validation will run as normal. If it's set
+        to "RESOLVE" then any rows found to have an unexpected resolution are removed.
+
+        Args:
+            df: DataFrame to check for, and potentially remove, misaligned rows.
+
+        Returns:
+            DataFrame with any misaligned rows removed.
+
+        """
         if self._on_misaligned_rows == ValidationErrorOptions.ERROR:
             self._validate_alignment(df[self.time_name])
         elif self._on_misaligned_rows == ValidationErrorOptions.RESOLVE:
             # No need to run _validate_alignment as the row removal logic will cover the same checks and any
             # invalid rows will be logged before being removed
-            df = self._remove_rows_with_invalid_resolution(df)
+            df = self._remove_misaligned_rows(df)
 
         return df
 
-    def _check_time_resolution_contiguity(
-        self, df: pl.DataFrame, error_method: ValidationErrorOptions = ValidationErrorOptions.ERROR
-    ) -> pl.DataFrame | None:
-        """Check the time resolution contiguity
+    def _remove_misaligned_rows(self, df: pl.DataFrame) -> pl.DataFrame:
+        """Remove misaligned rows
 
         Identify rows within the time series which have a different resolution to that expected (e.g. rows of PT1M
-        data within a PT30M dataset).
-
-        It also searches for gaps within the data, and will log these as warnings. For example where the dataset
-        stops, and is restarted again later in the year, but with no change in resolution.
+        data within a PT30M dataset) and remove them.
 
         Args:
             df: DataFrame containing the timeseries to check the resolution contiguity for.
-            error_method: Strategy for handling duplicates:
-                - ERROR: Raise an error.
-                - WARN: Log a warining.
-                - RESOLVE: Remove the erroneous rows.
-
-        Raises:
-            ResolutionError: Rows have been found with an unexpected resolution and the error_method is set to `ERROR`.
 
         Returns:
-            DataFrame with invalid rows removed if the error_method is RESOLVE
-
-        """
-        mask = df[self.time_name] != truncate_to_period(
-            date_times=df[self.time_name], period=self.alignment, time_anchor=self.time_anchor
-        )
-        invalid_timestamps = df[self.time_name].filter(mask)
-
-        # If no invalid timestamps have been found, exit early as there is nothing else to do.
-        if invalid_timestamps.is_empty():
-            return
-
-        formatted_timestamps = [item.strftime("%Y-%m-%d %H:%M:%S") for item in invalid_timestamps.to_list()]
-        error_message = (
-            f"The following timestamps do not conform to the expected resolution of "
-            f"{self.resolution.iso_duration}: `{formatted_timestamps}`"
-        )
-
-        if error_method == ValidationErrorOptions.ERROR:
-            raise ResolutionError(error_message)
-
-        if error_method == ValidationErrorOptions.WARN:
-            logger.warning(error_message)
-            return
-
-        if error_method == ValidationErrorOptions.RESOLVE:
-            logger.info(
-                f"Removing the following timestamps which were found to not conform to the expected resolution of "
-                f"{self.resolution.iso_duration}: `{formatted_timestamps}`"
-            )
-            valid_data = df.filter(~mask)
-            return valid_data
-
-    def _remove_rows_with_invalid_resolution(self, df: pl.DataFrame) -> pl.DataFrame | None:
-        """Check the time resolution contiguity
-
-        Identify rows within the time series which have a different resolution to that expected (e.g. rows of PT1M
-        data within a PT30M dataset).
-
-        It also searches for gaps within the data, and will log these as warnings. For example where the dataset
-        stops, and is restarted again later in the year, but with no change in resolution.
-
-        Args:
-            df: DataFrame containing the timeseries to check the resolution contiguity for.
-            error_method: Strategy for handling duplicates:
-                - ERROR: Raise an error.
-                - WARN: Log a warining.
-                - RESOLVE: Remove the erroneous rows.
-
-        Raises:
-            ResolutionError: Rows have been found with an unexpected resolution and the error_method is set to `ERROR`.
-
-        Returns:
-            DataFrame with invalid rows removed if the error_method is RESOLVE
+            DataFrame with invalid rows removed.
 
         """
         mask = df[self.time_name] != truncate_to_period(

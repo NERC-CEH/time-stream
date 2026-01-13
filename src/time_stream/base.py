@@ -166,6 +166,8 @@ class TimeFrame:
         )
 
         self._df = self._time_manager._handle_time_duplicates(df)
+        self._df = self._time_manager._handle_misaligned_rows(self._df)
+
         self._time_manager.validate(self.df)
         self.sort_time()
 

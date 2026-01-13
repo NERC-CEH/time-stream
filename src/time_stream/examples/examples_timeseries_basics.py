@@ -267,3 +267,41 @@ def add_new_column_to_df() -> None:
     tf = tf.with_df(new_df)
     # [end_block_19]
     print(tf.df)
+
+
+def create_misaligned_row_example() -> pl.DataFrame:
+    print("Initial data:")
+    print(
+        pl.DataFrame(
+            {
+                "time": [
+                    datetime(2020, 1, 1, 0, 0, 0),
+                    datetime(2020, 1, 1, 0, 30, 0),
+                    datetime(2020, 1, 1, 1, 0, 0),
+                    datetime(2020, 1, 1, 1, 30, 0),
+                    datetime(2020, 1, 1, 1, 31, 0),  # 1min
+                    datetime(2020, 1, 1, 1, 32, 0),  # 1min
+                    datetime(2020, 1, 1, 1, 33, 0),  # 1min
+                    datetime(2020, 1, 1, 2, 0, 0),
+                    datetime(2020, 1, 1, 2, 30, 0),
+                ],
+            }
+        )
+    )
+
+    print()
+    print("Resolved data with misaligned rows removed:")
+    print(
+        pl.DataFrame(
+            {
+                "time": [
+                    datetime(2020, 1, 1, 0, 0, 0),
+                    datetime(2020, 1, 1, 0, 30, 0),
+                    datetime(2020, 1, 1, 1, 0, 0),
+                    datetime(2020, 1, 1, 1, 30, 0),
+                    datetime(2020, 1, 1, 2, 0, 0),
+                    datetime(2020, 1, 1, 2, 30, 0),
+                ],
+            }
+        )
+    )
