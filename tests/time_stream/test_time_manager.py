@@ -713,21 +713,21 @@ class TestHandleMisalignedRows:
                     datetime(2020, 1, 3, 0, 0, 0),
                     datetime(2020, 1, 3, 8, 0, 0),
                     datetime(2020, 1, 3, 8, 30, 0),
+                    datetime(2020, 1, 3, 9, 0, 0),
                     datetime(2020, 1, 3, 9, 30, 0),
                     datetime(2020, 1, 3, 10, 0, 0),
                 ]
             }
         )
+        expected_df = pl.DataFrame(
+            {
+                "timestamp": [
+                    datetime(2020, 1, 3, 9, 0, 0),
+                ]
+            }
+        )
         period = Period.of_days(1)
-        error_dates = [
-            datetime.datetime(2020, 1, 1, 0, 0),
-            datetime.datetime(2020, 1, 2, 0, 0),
-            datetime.datetime(2020, 1, 3, 0, 0),
-            datetime.datetime(2020, 1, 3, 8, 0),
-            datetime.datetime(2020, 1, 3, 8, 30),
-            datetime.datetime(2020, 1, 3, 9, 30),
-            datetime.datetime(2020, 1, 3, 10, 0),
-        ]
+
         time_manager = TimeManager(
             time_name="timestamp",
             resolution=period,
@@ -737,12 +737,11 @@ class TestHandleMisalignedRows:
         )
 
         expected_log_message = (
-            f"Removing the following timestamps which were found to not conform to the expected resolution of "
-            f"{period.iso_duration}: `{error_dates}`"
+            "Removing the following timestamps which were found to not conform to the expected resolution of P1D: "
+            "`['2020-01-01 00:00:00', '2020-01-02 00:00:00', '2020-01-03 00:00:00', '2020-01-03 08:00:00', "
+            "'2020-01-03 08:30:00', '2020-01-03 09:30:00', '2020-01-03 10:00:00']`"
         )
 
-        timestamps_to_remove = [datetime.strptime(item, "%Y-%m-%d %H:%M:%S") for item in error_dates]
-        expected_df = df.filter(~pl.col("timestamp").is_in(timestamps_to_remove))
         with caplog.at_level(logging.INFO):
             actual_df = time_manager._handle_misaligned_rows(
                 df,
