@@ -489,6 +489,19 @@ invalid_resolution_test_cases = (
         ["2020-01-02 00:00:00", "2020-01-03 00:00:00"],
         id="P1D present in P1M",
     ),
+    # 01/01/2020 won't be picked up as daily as once it's rounded it's the same as monthly data.
+    pytest.param(
+        [
+            datetime(2020, 1, 1),  # Daily
+            datetime(2020, 1, 2),  # Daily
+            datetime(2020, 1, 3),  # Daily
+            datetime(2020, 1, 4),  # Monthly
+            datetime(2020, 1, 5),  # Monthly
+        ],
+        Period.of_months(1),
+        ["2020-01-02 00:00:00", "2020-01-03 00:00:00", "2020-01-04 00:00:00", "2020-01-05 00:00:00"],
+        id="All rows misaligned",
+    ),
 )
 
 
@@ -689,3 +702,52 @@ class TestHandleMisalignedRows:
             time_manager._handle_misaligned_rows(df)
         except ResolutionError as err:
             pytest.fail(f"No ResolutionError was expected to be raised. Error:{str(err)}")
+
+    def test_invalid_with_offset(self, caplog: pytest.LogCaptureFixture) -> None:
+        """The invalid data should be removed with a log message to indicate which rows are considered invalid."""
+        df = pl.DataFrame(
+            {
+                "timestamp": [
+                    datetime(2020, 1, 1, 0, 0, 0),
+                    datetime(2020, 1, 2, 0, 0, 0),
+                    datetime(2020, 1, 3, 0, 0, 0),
+                    datetime(2020, 1, 3, 8, 0, 0),
+                    datetime(2020, 1, 3, 8, 30, 0),
+                    datetime(2020, 1, 3, 9, 30, 0),
+                    datetime(2020, 1, 3, 10, 0, 0),
+                ]
+            }
+        )
+        period = Period.of_days(1)
+        error_dates = [
+            datetime.datetime(2020, 1, 1, 0, 0),
+            datetime.datetime(2020, 1, 2, 0, 0),
+            datetime.datetime(2020, 1, 3, 0, 0),
+            datetime.datetime(2020, 1, 3, 8, 0),
+            datetime.datetime(2020, 1, 3, 8, 30),
+            datetime.datetime(2020, 1, 3, 9, 30),
+            datetime.datetime(2020, 1, 3, 10, 0),
+        ]
+        time_manager = TimeManager(
+            time_name="timestamp",
+            resolution=period,
+            offset="+T9H",
+            periodicity=period,
+            on_misaligned_rows=ValidationErrorOptions.RESOLVE,
+        )
+
+        expected_log_message = (
+            f"Removing the following timestamps which were found to not conform to the expected resolution of "
+            f"{period.iso_duration}: `{error_dates}`"
+        )
+
+        timestamps_to_remove = [datetime.strptime(item, "%Y-%m-%d %H:%M:%S") for item in error_dates]
+        expected_df = df.filter(~pl.col("timestamp").is_in(timestamps_to_remove))
+        with caplog.at_level(logging.INFO):
+            actual_df = time_manager._handle_misaligned_rows(
+                df,
+            )
+
+            assert caplog.messages[0] == expected_log_message
+
+        assert_frame_equal(expected_df, actual_df)

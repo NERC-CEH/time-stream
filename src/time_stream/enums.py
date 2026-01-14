@@ -83,11 +83,9 @@ class ValidationErrorOptions(Enum):
 
     Attributes:
         ERROR: Raise an error.
-        WARN: Log a warning.
         RESOLVE: Fix the validation issues automatically.
 
     """
 
     ERROR = "error"
-    WARN = "warn"
     RESOLVE = "resolve"

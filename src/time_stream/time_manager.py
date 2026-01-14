@@ -54,6 +54,7 @@ class TimeManager:
             periodicity: Defines the allowed "frequency" of datetimes in your timeseries, i.e., how many datetime
                          entries are allowed within a given period of time.
             on_duplicates: What to do if duplicate rows are found in the data.
+            on_misaligned_rows: What to do if misaligned rows are found in the data.
             time_anchor: The time anchor to which the date/times conform to.
         """
         self._time_name = time_name

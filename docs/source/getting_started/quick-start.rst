@@ -237,9 +237,31 @@ As part of the resolution checks, misaligned rows (rows with a different resolut
 automatically. By default an error is raised, however if ``on_misaligned_rows="resolve"`` is set on creation of the 
 TimeFrame, then any misaligned rows will be automatically removed. 
 
-The example below shows how an input timeseries with misaligned rows is modified when ``on_misaligned_rows="resolve"``
-is provided during creation of the TimeFrame. Three rows with 1 minute resolution located in the centre of the 
-timeseries have been identified and removed.
+The following strategies are available to use with the ``on_misaligned_rows`` argument:
+
+1. **Error (Default):** ``on_misaligned_rows="error"``
+
+Raises an error when misaligned rows are found within the time series. 
+
+.. code-block:: python
+
+   tf = ts.TimeFrame(df, "time", on_misaligned_rows="error")
+
+The following error will be shown if misaligned rows are found. Note that this example assumes PT30M data: 
+
+.. code-block:: python
+
+   Time values are not aligned to resolution[+offset]: PT30M
+
+1. **Resolve:** ``on_misaligned_rows="resolve"``
+
+Any rows identified as being misaligned are removed and the TimeFrame data is updated.
+
+
+.. code-block:: python
+
+   tf = ts.TimeFrame(df, "time", on_misaligned_rows="resolve")
+
 
 .. jupyter-execute::
    :hide-code:

@@ -88,6 +88,10 @@ class TimeFrame:
             - ``KEEP_LAST``: Keep the last row of any duplicate groups.
             - ``DROP``: Drop all duplicate rows.
             - ``MERGE``: Merge duplicate rows using coalesce (the first non-null value for each column takes precedence)
+        on_misaligned_rows: What to do if misaligned rows are found in the data:
+
+            - ``ERROR`` (default): Raise error
+            - ``RESOLVE``: Remove any misaligned rows
 
     Examples:
         >>> # Simple 15 minute timeseries:
