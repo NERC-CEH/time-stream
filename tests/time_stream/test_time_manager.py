@@ -495,8 +495,8 @@ invalid_resolution_test_cases = (
             datetime(2020, 1, 1),  # Daily
             datetime(2020, 1, 2),  # Daily
             datetime(2020, 1, 3),  # Daily
-            datetime(2020, 1, 4),  # Monthly
-            datetime(2020, 1, 5),  # Monthly
+            datetime(2020, 1, 4),  # Daily
+            datetime(2020, 1, 5),  # Daily
         ],
         Period.of_months(1),
         ["2020-01-02 00:00:00", "2020-01-03 00:00:00", "2020-01-04 00:00:00", "2020-01-05 00:00:00"],
