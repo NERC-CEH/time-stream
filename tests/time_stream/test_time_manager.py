@@ -1,3 +1,4 @@
+import logging
 import re
 from datetime import datetime
 
@@ -6,7 +7,7 @@ import pytest
 from polars.testing import assert_frame_equal
 
 from time_stream import Period
-from time_stream.enums import DuplicateOption, TimeAnchor
+from time_stream.enums import DuplicateOption, TimeAnchor, ValidationErrorOptions
 from time_stream.exceptions import (
     ColumnNotFoundError,
     ColumnTypeError,
@@ -318,13 +319,6 @@ class TestCheckTimeIntegrity:
 
 
 class TestConfigurePeriodProperties:
-    # def setUp(self) -> None:
-    #     tm = object.__new__(TimeManager)  # skips __init__
-    #     tm._resolution = None
-    #     tm._offset = None
-    #     tm._alignment = None
-    #     tm._periodicity = None
-
     def test_resolution_str_no_offset_defaults_periodicity_to_alignment(self, tm: TimeManager) -> None:
         tm._resolution = "PT15M"
         tm._configure_period_properties()
@@ -430,3 +424,329 @@ class TestConfigurePeriodProperties:
         tm._periodicity = "NOT_A_PERIOD"
         with pytest.raises(PeriodParsingError):
             tm._configure_period_properties()
+
+
+invalid_resolution_test_cases = (
+    pytest.param(
+        [
+            datetime(2020, 1, 1, 0, 0, 0),
+            datetime(2020, 1, 1, 0, 30, 0),
+            datetime(2020, 1, 1, 1, 0, 0),
+            datetime(2021, 1, 1, 0, 0, 0),  # Gap of 1 year
+            datetime(2021, 1, 1, 0, 1, 0),  # 1 min
+            datetime(2021, 1, 1, 0, 2, 0),  # 1 min
+            datetime(2021, 1, 1, 0, 3, 0),  # 1 min
+            datetime(2021, 1, 1, 0, 30, 0),
+            datetime(2021, 1, 1, 1, 0, 0),
+            datetime(2021, 1, 2, 0, 0, 0),  # Gap of 1 day
+            datetime(2021, 1, 2, 0, 30, 0),
+            datetime(2021, 1, 2, 1, 0, 0),
+        ],
+        Period.of_minutes(30),
+        ["2021-01-01 00:01:00", "2021-01-01 00:02:00", "2021-01-01 00:03:00"],
+        id="complex_with_gaps",
+    ),
+    pytest.param(
+        [
+            datetime(2020, 1, 1, 0, 0, 0),
+            datetime(2020, 1, 1, 0, 30, 0),
+            datetime(2020, 1, 1, 1, 0, 0),
+            datetime(2020, 1, 1, 1, 30, 0),
+            datetime(2020, 1, 1, 1, 31, 0),  # 1min
+            datetime(2020, 1, 1, 1, 32, 0),  # 1min
+            datetime(2020, 1, 1, 1, 33, 0),  # 1min
+            datetime(2020, 1, 1, 2, 0, 0),
+            datetime(2020, 1, 1, 2, 30, 0),
+        ],
+        Period.of_minutes(30),
+        ["2020-01-01 01:31:00", "2020-01-01 01:32:00", "2020-01-01 01:33:00"],
+        id="multiple_time_resolutions",
+    ),
+    pytest.param(
+        [
+            datetime(2020, 1, 1, 0, 0, 0),
+            datetime(2020, 1, 1, 0, 30, 0),
+            datetime(2020, 1, 1, 1, 0, 0),
+            datetime(2020, 1, 1, 1, 30, 0),
+            datetime(2020, 1, 1, 1, 31, 0),  # 1min
+            datetime(2020, 1, 1, 2, 0, 0),
+            datetime(2020, 1, 1, 2, 30, 0),
+        ],
+        Period.of_minutes(30),
+        ["2020-01-01 01:31:00"],
+        id="single_invalid_row",
+    ),
+    # 01/01/2020 won't be picked up as daily as once it's rounded it's the same as monthly data.
+    pytest.param(
+        [
+            datetime(2020, 1, 1),  # Daily
+            datetime(2020, 1, 2),  # Daily
+            datetime(2020, 1, 3),  # Daily
+            datetime(2020, 2, 1),  # Monthly
+            datetime(2020, 3, 1),  # Monthly
+        ],
+        Period.of_months(1),
+        ["2020-01-02 00:00:00", "2020-01-03 00:00:00"],
+        id="P1D present in P1M",
+    ),
+    # 01/01/2020 won't be picked up as daily as once it's rounded it's the same as monthly data.
+    pytest.param(
+        [
+            datetime(2020, 1, 1),  # Daily
+            datetime(2020, 1, 2),  # Daily
+            datetime(2020, 1, 3),  # Daily
+            datetime(2020, 1, 4),  # Daily
+            datetime(2020, 1, 5),  # Daily
+        ],
+        Period.of_months(1),
+        ["2020-01-02 00:00:00", "2020-01-03 00:00:00", "2020-01-04 00:00:00", "2020-01-05 00:00:00"],
+        id="All rows misaligned",
+    ),
+)
+
+
+class TestHandleMisalignedRows:
+    def make_df_from_period(self, period: Period, length: int) -> pl.DataFrame:
+        df = pl.DataFrame(
+            {
+                "timestamp": [period.datetime(period.ordinal(datetime(2025, 1, 1)) + i) for i in range(length)],
+                "value": list(range(length)),
+            }
+        )
+        return df
+
+    @pytest.mark.parametrize(
+        "period, length",
+        [
+            (Period.of_years(1), 10),
+            (Period.of_months(1), 48),
+            (Period.of_days(1), 366),
+            (Period.of_hours(1), 72),
+            (Period.of_minutes(30), 2880),
+        ],
+        ids=["P1Y", "P1M", "P1D", "PT1H", "PT30M"],
+    )
+    def test_contiguous_time_series_no_gaps(self, period: Period, length: int) -> None:
+        """The input dataframe should be returned unmodified."""
+        df = self.make_df_from_period(period=period, length=length)
+
+        time_manager = TimeManager(time_name="timestamp", resolution=period, offset=None, periodicity=period)
+
+        try:
+            actual_df = time_manager._handle_misaligned_rows(df)
+        except ResolutionError as err:
+            pytest.fail(f"No ResolutionError was expected to be raised. Error:{str(err)}")
+
+        assert_frame_equal(actual_df, df)
+
+    def test_valid_PT30M_resolution_with_yearly_gaps(self) -> None:
+        """No modifications should be made data with gaps within valid PT30M data."""
+        df = pl.DataFrame(
+            {
+                "timestamp": [
+                    datetime(2021, 1, 1, 0, 0, 0),
+                    datetime(2021, 1, 1, 0, 30, 0),
+                    datetime(2021, 1, 1, 1, 0, 0),  # Year gap
+                    datetime(2022, 1, 1, 0, 0, 0),
+                    datetime(2022, 1, 1, 0, 30, 0),
+                    datetime(2022, 1, 1, 1, 0, 0),
+                    datetime(2023, 1, 1, 0, 0, 0),  # Year gap
+                    datetime(2023, 1, 1, 0, 30, 0),
+                    datetime(2023, 1, 1, 1, 0, 0),
+                ]
+            }
+        )
+        period = Period.of_minutes(30)
+        time_manager = TimeManager(time_name="timestamp", resolution=period, offset=None, periodicity=period)
+
+        try:
+            actual_df = time_manager._handle_misaligned_rows(df)
+        except ResolutionError as err:
+            pytest.fail(f"No ResolutionError was expected to be raised. Error:{str(err)}")
+
+        assert_frame_equal(actual_df, df)
+
+    def test_valid_monthly_resolution_with_yearly_gaps(self) -> None:
+        """No modifications should be made data with gaps within valid monthly resolution data."""
+        df = pl.DataFrame(
+            {
+                "timestamp": [
+                    datetime(2021, 1, 1),
+                    datetime(2021, 2, 1),
+                    datetime(2021, 3, 1),  # Year gap
+                    datetime(2022, 1, 1),
+                    datetime(2022, 2, 1),
+                    datetime(2022, 3, 1),
+                    datetime(2023, 1, 1),  # Year gap
+                    datetime(2023, 2, 1),
+                    datetime(2023, 3, 1),
+                ]
+            }
+        )
+        period = Period.of_months(1)
+        time_manager = TimeManager(
+            time_name="timestamp",
+            resolution=period,
+            offset=None,
+            periodicity=period,
+            on_misaligned_rows=ValidationErrorOptions.ERROR,
+        )
+
+        try:
+            actual_df = time_manager._handle_misaligned_rows(df)
+        except ResolutionError as err:
+            pytest.fail(f"No ResolutionError was expected to be raised. Error:{str(err)}")
+
+        assert_frame_equal(actual_df, df)
+
+    @pytest.mark.parametrize("input_timestamps, period, error_dates", invalid_resolution_test_cases)
+    def test_invalid_with_error(self, input_timestamps: list[datetime], period: Period, error_dates: list[str]) -> None:
+        """An error should be raised for the invalid data."""
+        df = pl.DataFrame({"timestamp": input_timestamps})
+        time_manager = TimeManager(
+            time_name="timestamp",
+            resolution=period,
+            offset=None,
+            periodicity=period,
+            on_misaligned_rows=ValidationErrorOptions.ERROR,
+        )
+
+        expected_error = f"Time values are not aligned to resolution[+offset]: {period.iso_duration}"
+        with pytest.raises(ResolutionError, match=re.escape(expected_error)):
+            time_manager._handle_misaligned_rows(df)
+
+    @pytest.mark.parametrize("input_timestamps, period, error_dates", invalid_resolution_test_cases)
+    def test_invalid_with_resolve(
+        self, input_timestamps: list[datetime], period: Period, error_dates: list[str], caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """The invalid data should be removed with a log message to indicate which rows are considered invalid."""
+        df = pl.DataFrame({"timestamp": input_timestamps})
+        time_manager = TimeManager(
+            time_name="timestamp",
+            resolution=period,
+            offset=None,
+            periodicity=period,
+            on_misaligned_rows=ValidationErrorOptions.RESOLVE,
+        )
+
+        expected_log_message = (
+            f"Removing the following timestamps which were found to not conform to the expected resolution of "
+            f"{period.iso_duration}: `{error_dates}`"
+        )
+
+        timestamps_to_remove = [datetime.strptime(item, "%Y-%m-%d %H:%M:%S") for item in error_dates]
+        expected_df = df.filter(~pl.col("timestamp").is_in(timestamps_to_remove))
+        with caplog.at_level(logging.INFO):
+            actual_df = time_manager._handle_misaligned_rows(
+                df,
+            )
+
+            assert caplog.messages[0] == expected_log_message
+
+        assert_frame_equal(expected_df, actual_df)
+
+    def test_no_initial_resolution_valid(self) -> None:
+        """Check a TimeManager instance with no initial resolution is handled correctly.
+
+        If no resolution period is provided then the TimeManager will be an initialised with a resolution of 1
+        microsecond causing the validation to pass by default.
+
+        """
+        df = pl.DataFrame(
+            {
+                "timestamp": [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)],
+                "value": [1, 2, 3],
+            }
+        )
+
+        time_manager = TimeManager(
+            time_name="timestamp",
+            resolution=None,
+            offset=None,
+            periodicity=None,
+            on_misaligned_rows=ValidationErrorOptions.ERROR,
+        )
+        try:
+            time_manager._remove_misaligned_rows(df)
+        except ResolutionError as err:
+            pytest.fail(f"No ResolutionError was expected to be raised. Error:{str(err)}")
+
+    def test_no_initial_resolution_invalid(self) -> None:
+        """Check a TimeManager instance with no initial resolution is handled correctly.
+
+        If no resolution period is provided then the TimeManager will be an initialised with a resolution of 1
+        microsecond causing the validation to pass by default even if invalid rows are present.
+
+        """
+        df = pl.DataFrame(
+            {
+                "timestamp": [
+                    datetime(2020, 1, 1),  # Daily
+                    datetime(2020, 1, 2),  # Daily
+                    datetime(2020, 1, 3),  # Daily
+                    datetime(2020, 2, 1),  # Monthly
+                    datetime(2020, 3, 1),  # Monthly
+                ],
+                "value": [1, 2, 3, 4, 5],
+            }
+        )
+
+        time_manager = TimeManager(
+            time_name="timestamp",
+            resolution=None,
+            offset=None,
+            periodicity=None,
+            on_misaligned_rows=ValidationErrorOptions.ERROR,
+        )
+        try:
+            time_manager._handle_misaligned_rows(df)
+        except ResolutionError as err:
+            pytest.fail(f"No ResolutionError was expected to be raised. Error:{str(err)}")
+
+    def test_invalid_with_offset(self, caplog: pytest.LogCaptureFixture) -> None:
+        """The invalid data should be removed with a log message to indicate which rows are considered invalid."""
+        df = pl.DataFrame(
+            {
+                "timestamp": [
+                    datetime(2020, 1, 1, 0, 0, 0),
+                    datetime(2020, 1, 2, 0, 0, 0),
+                    datetime(2020, 1, 3, 0, 0, 0),
+                    datetime(2020, 1, 3, 8, 0, 0),
+                    datetime(2020, 1, 3, 8, 30, 0),
+                    datetime(2020, 1, 3, 9, 0, 0),
+                    datetime(2020, 1, 3, 9, 30, 0),
+                    datetime(2020, 1, 3, 10, 0, 0),
+                ]
+            }
+        )
+        expected_df = pl.DataFrame(
+            {
+                "timestamp": [
+                    datetime(2020, 1, 3, 9, 0, 0),
+                ]
+            }
+        )
+        period = Period.of_days(1)
+
+        time_manager = TimeManager(
+            time_name="timestamp",
+            resolution=period,
+            offset="+T9H",
+            periodicity=period,
+            on_misaligned_rows=ValidationErrorOptions.RESOLVE,
+        )
+
+        expected_log_message = (
+            "Removing the following timestamps which were found to not conform to the expected resolution of P1D: "
+            "`['2020-01-01 00:00:00', '2020-01-02 00:00:00', '2020-01-03 00:00:00', '2020-01-03 08:00:00', "
+            "'2020-01-03 08:30:00', '2020-01-03 09:30:00', '2020-01-03 10:00:00']`"
+        )
+
+        with caplog.at_level(logging.INFO):
+            actual_df = time_manager._handle_misaligned_rows(
+                df,
+            )
+
+            assert caplog.messages[0] == expected_log_message
+
+        assert_frame_equal(expected_df, actual_df)

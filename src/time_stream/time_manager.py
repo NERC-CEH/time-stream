@@ -10,10 +10,12 @@ This module defines and enforces integrity rules for the temporal aspects of a T
 - Prevents mutation of time values between DataFrame operations.
 """
 
+import logging
+
 import polars as pl
 
 from time_stream import Period
-from time_stream.enums import DuplicateOption, TimeAnchor
+from time_stream.enums import DuplicateOption, TimeAnchor, ValidationErrorOptions
 from time_stream.exceptions import (
     ColumnNotFoundError,
     ColumnTypeError,
@@ -24,12 +26,9 @@ from time_stream.exceptions import (
     ResolutionError,
     TimeMutatedError,
 )
-from time_stream.utils import (
-    check_alignment,
-    check_periodicity,
-    epoch_check,
-    handle_duplicates,
-)
+from time_stream.utils import check_alignment, check_periodicity, epoch_check, handle_duplicates, truncate_to_period
+
+logger = logging.getLogger(__name__)
 
 
 class TimeManager:
@@ -42,6 +41,7 @@ class TimeManager:
         offset: str | None = None,
         periodicity: str | Period | None = None,
         on_duplicates: str | DuplicateOption = DuplicateOption.ERROR,
+        on_misaligned_rows: str | ValidationErrorOptions = ValidationErrorOptions.ERROR,
         time_anchor: str | TimeAnchor = TimeAnchor.START,
     ):
         """Initialise the time manager.
@@ -54,6 +54,7 @@ class TimeManager:
             periodicity: Defines the allowed "frequency" of datetimes in your timeseries, i.e., how many datetime
                          entries are allowed within a given period of time.
             on_duplicates: What to do if duplicate rows are found in the data.
+            on_misaligned_rows: What to do if misaligned rows are found in the data.
             time_anchor: The time anchor to which the date/times conform to.
         """
         self._time_name = time_name
@@ -62,6 +63,7 @@ class TimeManager:
         self._alignment = None
         self._periodicity = periodicity
         self._on_duplicates = DuplicateOption(on_duplicates)
+        self._on_misaligned_rows = ValidationErrorOptions(on_misaligned_rows)
         self._time_anchor = TimeAnchor(time_anchor)
 
         self._configure_period_properties()
@@ -240,3 +242,55 @@ class TimeManager:
         # Polars aggregate methods can change the order due to how it optimises the functionality, so sort times after
         new_df = new_df.sort(self._time_name)
         return new_df
+
+    def _handle_misaligned_rows(self, df: pl.DataFrame) -> pl.DataFrame:
+        """Handle misaligned rows.
+
+        If the _on_misaligned_rows property is set to "ERROR" then alignment validation will run as normal. If it's set
+        to "RESOLVE" then any rows found to have an unexpected resolution are removed.
+
+        Args:
+            df: DataFrame to check for, and potentially remove, misaligned rows.
+
+        Returns:
+            DataFrame with any misaligned rows removed.
+
+        """
+        if self._on_misaligned_rows == ValidationErrorOptions.ERROR:
+            self._validate_alignment(df[self.time_name])
+        elif self._on_misaligned_rows == ValidationErrorOptions.RESOLVE:
+            # No need to run _validate_alignment as the row removal logic will cover the same checks and any
+            # invalid rows will be logged before being removed
+            df = self._remove_misaligned_rows(df)
+
+        return df
+
+    def _remove_misaligned_rows(self, df: pl.DataFrame) -> pl.DataFrame:
+        """Remove misaligned rows
+
+        Identify rows within the time series which have a different resolution to that expected (e.g. rows of PT1M
+        data within a PT30M dataset) and remove them.
+
+        Args:
+            df: DataFrame containing the timeseries to check the resolution contiguity for.
+
+        Returns:
+            DataFrame with invalid rows removed.
+
+        """
+        mask = df[self.time_name] != truncate_to_period(
+            date_times=df[self.time_name], period=self.alignment, time_anchor=self.time_anchor
+        )
+        invalid_timestamps = df[self.time_name].filter(mask)
+
+        # If no invalid timestamps have been found, exit early as there is nothing else to do.
+        if invalid_timestamps.is_empty():
+            return df
+
+        formatted_timestamps = [item.strftime("%Y-%m-%d %H:%M:%S") for item in invalid_timestamps.to_list()]
+        logger.info(
+            f"Removing the following timestamps which were found to not conform to the expected resolution of "
+            f"{self.resolution.iso_duration}: `{formatted_timestamps}`"
+        )
+        valid_data = df.filter(~mask)
+        return valid_data

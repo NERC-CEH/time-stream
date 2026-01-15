@@ -76,3 +76,16 @@ class TimeAnchor(Enum):
     POINT = "point"
     START = "start"
     END = "end"
+
+
+class ValidationErrorOptions(Enum):
+    """Enum representing generic options for handling validation error.
+
+    Attributes:
+        ERROR: Raise an error.
+        RESOLVE: Fix the validation issues automatically.
+
+    """
+
+    ERROR = "error"
+    RESOLVE = "resolve"

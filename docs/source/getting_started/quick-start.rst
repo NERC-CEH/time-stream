@@ -229,6 +229,51 @@ approach that preserves the first non-null value for each column.
    import examples_timeseries_basics
    examples_timeseries_basics.duplicate_row_example_merge()
 
+
+Misaligned Row Detection
+------------------------
+
+As part of the resolution checks, misaligned rows (rows with a different resolution to that expected) are detected 
+automatically. By default an error is raised, however if ``on_misaligned_rows="resolve"`` is set on creation of the 
+TimeFrame, then any misaligned rows will be automatically removed. 
+
+.. note::
+   A resolution must be provided to the :class:`~time_stream.TimeFrame` initialisation for the misaligned row detection
+   to work. If not provided, a default resolution of 1 microsecond is assigned, which will pass any resolution checks.
+
+The following strategies are available to use with the ``on_misaligned_rows`` argument:
+
+1. **Error (Default):** ``on_misaligned_rows="error"``
+
+Raises an error when misaligned rows are found within the time series. 
+
+.. code-block:: python
+
+   tf = ts.TimeFrame(df, "time", "PT30M", on_misaligned_rows="error")
+
+The following error will be shown if misaligned rows are found. Note that this example assumes PT30M data: 
+
+.. code-block:: python
+
+   Time values are not aligned to resolution[+offset]: PT30M
+
+1. **Resolve:** ``on_misaligned_rows="resolve"``
+
+Any rows identified as being misaligned are removed and the TimeFrame data is updated.
+
+
+.. code-block:: python
+
+   tf = ts.TimeFrame(df, "time", "PT30M", on_misaligned_rows="resolve")
+
+
+.. jupyter-execute::
+   :hide-code:
+
+   import examples_timeseries_basics
+   examples_timeseries_basics.create_misaligned_row_example()
+
+
 With Metadata
 =============
 
