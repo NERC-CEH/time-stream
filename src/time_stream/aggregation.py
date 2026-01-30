@@ -298,6 +298,28 @@ class Mean(AggregationFunction):
         """Return the `Polars` expression for calculating the mean in an aggregation period."""
         return [pl.col(col).mean().alias(f"mean_{col}") for col in columns]
 
+@AggregationFunction.register
+class AngularMean(AggregationFunction):
+    """An aggregation class to calculate the angular mean (average angle) of values within each aggregation period."""
+
+    name = "angular_mean"
+
+    def expr(self, ctx: AggregationCtx, columns: list[str]) -> list[pl.Expr]:
+        """
+        
+        Return the `Polars` expression for calculating the angular mean in an aggregation period.
+        
+        Assumptions:
+        Measurement units: degrees
+        Desired output units: degrees
+        
+        """
+        angular_mean = pl.arctan2(
+            pl.concat_list([pl.col(c) for c in columns]).radians().sin().sum(),
+            pl.concat_list([pl.col(c) for c in columns]).radians().cos().sum()
+            ).degrees().alias("angular_mean")
+
+        return [angular_mean]
 
 @AggregationFunction.register
 class Sum(AggregationFunction):
