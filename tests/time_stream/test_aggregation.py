@@ -11,10 +11,10 @@ from time_stream.aggregation import (
     AggregationCtx,
     AggregationFunction,
     AggregationPipeline,
+    AngularMean,
     ConditionalCount,
     Max,
     Mean,
-    AngularMean,
     MeanSum,
     Min,
     PeaksOverThreshold,
@@ -202,7 +202,15 @@ class TestAggregationFunction:
         return mock_ts
 
     @pytest.mark.parametrize(
-        "get_input,expected", [("mean", Mean), ("angular_mean", AngularMean), ("min", Min), ("max", Max), ("mean_sum", MeanSum), ("sum", Sum)]
+        "get_input,expected",
+        [
+            ("mean", Mean),
+            ("angular_mean", AngularMean),
+            ("min", Min),
+            ("max", Max),
+            ("mean_sum", MeanSum),
+            ("sum", Sum),
+        ],
     )
     def test_get_with_string(self, get_input: str, expected: type[AggregationFunction]) -> None:
         """Test AggregationFunction.get() with string input."""
@@ -210,7 +218,8 @@ class TestAggregationFunction:
         assert isinstance(agg, expected)
 
     @pytest.mark.parametrize(
-        "get_input,expected", [(Mean, Mean), (AngularMean, AngularMean), (Min, Min), (Max, Max), (MeanSum, MeanSum), (Sum, Sum)]
+        "get_input,expected",
+        [(Mean, Mean), (AngularMean, AngularMean), (Min, Min), (Max, Max), (MeanSum, MeanSum), (Sum, Sum)],
     )
     def test_get_with_class(self, get_input: type[AggregationFunction], expected: type[AggregationFunction]) -> None:
         """Test AggregationFunction.get() with class input."""
@@ -218,7 +227,8 @@ class TestAggregationFunction:
         assert isinstance(agg, expected)
 
     @pytest.mark.parametrize(
-        "get_input,expected", [(Mean(), Mean), (AngularMean(), AngularMean), (Min(), Min), (Max(), Max), (MeanSum(), MeanSum), (Sum(), Sum)]
+        "get_input,expected",
+        [(Mean(), Mean), (AngularMean(), AngularMean), (Min(), Min), (Max(), Max), (MeanSum(), MeanSum), (Sum(), Sum)],
     )
     def test_get_with_instance(self, get_input: AggregationFunction, expected: type[AggregationFunction]) -> None:
         """Test AggregationFunction.get() with instance input."""
@@ -991,7 +1001,12 @@ class TestComplexPeriodicityAggregations:
                 {"threshold": 20},
             ),
         ],
-        ids=["hourly to month offset mean", "hourly to month offset angular mean","hourly to month offset max", "hourly to month offset pot"],
+        ids=[
+            "hourly to month offset mean",
+            "hourly to month offset angular mean",
+            "hourly to month offset max",
+            "hourly to month offset pot",
+        ],
     )
     def test_microsecond_to_month_offset(
         self,
