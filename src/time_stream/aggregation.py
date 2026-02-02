@@ -320,8 +320,6 @@ class AngularMean(AggregationFunction):
                             e.radians().sin().sum(), e.radians().cos().sum()
                         ).degrees().round(1).alias(f"angular_mean_{e.meta.root_names()[0]}")
                         for e in exprs]
-            
-        print(angular_mean)
         
         return angular_mean
 
