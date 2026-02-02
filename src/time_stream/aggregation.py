@@ -11,7 +11,9 @@ period-based grouping.
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import timedelta
+from functools import reduce
 from typing import Callable
+import operator
 
 import polars as pl
 
@@ -312,16 +314,16 @@ class AngularMean(AggregationFunction):
         Measurement units: degrees
         Desired output units: degrees
         """
-        angular_mean = (
-            pl.arctan2(
-                pl.concat_list([pl.col(c) for c in columns]).radians().sin().sum(),
-                pl.concat_list([pl.col(c) for c in columns]).radians().cos().sum(),
-            )
-            .degrees()
-            .alias("angular_mean")
-        )
-
-        return [angular_mean]
+        
+        exprs = [pl.col(c) if isinstance(c, str) else c for c in columns] 
+        angular_mean = [pl.arctan2(
+                            e.radians().sin().sum(), e.radians().cos().sum()
+                        ).degrees().round(1).alias(f"angular_mean_{e.meta.root_names()[0]}")
+                        for e in exprs]
+            
+        print(angular_mean)
+        
+        return angular_mean
 
 
 @AggregationFunction.register
