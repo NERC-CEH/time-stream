@@ -313,14 +313,13 @@ class AngularMean(AggregationFunction):
         Desired output units: degrees
         """
 
-        exprs = [pl.col(c) if isinstance(c, str) else c for c in columns]
         angular_mean = [
-            pl.arctan2((e.radians().sin().sum()), (e.radians().cos().sum()))
+            pl.arctan2((pl.col(col).radians().sin().sum()), (pl.col(col).radians().cos().sum()))
             .degrees()
             .round(1)
             .mod(360)
-            .alias(f"angular_mean_{e.meta.root_names()[0]}")
-            for e in exprs
+            .alias(f"angular_mean_{col}")
+            for col in columns
         ]
 
         return angular_mean
