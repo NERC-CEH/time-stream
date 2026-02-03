@@ -315,7 +315,7 @@ class AngularMean(AggregationFunction):
 
         exprs = [pl.col(c) if isinstance(c, str) else c for c in columns]
         angular_mean = [
-            pl.arctan2(e.radians().sin().sum(), e.radians().cos().sum())
+            pl.arctan2((e.radians().sin().sum()), (e.radians().cos().sum()))
             .degrees()
             .round(1)
             .alias(f"angular_mean_{e.meta.root_names()[0]}")

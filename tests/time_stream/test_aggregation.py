@@ -55,6 +55,8 @@ def generate_time_series(
             "value": list(range(length)),
             "value_plus1": [i + 1 for i in range(length)],
             "value_times2": [i * 2 for i in range(length)],
+            # for TestAngularMean
+            "value_about_pi": [i + 180 - 24 / 2 if i < 24 else i + 360 - 24 - 24 / 2 for i in range(length)],
         }
     )
 
@@ -1714,3 +1716,46 @@ class TestConditionalCount:
             aggregation_time_anchor=padded_tf.time_anchor,
         )
         assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False, check_exact=False)
+
+
+class TestAngularMean:
+    @pytest.mark.parametrize(
+        "input_tf,aggregator,target_period,column,timestamps,counts,values,timestamps_of,kwargs",
+        [
+            (
+                TS_PT1H_2DAYS,
+                AngularMean,
+                P1D,
+                ["value_about_pi"],
+                [datetime(2025, 1, 1), datetime(2025, 1, 2)],
+                [24, 24],
+                {"value_about_pi": [179.5, -0.5]},
+                None,
+                {},
+            ),
+        ],
+        ids=["hourly to daily angular_mean about pi"],
+    )
+    def test_angular_mean(
+        self,
+        input_tf: TimeFrame,
+        aggregator: type[AggregationFunction],
+        target_period: Period,
+        column: list,
+        timestamps: list,
+        counts: list,
+        values: dict,
+        timestamps_of: list | None,
+        kwargs: dict[str, Any],
+    ) -> None:
+        expected_df = generate_expected_df(timestamps, aggregator, column, values, counts, counts, timestamps_of)
+        result = aggregator(**kwargs).apply(
+            input_tf.df,
+            input_tf.time_name,
+            input_tf.time_anchor,
+            input_tf.periodicity,
+            target_period,
+            column,
+            input_tf.time_anchor,
+        )
+        assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False)
