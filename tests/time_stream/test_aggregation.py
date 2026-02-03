@@ -11,6 +11,7 @@ from time_stream.aggregation import (
     AggregationCtx,
     AggregationFunction,
     AggregationPipeline,
+    AngularMean,
     ConditionalCount,
     Max,
     Mean,
@@ -54,6 +55,8 @@ def generate_time_series(
             "value": list(range(length)),
             "value_plus1": [i + 1 for i in range(length)],
             "value_times2": [i * 2 for i in range(length)],
+            # for TestAngularMean
+            "value_about_pi": [i + 180 - 12 if i < 24 else i + 324 for i in range(length)],
         }
     )
 
@@ -201,7 +204,15 @@ class TestAggregationFunction:
         return mock_ts
 
     @pytest.mark.parametrize(
-        "get_input,expected", [("mean", Mean), ("min", Min), ("max", Max), ("mean_sum", MeanSum), ("sum", Sum)]
+        "get_input,expected",
+        [
+            ("mean", Mean),
+            ("angular_mean", AngularMean),
+            ("min", Min),
+            ("max", Max),
+            ("mean_sum", MeanSum),
+            ("sum", Sum),
+        ],
     )
     def test_get_with_string(self, get_input: str, expected: type[AggregationFunction]) -> None:
         """Test AggregationFunction.get() with string input."""
@@ -209,7 +220,8 @@ class TestAggregationFunction:
         assert isinstance(agg, expected)
 
     @pytest.mark.parametrize(
-        "get_input,expected", [(Mean, Mean), (Min, Min), (Max, Max), (MeanSum, MeanSum), (Sum, Sum)]
+        "get_input,expected",
+        [(Mean, Mean), (AngularMean, AngularMean), (Min, Min), (Max, Max), (MeanSum, MeanSum), (Sum, Sum)],
     )
     def test_get_with_class(self, get_input: type[AggregationFunction], expected: type[AggregationFunction]) -> None:
         """Test AggregationFunction.get() with class input."""
@@ -217,7 +229,8 @@ class TestAggregationFunction:
         assert isinstance(agg, expected)
 
     @pytest.mark.parametrize(
-        "get_input,expected", [(Mean(), Mean), (Min(), Min), (Max(), Max), (MeanSum(), MeanSum), (Sum(), Sum)]
+        "get_input,expected",
+        [(Mean(), Mean), (AngularMean(), AngularMean), (Min(), Min), (Max(), Max), (MeanSum(), MeanSum), (Sum(), Sum)],
     )
     def test_get_with_instance(self, get_input: AggregationFunction, expected: type[AggregationFunction]) -> None:
         """Test AggregationFunction.get() with instance input."""
@@ -282,6 +295,17 @@ class TestSimpleAggregations:
             (
                 TS_PT1H_2DAYS,
                 Mean,
+                P1D,
+                "value",
+                [datetime(2025, 1, 1), datetime(2025, 1, 2)],
+                [24, 24],
+                {"value": [11.5, 35.5]},
+                None,
+                {},
+            ),
+            (
+                TS_PT1H_2DAYS,
+                AngularMean,
                 P1D,
                 "value",
                 [datetime(2025, 1, 1), datetime(2025, 1, 2)],
@@ -359,6 +383,7 @@ class TestSimpleAggregations:
         ],
         ids=[
             "hourly to daily mean",
+            "hourly to daily angular_mean",
             "hourly to daily max",
             "hourly to daily min",
             "hourly to daily mean_sum",
@@ -404,6 +429,17 @@ class TestSimpleAggregations:
                 [datetime(2025, 1, 1), datetime(2025, 2, 1)],
                 [744, 672],
                 {"value": [371.5, 1079.5]},
+                None,
+                {},
+            ),
+            (
+                TS_PT1H_2MONTH,
+                AngularMean,
+                P1M,
+                "value",
+                [datetime(2025, 1, 1), datetime(2025, 2, 1)],
+                [744, 672],
+                {"value": [11.5, 179.5]},
                 None,
                 {},
             ),
@@ -476,6 +512,7 @@ class TestSimpleAggregations:
         ],
         ids=[
             "hourly to monthly mean",
+            "hourly to monthly angular_mean",
             "hourly to monthly max",
             "hourly to monthly min",
             "hourly to monthly mean_sum",
@@ -515,6 +552,17 @@ class TestSimpleAggregations:
             (
                 TS_P1M_2YEARS,
                 Mean,
+                P1Y,
+                "value",
+                [datetime(2025, 1, 1), datetime(2026, 1, 1)],
+                [12, 12],
+                {"value": [5.5, 17.5]},
+                None,
+                {},
+            ),
+            (
+                TS_P1M_2YEARS,
+                AngularMean,
                 P1Y,
                 "value",
                 [datetime(2025, 1, 1), datetime(2026, 1, 1)],
@@ -592,6 +640,7 @@ class TestSimpleAggregations:
         ],
         ids=[
             "monthly to yearly mean",
+            "monthly to yearly angular_mean",
             "monthly to yearly max",
             "monthly to yearly min",
             "monthly to yearly mean_sum",
@@ -631,6 +680,17 @@ class TestSimpleAggregations:
             (
                 TS_PT1H_2DAYS,
                 Mean,
+                P1D,
+                ["value", "value_plus1", "value_times2"],
+                [datetime(2025, 1, 1), datetime(2025, 1, 2)],
+                [24, 24],
+                {"value": [11.5, 35.5], "value_plus1": [12.5, 36.5], "value_times2": [23, 71]},
+                None,
+                {},
+            ),
+            (
+                TS_PT1H_2DAYS,
+                AngularMean,
                 P1D,
                 ["value", "value_plus1", "value_times2"],
                 [datetime(2025, 1, 1), datetime(2025, 1, 2)],
@@ -708,6 +768,7 @@ class TestSimpleAggregations:
         ],
         ids=[
             "mult column mean",
+            "mult column angular_mean",
             "mult column max",
             "mult column min",
             "mult column mean_sum",
@@ -819,6 +880,18 @@ class TestComplexPeriodicityAggregations:
             ),
             (
                 TS_PT1H_2DAYS,
+                AngularMean,
+                P1D_OFF,
+                "value",
+                [datetime(2024, 12, 31, 9), datetime(2025, 1, 1, 9), datetime(2025, 1, 2, 9)],
+                [24, 24, 24],
+                [9, 24, 15],
+                {"value": [4.0, 20.5, 40.0]},
+                None,
+                {},
+            ),
+            (
+                TS_PT1H_2DAYS,
                 Max,
                 P1D_OFF,
                 "value",
@@ -844,6 +917,7 @@ class TestComplexPeriodicityAggregations:
         ],
         ids=[
             "hourly to day offset mean",
+            "hourly to day offset angular mean",
             "hourly to day offset max",
             "hourly to day offset pot",
         ],
@@ -894,6 +968,18 @@ class TestComplexPeriodicityAggregations:
             ),
             (
                 TS_PT1H_2MONTH,
+                AngularMean,
+                P1M_OFF,
+                "value",
+                [datetime(2024, 12, 1, 9), datetime(2025, 1, 1, 9), datetime(2025, 2, 1, 9)],
+                [744, 744, 672],
+                [9, 744, 663],
+                {"value": [4.0, 20.5, 184]},
+                None,
+                {},
+            ),
+            (
+                TS_PT1H_2MONTH,
                 Max,
                 P1M_OFF,
                 "value",
@@ -917,7 +1003,12 @@ class TestComplexPeriodicityAggregations:
                 {"threshold": 20},
             ),
         ],
-        ids=["hourly to month offset mean", "hourly to month offset max", "hourly to month offset pot"],
+        ids=[
+            "hourly to month offset mean",
+            "hourly to month offset angular mean",
+            "hourly to month offset max",
+            "hourly to month offset pot",
+        ],
     )
     def test_microsecond_to_month_offset(
         self,
@@ -965,6 +1056,18 @@ class TestComplexPeriodicityAggregations:
             ),
             (
                 TS_P1D_OFF_2MONTH,
+                AngularMean,
+                P1M_OFF,
+                "value",
+                [datetime(2024, 12, 1, 9), datetime(2025, 1, 1, 9), datetime(2025, 2, 1, 9)],
+                [31, 31, 28],
+                [1, 31, 27],
+                {"value": [0.0, 16.0, 45.0]},
+                None,
+                {},
+            ),
+            (
+                TS_P1D_OFF_2MONTH,
                 Max,
                 P1M_OFF,
                 "value",
@@ -990,6 +1093,7 @@ class TestComplexPeriodicityAggregations:
         ],
         ids=[
             "daily_offset_to_month_offset_mean",
+            "daily_offset_to_month_offset_angular_mean",
             "daily_offset_to_month_offset_max",
             "daily_offset_to_month_offset_pot",
         ],
@@ -1040,6 +1144,18 @@ class TestComplexPeriodicityAggregations:
             ),
             (
                 TS_P1M_OFF_2YEARS,
+                AngularMean,
+                P1Y_OFF,
+                "value",
+                [datetime(2024, 10, 1, 9), datetime(2025, 10, 1, 9), datetime(2026, 10, 1, 9)],
+                [12, 12, 12],
+                [10, 12, 2],
+                {"value": [4.5, 15.5, 22.5]},
+                None,
+                {},
+            ),
+            (
+                TS_P1M_OFF_2YEARS,
                 Max,
                 P1Y_OFF,
                 "value",
@@ -1065,6 +1181,7 @@ class TestComplexPeriodicityAggregations:
         ],
         ids=[
             "month_offset_to_month_offset_mean",
+            "month_offset_to_month_offset_angular_mean",
             "month_offset_to_month_offset_max",
             "month_offset_to_month_offset_pot",
         ],
@@ -1108,6 +1225,17 @@ class TestEndAnchorAggregations:
             (
                 TS_PT1H_2DAYS,
                 Mean,
+                P1D,
+                "value",
+                [datetime(2025, 1, 1), datetime(2025, 1, 2), datetime(2025, 1, 3)],
+                [24, 24, 24],
+                [1, 24, 23],
+                {"value": [0.0, 12.5, 36.0]},
+                None,
+            ),
+            (
+                TS_PT1H_2DAYS,
+                AngularMean,
                 P1D,
                 "value",
                 [datetime(2025, 1, 1), datetime(2025, 1, 2), datetime(2025, 1, 3)],
@@ -1163,6 +1291,7 @@ class TestEndAnchorAggregations:
         ],
         ids=[
             "hourly to daily mean",
+            "hourly to daily angular mean",
             "hourly to daily max",
             "hourly to daily min",
             "hourly to daily offset_max",
@@ -1587,3 +1716,46 @@ class TestConditionalCount:
             aggregation_time_anchor=padded_tf.time_anchor,
         )
         assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False, check_exact=False)
+
+
+class TestAngularMean:
+    @pytest.mark.parametrize(
+        "input_tf,aggregator,target_period,column,timestamps,counts,values,timestamps_of,kwargs",
+        [
+            (
+                TS_PT1H_2DAYS,
+                AngularMean,
+                P1D,
+                ["value_about_pi"],
+                [datetime(2025, 1, 1), datetime(2025, 1, 2)],
+                [24, 24],
+                {"value_about_pi": [179.5, 359.5]},
+                None,
+                {},
+            ),
+        ],
+        ids=["hourly to daily angular_mean about pi"],
+    )
+    def test_angular_mean(
+        self,
+        input_tf: TimeFrame,
+        aggregator: type[AggregationFunction],
+        target_period: Period,
+        column: list,
+        timestamps: list,
+        counts: list,
+        values: dict,
+        timestamps_of: list | None,
+        kwargs: dict[str, Any],
+    ) -> None:
+        expected_df = generate_expected_df(timestamps, aggregator, column, values, counts, counts, timestamps_of)
+        result = aggregator(**kwargs).apply(
+            input_tf.df,
+            input_tf.time_name,
+            input_tf.time_anchor,
+            input_tf.periodicity,
+            target_period,
+            column,
+            input_tf.time_anchor,
+        )
+        assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False)
