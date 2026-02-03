@@ -187,6 +187,20 @@ Choose how values inside each window are summarised. Pass a **string** correspon
 
     **Example usage:** ``tf_agg = tf.aggregate("P1D", "mean", "concentration")``
 
+``angular_mean``
+^^^^^^^^
+:class:`time_stream.aggregation.AngularMean`
+
+    **What it does:** Averages all angles (measured in degrees) in each period. 
+                      Results are in the range -180 to 180 degrees.
+
+    **When to use:** Useful for variables like wind direction (``"wd"``), where the average represents
+    the period well.
+
+    **Additional args:** None.
+
+    **Example usage:** ``tf_agg = tf.aggregate("P1D", "angular_mean", "wd")``
+
 ``min``
 ^^^^^^^^
 :class:`time_stream.aggregation.Min`
@@ -224,7 +238,7 @@ Choose how values inside each window are summarised. Pass a **string** correspon
 
     **Example usage:** ``tf_agg = tf.aggregate("P1D", "percentile", "flow", p=95)``
 
-pot
+``pot``
 ^^^
 :class:`time_stream.aggregation.PeaksOverThreshold`
 
