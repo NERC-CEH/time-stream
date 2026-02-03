@@ -318,6 +318,7 @@ class AngularMean(AggregationFunction):
             pl.arctan2((e.radians().sin().sum()), (e.radians().cos().sum()))
             .degrees()
             .round(1)
+            .mod(360)
             .alias(f"angular_mean_{e.meta.root_names()[0]}")
             for e in exprs
         ]

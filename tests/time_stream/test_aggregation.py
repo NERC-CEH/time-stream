@@ -56,7 +56,7 @@ def generate_time_series(
             "value_plus1": [i + 1 for i in range(length)],
             "value_times2": [i * 2 for i in range(length)],
             # for TestAngularMean
-            "value_about_pi": [i + 180 - 24 / 2 if i < 24 else i + 360 - 24 - 24 / 2 for i in range(length)],
+            "value_about_pi": [i + 180 - 12 if i < 24 else i + 324 for i in range(length)],
         }
     )
 
@@ -974,7 +974,7 @@ class TestComplexPeriodicityAggregations:
                 [datetime(2024, 12, 1, 9), datetime(2025, 1, 1, 9), datetime(2025, 2, 1, 9)],
                 [744, 744, 672],
                 [9, 744, 663],
-                {"value": [4.0, 20.5, -176]},
+                {"value": [4.0, 20.5, 184]},
                 None,
                 {},
             ),
@@ -1729,7 +1729,7 @@ class TestAngularMean:
                 ["value_about_pi"],
                 [datetime(2025, 1, 1), datetime(2025, 1, 2)],
                 [24, 24],
-                {"value_about_pi": [179.5, -0.5]},
+                {"value_about_pi": [179.5, 359.5]},
                 None,
                 {},
             ),
