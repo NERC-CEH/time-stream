@@ -1,17 +1,17 @@
 [build-system]
-requires = ["setuptools >= 61.0", "autosemver"]
+requires = ["setuptools >= 61.0,<81",
+    "autosemver"]
 
 [project]
 requires-python = ">=3.12"
 dependencies = [
+    "setuptools >= 61.0,<81",
     "autosemver",
-    "setuptools < 81",
     "config>=0.5.1",
     "polars>=1.1.0",
     "pyarrow>=17.0.0",
     "pydantic>=2.8.2",
     "isodate",
-    "setuptools",
     "numpy",
     "scipy>=1.16.1",
     "matplotlib>=3.10.5",
