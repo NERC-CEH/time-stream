@@ -277,7 +277,7 @@ Choose how values inside each window are summarised. Pass a **string** correspon
 
 
 ``standard deviation``
-^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^
 :class:`time_stream.aggregation.StDev`
 
     **What it does:** Captures the variability or spread of values around the mean for a set of values.
