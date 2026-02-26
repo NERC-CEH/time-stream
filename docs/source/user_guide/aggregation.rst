@@ -275,6 +275,23 @@ Choose how values inside each window are summarised. Pass a **string** correspon
         2. ``tf_agg = tf.aggregate("P1Y", "conditional_count", "flow", condition=lambda col: col.diff().abs() > 5)``
         3. ``tf_agg = tf.aggregate("P1Y", "conditional_count", "flow", condition=lambda col: col.is_in(["ok", "good"]))``
 
+
+``standard deviation``
+^^^^^^^^
+:class:`time_stream.aggregation.StDev`
+
+    **What it does:** Captures the variability or spread of values around the mean for a set of values.
+
+    **When to use:** Useful for quality control checks. A smaller standard deviation value indicates less variation
+    from the mean value. If this is applied to a variable where it is expected that values will not change 
+    significantly across the time period, then a high standard deviation indicates a chance there is an issue with the
+    data.
+
+    **Additional args:** None.
+
+    **Example usage:** ``tf_agg = tf.aggregate("P1D", "stdev", "ta")``
+
+
 Column selection
 ----------------
 
