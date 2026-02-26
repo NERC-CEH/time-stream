@@ -462,3 +462,14 @@ class PeaksOverThreshold(ConditionalCount):
             threshold: The threshold to count peaks over.
         """
         super().__init__(lambda col: col > threshold)
+
+
+@AggregationFunction.register
+class StDev(AggregationFunction):
+    """An aggregation class to calculate the standard deviation of values within each aggregation period."""
+
+    name = "stdev"
+
+    def expr(self, ctx: AggregationCtx, columns: list[str]) -> list[pl.Expr]:
+        """Return the `Polars` expression for calculating the standard deviation in an aggregation period."""
+        return [pl.col(col).std().alias(f"stdev_{col}") for col in columns]
