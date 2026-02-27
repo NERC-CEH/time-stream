@@ -9,7 +9,7 @@ period-based grouping.
 """
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
 from typing import Callable
 
@@ -40,7 +40,7 @@ class TimeWindow:
 
     start: time
     end: time
-    closed: ClosedInterval = field(default=ClosedInterval.BOTH)
+    closed: ClosedInterval | None = ClosedInterval.BOTH
 
     def __post_init__(self) -> None:
         """Validate the time window on construction."""
