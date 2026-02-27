@@ -19,6 +19,7 @@ from time_stream.aggregation import (
     Min,
     PeaksOverThreshold,
     Percentile,
+    StDev,
     Sum,
     TimeWindow,
 )
@@ -219,6 +220,7 @@ class TestAggregationFunction:
             ("max", Max),
             ("mean_sum", MeanSum),
             ("sum", Sum),
+            ("stdev", StDev),
         ],
     )
     def test_get_with_string(self, get_input: str, expected: type[AggregationFunction]) -> None:
@@ -228,7 +230,15 @@ class TestAggregationFunction:
 
     @pytest.mark.parametrize(
         "get_input,expected",
-        [(Mean, Mean), (AngularMean, AngularMean), (Min, Min), (Max, Max), (MeanSum, MeanSum), (Sum, Sum)],
+        [
+            (Mean, Mean),
+            (AngularMean, AngularMean),
+            (Min, Min),
+            (Max, Max),
+            (MeanSum, MeanSum),
+            (Sum, Sum),
+            (StDev, StDev),
+        ],
     )
     def test_get_with_class(self, get_input: type[AggregationFunction], expected: type[AggregationFunction]) -> None:
         """Test AggregationFunction.get() with class input."""
@@ -237,7 +247,15 @@ class TestAggregationFunction:
 
     @pytest.mark.parametrize(
         "get_input,expected",
-        [(Mean(), Mean), (AngularMean(), AngularMean), (Min(), Min), (Max(), Max), (MeanSum(), MeanSum), (Sum(), Sum)],
+        [
+            (Mean(), Mean),
+            (AngularMean(), AngularMean),
+            (Min(), Min),
+            (Max(), Max),
+            (MeanSum(), MeanSum),
+            (Sum(), Sum),
+            (StDev(), StDev),
+        ],
     )
     def test_get_with_instance(self, get_input: AggregationFunction, expected: type[AggregationFunction]) -> None:
         """Test AggregationFunction.get() with instance input."""
@@ -387,6 +405,17 @@ class TestSimpleAggregations:
                 None,
                 {"threshold": 20},
             ),
+            (
+                TS_PT1H_2DAYS,
+                StDev,
+                P1D,
+                "value",
+                [datetime(2025, 1, 1), datetime(2025, 1, 2)],
+                [24, 24],
+                {"value": [7.071068, 7.071068]},
+                None,
+                {},
+            ),
         ],
         ids=[
             "hourly to daily mean",
@@ -397,6 +426,7 @@ class TestSimpleAggregations:
             "hourly to daily sum",
             "hourly_to_daily_95_percentile",
             "hourly_to_daily_pot",
+            "hourly_to_daily_stdev",
         ],
     )
     def test_microsecond_to_microsecond(
@@ -516,6 +546,17 @@ class TestSimpleAggregations:
                 None,
                 {"threshold": 100},
             ),
+            (
+                TS_PT1H_2MONTH,
+                StDev,
+                P1M,
+                "value",
+                [datetime(2025, 1, 1), datetime(2025, 2, 1)],
+                [744, 672],
+                {"value": [214.918589, 194.133974]},
+                None,
+                {},
+            ),
         ],
         ids=[
             "hourly to monthly mean",
@@ -526,6 +567,7 @@ class TestSimpleAggregations:
             "hourly to monthly sum",
             "hourly_to_monthly_75_percentile",
             "hourly_to_monthly_pot",
+            "hourly_to_monthly_stdev",
         ],
     )
     def test_microsecond_to_month(
@@ -644,6 +686,17 @@ class TestSimpleAggregations:
                 None,
                 {"threshold": 10},
             ),
+            (
+                TS_P1M_2YEARS,
+                StDev,
+                P1Y,
+                "value",
+                [datetime(2025, 1, 1), datetime(2026, 1, 1)],
+                [12, 12],
+                {"value": [3.605551, 3.605551]},
+                None,
+                {},
+            ),
         ],
         ids=[
             "monthly to yearly mean",
@@ -654,6 +707,7 @@ class TestSimpleAggregations:
             "monthly to yearly sum",
             "monthly_to_yearly_25_percentile",
             "monthly_to_yearly_pot",
+            "monthly_to_yearly_stdev",
         ],
     )
     def test_month_to_month(
@@ -772,6 +826,21 @@ class TestSimpleAggregations:
                 None,
                 {"threshold": 15},
             ),
+            (
+                TS_PT1H_2DAYS,
+                StDev,
+                P1D,
+                ["value", "value_plus1", "value_times2"],
+                [datetime(2025, 1, 1), datetime(2025, 1, 2)],
+                [24, 24],
+                {
+                    "value": [7.071068, 7.071068],
+                    "value_plus1": [7.071068, 7.071068],
+                    "value_times2": [14.142136, 14.142136],
+                },
+                None,
+                {},
+            ),
         ],
         ids=[
             "mult column mean",
@@ -782,6 +851,7 @@ class TestSimpleAggregations:
             "mult column sum",
             "multi_column_50_percentile",
             "multi_column_pot",
+            "multi_column_stdev",
         ],
     )
     def test_multi_column(
@@ -921,12 +991,25 @@ class TestComplexPeriodicityAggregations:
                 None,
                 {"threshold": 20},
             ),
+            (
+                TS_PT1H_2DAYS,
+                StDev,
+                P1D_OFF,
+                "value",
+                [datetime(2024, 12, 31, 9), datetime(2025, 1, 1, 9), datetime(2025, 1, 2, 9)],
+                [24, 24, 24],
+                [9, 24, 15],
+                {"value": [2.73861, 7.07107, 4.47214]},
+                None,
+                {},
+            ),
         ],
         ids=[
             "hourly to day offset mean",
             "hourly to day offset angular mean",
             "hourly to day offset max",
             "hourly to day offset pot",
+            "hourly to day offset stdev",
         ],
     )
     def test_microsecond_to_microsecond_offset(
@@ -1009,12 +1092,25 @@ class TestComplexPeriodicityAggregations:
                 None,
                 {"threshold": 20},
             ),
+            (
+                TS_PT1H_2MONTH,
+                StDev,
+                P1M_OFF,
+                "value",
+                [datetime(2024, 12, 1, 9), datetime(2025, 1, 1, 9), datetime(2025, 2, 1, 9)],
+                [744, 744, 672],
+                [9, 744, 663],
+                {"value": [2.73861, 214.91859, 191.53590]},
+                None,
+                {},
+            ),
         ],
         ids=[
             "hourly to month offset mean",
             "hourly to month offset angular mean",
             "hourly to month offset max",
             "hourly to month offset pot",
+            "hourly to month offset stdev",
         ],
     )
     def test_microsecond_to_month_offset(
@@ -1097,12 +1193,25 @@ class TestComplexPeriodicityAggregations:
                 None,
                 {"threshold": 30},
             ),
+            (
+                TS_P1D_OFF_2MONTH,
+                StDev,
+                P1M_OFF,
+                "value",
+                [datetime(2024, 12, 1, 9), datetime(2025, 1, 1, 9), datetime(2025, 2, 1, 9)],
+                [31, 31, 28],
+                [1, 31, 27],
+                {"value": [None, 9.09212, 7.93725]},
+                None,
+                {},
+            ),
         ],
         ids=[
             "daily_offset_to_month_offset_mean",
             "daily_offset_to_month_offset_angular_mean",
             "daily_offset_to_month_offset_max",
             "daily_offset_to_month_offset_pot",
+            "daily_offset_to_month_offset_stdev",
         ],
     )
     def test_microsecond_offset_to_month_offset(
@@ -1185,12 +1294,25 @@ class TestComplexPeriodicityAggregations:
                 None,
                 {"threshold": 10},
             ),
+            (
+                TS_P1M_OFF_2YEARS,
+                StDev,
+                P1Y_OFF,
+                "value",
+                [datetime(2024, 10, 1, 9), datetime(2025, 10, 1, 9), datetime(2026, 10, 1, 9)],
+                [12, 12, 12],
+                [10, 12, 2],
+                {"value": [3.02765, 3.60555, 0.70711]},
+                None,
+                {},
+            ),
         ],
         ids=[
             "month_offset_to_month_offset_mean",
             "month_offset_to_month_offset_angular_mean",
             "month_offset_to_month_offset_max",
             "month_offset_to_month_offset_pot",
+            "month_offset_to_month_offset_stdev",
         ],
     )
     def test_month_offset_to_month_offset(
@@ -1274,6 +1396,17 @@ class TestEndAnchorAggregations:
                 [datetime(2025, 1, 1), datetime(2025, 1, 1, 1), datetime(2025, 1, 2, 1)],
             ),
             (
+                TS_PT1H_2DAYS,
+                StDev,
+                P1D,
+                "value",
+                [datetime(2025, 1, 1), datetime(2025, 1, 2), datetime(2025, 1, 3)],
+                [24, 24, 24],
+                [1, 24, 23],
+                {"value": [None, 7.0710678118654755, 6.782329983125268]},
+                None,
+            ),
+            (
                 TS_P1D_OFF_2MONTH,
                 Max,
                 P1M_OFF,
@@ -1295,14 +1428,27 @@ class TestEndAnchorAggregations:
                 {"value": [5.0, 16.5, 23.0]},
                 None,
             ),
+            (
+                TS_P1M_OFF_2YEARS,
+                StDev,
+                P1Y_OFF,
+                "value",
+                [datetime(2025, 10, 1, 9), datetime(2026, 10, 1, 9), datetime(2027, 10, 1, 9)],
+                [12, 12, 12],
+                [11, 12, 1],
+                {"value": [3.316625, 3.605551, None]},
+                None,
+            ),
         ],
         ids=[
             "hourly to daily mean",
             "hourly to daily angular mean",
             "hourly to daily max",
             "hourly to daily min",
+            "hourly to daily stdev",
             "hourly to daily offset_max",
             "hourly to daily offset_mean",
+            "hourly to daily offset_stdev",
         ],
     )
     def test_end_anchor_aggregations(
