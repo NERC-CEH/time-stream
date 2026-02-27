@@ -31,16 +31,16 @@ Main responsibilities
 """
 
 from copy import deepcopy
-from datetime import datetime
+from datetime import datetime, time
 from typing import Any, Self, Sequence, Type
 
 import polars as pl
 
-from time_stream.aggregation import AggregationFunction
+from time_stream.aggregation import AggregationFunction, TimeWindow
 from time_stream.bitwise import BitwiseFlag
 from time_stream.calculations import calculate_min_max_envelope
-from time_stream.enums import DuplicateOption, TimeAnchor, ValidationErrorOptions
-from time_stream.exceptions import ColumnNotFoundError, MetadataError
+from time_stream.enums import ClosedInterval, DuplicateOption, TimeAnchor, ValidationErrorOptions
+from time_stream.exceptions import ColumnNotFoundError, MetadataError, TimeWindowError
 from time_stream.flag_manager import FlagColumn, FlagManager, FlagSystemType
 from time_stream.formatting import timeframe_repr
 from time_stream.infill import InfillMethod
@@ -520,6 +520,7 @@ class TimeFrame:
         columns: str | list[str] | None = None,
         missing_criteria: tuple[str, float | int] | None = None,
         aggregation_time_anchor: TimeAnchor | None = None,
+        time_window: tuple[time, time] | tuple[time, time, str | ClosedInterval] | TimeWindow | None = None,
         **kwargs,
     ) -> Self:
         """Apply an aggregation function to a column in this TimeFrame, check the aggregation satisfies user
@@ -531,11 +532,33 @@ class TimeFrame:
             columns: The column(s) containing the data to be aggregated. If omitted, will use all data columns.
             missing_criteria: How the aggregation handles missing data
             aggregation_time_anchor: The time anchor for the aggregation result.
+            time_window: Optional restriction of which time-of-day observations are included in each
+                aggregation period. Only supported when the aggregation period is daily or longer and the data
+                periodicity is sub-daily.
+
+                Accepts a :class:`TimeWindow` instance, or a ``(start, end, closed[optional])`` tuple, where:
+
+                - ``start``: :class:`datetime.time` object for start of the window
+                - ``end``: :class:`datetime.time` object for end of the window
+                - ``closed``: Define which sides of the interval are closed (inclusive)
+                  {'both', 'left', 'right', 'none'} (default = "both")
             **kwargs: Parameters specific to the aggregation function.
 
         Returns:
             A TimeFrame containing the aggregated data.
         """
+        # Normalise time_window tuple to a TimeWindow instance
+        if isinstance(time_window, tuple):
+            if len(time_window) == 2:
+                start, end = time_window
+                closed = ClosedInterval.BOTH
+            elif len(time_window) == 3:
+                start, end, closed = time_window
+                closed = ClosedInterval(closed)
+            else:
+                raise TimeWindowError(f"Unexpected number of arguments passed as a time_window tuple: {time_window}")
+            time_window = TimeWindow(start=start, end=end, closed=closed)
+
         # Get the aggregation function instance and run the apply method
         agg_func = AggregationFunction.get(aggregation_function, **kwargs)
         aggregation_period = configure_period_object(aggregation_period)
@@ -553,6 +576,7 @@ class TimeFrame:
             columns,
             missing_criteria=missing_criteria,
             aggregation_time_anchor=aggregation_time_anchor,
+            time_window=time_window,
         )
 
         # The resulting resolution and offset needs to be extracted from the aggregation period
