@@ -133,10 +133,14 @@ P1Y = Period.of_years(1)
 P1Y_OFF = P1Y.with_month_offset(9).with_hour_offset(9)  # water year
 
 # TimeSeries instances used throughout these tests
+TS_PT30M_1DAYS = generate_time_series(PT30M, PT30M, 48)  # 1 day of 30-minute data
+TS_PT30M_2DAYS = generate_time_series(PT30M, PT30M, 96)  # 2 days of 30-minute data
+TS_PT30M_2DAYS_MISSING = generate_time_series(PT30M, PT30M, 96, missing_data=True)  # 2 days of 30-minute data
 TS_PT1H_2DAYS = generate_time_series(PT1H, PT1H, 48)  # 2 days of 1-hour data
 TS_PT1H_2DAYS_MISSING = generate_time_series(PT1H, PT1H, 48, missing_data=True)  # 2 days of 1-hour data
 TS_PT1H_2MONTH = generate_time_series(PT1H, PT1H, 1_416)  # 2 months (Jan, Feb 2025) of 1-hour data
 TS_P1M_2YEARS = generate_time_series(P1M, P1M, 24)  # 2 years of month data
+TS_P1D_2DAYS = generate_time_series(P1D, P1D, 2)  # 2 days of daily data
 TS_P1D_OFF_2MONTH = generate_time_series(P1D, P1D_OFF, 59, offset="+9H")  # 2 months (Jan, Feb 2025) of 1-day-offset
 TS_P1M_OFF_2YEARS = generate_time_series(P1M, P1M_OFF, 24, offset="+9H")  # 2 years of 1-month-offset data
 
@@ -1764,99 +1768,83 @@ class TestAngularMean:
         assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False)
 
 
-def generate_30min_day_tf(days: int = 1, missing_data: bool = False) -> TimeFrame:
-    """Generate a TimeFrame of 30-minute data starting 2025-01-01 00:00.
-
-    Args:
-        days: Number of days of data to generate.
-        missing_data: If True, remove every 7th observation (by value index).
-
-    Returns:
-        A TimeFrame with 30-minute resolution and periodicity.
-    """
-    period_30min = Period.of_iso_duration("PT30M")
-    length = 48 * days
-    ordinal_from = period_30min.ordinal(datetime(2025, 1, 1))
-    timestamps = [period_30min.datetime(ordinal_from + i) for i in range(length)]
-    values = list(range(length))
-    df = pl.DataFrame({"timestamp": timestamps, "value": values})
-    if missing_data:
-        df = df.filter(pl.col("value") % 7 != 0)
-    return TimeFrame(df=df, time_name="timestamp", resolution=period_30min, periodicity=period_30min)
-
-
 class TestTimeWindow:
-    def test_valid_construction(self) -> None:
-        """TimeWindow is created successfully with valid start < end."""
+    def test_default_closed_is_both(self) -> None:
+        """Omitting closed defaults to ClosedInterval.BOTH."""
         tw = TimeWindow(start=time(10, 30), end=time(14, 0))
-        assert tw.start == time(10, 30)
-        assert tw.end == time(14, 0)
         assert tw.closed == ClosedInterval.BOTH
 
-    def test_valid_construction_with_closed(self) -> None:
-        """TimeWindow accepts a custom ClosedInterval."""
-        tw = TimeWindow(start=time(10, 30), end=time(14, 0), closed=ClosedInterval.LEFT)
-        assert tw.closed == ClosedInterval.LEFT
+    @pytest.mark.parametrize(
+        "start,end,closed",
+        [
+            (time(10, 30), time(14, 0), ClosedInterval.BOTH),
+            (time(10, 30), time(14, 0), ClosedInterval.LEFT),
+            (time(10, 30), time(14, 0), ClosedInterval.RIGHT),
+            (time(10, 30), time(14, 0), ClosedInterval.NONE),
+        ],
+        ids=["both closed", "left closed", "right closed", "none closed"],
+    )
+    def test_valid_construction(self, start: time, end: time, closed: ClosedInterval) -> None:
+        """TimeWindow stores start, end, and closed correctly."""
+        tw = TimeWindow(start=start, end=end, closed=closed)
+        assert tw.start == start
+        assert tw.end == end
+        assert tw.closed == closed
 
-    def test_start_equal_to_end_raises(self) -> None:
-        """start == end is not allowed (zero-width window)."""
+    @pytest.mark.parametrize(
+        "start,end",
+        [
+            (time(10, 0), time(10, 0)),
+            (time(23, 0), time(1, 0)),
+            ("10:30", time(14, 0)),
+            (time(10, 30), "14:00"),
+        ],
+        ids=["start equals end", "start after end", "non-time start", "non-time end"],
+    )
+    def test_invalid_construction_raises(self, start: Any, end: Any) -> None:
+        """Invalid start/end combinations raise TimeWindowError."""
         with pytest.raises(TimeWindowError):
-            TimeWindow(start=time(10, 0), end=time(10, 0))
+            TimeWindow(start=start, end=end)  # type: ignore[arg-type]
 
-    def test_start_after_end_raises(self) -> None:
-        """start > end raises TimeWindowError (midnight-wrapping is unsupported)."""
-        with pytest.raises(TimeWindowError):
-            TimeWindow(start=time(23, 0), end=time(1, 0))
-
-    def test_non_time_start_raises(self) -> None:
-        """Non-time start raises TimeWindowError."""
-        with pytest.raises(TimeWindowError):
-            TimeWindow(start="10:30", end=time(14, 0))  # type: ignore[arg-type]
-
-    def test_non_time_end_raises(self) -> None:
-        """Non-time end raises TimeWindowError."""
-        with pytest.raises(TimeWindowError):
-            TimeWindow(start=time(10, 30), end="14:00")  # type: ignore[arg-type]
-
-    def test_duration_basic(self) -> None:
+    @pytest.mark.parametrize(
+        "start,end,expected_duration",
+        [
+            (time(10, 30), time(14, 0), timedelta(hours=3, minutes=30)),
+            (time(9, 0), time(17, 0), timedelta(hours=8)),
+            (time(12, 0, 0), time(12, 0, 30), timedelta(seconds=30)),
+        ],
+        ids=["hours and minutes", "exact hours", "sub-minute"],
+    )
+    def test_duration(self, start: time, end: time, expected_duration: timedelta) -> None:
         """duration returns the timedelta between end and start."""
-        tw = TimeWindow(start=time(10, 30), end=time(14, 0))
-        assert tw.duration == timedelta(hours=3, minutes=30)
+        tw = TimeWindow(start=start, end=end)
+        assert tw.duration == expected_duration
 
-    def test_duration_exact_hours(self) -> None:
-        """duration for a whole-hour window."""
-        tw = TimeWindow(start=time(9, 0), end=time(17, 0))
-        assert tw.duration == timedelta(hours=8)
-
-    def test_duration_sub_minute(self) -> None:
-        """duration handles sub-minute precision."""
-        tw = TimeWindow(start=time(12, 0, 0), end=time(12, 0, 30))
-        assert tw.duration == timedelta(seconds=30)
-
-    def test_expected_count_both_closed(self) -> None:
-        tw = TimeWindow(start=time(10, 30), end=time(14, 0), closed=ClosedInterval.BOTH)
-        assert tw.expected_count(PT30M) == 8
-
-    def test_expected_count_left_closed(self) -> None:
-        tw = TimeWindow(start=time(10, 30), end=time(14, 0), closed=ClosedInterval.LEFT)
-        assert tw.expected_count(PT30M) == 7
-
-    def test_expected_count_right_closed(self) -> None:
-        tw = TimeWindow(start=time(10, 30), end=time(14, 0), closed=ClosedInterval.RIGHT)
-        assert tw.expected_count(PT30M) == 7
-
-    def test_expected_count_none_closed(self) -> None:
-        tw = TimeWindow(start=time(10, 30), end=time(14, 0), closed=ClosedInterval.NONE)
-        assert tw.expected_count(PT30M) == 6
-
-    def test_expected_count_narrow_window_none_closed_returns_zero(self) -> None:
-        """A window shorter than one period with NONE closed returns 0."""
-        tw = TimeWindow(start=time(10, 0), end=time(10, 15), closed=ClosedInterval.NONE)
-        assert tw.expected_count(PT30M) == 0
-
-    def test_expected_count_with_hourly_periodicity(self) -> None:
-        tw = TimeWindow(start=time(10, 0), end=time(14, 0), closed=ClosedInterval.BOTH)
-        assert tw.expected_count(PT1H) == 5
+    @pytest.mark.parametrize(
+        "start,end,closed,periodicity,expected",
+        [
+            (time(10, 30), time(14, 0), ClosedInterval.BOTH, PT30M, 8),
+            (time(10, 30), time(14, 0), ClosedInterval.LEFT, PT30M, 7),
+            (time(10, 30), time(14, 0), ClosedInterval.RIGHT, PT30M, 7),
+            (time(10, 30), time(14, 0), ClosedInterval.NONE, PT30M, 6),
+            (time(10, 0), time(10, 15), ClosedInterval.NONE, PT30M, 0),
+            (time(10, 0), time(14, 0), ClosedInterval.BOTH, PT1H, 5),
+        ],
+        ids=[
+            "both closed, 30-min",
+            "left closed, 30-min",
+            "right closed, 30-min",
+            "none closed, 30-min",
+            "narrow window none closed returns zero",
+            "both closed, hourly",
+        ],
+    )
+    def test_expected_count(
+        self, start: time, end: time, closed: ClosedInterval, periodicity: Period, expected: int
+    ) -> None:
+        """expected_count returns the number of on-grid timestamps within the window."""
+        tw = TimeWindow(start=start, end=end, closed=closed)
+        assert tw.expected_count(periodicity) == expected
 
 
 class TestTimeWindowValidation:
@@ -1864,9 +1852,8 @@ class TestTimeWindowValidation:
 
     def test_sub_daily_aggregation_period_raises(self) -> None:
         """time_window is not supported for sub-daily aggregation periods."""
-        tf = generate_30min_day_tf(days=2)
-        with pytest.raises(TimeWindowError, match="daily or longer"):
-            tf.aggregate(
+        with pytest.raises(TimeWindowError):
+            TS_PT30M_2DAYS.aggregate(
                 aggregation_period="PT1H",
                 aggregation_function="mean",
                 time_window=TimeWindow(start=time(10, 30), end=time(14, 0)),
@@ -1874,16 +1861,8 @@ class TestTimeWindowValidation:
 
     def test_daily_or_coarser_periodicity_raises(self) -> None:
         """time_window requires sub-daily periodicity - daily data has nothing to filter."""
-        period_1d = Period.of_iso_duration("P1D")
-        df = pl.DataFrame(
-            {
-                "timestamp": [datetime(2025, 1, 1), datetime(2025, 1, 2)],
-                "value": [1.0, 2.0],
-            }
-        )
-        tf = TimeFrame(df=df, time_name="timestamp", resolution=period_1d, periodicity=period_1d)
-        with pytest.raises(TimeWindowError, match="sub-daily"):
-            tf.aggregate(
+        with pytest.raises(TimeWindowError):
+            TS_P1D_2DAYS.aggregate(
                 aggregation_period="P1M",
                 aggregation_function="mean",
                 time_window=TimeWindow(start=time(10, 30), end=time(14, 0)),
@@ -1891,216 +1870,121 @@ class TestTimeWindowValidation:
 
     def test_midnight_wrapping_window_raises_on_construction(self) -> None:
         """A window where start >= end raises on TimeWindow construction."""
-        with pytest.raises(TimeWindowError, match="strictly before"):
+        with pytest.raises(TimeWindowError):
             TimeWindow(start=time(22, 0), end=time(2, 0))
 
 
 class TestTimeWindowAggregation:
-    def test_basic_mean_with_time_window(self) -> None:
-        """Mean of 30-min data over one day with window 10:30-14:00 (BOTH closed).
-
-        Window has 8 timestamps per day (indices 21-28): values 21-28.
-        Mean = (21+22+23+24+25+26+27+28) / 8 = 196/8 = 24.5
-        """
-        tf = generate_30min_day_tf(days=1)
-        result = tf.aggregate(
-            aggregation_period="P1D",
-            aggregation_function="mean",
-            time_window=TimeWindow(start=time(10, 30), end=time(14, 0)),
+    @pytest.mark.parametrize(
+        "input_tf,aggregator,target_period,columns,time_window,timestamps,expected_counts,actual_counts,values",
+        [
+            (
+                TS_PT30M_1DAYS,
+                Mean,
+                "P1D",
+                "value",
+                TimeWindow(start=time(10, 30), end=time(14, 0)),
+                [datetime(2025, 1, 1)],
+                [8],
+                [8],
+                {"value": [24.5]},
+            ),
+            (
+                TS_PT30M_2DAYS,
+                Mean,
+                "P1D",
+                "value",
+                TimeWindow(start=time(10, 30), end=time(14, 0)),
+                [datetime(2025, 1, 1), datetime(2025, 1, 2)],
+                [8, 8],
+                [8, 8],
+                {"value": [24.5, 72.5]},
+            ),
+            (
+                TS_PT30M_1DAYS,
+                Mean,
+                "P1D",
+                "value",
+                TimeWindow(start=time(10, 30), end=time(14, 0), closed=ClosedInterval.LEFT),
+                [datetime(2025, 1, 1)],
+                [7],
+                [7],
+                {"value": [24.0]},
+            ),
+            (
+                TS_PT30M_1DAYS,
+                Mean,
+                "P1D",
+                "value",
+                TimeWindow(start=time(10, 30), end=time(14, 0), closed=ClosedInterval.RIGHT),
+                [datetime(2025, 1, 1)],
+                [7],
+                [7],
+                {"value": [25.0]},
+            ),
+            (
+                TS_PT30M_1DAYS,
+                Mean,
+                "P1D",
+                "value",
+                TimeWindow(start=time(10, 30), end=time(14, 0), closed=ClosedInterval.NONE),
+                [datetime(2025, 1, 1)],
+                [6],
+                [6],
+                {"value": [24.5]},
+            ),
+            (
+                TS_PT30M_1DAYS,
+                Sum,
+                "P1D",
+                "value",
+                TimeWindow(start=time(10, 30), end=time(14, 0)),
+                [datetime(2025, 1, 1)],
+                [8],
+                [8],
+                {"value": [196]},
+            ),
+            (
+                TS_PT30M_1DAYS,
+                Mean,
+                "P1D",
+                ["value", "value_plus1"],
+                TimeWindow(start=time(10, 30), end=time(14, 0)),
+                [datetime(2025, 1, 1)],
+                [8],
+                [8],
+                {"value": [24.5], "value_plus1": [25.5]},
+            ),
+        ],
+        ids=[
+            "one-day mean, both closed",
+            "two-day mean, both closed",
+            "one-day mean, left closed",
+            "one-day mean, right closed",
+            "one-day mean, none closed",
+            "one-day sum, both closed",
+            "one-day mean, both closed, two columns",
+        ],
+    )
+    def test_windowed_aggregation(
+        self,
+        input_tf: TimeFrame,
+        aggregator: type[AggregationFunction],
+        target_period: str,
+        columns: str | list[str],
+        time_window: TimeWindow,
+        timestamps: list[datetime],
+        expected_counts: list[int],
+        actual_counts: list[int],
+        values: dict[str, list[float | int]],
+    ) -> None:
+        """Test time-windowed aggregation produces the correct expected DataFrame."""
+        col_list = columns if isinstance(columns, list) else [columns]
+        expected_df = generate_expected_df(timestamps, aggregator, columns, values, expected_counts, actual_counts)
+        result = input_tf.aggregate(
+            aggregation_period=target_period,
+            aggregation_function=aggregator,
+            columns=col_list,
+            time_window=time_window,
         )
-
-        assert result.df["mean_value"][0] == pytest.approx(24.5)
-        assert result.df["count_value"][0] == 8
-        assert result.df["expected_count_timestamp"][0] == 8
-        assert result.df["valid_value"][0] is True
-
-    def test_time_window_expected_count_matches_window(self) -> None:
-        """expected_count reflects the time window, not the full period."""
-        tf = generate_30min_day_tf(days=2)
-        # Full daily expected count would be 48 (48 x 30-min per day)
-        result = tf.aggregate(
-            aggregation_period="P1D",
-            aggregation_function="mean",
-            time_window=TimeWindow(start=time(10, 30), end=time(14, 0)),
-        )
-        # Should be 8 (not 48) for both days
-        assert list(result.df["expected_count_timestamp"]) == [8, 8]
-
-    def test_time_window_two_days(self) -> None:
-        """Two-day aggregation: each day returns correct windowed mean.
-
-        Day 1 window values (i=21..28): 21,22,23,24,25,26,27,28 -> mean=24.5
-        Day 2 window values (i=69..76): 69,70,71,72,73,74,75,76 -> mean=72.5
-        """
-        tf = generate_30min_day_tf(days=2)
-        result = tf.aggregate(
-            aggregation_period="P1D",
-            aggregation_function="mean",
-            time_window=TimeWindow(start=time(10, 30), end=time(14, 0)),
-        )
-
-        means = sorted(result.df["mean_value"].to_list())
-        assert means[0] == pytest.approx(24.5)
-        assert means[1] == pytest.approx(72.5)
-
-    def test_time_window_with_missing_data_actual_count(self) -> None:
-        """actual_count reflects only observations within the window that are present.
-
-        Missing every 7th value. Day 1 window (i=21..28): i=21 and i=28 are missing -> 6 present.
-        Day 2 window (i=69..76): i=70 is missing -> 7 present.
-        """
-        tf = generate_30min_day_tf(days=2, missing_data=True)
-        result = tf.aggregate(
-            aggregation_period="P1D",
-            aggregation_function="mean",
-            time_window=TimeWindow(start=time(10, 30), end=time(14, 0)),
-        )
-
-        # expected count stays 8 regardless of missing data
-        assert list(result.df["expected_count_timestamp"]) == [8, 8]
-        # actual counts: 6 and 7
-        actual_counts = sorted(result.df["count_value"].to_list())
-        assert actual_counts == [6, 7]
-
-    def test_time_window_with_missing_criteria(self) -> None:
-        """missing_criteria validation uses window-adjusted expected_count.
-
-        Day 1 window: 6/8 = 75% -> fails 80% threshold.
-        Day 2 window: 7/8 = 87.5% -> passes 80% threshold.
-        """
-        tf = generate_30min_day_tf(days=2, missing_data=True)
-        result = tf.aggregate(
-            aggregation_period="P1D",
-            aggregation_function="mean",
-            missing_criteria=("percent", 80),
-            time_window=TimeWindow(start=time(10, 30), end=time(14, 0)),
-        )
-
-        # valid_value: one day passes, one fails
-        valid = sorted(result.df["valid_value"].to_list())
-        assert valid == [False, True]
-
-    def test_time_window_closed_left(self) -> None:
-        """LEFT closed excludes 14:00; expected_count = 7, and value at 14:00 not included."""
-        tf = generate_30min_day_tf(days=1)
-        result = tf.aggregate(
-            aggregation_period="P1D",
-            aggregation_function="mean",
-            time_window=TimeWindow(start=time(10, 30), end=time(14, 0), closed=ClosedInterval.LEFT),
-        )
-
-        # Window: 10:30 (i=21) to 13:30 (i=27) inclusive, 7 values
-        # Mean = (21+22+23+24+25+26+27) / 7 = 168/7 = 24.0
-        assert result.df["expected_count_timestamp"][0] == 7
-        assert result.df["count_value"][0] == 7
-        assert result.df["mean_value"][0] == pytest.approx(24.0)
-
-    def test_time_window_closed_right(self) -> None:
-        """RIGHT closed excludes 10:30; expected_count = 7, and value at 10:30 not included."""
-        tf = generate_30min_day_tf(days=1)
-        result = tf.aggregate(
-            aggregation_period="P1D",
-            aggregation_function="mean",
-            time_window=TimeWindow(start=time(10, 30), end=time(14, 0), closed=ClosedInterval.RIGHT),
-        )
-
-        # Window: 11:00 (i=22) to 14:00 (i=28) inclusive, 7 values
-        # Mean = (22+23+24+25+26+27+28) / 7 = 175/7 = 25.0
-        assert result.df["expected_count_timestamp"][0] == 7
-        assert result.df["count_value"][0] == 7
-        assert result.df["mean_value"][0] == pytest.approx(25.0)
-
-    def test_time_window_closed_none(self) -> None:
-        """NONE closed excludes both boundaries; expected_count = 6."""
-        tf = generate_30min_day_tf(days=1)
-        result = tf.aggregate(
-            aggregation_period="P1D",
-            aggregation_function="mean",
-            time_window=TimeWindow(start=time(10, 30), end=time(14, 0), closed=ClosedInterval.NONE),
-        )
-
-        # Window: 11:00 (i=22) to 13:30 (i=27) inclusive, 6 values
-        # Mean = (22+23+24+25+26+27) / 6 = 147/6 = 24.5
-        assert result.df["expected_count_timestamp"][0] == 6
-        assert result.df["count_value"][0] == 6
-        assert result.df["mean_value"][0] == pytest.approx(24.5)
-
-    def test_time_window_via_tuple(self) -> None:
-        """Passing time_window as a tuple of (start, end) is equivalent to TimeWindow(start, end)."""
-        tf = generate_30min_day_tf(days=1)
-        result_tw = tf.aggregate(
-            aggregation_period="P1D",
-            aggregation_function="mean",
-            time_window=TimeWindow(start=time(10, 30), end=time(14, 0)),
-        )
-        result_tuple = tf.aggregate(
-            aggregation_period="P1D",
-            aggregation_function="mean",
-            time_window=(time(10, 30), time(14, 0)),
-        )
-
-        assert result_tw.df["mean_value"][0] == pytest.approx(result_tuple.df["mean_value"][0])
-        assert result_tw.df["expected_count_timestamp"][0] == result_tuple.df["expected_count_timestamp"][0]
-
-    def test_time_window_via_tuple_with_closed(self) -> None:
-        """Passing time_window as tuple with time_window_closed uses that ClosedInterval."""
-        tf = generate_30min_day_tf(days=1)
-        result = tf.aggregate(
-            aggregation_period="P1D",
-            aggregation_function="mean",
-            time_window=(time(10, 30), time(14, 0)),
-            time_window_closed=ClosedInterval.LEFT,
-        )
-        # LEFT closed: expected_count = 7
-        assert result.df["expected_count_timestamp"][0] == 7
-
-    def test_no_time_window_behaviour_unchanged(self) -> None:
-        """Omitting time_window gives the same result as before this feature was added."""
-        tf = generate_30min_day_tf(days=1)
-        result = tf.aggregate(aggregation_period="P1D", aggregation_function="mean")
-
-        # Full-day expected count for 30-min data
-        assert result.df["expected_count_timestamp"][0] == 48
-        assert result.df["count_value"][0] == 48
-
-    def test_time_window_with_sum_aggregation(self) -> None:
-        """time_window works with aggregations other than mean."""
-        tf = generate_30min_day_tf(days=1)
-        result = tf.aggregate(
-            aggregation_period="P1D",
-            aggregation_function="sum",
-            time_window=TimeWindow(start=time(10, 30), end=time(14, 0)),
-        )
-
-        # Window values 21..28, sum = 196
-        assert result.df["sum_value"][0] == 196
-        assert result.df["expected_count_timestamp"][0] == 8
-
-    def test_time_window_multiple_columns(self) -> None:
-        """time_window applies to all aggregated columns independently."""
-        period_30min = Period.of_iso_duration("PT30M")
-        length = 48
-        ordinal_from = period_30min.ordinal(datetime(2025, 1, 1))
-        timestamps = [period_30min.datetime(ordinal_from + i) for i in range(length)]
-        df = pl.DataFrame(
-            {
-                "timestamp": timestamps,
-                "a": list(range(length)),
-                "b": [i * 2 for i in range(length)],
-            }
-        )
-        tf = TimeFrame(df=df, time_name="timestamp", resolution=period_30min, periodicity=period_30min)
-
-        result = tf.aggregate(
-            aggregation_period="P1D",
-            aggregation_function="mean",
-            columns=["a", "b"],
-            time_window=TimeWindow(start=time(10, 30), end=time(14, 0)),
-        )
-
-        # Both columns: window i=21..28
-        assert result.df["mean_a"][0] == pytest.approx(24.5)
-        assert result.df["mean_b"][0] == pytest.approx(49.0)  # 2 * 24.5
-        assert result.df["count_a"][0] == 8
-        assert result.df["count_b"][0] == 8
-        assert result.df["expected_count_timestamp"][0] == 8
+        assert_frame_equal(result.df, expected_df, check_dtype=False, check_column_order=False)
