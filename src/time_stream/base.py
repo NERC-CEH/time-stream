@@ -535,11 +535,13 @@ class TimeFrame:
             time_window: Optional restriction of which time-of-day observations are included in each
                 aggregation period. Only supported when the aggregation period is daily or longer and the data
                 periodicity is sub-daily.
+
                 Accepts a :class:`TimeWindow` instance, or a ``(start, end, closed[optional])`` tuple, where:
-                - start = :class:`datetime.time` object for start of the window
-                - end = :class:`datetime.time` object for end of the window
-                - closed = Define which sides of the interval are closed (inclusive) {'both', 'left', 'right', 'none'}
-                           (default = "both")
+
+                - ``start``: :class:`datetime.time` object for start of the window
+                - ``end``: :class:`datetime.time` object for end of the window
+                - ``closed``: Define which sides of the interval are closed (inclusive)
+                  {'both', 'left', 'right', 'none'} (default = "both")
             **kwargs: Parameters specific to the aggregation function.
 
         Returns:
