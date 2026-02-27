@@ -9,17 +9,75 @@ period-based grouping.
 """
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
-from datetime import timedelta
+from dataclasses import dataclass, field
+from datetime import date, datetime, time, timedelta
 from typing import Callable
 
 import polars as pl
 
 from time_stream import Period
-from time_stream.enums import MissingCriteria, TimeAnchor
-from time_stream.exceptions import AggregationError, AggregationPeriodError, MissingCriteriaError
+from time_stream.enums import ClosedInterval, MissingCriteria, TimeAnchor
+from time_stream.exceptions import AggregationError, AggregationPeriodError, MissingCriteriaError, TimeWindowError
 from time_stream.operation import Operation
 from time_stream.utils import check_columns_in_dataframe
+
+
+@dataclass(frozen=True)
+class TimeWindow:
+    """A helper class for working with time windows: a set period of time between a start time and end time.
+
+    Can be used, for example, to restrict which observations within an aggregation period are included. For example,
+    to compute mean daily albedo from 30-minute values, you might restrict to the window 10:30-14:00.
+
+    Only supported for daily or longer aggregation periods when the data periodicity is sub-daily.
+    Midnight-wrapping windows (where ``start >= end``) are not supported.
+
+    Attributes:
+        start: The start of the time-of-day window.
+        end: The end of the time-of-day window. Must be after ``start``.
+        closed: Which boundary times are included. Defaults to both ends being closed (inclusive).
+    """
+
+    start: time
+    end: time
+    closed: ClosedInterval = field(default=ClosedInterval.BOTH)
+
+    def __post_init__(self) -> None:
+        """Validate the time window on construction."""
+        if not isinstance(self.start, time) or not isinstance(self.end, time):
+            raise TimeWindowError("'start' and 'end' must be datetime.time objects.")
+        if self.start >= self.end:
+            raise TimeWindowError(f"'start' ({self.start}) must be strictly before 'end' ({self.end}).")
+
+    @property
+    def duration(self) -> timedelta:
+        """The duration of the time window as a timedelta.
+
+        Returns:
+            The time difference between end and start.
+        """
+        return datetime.combine(date.min, self.end) - datetime.combine(date.min, self.start)
+
+    def expected_count(self, periodicity: Period) -> int:
+        """Count the number of observations expected within this window for a given periodicity.
+
+        Adjusts the counts for the closed boundaries:
+        - ``BOTH`` adds one (both boundary timestamps are included)
+        - ``NONE`` subtracts one (both are excluded)
+        - ``LEFT`` and ``RIGHT`` leave the count unchanged.
+
+        Args:
+            periodicity: The Period object from which the timedelta is used for the calculation.
+
+        Returns:
+            The expected number of observations within the window for the given periodicity.
+        """
+        count = self.duration // periodicity.timedelta
+        if self.closed == ClosedInterval.BOTH:
+            count += 1
+        elif self.closed == ClosedInterval.NONE:
+            count = max(0, count - 1)
+        return count
 
 
 @dataclass(frozen=True)
@@ -54,6 +112,7 @@ class AggregationFunction(Operation, ABC):
         columns: str | list[str],
         aggregation_time_anchor: TimeAnchor,
         missing_criteria: tuple[str, float | int] | None = None,
+        time_window: TimeWindow | None = None,
     ) -> pl.DataFrame:
         """Run the aggregation pipeline.
 
@@ -66,7 +125,7 @@ class AggregationFunction(Operation, ABC):
             columns: Column(s) containing the data to be aggregated
             aggregation_time_anchor: The time anchor for the aggregation result.
             missing_criteria: How the aggregation handles missing data
-
+            time_window: Optional restriction of which time-of-day observations are included.
 
         Returns:
             The aggregated dataframe
@@ -79,6 +138,7 @@ class AggregationFunction(Operation, ABC):
             columns,
             aggregation_time_anchor,
             missing_criteria,
+            time_window,
         )
         return pipeline.execute()
 
@@ -94,6 +154,7 @@ class AggregationPipeline:
         columns: str | list[str],
         aggregation_time_anchor: TimeAnchor,
         missing_criteria: tuple[str, float | int] | None = None,
+        time_window: TimeWindow | None = None,
     ):
         self.agg_func = agg_func
         self.ctx = ctx
@@ -101,6 +162,7 @@ class AggregationPipeline:
         self.aggregation_time_anchor = aggregation_time_anchor
         self.columns = [columns] if isinstance(columns, str) else columns
         self.missing_criteria = missing_criteria
+        self.time_window = time_window
 
     def execute(self) -> pl.DataFrame:
         """The general `Polars` method used for aggregating data is::
@@ -117,9 +179,12 @@ class AggregationPipeline:
         """
         self._validate()
 
+        # Optionally filter observations to those within the time-of-day window
+        df = self._apply_time_window(self.ctx.df) if self.time_window else self.ctx.df
+
         # Group by the aggregation period - taking into account the time anchor of the time series
         label, closed = self._get_label_closed()
-        grouper = self.ctx.df.group_by_dynamic(
+        grouper = df.group_by_dynamic(
             index_column=self.ctx.time_name,
             every=self.aggregation_period.pl_interval,
             offset=self.aggregation_period.pl_offset,
@@ -159,6 +224,7 @@ class AggregationPipeline:
             raise AggregationError("Cannot aggregate an empty DataFrame.")
         check_columns_in_dataframe(self.ctx.df, self.columns + [self.ctx.time_name])
         self._validate_period_compatibility()
+        self._validate_time_window()
 
     def _validate_period_compatibility(self) -> None:
         """Validate that the aggregation period is compatible with the time series periodicity."""
@@ -172,6 +238,39 @@ class AggregationPipeline:
                 f"Incompatible aggregation period '{self.aggregation_period}' with TimeFrame periodicity "
                 f"'{self.ctx.periodicity}'. TimeFrame periodicity must be a subperiod of the aggregation period."
             )
+
+    def _validate_time_window(self) -> None:
+        """Validate that the time_window, if provided, is compatible with the aggregation."""
+        if self.time_window is None:
+            return
+
+        # Aggregation period must be daily or longer
+        agg_td = self.aggregation_period.timedelta
+        if agg_td is not None and agg_td < timedelta(days=1):
+            raise TimeWindowError("'time_window' is only supported for daily or longer aggregation periods")
+
+        # Data periodicity must be sub-daily
+        periodicity_td = self.ctx.periodicity.timedelta
+        if periodicity_td is None or periodicity_td >= timedelta(days=1):
+            raise TimeWindowError("'time_window' requires the data periodicity to be sub-daily.")
+
+    def _apply_time_window(self, df: pl.DataFrame) -> pl.DataFrame:
+        """Filter a DataFrame to only rows whose time-of-day falls within the time window.
+
+        Args:
+            df: The DataFrame to filter.
+
+        Returns:
+            Filtered DataFrame containing only rows within the time window.
+        """
+        time_col = pl.col(self.ctx.time_name).dt.time()
+        return df.filter(
+            time_col.is_between(
+                self.time_window.start,
+                self.time_window.end,
+                closed=self.time_window.closed.value,  # type: ignore - linter complains that the string isn't a Literal
+            )
+        )
 
     def _get_label_closed(self) -> tuple[str, str]:
         """Map TimeAnchor to Polars label/closed semantics.
@@ -195,15 +294,24 @@ class AggregationPipeline:
         """A `Polars` expression to generate the expected count of values in a TimeFrame found in each
         period (if there were no missing values).
 
+        When a ``time_window`` is set, the expected count reflects only the observations that fall within
+        that window, rather than all observations in the aggregation period.
+
         Returns:
             pl.Expr: Polars expression that can be used to generate expected count on a DataFrame
         """
         expected_count_name = f"expected_count_{self.ctx.time_name}"
+
+        # When a time window is active, the expected count is derived from the window duration
+        # and the periodicity, adjusted for the closed boundaries.
+        if self.time_window is not None:
+            count = self.time_window.expected_count(self.ctx.periodicity)
+            expr = pl.lit(count)
+
         # For some aggregations, the expected count is a constant so use that if possible.
         # For example, when aggregating 15-minute data over a day, the expected count is always 96.
-        count = self.ctx.periodicity.count(self.aggregation_period)
-        if count > 0:
-            expr = pl.lit(count)
+        elif self.ctx.periodicity.count(self.aggregation_period) > 0:
+            expr = pl.lit(self.ctx.periodicity.count(self.aggregation_period))
 
         else:
             # Variable length periods need dynamic calculation, based on the start and end of a period interval
@@ -223,13 +331,15 @@ class AggregationPipeline:
                 expr = (end_expr - start_expr).dt.total_microseconds() // micros
 
             else:
-                # 2. If the data we are aggregating is month-based, then there is no simple way to do the calculation,
-                #    so use Polars to create a Series of date ranges lists and get the length of each list.
+                # 2. If the data we are aggregating is month-based, then there is no simple way to do the
+                #    calculation, so use Polars to create a Series of date ranges lists and get the length
+                #    of each list.
                 #
                 #    Note: This method will work for above use cases also, but if periodicity is small and the
                 #    aggregation period is large, it consumes too much memory and causes performance problems.
-                #    For example, aggregating 1 microsecond data over a calendar year involves the creation length
-                #    1_000_000 * 60 * 60 * 24 * 365 arrays which will probably fail with an out-of-memory error.
+                #    For example, aggregating 1 microsecond data over a calendar year involves the creation of
+                #    length 1_000_000 * 60 * 60 * 24 * 365 arrays which will probably fail with an
+                #    out-of-memory error.
                 expr = pl.datetime_ranges(
                     start_expr,
                     end_expr,

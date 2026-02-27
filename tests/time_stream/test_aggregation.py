@@ -1,5 +1,5 @@
 import re
-from datetime import datetime
+from datetime import datetime, time, timedelta
 from typing import Any, Callable
 from unittest.mock import Mock
 
@@ -20,12 +20,14 @@ from time_stream.aggregation import (
     PeaksOverThreshold,
     Percentile,
     Sum,
+    TimeWindow,
 )
 from time_stream.base import TimeFrame
-from time_stream.enums import TimeAnchor
+from time_stream.enums import ClosedInterval, TimeAnchor
 from time_stream.exceptions import (
     MissingCriteriaError,
     RegistryKeyTypeError,
+    TimeWindowError,
     UnknownRegistryKeyError,
 )
 from time_stream.period import Period
@@ -121,6 +123,7 @@ def generate_expected_df(
 
 
 # Period instances used throughout these tests
+PT30M = Period.of_minutes(30)
 PT1H = Period.of_hours(1)
 P1D = Period.of_days(1)
 P1D_OFF = P1D.with_hour_offset(9)  # water day
@@ -1759,3 +1762,345 @@ class TestAngularMean:
             input_tf.time_anchor,
         )
         assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False)
+
+
+def generate_30min_day_tf(days: int = 1, missing_data: bool = False) -> TimeFrame:
+    """Generate a TimeFrame of 30-minute data starting 2025-01-01 00:00.
+
+    Args:
+        days: Number of days of data to generate.
+        missing_data: If True, remove every 7th observation (by value index).
+
+    Returns:
+        A TimeFrame with 30-minute resolution and periodicity.
+    """
+    period_30min = Period.of_iso_duration("PT30M")
+    length = 48 * days
+    ordinal_from = period_30min.ordinal(datetime(2025, 1, 1))
+    timestamps = [period_30min.datetime(ordinal_from + i) for i in range(length)]
+    values = list(range(length))
+    df = pl.DataFrame({"timestamp": timestamps, "value": values})
+    if missing_data:
+        df = df.filter(pl.col("value") % 7 != 0)
+    return TimeFrame(df=df, time_name="timestamp", resolution=period_30min, periodicity=period_30min)
+
+
+class TestTimeWindow:
+    def test_valid_construction(self) -> None:
+        """TimeWindow is created successfully with valid start < end."""
+        tw = TimeWindow(start=time(10, 30), end=time(14, 0))
+        assert tw.start == time(10, 30)
+        assert tw.end == time(14, 0)
+        assert tw.closed == ClosedInterval.BOTH
+
+    def test_valid_construction_with_closed(self) -> None:
+        """TimeWindow accepts a custom ClosedInterval."""
+        tw = TimeWindow(start=time(10, 30), end=time(14, 0), closed=ClosedInterval.LEFT)
+        assert tw.closed == ClosedInterval.LEFT
+
+    def test_start_equal_to_end_raises(self) -> None:
+        """start == end is not allowed (zero-width window)."""
+        with pytest.raises(TimeWindowError):
+            TimeWindow(start=time(10, 0), end=time(10, 0))
+
+    def test_start_after_end_raises(self) -> None:
+        """start > end raises TimeWindowError (midnight-wrapping is unsupported)."""
+        with pytest.raises(TimeWindowError):
+            TimeWindow(start=time(23, 0), end=time(1, 0))
+
+    def test_non_time_start_raises(self) -> None:
+        """Non-time start raises TimeWindowError."""
+        with pytest.raises(TimeWindowError):
+            TimeWindow(start="10:30", end=time(14, 0))  # type: ignore[arg-type]
+
+    def test_non_time_end_raises(self) -> None:
+        """Non-time end raises TimeWindowError."""
+        with pytest.raises(TimeWindowError):
+            TimeWindow(start=time(10, 30), end="14:00")  # type: ignore[arg-type]
+
+    def test_duration_basic(self) -> None:
+        """duration returns the timedelta between end and start."""
+        tw = TimeWindow(start=time(10, 30), end=time(14, 0))
+        assert tw.duration == timedelta(hours=3, minutes=30)
+
+    def test_duration_exact_hours(self) -> None:
+        """duration for a whole-hour window."""
+        tw = TimeWindow(start=time(9, 0), end=time(17, 0))
+        assert tw.duration == timedelta(hours=8)
+
+    def test_duration_sub_minute(self) -> None:
+        """duration handles sub-minute precision."""
+        tw = TimeWindow(start=time(12, 0, 0), end=time(12, 0, 30))
+        assert tw.duration == timedelta(seconds=30)
+
+    def test_expected_count_both_closed(self) -> None:
+        tw = TimeWindow(start=time(10, 30), end=time(14, 0), closed=ClosedInterval.BOTH)
+        assert tw.expected_count(PT30M) == 8
+
+    def test_expected_count_left_closed(self) -> None:
+        tw = TimeWindow(start=time(10, 30), end=time(14, 0), closed=ClosedInterval.LEFT)
+        assert tw.expected_count(PT30M) == 7
+
+    def test_expected_count_right_closed(self) -> None:
+        tw = TimeWindow(start=time(10, 30), end=time(14, 0), closed=ClosedInterval.RIGHT)
+        assert tw.expected_count(PT30M) == 7
+
+    def test_expected_count_none_closed(self) -> None:
+        tw = TimeWindow(start=time(10, 30), end=time(14, 0), closed=ClosedInterval.NONE)
+        assert tw.expected_count(PT30M) == 6
+
+    def test_expected_count_narrow_window_none_closed_returns_zero(self) -> None:
+        """A window shorter than one period with NONE closed returns 0."""
+        tw = TimeWindow(start=time(10, 0), end=time(10, 15), closed=ClosedInterval.NONE)
+        assert tw.expected_count(PT30M) == 0
+
+    def test_expected_count_with_hourly_periodicity(self) -> None:
+        tw = TimeWindow(start=time(10, 0), end=time(14, 0), closed=ClosedInterval.BOTH)
+        assert tw.expected_count(PT1H) == 5
+
+
+class TestTimeWindowValidation:
+    """Tests that invalid time_window configurations raise TimeWindowError."""
+
+    def test_sub_daily_aggregation_period_raises(self) -> None:
+        """time_window is not supported for sub-daily aggregation periods."""
+        tf = generate_30min_day_tf(days=2)
+        with pytest.raises(TimeWindowError, match="daily or longer"):
+            tf.aggregate(
+                aggregation_period="PT1H",
+                aggregation_function="mean",
+                time_window=TimeWindow(start=time(10, 30), end=time(14, 0)),
+            )
+
+    def test_daily_or_coarser_periodicity_raises(self) -> None:
+        """time_window requires sub-daily periodicity - daily data has nothing to filter."""
+        period_1d = Period.of_iso_duration("P1D")
+        df = pl.DataFrame(
+            {
+                "timestamp": [datetime(2025, 1, 1), datetime(2025, 1, 2)],
+                "value": [1.0, 2.0],
+            }
+        )
+        tf = TimeFrame(df=df, time_name="timestamp", resolution=period_1d, periodicity=period_1d)
+        with pytest.raises(TimeWindowError, match="sub-daily"):
+            tf.aggregate(
+                aggregation_period="P1M",
+                aggregation_function="mean",
+                time_window=TimeWindow(start=time(10, 30), end=time(14, 0)),
+            )
+
+    def test_midnight_wrapping_window_raises_on_construction(self) -> None:
+        """A window where start >= end raises on TimeWindow construction."""
+        with pytest.raises(TimeWindowError, match="strictly before"):
+            TimeWindow(start=time(22, 0), end=time(2, 0))
+
+
+class TestTimeWindowAggregation:
+    def test_basic_mean_with_time_window(self) -> None:
+        """Mean of 30-min data over one day with window 10:30-14:00 (BOTH closed).
+
+        Window has 8 timestamps per day (indices 21-28): values 21-28.
+        Mean = (21+22+23+24+25+26+27+28) / 8 = 196/8 = 24.5
+        """
+        tf = generate_30min_day_tf(days=1)
+        result = tf.aggregate(
+            aggregation_period="P1D",
+            aggregation_function="mean",
+            time_window=TimeWindow(start=time(10, 30), end=time(14, 0)),
+        )
+
+        assert result.df["mean_value"][0] == pytest.approx(24.5)
+        assert result.df["count_value"][0] == 8
+        assert result.df["expected_count_timestamp"][0] == 8
+        assert result.df["valid_value"][0] is True
+
+    def test_time_window_expected_count_matches_window(self) -> None:
+        """expected_count reflects the time window, not the full period."""
+        tf = generate_30min_day_tf(days=2)
+        # Full daily expected count would be 48 (48 x 30-min per day)
+        result = tf.aggregate(
+            aggregation_period="P1D",
+            aggregation_function="mean",
+            time_window=TimeWindow(start=time(10, 30), end=time(14, 0)),
+        )
+        # Should be 8 (not 48) for both days
+        assert list(result.df["expected_count_timestamp"]) == [8, 8]
+
+    def test_time_window_two_days(self) -> None:
+        """Two-day aggregation: each day returns correct windowed mean.
+
+        Day 1 window values (i=21..28): 21,22,23,24,25,26,27,28 -> mean=24.5
+        Day 2 window values (i=69..76): 69,70,71,72,73,74,75,76 -> mean=72.5
+        """
+        tf = generate_30min_day_tf(days=2)
+        result = tf.aggregate(
+            aggregation_period="P1D",
+            aggregation_function="mean",
+            time_window=TimeWindow(start=time(10, 30), end=time(14, 0)),
+        )
+
+        means = sorted(result.df["mean_value"].to_list())
+        assert means[0] == pytest.approx(24.5)
+        assert means[1] == pytest.approx(72.5)
+
+    def test_time_window_with_missing_data_actual_count(self) -> None:
+        """actual_count reflects only observations within the window that are present.
+
+        Missing every 7th value. Day 1 window (i=21..28): i=21 and i=28 are missing -> 6 present.
+        Day 2 window (i=69..76): i=70 is missing -> 7 present.
+        """
+        tf = generate_30min_day_tf(days=2, missing_data=True)
+        result = tf.aggregate(
+            aggregation_period="P1D",
+            aggregation_function="mean",
+            time_window=TimeWindow(start=time(10, 30), end=time(14, 0)),
+        )
+
+        # expected count stays 8 regardless of missing data
+        assert list(result.df["expected_count_timestamp"]) == [8, 8]
+        # actual counts: 6 and 7
+        actual_counts = sorted(result.df["count_value"].to_list())
+        assert actual_counts == [6, 7]
+
+    def test_time_window_with_missing_criteria(self) -> None:
+        """missing_criteria validation uses window-adjusted expected_count.
+
+        Day 1 window: 6/8 = 75% -> fails 80% threshold.
+        Day 2 window: 7/8 = 87.5% -> passes 80% threshold.
+        """
+        tf = generate_30min_day_tf(days=2, missing_data=True)
+        result = tf.aggregate(
+            aggregation_period="P1D",
+            aggregation_function="mean",
+            missing_criteria=("percent", 80),
+            time_window=TimeWindow(start=time(10, 30), end=time(14, 0)),
+        )
+
+        # valid_value: one day passes, one fails
+        valid = sorted(result.df["valid_value"].to_list())
+        assert valid == [False, True]
+
+    def test_time_window_closed_left(self) -> None:
+        """LEFT closed excludes 14:00; expected_count = 7, and value at 14:00 not included."""
+        tf = generate_30min_day_tf(days=1)
+        result = tf.aggregate(
+            aggregation_period="P1D",
+            aggregation_function="mean",
+            time_window=TimeWindow(start=time(10, 30), end=time(14, 0), closed=ClosedInterval.LEFT),
+        )
+
+        # Window: 10:30 (i=21) to 13:30 (i=27) inclusive, 7 values
+        # Mean = (21+22+23+24+25+26+27) / 7 = 168/7 = 24.0
+        assert result.df["expected_count_timestamp"][0] == 7
+        assert result.df["count_value"][0] == 7
+        assert result.df["mean_value"][0] == pytest.approx(24.0)
+
+    def test_time_window_closed_right(self) -> None:
+        """RIGHT closed excludes 10:30; expected_count = 7, and value at 10:30 not included."""
+        tf = generate_30min_day_tf(days=1)
+        result = tf.aggregate(
+            aggregation_period="P1D",
+            aggregation_function="mean",
+            time_window=TimeWindow(start=time(10, 30), end=time(14, 0), closed=ClosedInterval.RIGHT),
+        )
+
+        # Window: 11:00 (i=22) to 14:00 (i=28) inclusive, 7 values
+        # Mean = (22+23+24+25+26+27+28) / 7 = 175/7 = 25.0
+        assert result.df["expected_count_timestamp"][0] == 7
+        assert result.df["count_value"][0] == 7
+        assert result.df["mean_value"][0] == pytest.approx(25.0)
+
+    def test_time_window_closed_none(self) -> None:
+        """NONE closed excludes both boundaries; expected_count = 6."""
+        tf = generate_30min_day_tf(days=1)
+        result = tf.aggregate(
+            aggregation_period="P1D",
+            aggregation_function="mean",
+            time_window=TimeWindow(start=time(10, 30), end=time(14, 0), closed=ClosedInterval.NONE),
+        )
+
+        # Window: 11:00 (i=22) to 13:30 (i=27) inclusive, 6 values
+        # Mean = (22+23+24+25+26+27) / 6 = 147/6 = 24.5
+        assert result.df["expected_count_timestamp"][0] == 6
+        assert result.df["count_value"][0] == 6
+        assert result.df["mean_value"][0] == pytest.approx(24.5)
+
+    def test_time_window_via_tuple(self) -> None:
+        """Passing time_window as a tuple of (start, end) is equivalent to TimeWindow(start, end)."""
+        tf = generate_30min_day_tf(days=1)
+        result_tw = tf.aggregate(
+            aggregation_period="P1D",
+            aggregation_function="mean",
+            time_window=TimeWindow(start=time(10, 30), end=time(14, 0)),
+        )
+        result_tuple = tf.aggregate(
+            aggregation_period="P1D",
+            aggregation_function="mean",
+            time_window=(time(10, 30), time(14, 0)),
+        )
+
+        assert result_tw.df["mean_value"][0] == pytest.approx(result_tuple.df["mean_value"][0])
+        assert result_tw.df["expected_count_timestamp"][0] == result_tuple.df["expected_count_timestamp"][0]
+
+    def test_time_window_via_tuple_with_closed(self) -> None:
+        """Passing time_window as tuple with time_window_closed uses that ClosedInterval."""
+        tf = generate_30min_day_tf(days=1)
+        result = tf.aggregate(
+            aggregation_period="P1D",
+            aggregation_function="mean",
+            time_window=(time(10, 30), time(14, 0)),
+            time_window_closed=ClosedInterval.LEFT,
+        )
+        # LEFT closed: expected_count = 7
+        assert result.df["expected_count_timestamp"][0] == 7
+
+    def test_no_time_window_behaviour_unchanged(self) -> None:
+        """Omitting time_window gives the same result as before this feature was added."""
+        tf = generate_30min_day_tf(days=1)
+        result = tf.aggregate(aggregation_period="P1D", aggregation_function="mean")
+
+        # Full-day expected count for 30-min data
+        assert result.df["expected_count_timestamp"][0] == 48
+        assert result.df["count_value"][0] == 48
+
+    def test_time_window_with_sum_aggregation(self) -> None:
+        """time_window works with aggregations other than mean."""
+        tf = generate_30min_day_tf(days=1)
+        result = tf.aggregate(
+            aggregation_period="P1D",
+            aggregation_function="sum",
+            time_window=TimeWindow(start=time(10, 30), end=time(14, 0)),
+        )
+
+        # Window values 21..28, sum = 196
+        assert result.df["sum_value"][0] == 196
+        assert result.df["expected_count_timestamp"][0] == 8
+
+    def test_time_window_multiple_columns(self) -> None:
+        """time_window applies to all aggregated columns independently."""
+        period_30min = Period.of_iso_duration("PT30M")
+        length = 48
+        ordinal_from = period_30min.ordinal(datetime(2025, 1, 1))
+        timestamps = [period_30min.datetime(ordinal_from + i) for i in range(length)]
+        df = pl.DataFrame(
+            {
+                "timestamp": timestamps,
+                "a": list(range(length)),
+                "b": [i * 2 for i in range(length)],
+            }
+        )
+        tf = TimeFrame(df=df, time_name="timestamp", resolution=period_30min, periodicity=period_30min)
+
+        result = tf.aggregate(
+            aggregation_period="P1D",
+            aggregation_function="mean",
+            columns=["a", "b"],
+            time_window=TimeWindow(start=time(10, 30), end=time(14, 0)),
+        )
+
+        # Both columns: window i=21..28
+        assert result.df["mean_a"][0] == pytest.approx(24.5)
+        assert result.df["mean_b"][0] == pytest.approx(49.0)  # 2 * 24.5
+        assert result.df["count_a"][0] == 8
+        assert result.df["count_b"][0] == 8
+        assert result.df["expected_count_timestamp"][0] == 8
