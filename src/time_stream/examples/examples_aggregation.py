@@ -150,10 +150,26 @@ def time_stream_example() -> None:
     # fmt: on
 
 
+def aggregation_time_window_example() -> None:
+    from datetime import time
+
+    with suppress_output():
+        df = get_example_df(library="polars")
+
+    tf = ts.TimeFrame(df, "time", resolution="PT15M", periodicity="PT15M")
+
+    # [start_block_4]
+    tf_agg = tf.aggregate("P1D", "mean", "flow", time_window=(time(9, 0), time(17, 0)))
+    # [end_block_4]
+    print(tf_agg.df)
+
+
 def aggregation_missing_criteria_example() -> None:
     with suppress_output():
         df = get_example_df(library="polars")
+
     tf = ts.TimeFrame(df, "time", resolution="PT15M", periodicity="PT15M")
+    # [start_block_5]
     tf_agg = tf.aggregate("P1M", "mean", "flow", missing_criteria=("missing", 150))
-    print('tf.aggregate("P1M", "mean", "flow", missing_criteria=("missing", 150))\n')
-    print(tf_agg)
+    # [end_block_5]
+    print(tf_agg.df)

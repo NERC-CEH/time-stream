@@ -50,7 +50,7 @@ and then in Time-Stream:
 
 **Input:**
 
-.. _example_input_data:
+.. _example_input_data_agg:
 
 15-minute river flow timeseries, including some missing data.
 
@@ -301,7 +301,7 @@ The policies you can specify are:
 
 **Examples**
 
-Using the :ref:`15-minute flow example data <example_input_data>`:
+Using the :ref:`15-minute flow example data <example_input_data_agg>`:
 
 .. code-block:: python
 
@@ -342,3 +342,39 @@ See the :doc:`concepts page </getting_started/concepts>` page for more informati
 .. note::
 
     If omitted, the aggregation uses the input TimeFrame's time anchor
+
+
+Time window
+-----------
+
+Restrict which **time-of-day** observations are included in each aggregation period using a time window.
+This is useful when only observations from certain hours of the day should contribute to the aggregated
+value - for example, computing a daily mean from daytime-only observations.
+
+The time window is defined by a ``start`` time and ``end`` time, with an optional ``closed`` parameter
+controlling which boundaries are inclusive (default: both).
+
+.. note::
+
+    ``time_window`` is only supported when the aggregation period is daily or longer and the data
+    periodicity is sub-daily.
+
+**Example**
+
+Using the :ref:`15-minute flow example data <example_input_data_agg>`:
+
+.. literalinclude:: ../../../src/time_stream/examples/examples_aggregation.py
+    :language: python
+    :start-after: [start_block_4]
+    :end-before: [end_block_4]
+    :dedent:
+
+.. jupyter-execute::
+   :hide-code:
+
+   import examples_aggregation
+   examples_aggregation.aggregation_time_window_example()
+
+The ``expected_count_<time>`` column reflects the number of observations expected within the window
+for each period - not the full period. This means that ``missing_criteria`` checks are automatically
+applied relative to the windowed expectation.
