@@ -54,6 +54,7 @@ class AggregationFunction(Operation, ABC):
         columns: str | list[str],
         aggregation_time_anchor: TimeAnchor,
         missing_criteria: tuple[str, float | int] | None = None,
+        rolling: bool = False,
     ) -> pl.DataFrame:
         """Run the aggregation pipeline.
 
@@ -66,7 +67,7 @@ class AggregationFunction(Operation, ABC):
             columns: Column(s) containing the data to be aggregated
             aggregation_time_anchor: The time anchor for the aggregation result.
             missing_criteria: How the aggregation handles missing data
-
+            rolling: If True, then a rolling aggregation method will be used
 
         Returns:
             The aggregated dataframe
@@ -79,6 +80,7 @@ class AggregationFunction(Operation, ABC):
             columns,
             aggregation_time_anchor,
             missing_criteria,
+            rolling,
         )
         return pipeline.execute()
 
@@ -94,6 +96,7 @@ class AggregationPipeline:
         columns: str | list[str],
         aggregation_time_anchor: TimeAnchor,
         missing_criteria: tuple[str, float | int] | None = None,
+        rolling: bool = False,
     ):
         self.agg_func = agg_func
         self.ctx = ctx
@@ -101,6 +104,7 @@ class AggregationPipeline:
         self.aggregation_time_anchor = aggregation_time_anchor
         self.columns = [columns] if isinstance(columns, str) else columns
         self.missing_criteria = missing_criteria
+        self.rolling = rolling
 
     def execute(self) -> pl.DataFrame:
         """The general `Polars` method used for aggregating data is::
@@ -119,13 +123,22 @@ class AggregationPipeline:
 
         # Group by the aggregation period - taking into account the time anchor of the time series
         label, closed = self._get_label_closed()
-        grouper = self.ctx.df.group_by_dynamic(
-            index_column=self.ctx.time_name,
-            every=self.aggregation_period.pl_interval,
-            offset=self.aggregation_period.pl_offset,
-            closed=closed,
-            label=label,
-        )
+
+        if self.rolling:
+            grouper = self.ctx.df.rolling(
+                index_column=self.ctx.time_name,
+                period=self.aggregation_period.pl_interval,
+                offset=self.aggregation_period.pl_offset,
+                closed=closed,
+            )
+        else:
+            grouper = self.ctx.df.group_by_dynamic(
+                index_column=self.ctx.time_name,
+                every=self.aggregation_period.pl_interval,
+                offset=self.aggregation_period.pl_offset,
+                closed=closed,
+                label=label,
+            )
 
         # Build expressions to go in the .agg method
         agg_expressions = []

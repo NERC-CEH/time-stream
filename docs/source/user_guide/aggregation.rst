@@ -359,3 +359,16 @@ See the :doc:`concepts page </getting_started/concepts>` page for more informati
 .. note::
 
     If omitted, the aggregation uses the input TimeFrame's time anchor
+
+
+Rolling aggregation
+-------------------
+
+All aggregation functions are able to be applied on a rolling basis instead of across a fixed time period. To apply
+the selected aggregation function as a rolling aggregation, set the `rolling` flag to `True`. The `aggregation_period`
+is then used as the size of the rolling window. 
+
+For example, to calculate the rolling hourly maximum for the :ref:`15-minute flow example data <example_input_data>`:
+
+.. code-block:: python
+    tf_agg = tf.aggregate("P1H", "max", "flow", rolling = True)

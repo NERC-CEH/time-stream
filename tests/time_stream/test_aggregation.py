@@ -131,6 +131,7 @@ P1Y = Period.of_years(1)
 P1Y_OFF = P1Y.with_month_offset(9).with_hour_offset(9)  # water year
 
 # TimeSeries instances used throughout these tests
+TS_PT1H_HALF_DAY = generate_time_series(PT1H, PT1H, 12)  # half a day of 1-hour data
 TS_PT1H_2DAYS = generate_time_series(PT1H, PT1H, 48)  # 2 days of 1-hour data
 TS_PT1H_2DAYS_MISSING = generate_time_series(PT1H, PT1H, 48, missing_data=True)  # 2 days of 1-hour data
 TS_PT1H_2MONTH = generate_time_series(PT1H, PT1H, 1_416)  # 2 months (Jan, Feb 2025) of 1-hour data
@@ -438,13 +439,13 @@ class TestSimpleAggregations:
         microsecond-based resolution."""
         expected_df = generate_expected_df(timestamps, aggregator, column, values, counts, counts, timestamps_of)
         result = aggregator(**kwargs).apply(
-            input_tf.df,
-            input_tf.time_name,
-            input_tf.time_anchor,
-            input_tf.periodicity,
-            target_period,
-            column,
-            input_tf.time_anchor,
+            df=input_tf.df,
+            time_name=input_tf.time_name,
+            time_anchor=input_tf.time_anchor,
+            periodicity=input_tf.periodicity,
+            aggregation_period=target_period,
+            columns=column,
+            aggregation_time_anchor=input_tf.time_anchor,
         )
         assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False)
 
@@ -1905,3 +1906,104 @@ class TestAngularMean:
             input_tf.time_anchor,
         )
         assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False)
+
+
+class TestRollingAggregation:
+    @pytest.mark.parametrize(
+        "aggregator, expected_values, timestamps_of, kwargs",
+        [
+            (Mean, [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 10.5, 11.0], [], {}),
+            (AngularMean, [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 10.5, 11.0], [], {}),
+            (Sum, [3, 6, 9, 12, 15, 18, 21, 24, 27, 30, 21, 11], [], {}),
+            (MeanSum, [3.0, 6.0, 9.0, 12.0, 15.0, 18.0, 21.0, 24.0, 27.0, 30.0, 31.5, 33.0], [], {}),
+            (
+                Min,
+                [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+                [
+                    datetime(2025, 1, 1, 0, 0),
+                    datetime(2025, 1, 1, 1, 0),
+                    datetime(2025, 1, 1, 2, 0),
+                    datetime(2025, 1, 1, 3, 0),
+                    datetime(2025, 1, 1, 4, 0),
+                    datetime(2025, 1, 1, 5, 0),
+                    datetime(2025, 1, 1, 6, 0),
+                    datetime(2025, 1, 1, 7, 0),
+                    datetime(2025, 1, 1, 8, 0),
+                    datetime(2025, 1, 1, 9, 0),
+                    datetime(2025, 1, 1, 10, 0),
+                    datetime(2025, 1, 1, 11, 0),
+                ],
+                {},
+            ),
+            (
+                Max,
+                [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 11, 11],
+                [
+                    datetime(2025, 1, 1, 2, 0),
+                    datetime(2025, 1, 1, 3, 0),
+                    datetime(2025, 1, 1, 4, 0),
+                    datetime(2025, 1, 1, 5, 0),
+                    datetime(2025, 1, 1, 6, 0),
+                    datetime(2025, 1, 1, 7, 0),
+                    datetime(2025, 1, 1, 8, 0),
+                    datetime(2025, 1, 1, 9, 0),
+                    datetime(2025, 1, 1, 10, 0),
+                    datetime(2025, 1, 1, 11, 0),
+                    datetime(2025, 1, 1, 11, 0),
+                    datetime(2025, 1, 1, 11, 0),
+                ],
+                {},
+            ),
+            (Percentile, [2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 11.0, 11.0], [], {"p": 95}),
+            (PeaksOverThreshold, [0, 0, 0, 1, 2, 3, 3, 3, 3, 3, 2, 1], [], {"threshold": 4}),
+            (StDev, [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.707107, None], [], {}),
+        ],
+        ids=[
+            "Mean",
+            "Angular mean",
+            "Sum",
+            "Mean sum",
+            "Min",
+            "Max",
+            "Percentile",
+            "Peaks over threshold",
+            "Standard deviation",
+        ],
+    )
+    def test_rolling_aggregation(
+        self,
+        aggregator: type[AggregationFunction],
+        expected_values: list[float | int],
+        timestamps_of: list[datetime] | None,
+        kwargs: dict[str, Any],
+    ) -> None:
+        """Check rolling aggregations are applied correctly."""
+        input_tf = TS_PT1H_HALF_DAY
+        target_period = Period.of_hours(3)
+        column = "value"
+        timestamps = input_tf.df["timestamp"].to_list()
+
+        expected_df = generate_expected_df(
+            timestamps=timestamps,
+            aggregator=aggregator,
+            columns=column,
+            values={column: expected_values},
+            expected_counts=[3] * 12,
+            actual_counts=([3] * 10) + [2, 1],
+            timestamps_of=timestamps_of,
+        )
+
+        result = aggregator(**kwargs).apply(
+            df=input_tf.df,
+            time_name=input_tf.time_name,
+            time_anchor=input_tf.time_anchor,
+            periodicity=input_tf.periodicity,
+            aggregation_period=target_period,
+            columns=column,
+            aggregation_time_anchor=input_tf.time_anchor,
+            rolling=True,
+        )
+
+        assert_frame_equal(
+            result, expected_df, check_dtype=False, check_column_order=False, check_exact=False, atol=0.00001
+        )
