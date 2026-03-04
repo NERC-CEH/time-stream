@@ -8,7 +8,7 @@ from polars.testing import assert_series_equal
 
 from time_stream.base import TimeFrame
 from time_stream.exceptions import QcUnknownOperatorError, RegistryKeyTypeError, UnknownRegistryKeyError
-from time_stream.qc import ComparisonCheck, QCCheck, QcCtx, RangeCheck, SpikeCheck
+from time_stream.qc import ComparisonCheck, QCCheck, QcCtx, RangeCheck, SpikeCheck, FlatLineCheck
 
 
 class MockQC(QCCheck):
@@ -592,3 +592,76 @@ class TestCheckWithDateRange:
         result = check.apply(self.tf.df, self.tf.time_name, "value_a", observation_interval=observation_interval)
         expected = pl.Series([False, False, False, False, False, False, False, True, True, True])
         assert_series_equal(result, expected)
+
+
+class TestFlatLineCheck:
+    data = pl.DataFrame(
+        {
+            "time": [
+                datetime(2023, 8, 10),
+                datetime(2023, 8, 11),
+                datetime(2023, 8, 12),
+                datetime(2023, 8, 13),
+                datetime(2023, 8, 14),
+                datetime(2023, 8, 15),
+                datetime(2023, 8, 16),
+                datetime(2023, 8, 17),
+                datetime(2023, 8, 18),
+            ],
+            "value_a": range(9),
+        }
+    )
+    tf = TimeFrame(data, "time")
+
+    @pytest.mark.parametrize(
+        "threshold,data,expected",
+        [
+            (2, [0.0, 1.0, 1.0, 1.0, 5.0, 6.0, 7.0, 8.0, 9.0], [False, True, True, True, False, False, False, False, False]),
+            (2, [1.0, 1.0, 1.0, 1.0, 5.0, 6.0, 7.0, 8.0, 9.0], [True, True, True, True, False, False, False, False, False]),
+            (3, [0.0, 1.0, 1.0, 1.0, 5.0, 6.0, 7.0, 8.0, 9.0], [False, True, True, True, False, False, False, False, False]),
+            (3, [0.0, 1.0, 2.0, 3.0, 4.0, 6.0, 6.0, 6.0, 6.0], [False, False, False, False, False, True, True, True, True]),
+            (4, [0.0, 1.0, 1.0, 1.0, 5.0, 6.0, 7.0, 8.0, 9.0], [False, False, False, False, False, False, False, False, False]),
+        ],
+    )
+    def test_flat_line_threshold(self, threshold: int, data: list[float], expected: list[bool]) -> None:
+        """Test that the flat line check works correctly with different thresholds."""
+        df = self.tf.df.with_columns(pl.Series(data).alias("value_a"))
+        tf = self.tf.with_df(df)
+
+        check = FlatLineCheck(threshold)
+        result = check.apply(tf.df, tf.time_name, "value_a")
+        expected_series = pl.Series(expected)
+        assert_series_equal(result, expected_series)
+
+    @pytest.mark.parametrize(
+        "threshold,data,expected",
+        [
+            (3, [0.0, 1.0, 1.0, 1.0, 5.0, 6.0, 6.0, 6.0, 6.0], [False, True, True, True, False, True, True, True, True]),
+            (4, [0.0, 1.0, 1.0, 1.0, 5.0, 6.0, 6.0, 6.0, 6.0], [False, False, False, False, False, True, True, True, True]),
+            (4, [1.0, 1.0, 1.0, 1.0, 5.0, 6.0, 6.0, 6.0, 6.0], [True, True, True, True, False, True, True, True, True]),
+            (5, [1.0, 1.0, 1.0, 1.0, 5.0, 6.0, 6.0, 6.0, 6.0], [False, False, False, False, False, False, False, False, False]),
+        ],
+    )
+    def test_multiple_flat_lines(self, threshold: int, data: list[float], expected: list[bool]) -> None:
+        """Test that multiple flat lines are correctly identified."""
+        df = self.tf.df.with_columns(pl.Series(data).alias("value_a"))
+        tf = self.tf.with_df(df)
+
+        check = FlatLineCheck(threshold)
+        result = check.apply(tf.df, tf.time_name, "value_a")
+        expected_series = pl.Series(expected)
+        assert_series_equal(result, expected_series)
+
+    @pytest.mark.parametrize(
+        "threshold",
+        [
+            (1),
+            (0),
+            (-2),
+        ],
+    )
+    def test_bad_threshold(self, threshold: int) -> None:
+        """Thtreshold of 1 means that any repeated value will be flagged as a flat line.  Check this is not the case."""
+        check = FlatLineCheck(threshold)
+        with pytest.raises(ValueError, match="Threshold for flat line check must be at least 2"):
+            check.apply(self.tf.df, self.tf.time_name, "value_a")

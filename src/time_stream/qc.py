@@ -273,3 +273,35 @@ class SpikeCheck(QCCheck):
 
         # Double the threshold since we're summing differences
         return d_no_skew > (self.threshold * 2.0)
+
+
+@QCCheck.register
+class FlatLineCheck(QCCheck):
+    """Detect flat lines by checking number of repeated values."""
+
+    name = "flat_line"
+
+    def __init__(self, threshold: float):
+        """Initialize flat line detection check.
+
+        Args:
+            threshold: Number of repeated values to consider flat lining.
+        """
+        self.threshold = threshold
+
+    def expr(self, ctx: QcCtx, column: str) -> pl.Expr:
+        """Return the Polars expression for flat line detection.
+
+        """
+        if self.threshold < 2:
+            raise ValueError("Threshold for flat line check must be at least 2")
+
+        # Fill null after shift with the first value to avoid false change at start
+        shifted = pl.col(column).shift(1).fill_null(pl.col(column).first())
+
+        change = (pl.col(column) != shifted).cast(pl.Int32)
+        group_id = change.cum_sum()
+
+        group_size = pl.count().over(group_id.alias("group_id"))
+
+        return (group_size >= self.threshold)
