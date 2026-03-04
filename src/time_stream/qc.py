@@ -281,27 +281,43 @@ class FlatLineCheck(QCCheck):
 
     name = "flat_line"
 
-    def __init__(self, threshold: float):
+    def __init__(self, threshold: float, ignore_values: float | list | None = None):
         """Initialize flat line detection check.
 
         Args:
             threshold: Number of repeated values to consider flat lining.
+            ignore_values: Optional list of values to ignore when checking for flat lines (e.g., 0's).
         """
         self.threshold = threshold
+        self.ignore_values = (
+            ignore_values if isinstance(ignore_values, list) else ([ignore_values] if ignore_values is not None else [])
+        )
 
     def expr(self, ctx: QcCtx, column: str) -> pl.Expr:
         """Return the Polars expression for flat line detection.
 
+        Repeated nulls do not count as flat lines.
         """
         if self.threshold < 2:
             raise ValueError("Threshold for flat line check must be at least 2")
 
-        # Fill null after shift with the first value to avoid false change at start
-        shifted = pl.col(column).shift(1).fill_null(pl.col(column).first())
+        prev = pl.col(column).shift(1)
 
-        change = (pl.col(column) != shifted).cast(pl.Int32)
+        # Treat "equal to previous" such that two nulls are not considered equal
+        equal_prev = pl.col(column).is_not_null() & prev.is_not_null() & (pl.col(column) == prev)
+
+        # Mark starts of new groups, then create a group id by cumulative sum
+        change = (~equal_prev).cast(pl.Int32)
         group_id = change.cum_sum()
 
-        group_size = pl.count().over(group_id.alias("group_id"))
+        # Size of each group
+        group_size = pl.count().over(group_id)
 
-        return (group_size >= self.threshold)
+        # Only consider non-null groups for flat-line detection
+        result = (group_size >= self.threshold) & pl.col(column).is_not_null()
+
+        # Apply ignore-values if provided
+        if self.ignore_values:
+            result = result & ~pl.col(column).is_in(self.ignore_values)
+
+        return result
