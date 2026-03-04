@@ -1983,13 +1983,20 @@ class TestRollingAggregation:
         column = "value"
         timestamps = input_tf.df["timestamp"].to_list()
 
+        # The expected count should be 3 for each row to account for the 3 hour rolling aggregation period
+        expected_counts = [3] * 12
+
+        # The actual counts should be 3 for all rows except for the last two, where the window extends beyond
+        # the length of the dataframe.
+        actual_counts = ([3] * 10) + [2, 1]
+
         expected_df = generate_expected_df(
             timestamps=timestamps,
             aggregator=aggregator,
             columns=column,
             values={column: expected_values},
-            expected_counts=[3] * 12,
-            actual_counts=([3] * 10) + [2, 1],
+            expected_counts=expected_counts,
+            actual_counts=actual_counts,
             timestamps_of=timestamps_of,
         )
 
@@ -2007,3 +2014,132 @@ class TestRollingAggregation:
         assert_frame_equal(
             result, expected_df, check_dtype=False, check_column_order=False, check_exact=False, atol=0.00001
         )
+
+    def test_rolling_angular_mean(self) -> None:
+        """Check angular mean is applied correctly across different angle overlaps (e.g. -180, 360 etc)."""
+        period = Period.of_hours(1)
+        aggregation_period = Period.of_hours(3)
+        column_name = "angle"
+        timestamps = [
+            datetime(2025, 1, 1, 0, 0, 0),
+            datetime(2025, 1, 1, 1, 0, 0),
+            datetime(2025, 1, 1, 2, 0, 0),
+            datetime(2025, 1, 1, 3, 0, 0),
+            datetime(2025, 1, 1, 4, 0, 0),
+            datetime(2025, 1, 1, 5, 0, 0),
+            datetime(2025, 1, 1, 6, 0, 0),
+            datetime(2025, 1, 1, 7, 0, 0),
+            datetime(2025, 1, 1, 8, 0, 0),
+            datetime(2025, 1, 1, 9, 0, 0),
+            datetime(2025, 1, 1, 10, 0, 0),
+            datetime(2025, 1, 1, 11, 0, 0),
+            datetime(2025, 1, 1, 12, 0, 0),
+            datetime(2025, 1, 1, 13, 0, 0),
+            datetime(2025, 1, 1, 14, 0, 0),
+        ]
+
+        input_tf = TimeFrame(
+            df=pl.DataFrame(
+                {
+                    "timestamp": timestamps,
+                    column_name: [180, -180, -135, -90, -45, 0, 45, 90, 135, 180, 225, 270, 315, 360, 0],
+                }
+            ),
+            time_name="timestamp",
+            resolution=period,
+            periodicity=period,
+        )
+
+        expected_df = generate_expected_df(
+            timestamps=timestamps,
+            aggregator=AngularMean,
+            columns=column_name,
+            values={
+                column_name: [
+                    194.6,
+                    225.0,
+                    270.0,
+                    315.0,
+                    0.0,
+                    45.0,
+                    90.0,
+                    135.0,
+                    180.0,
+                    225.0,
+                    270.0,
+                    315.0,
+                    345.4,
+                    0.0,
+                    0.0,
+                ]
+            },
+            expected_counts=[3] * 15,
+            actual_counts=[3] * 13 + [2, 1],
+            timestamps_of=None,
+        )
+
+        result = AngularMean().apply(
+            df=input_tf.df,
+            time_name=input_tf.time_name,
+            time_anchor=input_tf.time_anchor,
+            periodicity=input_tf.periodicity,
+            aggregation_period=aggregation_period,
+            columns=column_name,
+            aggregation_time_anchor=input_tf.time_anchor,
+            rolling=True,
+        )
+
+        assert_frame_equal(
+            result, expected_df, check_dtype=False, check_column_order=False, check_exact=False, atol=0.00001
+        )
+
+    def test_rolling_aggregation_over_day_threshold(self) -> None:
+        """Tests the rolling aggregation window is applied correctly when the datetime crosses into a new day."""
+
+        period = Period.of_hours(1)
+        aggregation_period = Period.of_hours(3)
+        column_name = "value"
+        timestamps = [
+            datetime(2025, 1, 1, 21, 0, 0),
+            datetime(2025, 1, 1, 22, 0, 0),
+            datetime(2025, 1, 1, 23, 0, 0),
+            datetime(2025, 1, 2, 0, 0, 0),
+            datetime(2025, 1, 2, 1, 0, 0),
+            datetime(2025, 1, 2, 2, 0, 0),
+            datetime(2025, 1, 2, 3, 0, 0),
+        ]
+
+        input_tf = TimeFrame(
+            df=pl.DataFrame(
+                {
+                    "timestamp": timestamps,
+                    column_name: [1, 2, 3, 4, 5, 6, 7],
+                }
+            ),
+            time_name="timestamp",
+            resolution=period,
+            periodicity=period,
+        )
+
+        expected_df = generate_expected_df(
+            timestamps=timestamps,
+            aggregator=Sum,
+            columns=column_name,
+            values={column_name: [6, 9, 12, 15, 18, 13, 7]},
+            expected_counts=[3] * 7,
+            actual_counts=[3] * 5 + [2, 1],
+            timestamps_of=None,
+        )
+
+        result = Sum().apply(
+            df=input_tf.df,
+            time_name=input_tf.time_name,
+            time_anchor=input_tf.time_anchor,
+            periodicity=input_tf.periodicity,
+            aggregation_period=aggregation_period,
+            columns=column_name,
+            aggregation_time_anchor=input_tf.time_anchor,
+            rolling=True,
+        )
+
+        assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False)
