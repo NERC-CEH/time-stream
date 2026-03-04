@@ -520,6 +520,7 @@ class TimeFrame:
         columns: str | list[str] | None = None,
         missing_criteria: tuple[str, float | int] | None = None,
         aggregation_time_anchor: TimeAnchor | None = None,
+        rolling: bool = False,
         **kwargs,
     ) -> Self:
         """Apply an aggregation function to a column in this TimeFrame, check the aggregation satisfies user
@@ -531,6 +532,7 @@ class TimeFrame:
             columns: The column(s) containing the data to be aggregated. If omitted, will use all data columns.
             missing_criteria: How the aggregation handles missing data
             aggregation_time_anchor: The time anchor for the aggregation result.
+            rolling: If True, then a rolling agggregation will be applied.
             **kwargs: Parameters specific to the aggregation function.
 
         Returns:
@@ -553,6 +555,7 @@ class TimeFrame:
             columns,
             missing_criteria=missing_criteria,
             aggregation_time_anchor=aggregation_time_anchor,
+            rolling=rolling,
         )
 
         # The resulting resolution and offset needs to be extracted from the aggregation period
