@@ -673,10 +673,7 @@ class TestFlatLineCheck:
                 [0.0, 1.0, 1.0, 1.0, 5.0, 6.0, 6.0, 6.0, 6.0],
                 [False, False, False, False, False, True, True, True, True],
             ),
-            (
-                4,
-                [1.0, 1.0, 1.0, 1.0, 5.0, 6.0, 6.0, 6.0, 6.0],
-                [True, True, True, True, False, True, True, True, True]),
+            (4, [1.0, 1.0, 1.0, 1.0, 5.0, 6.0, 6.0, 6.0, 6.0], [True, True, True, True, False, True, True, True, True]),
             (
                 5,
                 [1.0, 1.0, 1.0, 1.0, 5.0, 6.0, 6.0, 6.0, 6.0],
