@@ -642,6 +642,13 @@ class TestFlatLineCheck:
                 [False, False, False, False, False, False, False, False, False],
             ),
         ],
+        ids=[
+            "simple_flat_line",
+            "from_start",
+            "flatline_len_is_threshold",
+            "at_end",
+            "flat_line_below_threshold",
+        ],
     )
     def test_flat_line_threshold(self, threshold: int, data: list[float], expected: list[bool]) -> None:
         """Test that the flat line check works correctly with different thresholds."""
@@ -666,12 +673,21 @@ class TestFlatLineCheck:
                 [0.0, 1.0, 1.0, 1.0, 5.0, 6.0, 6.0, 6.0, 6.0],
                 [False, False, False, False, False, True, True, True, True],
             ),
-            (4, [1.0, 1.0, 1.0, 1.0, 5.0, 6.0, 6.0, 6.0, 6.0], [True, True, True, True, False, True, True, True, True]),
+            (
+                4,
+                [1.0, 1.0, 1.0, 1.0, 5.0, 6.0, 6.0, 6.0, 6.0],
+                [True, True, True, True, False, True, True, True, True]),
             (
                 5,
                 [1.0, 1.0, 1.0, 1.0, 5.0, 6.0, 6.0, 6.0, 6.0],
                 [False, False, False, False, False, False, False, False, False],
             ),
+        ],
+        ids=[
+            "2_flat_lines",
+            "1_too_small",
+            "flatlines_on_ends",
+            "flat_lines_below_threshold",
         ],
     )
     def test_multiple_flat_lines(self, threshold: int, data: list[float], expected: list[bool]) -> None:
@@ -722,6 +738,12 @@ class TestFlatLineCheck:
                 [False, False, False, True, True, True, False, False, False],
             ),
         ],
+        ids=[
+            "single_null_at_start",
+            "2_nulls_at_start",
+            "2_nulls_at_end",
+            "single_null_at_end",
+        ],
     )
     def test_with_trailing_null_values(self, threshold: int, data: list[float], expected: list[bool]) -> None:
         """Test that null values at beginning and end are not seen as flat lines."""
@@ -751,6 +773,11 @@ class TestFlatLineCheck:
                 [None, None, None, None, None, None, None, None, None],
                 [False, False, False, False, False, False, False, False, False],
             ),
+        ],
+        ids=[
+            "null_flatline_at_start",
+            "null_flatline_in_middle",
+            "all_nulls",
         ],
     )
     def test_null_values_not_flatline(self, threshold: int, data: list[float], expected: list[bool]) -> None:
@@ -787,6 +814,12 @@ class TestFlatLineCheck:
                 [False, False, False, False, False, False, False, False, False],
             ),
         ],
+        ids=[
+            "null_not_in_flatline",
+            "flatline_broken_by_null",
+            "2_flatlines_beside_by_null",
+            "nulls_but_no_flatline",
+        ],
     )
     def test_with_inner_null_values(self, threshold: int, data: list[float], expected: list[bool]) -> None:
         """Test that null values in the middle of a flat line are not counted, and break the flat line."""
@@ -819,6 +852,11 @@ class TestFlatLineCheck:
                 [1.0, 1.0, 1.0, None, 1.0, 1.0, 1.0, 8.0, 9.0],
                 [True, True, True, False, True, True, True, False, False],
             ),
+        ],
+        ids=[
+            "ignore_val_as_float",
+            "ignore_val_as_list",
+            "ignore_vals_not_present",
         ],
     )
     def test_with_ignore_values(
