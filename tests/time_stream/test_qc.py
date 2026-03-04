@@ -693,7 +693,7 @@ class TestFlatLineCheck:
         ],
     )
     def test_bad_threshold(self, threshold: int) -> None:
-        """Thtreshold of 1 means that any repeated value will be flagged as a flat line.  Check this is not the case."""
+        """Threshold of 1 means that any repeated value will be flagged as a flat line.  Check this is not the case."""
         check = FlatLineCheck(threshold)
         with pytest.raises(ValueError, match="Threshold for flat line check must be at least 2"):
             check.apply(self.tf.df, self.tf.time_name, "value_a")
