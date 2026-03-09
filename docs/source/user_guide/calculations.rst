@@ -1,4 +1,4 @@
-.. __calculations:
+.. _calculations:
 
 ============
 Calculations

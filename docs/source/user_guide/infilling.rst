@@ -40,8 +40,6 @@ Let's take our example 15-minute river flow data that contains a few short outag
 
 **Input:**
 
-.. _example_input_data:
-
 15-minute river flow timeseries, including some missing data.
 
 .. jupyter-execute::
