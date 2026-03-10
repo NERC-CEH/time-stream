@@ -5,13 +5,90 @@ This module provides helper functions used across the time_stream package for wo
 """
 
 from collections.abc import Iterable
-from datetime import datetime
+from dataclasses import dataclass
+from datetime import date, datetime, time, timedelta
 
 import polars as pl
 
 from time_stream import Period
-from time_stream.enums import DuplicateOption, TimeAnchor
-from time_stream.exceptions import ColumnNotFoundError, DuplicateValueError, UnhandledEnumError
+from time_stream.enums import ClosedInterval, DuplicateOption, TimeAnchor
+from time_stream.exceptions import ColumnNotFoundError, DuplicateValueError, TimeWindowError, UnhandledEnumError
+
+
+@dataclass(frozen=True)
+class TimeWindow:
+    """A time-of-day window defined by a start and end time.
+
+    Can be used to restrict which observations within a period are included. For example, to compute
+    mean daily albedo from 30-minute values, you might restrict to the window 10:30-14:00.
+
+    Midnight-wrapping windows (where ``start >= end``) are not supported.
+
+    Attributes:
+        start: The start of the time-of-day window.
+        end: The end of the time-of-day window. Must be after ``start``.
+        closed: Which boundary times are included. Defaults to both ends being closed (inclusive).
+    """
+
+    start: time
+    end: time
+    closed: ClosedInterval | None = ClosedInterval.BOTH
+
+    def __post_init__(self) -> None:
+        """Validate the time window on construction."""
+        if not isinstance(self.start, time) or not isinstance(self.end, time):
+            raise TimeWindowError("'start' and 'end' must be datetime.time objects.")
+        if self.start >= self.end:
+            raise TimeWindowError(f"'start' ({self.start}) must be strictly before 'end' ({self.end}).")
+
+    @property
+    def duration(self) -> timedelta:
+        """The duration of the time window as a timedelta.
+
+        Returns:
+            The time difference between end and start.
+        """
+        return datetime.combine(date.min, self.end) - datetime.combine(date.min, self.start)
+
+    def filter_df(self, df: pl.DataFrame, time_name: str) -> pl.DataFrame:
+        """Filter a DataFrame to rows whose time-of-day falls within this window.
+
+        Args:
+            df: The DataFrame to filter.
+            time_name: The name of the datetime column.
+
+        Returns:
+            Filtered DataFrame containing only rows within the time window.
+        """
+        time_col = pl.col(time_name).dt.time()
+        return df.filter(
+            time_col.is_between(
+                self.start,
+                self.end,
+                closed=self.closed.value,  # type: ignore - linter complains string isn't a Literal
+            )
+        )
+
+    def expected_count(self, periodicity: Period) -> int:
+        """Count the number of observations expected within this window for a given periodicity.
+
+        Adjusts the counts for the closed boundaries:
+        - ``BOTH`` adds one (both boundary timestamps are included)
+        - ``NONE`` subtracts one (both are excluded)
+        - ``LEFT`` and ``RIGHT`` leave the count unchanged.
+
+        Args:
+            periodicity: The Period object from which the timedelta is used for the calculation.
+
+        Returns:
+            The expected number of observations within the window for the given periodicity.
+        """
+        count = self.duration // periodicity.timedelta
+        if self.closed == ClosedInterval.BOTH:
+            count += 1
+        elif self.closed == ClosedInterval.NONE:
+            count = max(0, count - 1)
+        return count
 
 
 def get_date_filter(

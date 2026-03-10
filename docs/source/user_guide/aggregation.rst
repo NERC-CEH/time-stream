@@ -156,6 +156,8 @@ Common examples:
 .. note::
    The resulting :class:`~time_stream.TimeFrame` will have its resolution and periodicity set to this value.
 
+.. _aggregation_functions:
+
 Aggregation methods
 -------------------
 
@@ -277,7 +279,7 @@ Choose how values inside each window are summarised. Pass a **string** correspon
 
 
 ``stdev``
-^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^
 :class:`time_stream.aggregation.StDev`
 
     **What it does:** Captures the standard deviation - the variability or spread of values around the mean -
@@ -299,6 +301,8 @@ Column selection
 Specify which columns to aggregate; only these will be used by the aggregation function. This can be a single
 column name, a list of columns, or if not provided - the method will use *all* columns in the timeseries.
 
+
+.. _missing_criteria:
 
 Missing criteria
 ----------------
@@ -401,11 +405,8 @@ applied relative to the windowed expectation.
 Rolling aggregation
 -------------------
 
-All aggregation functions are able to be applied on a rolling basis instead of across a fixed time period. To apply
-the selected aggregation function as a rolling aggregation, set the `rolling` flag to `True`. The `aggregation_period`
-is then used as the size of the rolling window.
+All aggregation functions can also be applied as rolling (sliding window) operations via
+:meth:`~time_stream.TimeFrame.rolling_aggregate`. Unlike :meth:`~time_stream.TimeFrame.aggregate`,
+rolling aggregation preserves the original resolution and timestamps.
 
-For example, to calculate the rolling hourly maximum for the :ref:`15-minute flow example data <example_input_data>`:
-
-.. code-block:: python
-    tf_agg = tf.aggregate("P1H", "max", "flow", rolling = True)
+See :doc:`rolling_aggregation` for a full guide including alignment options and worked examples.
