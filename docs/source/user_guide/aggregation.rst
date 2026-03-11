@@ -156,6 +156,8 @@ Common examples:
 .. note::
    The resulting :class:`~time_stream.TimeFrame` will have its resolution and periodicity set to this value.
 
+.. _aggregation_functions:
+
 Aggregation methods
 -------------------
 
@@ -277,7 +279,7 @@ Choose how values inside each window are summarised. Pass a **string** correspon
 
 
 ``stdev``
-^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^
 :class:`time_stream.aggregation.StDev`
 
     **What it does:** Captures the standard deviation - the variability or spread of values around the mean -
@@ -299,6 +301,8 @@ Column selection
 Specify which columns to aggregate; only these will be used by the aggregation function. This can be a single
 column name, a list of columns, or if not provided - the method will use *all* columns in the timeseries.
 
+
+.. _missing_criteria:
 
 Missing criteria
 ----------------
@@ -396,3 +400,13 @@ Using the :ref:`15-minute flow example data <example_input_data_agg>`:
 The ``expected_count_<time>`` column reflects the number of observations expected within the window
 for each period - not the full period. This means that ``missing_criteria`` checks are automatically
 applied relative to the windowed expectation.
+
+
+Rolling aggregation
+-------------------
+
+All aggregation functions can also be applied as rolling (sliding window) operations via
+:meth:`~time_stream.TimeFrame.rolling_aggregate`. Unlike :meth:`~time_stream.TimeFrame.aggregate`,
+rolling aggregation preserves the original resolution and timestamps.
+
+See :doc:`rolling_aggregation` for a full guide including alignment options and worked examples.

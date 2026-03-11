@@ -83,6 +83,7 @@ of your **TimeFrame**.
 Let's look at the method in more detail:
 
 .. automethod:: time_stream.TimeFrame.infill
+   :no-index:
 
 Infill methods
 --------------

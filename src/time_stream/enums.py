@@ -89,3 +89,21 @@ class ValidationErrorOptions(Enum):
 
     ERROR = "error"
     RESOLVE = "resolve"
+
+
+class RollingAlignment(Enum):
+    """Enum representing how a rolling window is aligned relative to each timestamp.
+
+    Attributes:
+        TRAILING: The window looks backward from the timestamp. Window: (t - window_size, t].
+            Edge effects appear at the start of the series.
+        LEADING: The window looks forward from the timestamp. Window: [t, t + window_size).
+            Edge effects appear at the end of the series.
+        CENTER: The window is centered on the timestamp. Window: [t - window_size/2, t + window_size/2].
+            Edge effects appear at both the start and end of the series.
+            Not supported for calendar-based periods (months, years).
+    """
+
+    TRAILING = "trailing"
+    LEADING = "leading"
+    CENTER = "center"

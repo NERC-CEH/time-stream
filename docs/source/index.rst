@@ -112,6 +112,7 @@ This project is licensed under the `GNU General Public License v3.0 <https://git
 
     user_guide/intro
     user_guide/aggregation
+    user_guide/rolling_aggregation
     user_guide/infilling
     user_guide/quality_control
     user_guide/calculations
