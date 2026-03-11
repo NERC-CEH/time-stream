@@ -32,6 +32,20 @@
 }
 
 
+.version-badge {
+    font-size: 0.75rem;
+    font-weight: 600;
+    border: 1px solid;
+    border-radius: 4px;
+    padding: 2px 6px;
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.version-badge:hover {
+    background-color: var(--accent-2);
+}
+
 .toctree-l2 {
     font-size: 0.8em;
 }

@@ -12,6 +12,8 @@ Time-Stream
     Python library for handling and analysing timeseries data with a focus on maintaining the integrity of the
     temporal properties of the data.
 
+Current version: |release|
+
 .. container:: buttons
 
     `Docs <getting_started/installation.html>`_
