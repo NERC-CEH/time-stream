@@ -22,7 +22,7 @@ With **Time-Stream** you state intent, not mechanics:
 
 .. code-block:: python
 
-    tf.infill("linear", "flow", max_gap=3)
+    tf.infill("linear", "flow", max_gap_size=3)
 
 That's it, a single line with clear intent: "I want to use the *linear* infill method on my *flow* data,
 but only for *gaps* ≤ 3 steps".
