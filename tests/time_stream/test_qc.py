@@ -989,3 +989,101 @@ class TestFlatLineCheck:
         result = check.apply(tf.df, tf.time_name, "value_a")
         expected_series = pl.Series(expected)
         assert_series_equal(result, expected_series)
+
+    @pytest.mark.parametrize(
+        "min_count,data,expected",
+        [
+            (
+                2,
+                ["a", "b", "b", "b", "c", "d", "e", "f", "g"],
+                [False, True, True, True, False, False, False, False, False],
+            ),
+            (
+                2,
+                ["a", "a", "a", "a", "b", "c", "d", "e", "f"],
+                [True, True, True, True, False, False, False, False, False],
+            ),
+            (
+                3,
+                ["a", "b", "b", "b", "c", "d", "e", "f", "g"],
+                [False, True, True, True, False, False, False, False, False],
+            ),
+            (
+                4,
+                ["a", "b", "b", "b", "c", "d", "e", "f", "g"],
+                [False, False, False, False, False, False, False, False, False],
+            ),
+        ],
+        ids=[
+            "simple_flat_line",
+            "from_start",
+            "flatline_len_is_min_count",
+            "flat_line_below_min_count",
+        ],
+    )
+    def test_string_data_min_count(self, min_count: int, data: list[str], expected: list[bool]) -> None:
+        """Test that the flat line check works correctly with string column data."""
+        df = self.tf.df.with_columns(pl.Series(data, dtype=pl.String).alias("value_a"))
+        tf = self.tf.with_df(df)
+
+        check = FlatLineCheck(min_count)
+        result = check.apply(tf.df, tf.time_name, "value_a")
+        expected_series = pl.Series(expected)
+        assert_series_equal(result, expected_series)
+
+    @pytest.mark.parametrize(
+        "min_count,data,expected",
+        [
+            (
+                3,
+                ["a", "a", "a", None, "b", "c", "d", "e", "f"],
+                [True, True, True, False, False, False, False, False, False],
+            ),
+            (
+                3,
+                ["a", "a", "a", None, "a", "a", "a", "b", "c"],
+                [True, True, True, False, True, True, True, False, False],
+            ),
+            (
+                3,
+                [None, "a", "a", "a", "b", "c", "d", "e", "f"],
+                [False, True, True, True, False, False, False, False, False],
+            ),
+            (
+                3,
+                [None, None, None, "a", "a", "a", "b", "c", "d"],
+                [False, False, False, True, True, True, False, False, False],
+            ),
+            (
+                3,
+                [None, None, None, None, None, None, None, None, None],
+                [False, False, False, False, False, False, False, False, False],
+            ),
+        ],
+        ids=[
+            "null_breaks_flatline",
+            "two_flatlines_separated_by_null",
+            "null_at_start",
+            "multiple_nulls_at_start",
+            "all_nulls",
+        ],
+    )
+    def test_string_data_with_nulls(self, min_count: int, data: list[str | None], expected: list[bool]) -> None:
+        """Test that null values are handled correctly in string columns."""
+        df = self.tf.df.with_columns(pl.Series(data, dtype=pl.String).alias("value_a"))
+        tf = self.tf.with_df(df)
+
+        check = FlatLineCheck(min_count)
+        result = check.apply(tf.df, tf.time_name, "value_a")
+        expected_series = pl.Series(expected)
+        assert_series_equal(result, expected_series)
+
+    def test_string_data_with_tolerance_raises(self) -> None:
+        """Test that using tolerance with a string column raises an error."""
+        data = ["a", "a", "a", "b", "b", "b", "c", "d", "e"]
+        df = self.tf.df.with_columns(pl.Series(data, dtype=pl.String).alias("value_a"))
+        tf = self.tf.with_df(df)
+
+        check = FlatLineCheck(3, tolerance=0.1)
+        with pytest.raises(Exception):
+            check.apply(tf.df, tf.time_name, "value_a")
