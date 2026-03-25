@@ -8,7 +8,7 @@ from polars.testing import assert_series_equal
 
 from time_stream.base import TimeFrame
 from time_stream.exceptions import QcUnknownOperatorError, RegistryKeyTypeError, UnknownRegistryKeyError
-from time_stream.qc import ComparisonCheck, QCCheck, QcCtx, RangeCheck, SpikeCheck
+from time_stream.qc import ComparisonCheck, FlatLineCheck, QCCheck, QcCtx, RangeCheck, SpikeCheck
 
 
 class MockQC(QCCheck):
@@ -592,3 +592,498 @@ class TestCheckWithDateRange:
         result = check.apply(self.tf.df, self.tf.time_name, "value_a", observation_interval=observation_interval)
         expected = pl.Series([False, False, False, False, False, False, False, True, True, True])
         assert_series_equal(result, expected)
+
+
+class TestFlatLineCheck:
+    data = pl.DataFrame(
+        {
+            "time": [
+                datetime(2023, 8, 10),
+                datetime(2023, 8, 11),
+                datetime(2023, 8, 12),
+                datetime(2023, 8, 13),
+                datetime(2023, 8, 14),
+                datetime(2023, 8, 15),
+                datetime(2023, 8, 16),
+                datetime(2023, 8, 17),
+                datetime(2023, 8, 18),
+            ],
+            "value_a": range(9),
+        }
+    )
+    tf = TimeFrame(data, "time")
+
+    @pytest.mark.parametrize(
+        "min_count,data,expected",
+        [
+            (
+                2,
+                [0.0, 1.0, 1.0, 1.0, 5.0, 6.0, 7.0, 8.0, 9.0],
+                [False, True, True, True, False, False, False, False, False],
+            ),
+            (
+                2,
+                [1.0, 1.0, 1.0, 1.0, 5.0, 6.0, 7.0, 8.0, 9.0],
+                [True, True, True, True, False, False, False, False, False],
+            ),
+            (
+                3,
+                [0.0, 1.0, 1.0, 1.0, 5.0, 6.0, 7.0, 8.0, 9.0],
+                [False, True, True, True, False, False, False, False, False],
+            ),
+            (
+                3,
+                [0.0, 1.0, 2.0, 3.0, 4.0, 6.0, 6.0, 6.0, 6.0],
+                [False, False, False, False, False, True, True, True, True],
+            ),
+            (
+                4,
+                [0.0, 1.0, 1.0, 1.0, 5.0, 6.0, 7.0, 8.0, 9.0],
+                [False, False, False, False, False, False, False, False, False],
+            ),
+        ],
+        ids=[
+            "simple_flat_line",
+            "from_start",
+            "flatline_len_is_min_count",
+            "at_end",
+            "flat_line_below_min_count",
+        ],
+    )
+    def test_flat_line_min_count(self, min_count: int, data: list[float], expected: list[bool]) -> None:
+        """Test that the flat line check works correctly with different min_count values."""
+        df = self.tf.df.with_columns(pl.Series(data).alias("value_a"))
+        tf = self.tf.with_df(df)
+
+        check = FlatLineCheck(min_count)
+        result = check.apply(tf.df, tf.time_name, "value_a")
+        expected_series = pl.Series(expected)
+        assert_series_equal(result, expected_series)
+
+    @pytest.mark.parametrize(
+        "min_count,data,expected",
+        [
+            (
+                3,
+                [0.0, 1.0, 1.0, 1.0, 5.0, 6.0, 6.0, 6.0, 6.0],
+                [False, True, True, True, False, True, True, True, True],
+            ),
+            (
+                4,
+                [0.0, 1.0, 1.0, 1.0, 5.0, 6.0, 6.0, 6.0, 6.0],
+                [False, False, False, False, False, True, True, True, True],
+            ),
+            (4, [1.0, 1.0, 1.0, 1.0, 5.0, 6.0, 6.0, 6.0, 6.0], [True, True, True, True, False, True, True, True, True]),
+            (
+                5,
+                [1.0, 1.0, 1.0, 1.0, 5.0, 6.0, 6.0, 6.0, 6.0],
+                [False, False, False, False, False, False, False, False, False],
+            ),
+        ],
+        ids=[
+            "2_flat_lines",
+            "1_too_small",
+            "flatlines_on_ends",
+            "flat_lines_below_min_count",
+        ],
+    )
+    def test_multiple_flat_lines(self, min_count: int, data: list[float], expected: list[bool]) -> None:
+        """Test that multiple flat lines are correctly identified."""
+        df = self.tf.df.with_columns(pl.Series(data).alias("value_a"))
+        tf = self.tf.with_df(df)
+
+        check = FlatLineCheck(min_count)
+        result = check.apply(tf.df, tf.time_name, "value_a")
+        expected_series = pl.Series(expected)
+        assert_series_equal(result, expected_series)
+
+    @pytest.mark.parametrize(
+        "min_count",
+        [1, 0, -2],
+    )
+    def test_bad_min_count(self, min_count: int) -> None:
+        """Test that min_count values below 2 raise a ValueError at construction time."""
+        with pytest.raises(ValueError, match="min_count for flat line check must be at least 2"):
+            FlatLineCheck(min_count)
+
+    @pytest.mark.parametrize(
+        "min_count,data,expected",
+        [
+            (
+                3,
+                [None, 1.0, 1.0, 1.0, 5.0, 6.0, 7.0, 8.0, 9.0],
+                [False, True, True, True, False, False, False, False, False],
+            ),
+            (
+                3,
+                [None, None, 1.0, 1.0, 1.0, 1.0, 7.0, 8.0, 9.0],
+                [False, False, True, True, True, True, False, False, False],
+            ),
+            (
+                3,
+                [1.0, 2.0, 3.0, 4.0, 4.0, 4.0, 4.0, None, None],
+                [False, False, False, True, True, True, True, False, False],
+            ),
+            (
+                3,
+                [1.0, 2.0, 3.0, 4.0, 4.0, 4.0, 7.0, 8.0, None],
+                [False, False, False, True, True, True, False, False, False],
+            ),
+        ],
+        ids=[
+            "single_null_at_start",
+            "2_nulls_at_start",
+            "2_nulls_at_end",
+            "single_null_at_end",
+        ],
+    )
+    def test_with_trailing_null_values(self, min_count: int, data: list[float], expected: list[bool]) -> None:
+        """Test that null values at beginning and end are not seen as flat lines."""
+        df = self.tf.df.with_columns(pl.Series(data).alias("value_a"))
+        tf = self.tf.with_df(df)
+
+        check = FlatLineCheck(min_count)
+        result = check.apply(tf.df, tf.time_name, "value_a")
+        expected_series = pl.Series(expected)
+        assert_series_equal(result, expected_series)
+
+    @pytest.mark.parametrize(
+        "min_count,data,expected",
+        [
+            (
+                3,
+                [None, None, None, 1.0, 1.0, 1.0, 7.0, 8.0, 9.0],
+                [False, False, False, True, True, True, False, False, False],
+            ),
+            (
+                3,
+                [1.0, None, None, None, None, 1.0, 1.0, 1.0, None],
+                [False, False, False, False, False, True, True, True, False],
+            ),
+            (
+                3,
+                [None, None, None, None, None, None, None, None, None],
+                [False, False, False, False, False, False, False, False, False],
+            ),
+        ],
+        ids=[
+            "null_flatline_at_start",
+            "null_flatline_in_middle",
+            "all_nulls",
+        ],
+    )
+    def test_null_values_not_flatline(self, min_count: int, data: list[float], expected: list[bool]) -> None:
+        """Test that null values are not considered as part of a flat line."""
+        df = self.tf.df.with_columns(pl.Series(data).alias("value_a"))
+        tf = self.tf.with_df(df)
+
+        check = FlatLineCheck(min_count)
+        result = check.apply(tf.df, tf.time_name, "value_a")
+        expected_series = pl.Series(expected)
+        assert_series_equal(result, expected_series)
+
+    @pytest.mark.parametrize(
+        "min_count,data,expected",
+        [
+            (
+                3,
+                [1.0, 1.0, 1.0, None, 5.0, 6.0, 7.0, 8.0, 9.0],
+                [True, True, True, False, False, False, False, False, False],
+            ),
+            (
+                3,
+                [1.0, 1.0, 1.0, None, 1.0, 6.0, 7.0, 8.0, 9.0],
+                [True, True, True, False, False, False, False, False, False],
+            ),
+            (
+                3,
+                [1.0, 1.0, 1.0, None, 1.0, 1.0, 1.0, 8.0, 9.0],
+                [True, True, True, False, True, True, True, False, False],
+            ),
+            (
+                3,
+                [None, 1.0, 1.0, None, 1.0, 6.0, 7.0, 8.0, 9.0],
+                [False, False, False, False, False, False, False, False, False],
+            ),
+        ],
+        ids=[
+            "null_not_in_flatline",
+            "flatline_broken_by_null",
+            "2_flatlines_beside_by_null",
+            "nulls_but_no_flatline",
+        ],
+    )
+    def test_with_inner_null_values(self, min_count: int, data: list[float], expected: list[bool]) -> None:
+        """Test that null values in the middle of a flat line are not counted, and break the flat line."""
+        df = self.tf.df.with_columns(pl.Series(data).alias("value_a"))
+        tf = self.tf.with_df(df)
+
+        check = FlatLineCheck(min_count)
+        result = check.apply(tf.df, tf.time_name, "value_a")
+        expected_series = pl.Series(expected)
+        assert_series_equal(result, expected_series)
+
+    @pytest.mark.parametrize(
+        "min_count,ignore,data,col_dtype,expected",
+        [
+            (
+                3,
+                1.0,
+                [1.0, 1.0, 1.0, 1.0, 5.0, 6.0, 7.0, 8.0, 9.0],
+                pl.Float64,
+                [False, False, False, False, False, False, False, False, False],
+            ),
+            (
+                3,
+                [1.0],
+                [1.0, 1.0, 1.0, None, 1.0, 6.0, 7.0, 8.0, 9.0],
+                pl.Float64,
+                [False, False, False, False, False, False, False, False, False],
+            ),
+            (
+                3,
+                [2.0, 3.0],
+                [1.0, 1.0, 1.0, None, 1.0, 1.0, 1.0, 8.0, 9.0],
+                pl.Float64,
+                [True, True, True, False, True, True, True, False, False],
+            ),
+            (
+                3,
+                0,
+                [0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 5.0, 6.0, 7.0],
+                pl.Float64,
+                [False, False, False, True, True, True, False, False, False],
+            ),
+            (
+                3,
+                [0, 3.1],
+                [0.0, 0.0, 0.0, 3.1, 3.1, 3.1, 5.0, 6.0, 7.0],
+                pl.Float64,
+                [False, False, False, False, False, False, False, False, False],
+            ),
+            (
+                3,
+                0,
+                [0, 0, 0, 1, 1, 1, 5, 6, 7],
+                pl.Int64,
+                [False, False, False, True, True, True, False, False, False],
+            ),
+            (
+                3,
+                "a",
+                ["a", "a", "a", "b", "b", "b", "c", "d", "e"],
+                pl.String,
+                [False, False, False, True, True, True, False, False, False],
+            ),
+        ],
+        ids=[
+            "float_ignore_as_scalar",
+            "float_ignore_as_list",
+            "float_ignore_vals_not_present",
+            "float_col_int_ignore_upcast",
+            "float_col_mixed_int_float_ignore",
+            "int_col_int_ignore",
+            "string_col_string_ignore",
+        ],
+    )
+    def test_with_ignore_values(
+        self, min_count: int, ignore: Any, data: list, col_dtype: pl.DataType, expected: list[bool]
+    ) -> None:
+        """Test that values in ignore_value are not flagged even when they form a flat line."""
+        df = self.tf.df.with_columns(pl.Series(data, dtype=col_dtype).alias("value_a"))
+        tf = self.tf.with_df(df)
+
+        check = FlatLineCheck(min_count, ignore_value=ignore)
+        result = check.apply(tf.df, tf.time_name, "value_a")
+        expected_series = pl.Series(expected)
+        assert_series_equal(result, expected_series)
+
+    @pytest.mark.parametrize(
+        "ignore,data,col_dtype",
+        [
+            ("bad", [1.0, 1.0, 1.0, 2.0, 2.0, 2.0, 5.0, 6.0, 7.0], pl.Float64),
+            (0.0, [0, 0, 0, 1, 1, 1, 5, 6, 7], pl.Int64),
+            (1, ["a", "a", "a", "b", "b", "b", "c", "d", "e"], pl.String),
+        ],
+        ids=[
+            "string_ignore_for_float_col",
+            "float_ignore_for_int_col",
+            "int_ignore_for_string_col",
+        ],
+    )
+    def test_with_bad_ignore_values(self, ignore: Any, data: list, col_dtype: pl.DataType) -> None:
+        """Test that incompatible ignore_value types raise TypeError."""
+        df = self.tf.df.with_columns(pl.Series(data, dtype=col_dtype).alias("value_a"))
+        tf = self.tf.with_df(df)
+
+        check = FlatLineCheck(3, ignore_value=ignore)
+        with pytest.raises(TypeError, match="incompatible with"):
+            check.apply(tf.df, tf.time_name, "value_a")
+
+    @pytest.mark.parametrize(
+        "tolerance,data,expected",
+        [
+            (
+                0.01,
+                [1.0, 1.005, 1.009, 1.0, 5.0, 6.0, 7.0, 8.0, 9.0],
+                [True, True, True, True, False, False, False, False, False],
+            ),
+            (
+                0.01,
+                [1.0, 1.011, 1.0, 1.0, 5.0, 6.0, 7.0, 8.0, 9.0],
+                [False, False, False, False, False, False, False, False, False],
+            ),
+            (
+                0.01,
+                [1.0, 1.01, 1.02, 5.0, 6.0, 7.0, 8.0, 8.0, 8.0],
+                [False, False, False, False, False, False, True, True, True],
+            ),
+            (
+                0.001,
+                [0.0, 0.0005, 0.0009, 0.0, 5.0, 6.0, 7.0, 8.0, 9.0],
+                [True, True, True, True, False, False, False, False, False],
+            ),
+        ],
+        ids=[
+            "within_tolerance_flagged",
+            "outside_tolerance_not_flagged",
+            "exact_boundary_flagged",
+            "small_tolerance",
+        ],
+    )
+    def test_tolerance(self, tolerance: float, data: list[float], expected: list[bool]) -> None:
+        """Test that tolerance allows near-equal consecutive values to be treated as equal."""
+        df = self.tf.df.with_columns(pl.Series(data).alias("value_a"))
+        tf = self.tf.with_df(df)
+
+        check = FlatLineCheck(3, tolerance=tolerance)
+        result = check.apply(tf.df, tf.time_name, "value_a")
+        expected_series = pl.Series(expected)
+        assert_series_equal(result, expected_series)
+
+    @pytest.mark.parametrize(
+        "tolerance,data,expected",
+        [
+            (
+                0.01,
+                [1.0, 1.005, None, 1.0, 1.005, 1.009, 9.0, 8.0, 7.0],
+                [False, False, False, True, True, True, False, False, False],
+            ),
+            (
+                0.01,
+                [None, 1.0, 1.005, 1.009, 5.0, 6.0, 7.0, 8.0, 9.0],
+                [False, True, True, True, False, False, False, False, False],
+            ),
+        ],
+        ids=[
+            "null_breaks_tolerance_flatline",
+            "null_at_start_with_tolerance",
+        ],
+    )
+    def test_tolerance_with_nulls(self, tolerance: float, data: list[float], expected: list[bool]) -> None:
+        """Test that null values correctly break flat line groups when tolerance is set."""
+        df = self.tf.df.with_columns(pl.Series(data).alias("value_a"))
+        tf = self.tf.with_df(df)
+
+        check = FlatLineCheck(3, tolerance=tolerance)
+        result = check.apply(tf.df, tf.time_name, "value_a")
+        expected_series = pl.Series(expected)
+        assert_series_equal(result, expected_series)
+
+    @pytest.mark.parametrize(
+        "min_count,data,expected",
+        [
+            (
+                2,
+                ["a", "b", "b", "b", "c", "d", "e", "f", "g"],
+                [False, True, True, True, False, False, False, False, False],
+            ),
+            (
+                2,
+                ["a", "a", "a", "a", "b", "c", "d", "e", "f"],
+                [True, True, True, True, False, False, False, False, False],
+            ),
+            (
+                3,
+                ["a", "b", "b", "b", "c", "d", "e", "f", "g"],
+                [False, True, True, True, False, False, False, False, False],
+            ),
+            (
+                4,
+                ["a", "b", "b", "b", "c", "d", "e", "f", "g"],
+                [False, False, False, False, False, False, False, False, False],
+            ),
+        ],
+        ids=[
+            "simple_flat_line",
+            "from_start",
+            "flatline_len_is_min_count",
+            "flat_line_below_min_count",
+        ],
+    )
+    def test_string_data_min_count(self, min_count: int, data: list[str], expected: list[bool]) -> None:
+        """Test that the flat line check works correctly with string column data."""
+        df = self.tf.df.with_columns(pl.Series(data, dtype=pl.String).alias("value_a"))
+        tf = self.tf.with_df(df)
+
+        check = FlatLineCheck(min_count)
+        result = check.apply(tf.df, tf.time_name, "value_a")
+        expected_series = pl.Series(expected)
+        assert_series_equal(result, expected_series)
+
+    @pytest.mark.parametrize(
+        "min_count,data,expected",
+        [
+            (
+                3,
+                ["a", "a", "a", None, "b", "c", "d", "e", "f"],
+                [True, True, True, False, False, False, False, False, False],
+            ),
+            (
+                3,
+                ["a", "a", "a", None, "a", "a", "a", "b", "c"],
+                [True, True, True, False, True, True, True, False, False],
+            ),
+            (
+                3,
+                [None, "a", "a", "a", "b", "c", "d", "e", "f"],
+                [False, True, True, True, False, False, False, False, False],
+            ),
+            (
+                3,
+                [None, None, None, "a", "a", "a", "b", "c", "d"],
+                [False, False, False, True, True, True, False, False, False],
+            ),
+            (
+                3,
+                [None, None, None, None, None, None, None, None, None],
+                [False, False, False, False, False, False, False, False, False],
+            ),
+        ],
+        ids=[
+            "null_breaks_flatline",
+            "two_flatlines_separated_by_null",
+            "null_at_start",
+            "multiple_nulls_at_start",
+            "all_nulls",
+        ],
+    )
+    def test_string_data_with_nulls(self, min_count: int, data: list[str | None], expected: list[bool]) -> None:
+        """Test that null values are handled correctly in string columns."""
+        df = self.tf.df.with_columns(pl.Series(data, dtype=pl.String).alias("value_a"))
+        tf = self.tf.with_df(df)
+
+        check = FlatLineCheck(min_count)
+        result = check.apply(tf.df, tf.time_name, "value_a")
+        expected_series = pl.Series(expected)
+        assert_series_equal(result, expected_series)
+
+    def test_string_data_with_tolerance_raises(self) -> None:
+        """Test that using tolerance with a string column raises an error."""
+        data = ["a", "a", "a", "b", "b", "b", "c", "d", "e"]
+        df = self.tf.df.with_columns(pl.Series(data, dtype=pl.String).alias("value_a"))
+        tf = self.tf.with_df(df)
+
+        check = FlatLineCheck(3, tolerance=0.1)
+        with pytest.raises(Exception):
+            check.apply(tf.df, tf.time_name, "value_a")

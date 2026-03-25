@@ -9,6 +9,7 @@ It supports various QC checks including:
 - RangeCheck: Verify values fall within or outside a given range.
 - TimeRangeCheck: Apply range checks directly to the time column.
 - SpikeCheck: Detect sudden spikes based on differences with neighbors.
+- FlatLineCheck: Detect flat lines by checking for consecutive repeated values.
 """
 
 from abc import ABC, abstractmethod
@@ -114,7 +115,7 @@ class ComparisonCheck(QCCheck):
     name = "comparison"
 
     def __init__(self, compare_to: float | list, operator: str, flag_na: bool = False) -> None:
-        """Initialize comparison check.
+        """Initialise comparison check.
 
         Args:
             compare_to: The value for comparison.
@@ -160,7 +161,7 @@ class RangeCheck(QCCheck):
         closed: str | ClosedInterval = "both",
         within: bool = True,
     ) -> None:
-        """Initialize range check.
+        """Initialise range check.
 
         Args:
             min_value: Minimum of the range.
@@ -244,7 +245,7 @@ class SpikeCheck(QCCheck):
     name = "spike"
 
     def __init__(self, threshold: float):
-        """Initialize spike detection check.
+        """Initialise spike detection check.
 
         Args:
             threshold: The spike detection threshold.
@@ -273,3 +274,72 @@ class SpikeCheck(QCCheck):
 
         # Double the threshold since we're summing differences
         return d_no_skew > (self.threshold * 2.0)
+
+
+@QCCheck.register
+class FlatLineCheck(QCCheck):
+    """Detect flat lines by checking for consecutive repeated values."""
+
+    name = "flat_line"
+
+    def __init__(
+        self,
+        min_count: int,
+        tolerance: float | None = None,
+        ignore_value: int | float | str | list | None = None,
+    ) -> None:
+        """Initialise flat line detection check.
+
+        Args:
+            min_count: Minimum number of consecutive repeated values required for a flat line. Must be at least 2.
+            tolerance: Optional tolerance for near-equality comparison. When set, consecutive values differing by
+                less than or equal to this amount are considered equal. Only valid for numeric columns.
+                Defaults to None (exact equality).
+            ignore_value: Optional value or list of values that are allowed to repeat without being flagged.
+                For float columns, int values are automatically upcast to float. For all other column types,
+                values must match the column's type exactly.
+        """
+        if min_count < 2:
+            raise ValueError("min_count for flat line check must be at least 2")
+        self.min_count = min_count
+        self.tolerance = tolerance
+        self.ignore_values = (
+            ignore_value if isinstance(ignore_value, list) else ([ignore_value] if ignore_value is not None else [])
+        )
+
+    def expr(self, ctx: QcCtx, column: str) -> pl.Expr:
+        """Return the Polars expression for flat line detection.
+
+        Repeated nulls do not count as flat lines. Null values break flat line groups.
+        """
+        prev = pl.col(column).shift(1)
+
+        # Treat "equal to previous" such that two nulls are not considered equal.
+        # When tolerance is set, use absolute difference; otherwise use exact equality.
+        if self.tolerance is None:
+            equal_to_prev = pl.col(column).is_not_null() & prev.is_not_null() & (pl.col(column) == prev)
+        else:
+            equal_to_prev = (
+                pl.col(column).is_not_null() & prev.is_not_null() & ((pl.col(column) - prev).abs() <= self.tolerance)
+            )
+
+        # Mark starts of new groups, then create a group id by cumulative sum
+        change = (~equal_to_prev).cast(pl.Int32)
+        group_id = change.cum_sum()
+
+        # Size of each group
+        group_size = pl.len().over(group_id)
+
+        # Only consider non-null groups for flat-line detection
+        result = (group_size >= self.min_count) & pl.col(column).is_not_null()
+
+        # Apply ignore-values if provided
+        if self.ignore_values:
+            dtype = ctx.df.schema[column]
+            try:
+                ignore_list = pl.Series("", self.ignore_values, dtype=dtype, strict=True).to_list()
+            except Exception as e:
+                raise TypeError(f"ignore_value is incompatible with column '{column}' of type {dtype}: {e}") from e
+            result = result & ~pl.col(column).is_in(ignore_list)
+
+        return result

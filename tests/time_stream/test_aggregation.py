@@ -1,5 +1,5 @@
 import re
-from datetime import datetime
+from datetime import datetime, time
 from typing import Any, Callable
 from unittest.mock import Mock
 
@@ -10,7 +10,6 @@ from polars.testing import assert_frame_equal
 from time_stream.aggregation import (
     AggregationCtx,
     AggregationFunction,
-    AggregationPipeline,
     AngularMean,
     ConditionalCount,
     Max,
@@ -19,17 +18,23 @@ from time_stream.aggregation import (
     Min,
     PeaksOverThreshold,
     Percentile,
+    RollingAggregationPipeline,
+    StandardAggregationPipeline,
     StDev,
     Sum,
 )
 from time_stream.base import TimeFrame
-from time_stream.enums import TimeAnchor
+from time_stream.enums import ClosedInterval, RollingAlignment, TimeAnchor
 from time_stream.exceptions import (
+    AggregationError,
+    AggregationPeriodError,
     MissingCriteriaError,
     RegistryKeyTypeError,
+    TimeWindowError,
     UnknownRegistryKeyError,
 )
 from time_stream.period import Period
+from time_stream.utils import TimeWindow
 
 
 def generate_time_series(
@@ -122,6 +127,7 @@ def generate_expected_df(
 
 
 # Period instances used throughout these tests
+PT30M = Period.of_minutes(30)
 PT1H = Period.of_hours(1)
 P1D = Period.of_days(1)
 P1D_OFF = P1D.with_hour_offset(9)  # water day
@@ -131,15 +137,20 @@ P1Y = Period.of_years(1)
 P1Y_OFF = P1Y.with_month_offset(9).with_hour_offset(9)  # water year
 
 # TimeSeries instances used throughout these tests
+TS_PT30M_1DAYS = generate_time_series(PT30M, PT30M, 48)  # 1 day of 30-minute data
+TS_PT30M_2DAYS = generate_time_series(PT30M, PT30M, 96)  # 2 days of 30-minute data
+TS_PT30M_2DAYS_MISSING = generate_time_series(PT30M, PT30M, 96, missing_data=True)  # 2 days of 30-minute data
+TS_PT1H_HALF_DAY = generate_time_series(PT1H, PT1H, 12)  # half a day of 1-hour data
 TS_PT1H_2DAYS = generate_time_series(PT1H, PT1H, 48)  # 2 days of 1-hour data
 TS_PT1H_2DAYS_MISSING = generate_time_series(PT1H, PT1H, 48, missing_data=True)  # 2 days of 1-hour data
 TS_PT1H_2MONTH = generate_time_series(PT1H, PT1H, 1_416)  # 2 months (Jan, Feb 2025) of 1-hour data
 TS_P1M_2YEARS = generate_time_series(P1M, P1M, 24)  # 2 years of month data
+TS_P1D_2DAYS = generate_time_series(P1D, P1D, 2)  # 2 days of daily data
 TS_P1D_OFF_2MONTH = generate_time_series(P1D, P1D_OFF, 59, offset="+9H")  # 2 months (Jan, Feb 2025) of 1-day-offset
 TS_P1M_OFF_2YEARS = generate_time_series(P1M, P1M_OFF, 24, offset="+9H")  # 2 years of 1-month-offset data
 
 
-class TestAggregationPipeline:
+class TestStandardAggregationPipeline:
     @staticmethod
     def setup_agg_context() -> Mock:
         ctx = Mock(spec=AggregationCtx)
@@ -165,7 +176,14 @@ class TestAggregationPipeline:
         agg_func = Mock(spec=AggregationFunction)
         period = Mock()
 
-        ap = AggregationPipeline(agg_func, ctx, period, columns, ctx.time_anchor, (criteria, threshold))
+        ap = StandardAggregationPipeline(
+            agg_func,
+            ctx,
+            period,
+            columns,
+            missing_criteria=(criteria, threshold),
+            aggregation_time_anchor=ctx.time_anchor,
+        )
 
         expressions = ap._missing_data_expr()
         assert isinstance(expressions, list)
@@ -188,7 +206,14 @@ class TestAggregationPipeline:
         agg_func = Mock(spec=AggregationFunction)
         period = Mock()
 
-        ap = AggregationPipeline(agg_func, ctx, period, columns, ctx.time_anchor, (criteria, threshold))
+        ap = StandardAggregationPipeline(
+            agg_func,
+            ctx,
+            period,
+            columns,
+            missing_criteria=(criteria, threshold),
+            aggregation_time_anchor=ctx.time_anchor,
+        )
 
         with pytest.raises(MissingCriteriaError):
             ap._missing_data_expr()
@@ -437,15 +462,18 @@ class TestSimpleAggregations:
         """Test aggregations of microsecond-based (i.e., 1 day or less) resolution data, to another
         microsecond-based resolution."""
         expected_df = generate_expected_df(timestamps, aggregator, column, values, counts, counts, timestamps_of)
-        result = aggregator(**kwargs).apply(
-            input_tf.df,
-            input_tf.time_name,
-            input_tf.time_anchor,
-            input_tf.periodicity,
+        result = StandardAggregationPipeline(
+            aggregator(**kwargs),
+            AggregationCtx(
+                df=input_tf.df,
+                time_name=input_tf.time_name,
+                time_anchor=input_tf.time_anchor,
+                periodicity=input_tf.periodicity,
+            ),
             target_period,
             column,
-            input_tf.time_anchor,
-        )
+            aggregation_time_anchor=input_tf.time_anchor,
+        ).execute()
         assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False)
 
     @pytest.mark.parametrize(
@@ -577,15 +605,18 @@ class TestSimpleAggregations:
     ) -> None:
         """Test aggregations of microsecond-based (i.e., 1-day or less) resolution data, to a month-based resolution."""
         expected_df = generate_expected_df(timestamps, aggregator, column, values, counts, counts, timestamps_of)
-        result = aggregator(**kwargs).apply(
-            input_tf.df,
-            input_tf.time_name,
-            input_tf.time_anchor,
-            input_tf.periodicity,
+        result = StandardAggregationPipeline(
+            aggregator(**kwargs),
+            AggregationCtx(
+                df=input_tf.df,
+                time_name=input_tf.time_name,
+                time_anchor=input_tf.time_anchor,
+                periodicity=input_tf.periodicity,
+            ),
             target_period,
             column,
-            input_tf.time_anchor,
-        )
+            aggregation_time_anchor=input_tf.time_anchor,
+        ).execute()
         assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False)
 
     @pytest.mark.parametrize(
@@ -717,15 +748,18 @@ class TestSimpleAggregations:
     ) -> None:
         """Test aggregations of month-based resolution data, to a month-based resolution."""
         expected_df = generate_expected_df(timestamps, aggregator, column, values, counts, counts, timestamps_of)
-        result = aggregator(**kwargs).apply(
-            input_tf.df,
-            input_tf.time_name,
-            input_tf.time_anchor,
-            input_tf.periodicity,
+        result = StandardAggregationPipeline(
+            aggregator(**kwargs),
+            AggregationCtx(
+                df=input_tf.df,
+                time_name=input_tf.time_name,
+                time_anchor=input_tf.time_anchor,
+                periodicity=input_tf.periodicity,
+            ),
             target_period,
             column,
-            input_tf.time_anchor,
-        )
+            aggregation_time_anchor=input_tf.time_anchor,
+        ).execute()
         assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False)
 
     @pytest.mark.parametrize(
@@ -860,15 +894,18 @@ class TestSimpleAggregations:
         kwargs: dict[str, Any],
     ) -> None:
         expected_df = generate_expected_df(timestamps, aggregator, column, values, counts, counts, timestamps_of)
-        result = aggregator(**kwargs).apply(
-            input_tf.df,
-            input_tf.time_name,
-            input_tf.time_anchor,
-            input_tf.periodicity,
+        result = StandardAggregationPipeline(
+            aggregator(**kwargs),
+            AggregationCtx(
+                df=input_tf.df,
+                time_name=input_tf.time_name,
+                time_anchor=input_tf.time_anchor,
+                periodicity=input_tf.periodicity,
+            ),
             target_period,
             column,
-            input_tf.time_anchor,
-        )
+            aggregation_time_anchor=input_tf.time_anchor,
+        ).execute()
         assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False)
 
     @pytest.mark.parametrize(
@@ -914,15 +951,15 @@ class TestSimpleAggregations:
         expected_df = generate_expected_df(
             timestamps, aggregator, column, values, expected_counts, actual_counts, timestamps_of
         )
-        result = aggregator().apply(
-            df,
-            input_tf.time_name,
-            input_tf.time_anchor,
-            input_tf.periodicity,
+        result = StandardAggregationPipeline(
+            aggregator(),
+            AggregationCtx(
+                df=df, time_name=input_tf.time_name, time_anchor=input_tf.time_anchor, periodicity=input_tf.periodicity
+            ),
             target_period,
             column,
-            input_tf.time_anchor,
-        )
+            aggregation_time_anchor=input_tf.time_anchor,
+        ).execute()
         assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False)
 
 
@@ -1023,15 +1060,18 @@ class TestComplexPeriodicityAggregations:
         expected_df = generate_expected_df(
             timestamps, aggregator, column, values, expected_counts, actual_counts, timestamps_of
         )
-        result = aggregator(**kwargs).apply(
-            input_tf.df,
-            input_tf.time_name,
-            input_tf.time_anchor,
-            input_tf.periodicity,
+        result = StandardAggregationPipeline(
+            aggregator(**kwargs),
+            AggregationCtx(
+                df=input_tf.df,
+                time_name=input_tf.time_name,
+                time_anchor=input_tf.time_anchor,
+                periodicity=input_tf.periodicity,
+            ),
             target_period,
             column,
-            input_tf.time_anchor,
-        )
+            aggregation_time_anchor=input_tf.time_anchor,
+        ).execute()
         assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False)
 
     @pytest.mark.parametrize(
@@ -1124,15 +1164,18 @@ class TestComplexPeriodicityAggregations:
         expected_df = generate_expected_df(
             timestamps, aggregator, column, values, expected_counts, actual_counts, timestamps_of
         )
-        result = aggregator(**kwargs).apply(
-            input_tf.df,
-            input_tf.time_name,
-            input_tf.time_anchor,
-            input_tf.periodicity,
+        result = StandardAggregationPipeline(
+            aggregator(**kwargs),
+            AggregationCtx(
+                df=input_tf.df,
+                time_name=input_tf.time_name,
+                time_anchor=input_tf.time_anchor,
+                periodicity=input_tf.periodicity,
+            ),
             target_period,
             column,
-            input_tf.time_anchor,
-        )
+            aggregation_time_anchor=input_tf.time_anchor,
+        ).execute()
         assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False)
 
     @pytest.mark.parametrize(
@@ -1225,15 +1268,18 @@ class TestComplexPeriodicityAggregations:
         expected_df = generate_expected_df(
             timestamps, aggregator, column, values, expected_counts, actual_counts, timestamps_of
         )
-        result = aggregator(**kwargs).apply(
-            input_tf.df,
-            input_tf.time_name,
-            input_tf.time_anchor,
-            input_tf.periodicity,
+        result = StandardAggregationPipeline(
+            aggregator(**kwargs),
+            AggregationCtx(
+                df=input_tf.df,
+                time_name=input_tf.time_name,
+                time_anchor=input_tf.time_anchor,
+                periodicity=input_tf.periodicity,
+            ),
             target_period,
             column,
-            input_tf.time_anchor,
-        )
+            aggregation_time_anchor=input_tf.time_anchor,
+        ).execute()
         assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False)
 
     @pytest.mark.parametrize(
@@ -1326,15 +1372,18 @@ class TestComplexPeriodicityAggregations:
         expected_df = generate_expected_df(
             timestamps, aggregator, column, values, expected_counts, actual_counts, timestamps_of
         )
-        result = aggregator(**kwargs).apply(
-            input_tf.df,
-            input_tf.time_name,
-            input_tf.time_anchor,
-            input_tf.periodicity,
+        result = StandardAggregationPipeline(
+            aggregator(**kwargs),
+            AggregationCtx(
+                df=input_tf.df,
+                time_name=input_tf.time_name,
+                time_anchor=input_tf.time_anchor,
+                periodicity=input_tf.periodicity,
+            ),
             target_period,
             column,
-            input_tf.time_anchor,
-        )
+            aggregation_time_anchor=input_tf.time_anchor,
+        ).execute()
         assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False)
 
 
@@ -1459,9 +1508,18 @@ class TestEndAnchorAggregations:
         expected_df = generate_expected_df(
             timestamps, aggregator, column, values, expected_counts, actual_counts, timestamps_of
         )
-        result = aggregator().apply(
-            input_tf.df, input_tf.time_name, TimeAnchor.END, input_tf.periodicity, target_period, column, TimeAnchor.END
-        )
+        result = StandardAggregationPipeline(
+            aggregator(),
+            AggregationCtx(
+                df=input_tf.df,
+                time_name=input_tf.time_name,
+                time_anchor=TimeAnchor.END,
+                periodicity=input_tf.periodicity,
+            ),
+            target_period,
+            column,
+            aggregation_time_anchor=TimeAnchor.END,
+        ).execute()
         assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False)
 
     @pytest.mark.parametrize(
@@ -1511,15 +1569,18 @@ class TestEndAnchorAggregations:
         expected_df = generate_expected_df(
             timestamps, aggregator, column, values, expected_counts, actual_counts, timestamps_of
         )
-        result = aggregator().apply(
-            input_tf.df,
-            input_tf.time_name,
-            TimeAnchor.END,
-            input_tf.periodicity,
+        result = StandardAggregationPipeline(
+            aggregator(),
+            AggregationCtx(
+                df=input_tf.df,
+                time_name=input_tf.time_name,
+                time_anchor=TimeAnchor.END,
+                periodicity=input_tf.periodicity,
+            ),
             target_period,
             column,
-            TimeAnchor.START,
-        )
+            aggregation_time_anchor=TimeAnchor.START,
+        ).execute()
         assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False)
 
 
@@ -1549,15 +1610,18 @@ class TestMissingCriteriaAggregations:
             valid=valid,
         )
 
-        result = self.aggregator().apply(
-            self.input_tf.df,
-            self.input_tf.time_name,
-            self.input_tf.time_anchor,
-            self.input_tf.periodicity,
+        result = StandardAggregationPipeline(
+            self.aggregator(),
+            AggregationCtx(
+                df=self.input_tf.df,
+                time_name=self.input_tf.time_name,
+                time_anchor=self.input_tf.time_anchor,
+                periodicity=self.input_tf.periodicity,
+            ),
             self.target_period,
             self.column,
-            self.input_tf.time_anchor,
-        )
+            aggregation_time_anchor=self.input_tf.time_anchor,
+        ).execute()
 
         assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False, check_exact=False)
 
@@ -1606,16 +1670,19 @@ class TestMissingCriteriaAggregations:
             valid=valid,
         )
 
-        result = self.aggregator().apply(
-            self.input_tf.df,
-            self.input_tf.time_name,
-            self.input_tf.time_anchor,
-            self.input_tf.periodicity,
+        result = StandardAggregationPipeline(
+            self.aggregator(),
+            AggregationCtx(
+                df=self.input_tf.df,
+                time_name=self.input_tf.time_name,
+                time_anchor=self.input_tf.time_anchor,
+                periodicity=self.input_tf.periodicity,
+            ),
             self.target_period,
             self.column,
-            self.input_tf.time_anchor,
-            criteria,
-        )
+            missing_criteria=criteria,
+            aggregation_time_anchor=self.input_tf.time_anchor,
+        ).execute()
 
         assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False, check_exact=False)
 
@@ -1635,15 +1702,18 @@ class TestMeanSumWithMissingData:
 
         expected_df = generate_expected_df(timestamps, MeanSum, column, values, expected_counts, actual_counts)
 
-        result = MeanSum().apply(
-            input_tf.df,
-            input_tf.time_name,
-            input_tf.time_anchor,
-            input_tf.periodicity,
+        result = StandardAggregationPipeline(
+            MeanSum(),
+            AggregationCtx(
+                df=input_tf.df,
+                time_name=input_tf.time_name,
+                time_anchor=input_tf.time_anchor,
+                periodicity=input_tf.periodicity,
+            ),
             target_period,
             column,
-            input_tf.time_anchor,
-        )
+            aggregation_time_anchor=input_tf.time_anchor,
+        ).execute()
 
         assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False, check_exact=False)
 
@@ -1756,15 +1826,18 @@ class TestPercentileAggregation:
         counts = [24, 24]
 
         expected_df = generate_expected_df(timestamps, Percentile, column, expected_values, counts, counts, None)
-        result = Percentile(p=percentile).apply(
-            df=input_tf.df,
-            time_name=input_tf.time_name,
-            time_anchor=input_tf.time_anchor,
-            periodicity=input_tf.periodicity,
-            aggregation_period=P1D,
-            columns="value",
+        result = StandardAggregationPipeline(
+            Percentile(p=percentile),
+            AggregationCtx(
+                df=input_tf.df,
+                time_name=input_tf.time_name,
+                time_anchor=input_tf.time_anchor,
+                periodicity=input_tf.periodicity,
+            ),
+            P1D,
+            "value",
             aggregation_time_anchor=input_tf.time_anchor,
-        )
+        ).execute()
         assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False)
 
     @pytest.mark.parametrize("percentile", [0.000000001, 0.999999, 101, 10000, 1.1, -1, -0.000000000001])
@@ -1774,15 +1847,18 @@ class TestPercentileAggregation:
         expected_error = "The percentile value must be provided as an integer value from 0 to 100"
 
         with pytest.raises(ValueError, match=expected_error):
-            Percentile(p=percentile).apply(
-                df=input_tf.df,
-                time_name=input_tf.time_name,
-                time_anchor=input_tf.time_anchor,
-                periodicity=input_tf.periodicity,
-                aggregation_period=P1D,
-                columns="value",
+            StandardAggregationPipeline(
+                Percentile(p=percentile),  # type: ignore (expecting type warning for test)
+                AggregationCtx(
+                    df=input_tf.df,
+                    time_name=input_tf.time_name,
+                    time_anchor=input_tf.time_anchor,
+                    periodicity=input_tf.periodicity,
+                ),
+                P1D,
+                "value",
                 aggregation_time_anchor=input_tf.time_anchor,
-            )
+            ).execute()
 
 
 class TestConditionalCount:
@@ -1828,15 +1904,18 @@ class TestConditionalCount:
             timestamps, ConditionalCount, column, values, expected_counts, actual_counts, None
         )
 
-        result = ConditionalCount(condition).apply(
-            df=input_tf.df,
-            time_name=input_tf.time_name,
-            time_anchor=input_tf.time_anchor,
-            periodicity=input_tf.periodicity,
-            aggregation_period=target_period,
-            columns="value",
+        result = StandardAggregationPipeline(
+            ConditionalCount(condition),
+            AggregationCtx(
+                df=input_tf.df,
+                time_name=input_tf.time_name,
+                time_anchor=input_tf.time_anchor,
+                periodicity=input_tf.periodicity,
+            ),
+            target_period,
+            "value",
             aggregation_time_anchor=input_tf.time_anchor,
-        )
+        ).execute()
         assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False, check_exact=False)
 
     def test_count_null(self) -> None:
@@ -1852,15 +1931,18 @@ class TestConditionalCount:
             None,
         )
 
-        result = ConditionalCount(lambda col: col.is_null()).apply(
-            df=padded_tf.df,
-            time_name=padded_tf.time_name,
-            time_anchor=padded_tf.time_anchor,
-            periodicity=padded_tf.periodicity,
-            aggregation_period=P1D,
-            columns="value",
+        result = StandardAggregationPipeline(
+            ConditionalCount(lambda col: col.is_null()),
+            AggregationCtx(
+                df=padded_tf.df,
+                time_name=padded_tf.time_name,
+                time_anchor=padded_tf.time_anchor,
+                periodicity=padded_tf.periodicity,
+            ),
+            P1D,
+            "value",
             aggregation_time_anchor=padded_tf.time_anchor,
-        )
+        ).execute()
         assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False, check_exact=False)
 
 
@@ -1895,13 +1977,709 @@ class TestAngularMean:
         kwargs: dict[str, Any],
     ) -> None:
         expected_df = generate_expected_df(timestamps, aggregator, column, values, counts, counts, timestamps_of)
-        result = aggregator(**kwargs).apply(
-            input_tf.df,
-            input_tf.time_name,
-            input_tf.time_anchor,
-            input_tf.periodicity,
+        result = StandardAggregationPipeline(
+            aggregator(**kwargs),
+            AggregationCtx(
+                df=input_tf.df,
+                time_name=input_tf.time_name,
+                time_anchor=input_tf.time_anchor,
+                periodicity=input_tf.periodicity,
+            ),
             target_period,
             column,
-            input_tf.time_anchor,
-        )
+            aggregation_time_anchor=input_tf.time_anchor,
+        ).execute()
         assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False)
+
+
+class TestTimeWindowValidation:
+    """Tests that invalid time_window configurations raise TimeWindowError."""
+
+    def test_sub_daily_aggregation_period_raises(self) -> None:
+        """time_window is not supported for sub-daily aggregation periods."""
+        with pytest.raises(TimeWindowError):
+            TS_PT30M_2DAYS.aggregate(
+                aggregation_period="PT1H",
+                aggregation_function="mean",
+                time_window=TimeWindow(start=time(10, 30), end=time(14, 0)),
+            )
+
+    def test_daily_or_coarser_periodicity_raises(self) -> None:
+        """time_window requires sub-daily periodicity - daily data has nothing to filter."""
+        with pytest.raises(TimeWindowError):
+            TS_P1D_2DAYS.aggregate(
+                aggregation_period="P1M",
+                aggregation_function="mean",
+                time_window=TimeWindow(start=time(10, 30), end=time(14, 0)),
+            )
+
+    def test_midnight_wrapping_window_raises_on_construction(self) -> None:
+        """A window where start >= end raises on TimeWindow construction."""
+        with pytest.raises(TimeWindowError):
+            TimeWindow(start=time(22, 0), end=time(2, 0))
+
+
+class TestTimeWindowAggregation:
+    @pytest.mark.parametrize(
+        "input_tf,aggregator,target_period,columns,time_window,timestamps,expected_counts,actual_counts,values",
+        [
+            (
+                TS_PT30M_1DAYS,
+                Mean,
+                "P1D",
+                "value",
+                TimeWindow(start=time(10, 30), end=time(14, 0)),
+                [datetime(2025, 1, 1)],
+                [8],
+                [8],
+                {"value": [24.5]},
+            ),
+            (
+                TS_PT30M_2DAYS,
+                Mean,
+                "P1D",
+                "value",
+                TimeWindow(start=time(10, 30), end=time(14, 0)),
+                [datetime(2025, 1, 1), datetime(2025, 1, 2)],
+                [8, 8],
+                [8, 8],
+                {"value": [24.5, 72.5]},
+            ),
+            (
+                TS_PT30M_1DAYS,
+                Mean,
+                "P1D",
+                "value",
+                TimeWindow(start=time(10, 30), end=time(14, 0), closed=ClosedInterval.LEFT),
+                [datetime(2025, 1, 1)],
+                [7],
+                [7],
+                {"value": [24.0]},
+            ),
+            (
+                TS_PT30M_1DAYS,
+                Mean,
+                "P1D",
+                "value",
+                TimeWindow(start=time(10, 30), end=time(14, 0), closed=ClosedInterval.RIGHT),
+                [datetime(2025, 1, 1)],
+                [7],
+                [7],
+                {"value": [25.0]},
+            ),
+            (
+                TS_PT30M_1DAYS,
+                Mean,
+                "P1D",
+                "value",
+                TimeWindow(start=time(10, 30), end=time(14, 0), closed=ClosedInterval.NONE),
+                [datetime(2025, 1, 1)],
+                [6],
+                [6],
+                {"value": [24.5]},
+            ),
+            (
+                TS_PT30M_1DAYS,
+                Sum,
+                "P1D",
+                "value",
+                TimeWindow(start=time(10, 30), end=time(14, 0)),
+                [datetime(2025, 1, 1)],
+                [8],
+                [8],
+                {"value": [196]},
+            ),
+            (
+                TS_PT30M_1DAYS,
+                Mean,
+                "P1D",
+                ["value", "value_plus1"],
+                TimeWindow(start=time(10, 30), end=time(14, 0)),
+                [datetime(2025, 1, 1)],
+                [8],
+                [8],
+                {"value": [24.5], "value_plus1": [25.5]},
+            ),
+        ],
+        ids=[
+            "one-day mean, both closed",
+            "two-day mean, both closed",
+            "one-day mean, left closed",
+            "one-day mean, right closed",
+            "one-day mean, none closed",
+            "one-day sum, both closed",
+            "one-day mean, both closed, two columns",
+        ],
+    )
+    def test_windowed_aggregation(
+        self,
+        input_tf: TimeFrame,
+        aggregator: type[AggregationFunction],
+        target_period: str,
+        columns: str | list[str],
+        time_window: TimeWindow,
+        timestamps: list[datetime],
+        expected_counts: list[int],
+        actual_counts: list[int],
+        values: dict[str, list[float | int]],
+    ) -> None:
+        """Test time-windowed aggregation produces the correct expected DataFrame."""
+        col_list = columns if isinstance(columns, list) else [columns]
+        expected_df = generate_expected_df(timestamps, aggregator, columns, values, expected_counts, actual_counts)
+        result = input_tf.aggregate(
+            aggregation_period=target_period,
+            aggregation_function=aggregator,
+            columns=col_list,
+            time_window=time_window,
+        )
+        assert_frame_equal(result.df, expected_df, check_dtype=False, check_column_order=False)
+
+
+class TestRollingAggregation:
+    @pytest.mark.parametrize(
+        "aggregator, expected_values, timestamps_of, kwargs",
+        [
+            (Mean, [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 10.5, 11.0], [], {}),
+            (AngularMean, [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 10.5, 11.0], [], {}),
+            (Sum, [3, 6, 9, 12, 15, 18, 21, 24, 27, 30, 21, 11], [], {}),
+            (MeanSum, [3.0, 6.0, 9.0, 12.0, 15.0, 18.0, 21.0, 24.0, 27.0, 30.0, 31.5, 33.0], [], {}),
+            (
+                Min,
+                [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+                [
+                    datetime(2025, 1, 1, 0, 0),
+                    datetime(2025, 1, 1, 1, 0),
+                    datetime(2025, 1, 1, 2, 0),
+                    datetime(2025, 1, 1, 3, 0),
+                    datetime(2025, 1, 1, 4, 0),
+                    datetime(2025, 1, 1, 5, 0),
+                    datetime(2025, 1, 1, 6, 0),
+                    datetime(2025, 1, 1, 7, 0),
+                    datetime(2025, 1, 1, 8, 0),
+                    datetime(2025, 1, 1, 9, 0),
+                    datetime(2025, 1, 1, 10, 0),
+                    datetime(2025, 1, 1, 11, 0),
+                ],
+                {},
+            ),
+            (
+                Max,
+                [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 11, 11],
+                [
+                    datetime(2025, 1, 1, 2, 0),
+                    datetime(2025, 1, 1, 3, 0),
+                    datetime(2025, 1, 1, 4, 0),
+                    datetime(2025, 1, 1, 5, 0),
+                    datetime(2025, 1, 1, 6, 0),
+                    datetime(2025, 1, 1, 7, 0),
+                    datetime(2025, 1, 1, 8, 0),
+                    datetime(2025, 1, 1, 9, 0),
+                    datetime(2025, 1, 1, 10, 0),
+                    datetime(2025, 1, 1, 11, 0),
+                    datetime(2025, 1, 1, 11, 0),
+                    datetime(2025, 1, 1, 11, 0),
+                ],
+                {},
+            ),
+            (Percentile, [2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 11.0, 11.0], [], {"p": 95}),
+            (PeaksOverThreshold, [0, 0, 0, 1, 2, 3, 3, 3, 3, 3, 2, 1], [], {"threshold": 4}),
+            (StDev, [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.707107, None], [], {}),
+        ],
+        ids=[
+            "Mean",
+            "Angular mean",
+            "Sum",
+            "Mean sum",
+            "Min",
+            "Max",
+            "Percentile",
+            "Peaks over threshold",
+            "Standard deviation",
+        ],
+    )
+    def test_rolling_aggregation(
+        self,
+        aggregator: type[AggregationFunction],
+        expected_values: list[float | int],
+        timestamps_of: list[datetime] | None,
+        kwargs: dict[str, Any],
+    ) -> None:
+        """Check rolling aggregations are applied correctly."""
+        input_tf = TS_PT1H_HALF_DAY
+        target_period = Period.of_hours(3)
+        column = "value"
+        timestamps = input_tf.df["timestamp"].to_list()
+
+        # The expected count should be 3 for each row to account for the 3 hour rolling aggregation period
+        expected_counts = [3] * 12
+
+        # The actual counts should be 3 for all rows except for the last two, where the window extends beyond
+        # the length of the dataframe.
+        actual_counts = ([3] * 10) + [2, 1]
+
+        expected_df = generate_expected_df(
+            timestamps=timestamps,
+            aggregator=aggregator,
+            columns=column,
+            values={column: expected_values},
+            expected_counts=expected_counts,
+            actual_counts=actual_counts,
+            timestamps_of=timestamps_of,
+        )
+
+        result = RollingAggregationPipeline(
+            aggregator(**kwargs),
+            AggregationCtx(
+                df=input_tf.df,
+                time_name=input_tf.time_name,
+                time_anchor=input_tf.time_anchor,
+                periodicity=input_tf.periodicity,
+            ),
+            target_period,
+            column,
+            alignment=RollingAlignment.LEADING,
+        ).execute()
+
+        assert_frame_equal(
+            result, expected_df, check_dtype=False, check_column_order=False, check_exact=False, atol=0.00001
+        )
+
+    def test_rolling_angular_mean(self) -> None:
+        """Check angular mean is applied correctly across different angle overlaps (e.g. -180, 360 etc)."""
+        period = Period.of_hours(1)
+        aggregation_period = Period.of_hours(3)
+        column_name = "angle"
+        timestamps = [
+            datetime(2025, 1, 1, 0, 0, 0),
+            datetime(2025, 1, 1, 1, 0, 0),
+            datetime(2025, 1, 1, 2, 0, 0),
+            datetime(2025, 1, 1, 3, 0, 0),
+            datetime(2025, 1, 1, 4, 0, 0),
+            datetime(2025, 1, 1, 5, 0, 0),
+            datetime(2025, 1, 1, 6, 0, 0),
+            datetime(2025, 1, 1, 7, 0, 0),
+            datetime(2025, 1, 1, 8, 0, 0),
+            datetime(2025, 1, 1, 9, 0, 0),
+            datetime(2025, 1, 1, 10, 0, 0),
+            datetime(2025, 1, 1, 11, 0, 0),
+            datetime(2025, 1, 1, 12, 0, 0),
+            datetime(2025, 1, 1, 13, 0, 0),
+            datetime(2025, 1, 1, 14, 0, 0),
+        ]
+
+        input_tf = TimeFrame(
+            df=pl.DataFrame(
+                {
+                    "timestamp": timestamps,
+                    column_name: [180, -180, -135, -90, -45, 0, 45, 90, 135, 180, 225, 270, 315, 360, 0],
+                }
+            ),
+            time_name="timestamp",
+            resolution=period,
+            periodicity=period,
+        )
+
+        expected_df = generate_expected_df(
+            timestamps=timestamps,
+            aggregator=AngularMean,
+            columns=column_name,
+            values={
+                column_name: [
+                    194.6,
+                    225.0,
+                    270.0,
+                    315.0,
+                    0.0,
+                    45.0,
+                    90.0,
+                    135.0,
+                    180.0,
+                    225.0,
+                    270.0,
+                    315.0,
+                    345.4,
+                    0.0,
+                    0.0,
+                ]
+            },
+            expected_counts=[3] * 15,
+            actual_counts=[3] * 13 + [2, 1],
+            timestamps_of=None,
+        )
+
+        result = RollingAggregationPipeline(
+            AngularMean(),
+            AggregationCtx(
+                df=input_tf.df,
+                time_name=input_tf.time_name,
+                time_anchor=input_tf.time_anchor,
+                periodicity=input_tf.periodicity,
+            ),
+            aggregation_period,
+            column_name,
+            alignment=RollingAlignment.LEADING,
+        ).execute()
+
+        assert_frame_equal(
+            result, expected_df, check_dtype=False, check_column_order=False, check_exact=False, atol=0.00001
+        )
+
+    def test_rolling_aggregation_over_day_threshold(self) -> None:
+        """Tests the rolling aggregation window is applied correctly when the datetime crosses into a new day."""
+
+        period = Period.of_hours(1)
+        aggregation_period = Period.of_hours(3)
+        column_name = "value"
+        timestamps = [
+            datetime(2025, 1, 1, 21, 0, 0),
+            datetime(2025, 1, 1, 22, 0, 0),
+            datetime(2025, 1, 1, 23, 0, 0),
+            datetime(2025, 1, 2, 0, 0, 0),
+            datetime(2025, 1, 2, 1, 0, 0),
+            datetime(2025, 1, 2, 2, 0, 0),
+            datetime(2025, 1, 2, 3, 0, 0),
+        ]
+
+        input_tf = TimeFrame(
+            df=pl.DataFrame(
+                {
+                    "timestamp": timestamps,
+                    column_name: [1, 2, 3, 4, 5, 6, 7],
+                }
+            ),
+            time_name="timestamp",
+            resolution=period,
+            periodicity=period,
+        )
+
+        expected_df = generate_expected_df(
+            timestamps=timestamps,
+            aggregator=Sum,
+            columns=column_name,
+            values={column_name: [6, 9, 12, 15, 18, 13, 7]},
+            expected_counts=[3] * 7,
+            actual_counts=[3] * 5 + [2, 1],
+            timestamps_of=None,
+        )
+
+        result = RollingAggregationPipeline(
+            Sum(),
+            AggregationCtx(
+                df=input_tf.df,
+                time_name=input_tf.time_name,
+                time_anchor=input_tf.time_anchor,
+                periodicity=input_tf.periodicity,
+            ),
+            aggregation_period,
+            column_name,
+            alignment=RollingAlignment.LEADING,
+        ).execute()
+
+        assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False)
+
+    def test_trailing_alignment(self) -> None:
+        """Check TRAILING alignment produces backward-looking windows with edge effects at the start."""
+        input_tf = TS_PT1H_HALF_DAY
+        target_period = Period.of_hours(3)
+        column = "value"
+        timestamps = input_tf.df["timestamp"].to_list()
+
+        # For trailing (t-3h, t], edge effects at start: first row sees 1 value, second 2, then 3 from row 3 onward.
+        expected_counts = [3] * 12
+        actual_counts = [1, 2] + ([3] * 10)
+
+        expected_df = generate_expected_df(
+            timestamps=timestamps,
+            aggregator=Mean,
+            columns=column,
+            values={column: [0.0, 0.5, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0]},
+            expected_counts=expected_counts,
+            actual_counts=actual_counts,
+        )
+
+        result = RollingAggregationPipeline(
+            Mean(),
+            AggregationCtx(
+                df=input_tf.df,
+                time_name=input_tf.time_name,
+                time_anchor=input_tf.time_anchor,
+                periodicity=input_tf.periodicity,
+            ),
+            target_period,
+            column,
+            alignment=RollingAlignment.TRAILING,
+        ).execute()
+
+        assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False, check_exact=False)
+
+    def test_center_alignment(self) -> None:
+        """Check CENTER alignment produces symmetric windows with edge effects at both ends."""
+        input_tf = TS_PT1H_HALF_DAY
+        target_period = Period.of_hours(3)
+        column = "value"
+        timestamps = input_tf.df["timestamp"].to_list()
+
+        # For center [t-1.5h, t+1.5h], edge effects at first and last row: each sees 2 values.
+        expected_counts = [3] * 12
+        actual_counts = [2] + ([3] * 10) + [2]
+
+        expected_df = generate_expected_df(
+            timestamps=timestamps,
+            aggregator=Mean,
+            columns=column,
+            values={column: [0.5, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 10.5]},
+            expected_counts=expected_counts,
+            actual_counts=actual_counts,
+        )
+
+        result = RollingAggregationPipeline(
+            Mean(),
+            AggregationCtx(
+                df=input_tf.df,
+                time_name=input_tf.time_name,
+                time_anchor=input_tf.time_anchor,
+                periodicity=input_tf.periodicity,
+            ),
+            target_period,
+            column,
+            alignment=RollingAlignment.CENTER,
+        ).execute()
+
+        assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False, check_exact=False)
+
+    def test_rolling_aggregation_calendar_period(self) -> None:
+        """Check rolling aggregation works correctly with calendar-based (monthly) window sizes."""
+        input_tf = TS_P1M_2YEARS
+        target_period = Period.of_months(3)
+        column = "value"
+        timestamps = input_tf.df["timestamp"].to_list()
+
+        # 24 months of data (values 0-23) with a 3-month TRAILING window.
+        # Edge effects at the start: row 0 sees only itself, row 1 sees 2 months, then full 3-month windows.
+        expected_counts = [3] * 24
+        actual_counts = [1, 2] + [3] * 22
+        expected_values = [0.0, 0.5] + [float(k - 1) for k in range(2, 24)]
+
+        expected_df = generate_expected_df(
+            timestamps=timestamps,
+            aggregator=Mean,
+            columns=column,
+            values={column: expected_values},
+            expected_counts=expected_counts,
+            actual_counts=actual_counts,
+        )
+
+        result = RollingAggregationPipeline(
+            Mean(),
+            AggregationCtx(
+                df=input_tf.df,
+                time_name=input_tf.time_name,
+                time_anchor=input_tf.time_anchor,
+                periodicity=input_tf.periodicity,
+            ),
+            target_period,
+            column,
+            alignment=RollingAlignment.TRAILING,
+        ).execute()
+
+        assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False, check_exact=False)
+
+    def test_default_alignment_is_trailing(self) -> None:
+        """Check that the default alignment is TRAILING."""
+        input_tf = TS_PT1H_HALF_DAY
+        target_period = Period.of_hours(3)
+        column = "value"
+
+        ctx = AggregationCtx(
+            df=input_tf.df,
+            time_name=input_tf.time_name,
+            time_anchor=input_tf.time_anchor,
+            periodicity=input_tf.periodicity,
+        )
+        result_default = RollingAggregationPipeline(Mean(), ctx, target_period, column).execute()
+        result_trailing = RollingAggregationPipeline(
+            Mean(), ctx, target_period, column, alignment=RollingAlignment.TRAILING
+        ).execute()
+
+        assert_frame_equal(result_default, result_trailing)
+
+    def test_rolling_validation_window_too_small(self) -> None:
+        """Check that rolling raises when window size is smaller than data periodicity."""
+        input_tf = TS_PT1H_HALF_DAY
+        with pytest.raises(AggregationPeriodError):
+            RollingAggregationPipeline(
+                Mean(),
+                AggregationCtx(
+                    df=input_tf.df,
+                    time_name=input_tf.time_name,
+                    time_anchor=input_tf.time_anchor,
+                    periodicity=input_tf.periodicity,
+                ),
+                Period.of_minutes(30),
+                "value",
+            ).execute()
+
+    def test_rolling_validation_center_alignment_calendar_period(self) -> None:
+        """Check that CENTER alignment raises for calendar-based (monthly) window sizes."""
+        input_tf = TS_P1M_2YEARS
+        with pytest.raises(AggregationError):
+            RollingAggregationPipeline(
+                Mean(),
+                AggregationCtx(
+                    df=input_tf.df,
+                    time_name=input_tf.time_name,
+                    time_anchor=input_tf.time_anchor,
+                    periodicity=input_tf.periodicity,
+                ),
+                Period.of_months(3),
+                "value",
+                alignment=RollingAlignment.CENTER,
+            ).execute()
+
+
+class TestRollingAggregateMethod:
+    """Tests for TimeFrame.rolling_aggregate() public API."""
+
+    def test_output_preserves_resolution_and_periodicity(self) -> None:
+        """Check that rolling_aggregate preserves the input TimeFrame's temporal structure."""
+        input_tf = TS_PT1H_HALF_DAY
+        result = input_tf.rolling_aggregate("PT3H", "mean", "value")
+
+        assert result.resolution == input_tf.resolution
+        assert result.periodicity == input_tf.periodicity
+        assert result.time_anchor == input_tf.time_anchor
+
+    def test_output_has_same_number_of_rows(self) -> None:
+        """Check that rolling_aggregate returns the same number of rows as the input."""
+        input_tf = TS_PT1H_HALF_DAY
+        result = input_tf.rolling_aggregate("PT3H", "mean", "value")
+
+        assert len(result.df) == len(input_tf.df)
+
+    def test_output_timestamps_match_input(self) -> None:
+        """Check that rolling_aggregate preserves the original timestamps."""
+        input_tf = TS_PT1H_HALF_DAY
+        result = input_tf.rolling_aggregate("PT3H", "mean", "value")
+
+        assert result.df["timestamp"].to_list() == input_tf.df["timestamp"].to_list()
+
+    def test_alignment_as_string(self) -> None:
+        """Check that the alignment parameter accepts string values."""
+        input_tf = TS_PT1H_HALF_DAY
+        result_enum = input_tf.rolling_aggregate("PT3H", "mean", "value", alignment=RollingAlignment.LEADING)
+        result_str = input_tf.rolling_aggregate("PT3H", "mean", "value", alignment="leading")
+
+        assert_frame_equal(result_enum.df, result_str.df)
+
+    def test_default_alignment_is_trailing(self) -> None:
+        """Check that the default alignment for rolling_aggregate is TRAILING."""
+        input_tf = TS_PT1H_HALF_DAY
+        result_default = input_tf.rolling_aggregate("PT3H", "mean", "value")
+        result_trailing = input_tf.rolling_aggregate("PT3H", "mean", "value", alignment=RollingAlignment.TRAILING)
+
+        assert_frame_equal(result_default.df, result_trailing.df)
+
+    def test_rolling_aggregate_mean_trailing(self) -> None:
+        """Check TRAILING mean values are correct end-to-end through rolling_aggregate."""
+        input_tf = TS_PT1H_HALF_DAY
+        timestamps = input_tf.df["timestamp"].to_list()
+
+        result = input_tf.rolling_aggregate("PT3H", "mean", "value")
+
+        expected_df = generate_expected_df(
+            timestamps=timestamps,
+            aggregator=Mean,
+            columns="value",
+            values={"value": [0.0, 0.5, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0]},
+            expected_counts=[3] * 12,
+            actual_counts=[1, 2] + ([3] * 10),
+        )
+        assert_frame_equal(result.df, expected_df, check_dtype=False, check_column_order=False, check_exact=False)
+
+    def test_rolling_aggregate_missing_criteria(self) -> None:
+        """Check that missing_criteria correctly flags rows with insufficient window coverage."""
+        input_tf = TS_PT1H_HALF_DAY
+
+        # With TRAILING and window=3h, the first two rows have fewer than 3 values.
+        # missing_criteria=("available", 3) should mark those rows as invalid.
+        result = input_tf.rolling_aggregate("PT3H", "mean", "value", missing_criteria=("available", 3))
+
+        valid_col = result.df["valid_value"].to_list()
+        # First two rows have count=1 and count=2 respectively, so both should be invalid.
+        assert valid_col[0] is False
+        assert valid_col[1] is False
+        # All remaining rows have count=3 and should be valid.
+        assert all(valid_col[2:])
+
+    def test_metadata_preserved(self) -> None:
+        """Check that TimeFrame-level metadata is preserved through rolling_aggregate."""
+        input_tf = TS_PT1H_HALF_DAY
+        input_tf = input_tf.with_metadata({"source": "test"})
+        result = input_tf.rolling_aggregate("PT3H", "mean", "value")
+
+        assert result.metadata == {"source": "test"}
+
+    def test_rolling_aggregate_mean_leading(self) -> None:
+        """Check LEADING mean values are correct end-to-end through rolling_aggregate."""
+        input_tf = TS_PT1H_HALF_DAY
+        timestamps = input_tf.df["timestamp"].to_list()
+
+        result = input_tf.rolling_aggregate("PT3H", "mean", "value", alignment=RollingAlignment.LEADING)
+
+        expected_df = generate_expected_df(
+            timestamps=timestamps,
+            aggregator=Mean,
+            columns="value",
+            values={"value": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 10.5, 11.0]},
+            expected_counts=[3] * 12,
+            actual_counts=([3] * 10) + [2, 1],
+        )
+        assert_frame_equal(result.df, expected_df, check_dtype=False, check_column_order=False, check_exact=False)
+
+    def test_rolling_aggregate_mean_center(self) -> None:
+        """Check CENTER mean values are correct end-to-end through rolling_aggregate."""
+        input_tf = TS_PT1H_HALF_DAY
+        timestamps = input_tf.df["timestamp"].to_list()
+
+        result = input_tf.rolling_aggregate("PT3H", "mean", "value", alignment=RollingAlignment.CENTER)
+
+        expected_df = generate_expected_df(
+            timestamps=timestamps,
+            aggregator=Mean,
+            columns="value",
+            values={"value": [0.5, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 10.5]},
+            expected_counts=[3] * 12,
+            actual_counts=[2] + ([3] * 10) + [2],
+        )
+        assert_frame_equal(result.df, expected_df, check_dtype=False, check_column_order=False, check_exact=False)
+
+    def test_rolling_aggregate_multiple_columns(self) -> None:
+        """Check rolling_aggregate produces correct output for multiple columns."""
+        input_tf = TS_PT1H_HALF_DAY
+
+        result = input_tf.rolling_aggregate("PT3H", "mean", ["value", "value_plus1"])
+
+        # value_plus1 = value + 1, so its trailing mean must be exactly 1 more than value's
+        assert "mean_value" in result.df.columns
+        assert "mean_value_plus1" in result.df.columns
+        value_means = result.df["mean_value"].to_list()
+        value_plus1_means = result.df["mean_value_plus1"].to_list()
+        for v, vp1 in zip(value_means, value_plus1_means):
+            assert abs(vp1 - v - 1.0) < 1e-6
+
+        # Completeness columns for both columns must be present
+        assert "count_value" in result.df.columns
+        assert "count_value_plus1" in result.df.columns
+        assert len(result.df) == len(input_tf.df)
+
+    def test_rolling_aggregate_window_too_small_raises(self) -> None:
+        """Check that rolling_aggregate raises when the window is smaller than the data periodicity."""
+        input_tf = TS_PT1H_HALF_DAY
+        with pytest.raises(AggregationPeriodError):
+            input_tf.rolling_aggregate("PT30M", "mean", "value")
+
+    def test_rolling_aggregate_center_calendar_raises(self) -> None:
+        """Check that rolling_aggregate raises when CENTER alignment is used with a calendar-based window."""
+        input_tf = TS_P1M_2YEARS
+        with pytest.raises(AggregationError):
+            input_tf.rolling_aggregate("P3M", "mean", "value", alignment=RollingAlignment.CENTER)

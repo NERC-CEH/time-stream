@@ -12,6 +12,8 @@ Time-Stream
     Python library for handling and analysing timeseries data with a focus on maintaining the integrity of the
     temporal properties of the data.
 
+Current version: |release|
+
 .. container:: buttons
 
     `Docs <getting_started/installation.html>`_
@@ -112,6 +114,7 @@ This project is licensed under the `GNU General Public License v3.0 <https://git
 
     user_guide/intro
     user_guide/aggregation
+    user_guide/rolling_aggregation
     user_guide/infilling
     user_guide/quality_control
     user_guide/calculations

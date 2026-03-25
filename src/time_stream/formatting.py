@@ -42,6 +42,9 @@ def timeframe_repr(tf: "TimeFrame") -> str:
         repr_items["Metadata"] = tf.metadata
 
     lines.extend(format_repr_items(repr_items))
+
+    lines.extend(["DataFrame:", str(tf.df)])
+
     return "\n".join(lines)
 
 

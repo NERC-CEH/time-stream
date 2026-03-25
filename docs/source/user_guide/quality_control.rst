@@ -51,29 +51,14 @@ The :meth:`~time_stream.TimeFrame.qc_check` method applies a single QC check to 
 It can return a boolean mask (for filtering) or update the TimeFrame with a new column containing the results
 of the QC check. Each QC check is configurable through parameters specific to that check - see examples below.
 
-Available checks
+Comparison check
 ----------------
 
-- ``"comparison"`` - **compare values against a constant or list using operators:**
-  ``<, <=, >, >=, ==, !=, is_in``
+Compare values against a constant or list using operators: ``<, <=, >, >=, ==, !=, is_in``.
 
-  Use for value thresholds or list of error codes.
+Use for value thresholds or lists of error codes.
 
-- ``"range"`` - **check if values lie inside/outside a min–max interval.**
-
-  Use for physical plausibility bounds (e.g. temperature between −50 and 50 °C).
-
-- ``"time_range"`` - **flag data between specific time ranges.**
-
-  Use for known bad periods such as sensor outages or calibration times.
-
-- ``"spike"`` - **detect sudden jumps using neighbour differences.**
-
-  Use for unrealistic single-point spikes.
-
-**Examples:**
-
-1. Temperature greater than or equal to 50
+**Example: Temperature greater than or equal to 50:**
 
 .. literalinclude:: ../../../src/time_stream/examples/examples_quality_control.py
    :language: python
@@ -87,7 +72,7 @@ Available checks
    import examples_quality_control
    examples_quality_control.comparison_qc_1()
 
-2. Sensor codes within a list
+**Example: Sensor codes within a list:**
 
 .. literalinclude:: ../../../src/time_stream/examples/examples_quality_control.py
    :language: python
@@ -101,8 +86,14 @@ Available checks
    import examples_quality_control
    examples_quality_control.comparison_qc_3()
 
+Range check
+-----------
 
-3. Temperatures outside of min and max range (below -30 and above 50)
+Check if values lie inside or outside a min-max interval.
+
+Use for physical plausibility bounds (e.g. temperature between -30 and 50 °C).
+
+**Example: Temperatures outside of the range -30 to 50:**
 
 .. literalinclude:: ../../../src/time_stream/examples/examples_quality_control.py
    :language: python
@@ -116,7 +107,14 @@ Available checks
    import examples_quality_control
    examples_quality_control.range_qc_1()
 
-4. Flag rainfall values between the hours of 01:00 and 03:00
+Time range check
+----------------
+
+Flag data between specific time ranges.
+
+Use for known bad periods such as sensor outages or calibration times.
+
+**Example: Flag rainfall values between the hours of 01:00 and 03:00:**
 
 .. literalinclude:: ../../../src/time_stream/examples/examples_quality_control.py
    :language: python
@@ -130,7 +128,7 @@ Available checks
    import examples_quality_control
    examples_quality_control.time_range_qc_1()
 
-5. Flag temperature values between 03:30 on the 1st January and 09:30 on the 1st January
+**Example: Flag temperature values between 03:30 and 09:30 on the 1st January:**
 
 .. literalinclude:: ../../../src/time_stream/examples/examples_quality_control.py
    :language: python
@@ -142,9 +140,16 @@ Available checks
    :hide-code:
 
    import examples_quality_control
-   ts = examples_quality_control.time_range_qc_2()
+   examples_quality_control.time_range_qc_2()
 
-6. Spike check on temperature data
+Spike check
+-----------
+
+Detect sudden jumps using neighbour differences.
+
+Use for unrealistic single-point spikes.
+
+**Example: Spike check on temperature data:**
 
 .. literalinclude:: ../../../src/time_stream/examples/examples_quality_control.py
    :language: python
@@ -156,15 +161,73 @@ Available checks
    :hide-code:
 
    import examples_quality_control
-   ts = examples_quality_control.spike_qc_1()
+   examples_quality_control.spike_qc_1()
 
 .. note::
-    The result doesn't flag the neighbouring high values of 50, 52. The spike test is really for detecting a sudden
-    jump with one value between "normal" values.
+    The result doesn't flag the neighbouring high values of 50 and 52. The spike test detects a sudden
+    jump where one value sits between otherwise normal values.
 
 .. note::
-    The result return ``null`` for the first and last values; the spike test relies of comparisons of neighbouring
-    values.
+    The result returns ``null`` for the first and last values; the spike test relies on comparisons with
+    neighbouring values.
+
+Flat line check
+---------------
+
+Detect consecutive repeated (or near-repeated) values.
+
+Use when a sensor stuck at a fixed value should be flagged as suspect.
+
+**Example: Flag temperature values stuck at the same reading for 3 or more consecutive timesteps:**
+
+.. literalinclude:: ../../../src/time_stream/examples/examples_quality_control.py
+   :language: python
+   :start-after: [start_block_11]
+   :end-before: [end_block_11]
+   :dedent:
+
+.. jupyter-execute::
+   :hide-code:
+
+   import examples_quality_control
+   examples_quality_control.flat_line_qc_1()
+
+**Example: Using** ``ignore_value`` **- suppress flagging when the repeated value is 0.0:**
+
+.. literalinclude:: ../../../src/time_stream/examples/examples_quality_control.py
+   :language: python
+   :start-after: [start_block_12]
+   :end-before: [end_block_12]
+   :dedent:
+
+.. jupyter-execute::
+   :hide-code:
+
+   import examples_quality_control
+   examples_quality_control.flat_line_qc_2()
+
+.. note::
+    More than one ``ignore_value`` can be specified in a list, e.g. [0.0, 20.0]
+
+**Example: Using** ``tolerance`` **- flag values that barely change (within 0.01) for 3 or more consecutive readings:**
+
+The data below drifts slightly around 20 °C (varying by less than 0.01 between readings) before jumping
+to a different range. The ``tolerance`` parameter catches these near-flat runs that exact equality would miss.
+
+.. literalinclude:: ../../../src/time_stream/examples/examples_quality_control.py
+   :language: python
+   :start-after: [start_block_13]
+   :end-before: [end_block_13]
+   :dedent:
+
+.. jupyter-execute::
+   :hide-code:
+
+   import examples_quality_control
+   examples_quality_control.flat_line_qc_3()
+
+Additional parameters
+=====================
 
 Observation interval
 --------------------

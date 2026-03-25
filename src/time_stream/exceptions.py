@@ -80,6 +80,10 @@ class MissingCriteriaError(AggregationError):
     """Raised when invalid or inconsistent missing data criteria are provided."""
 
 
+class TimeWindowError(AggregationError):
+    """Raised when an invalid or incompatible time_window is provided."""
+
+
 class BitwiseFlagError(TimeStreamError):
     """Base class for BitwiseFlag-related errors."""
 

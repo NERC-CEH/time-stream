@@ -31,7 +31,7 @@ def comparison_qc_1() -> None:
         "comparison", "temperature", compare_to=50, operator=">=", into=True
     )
     # [end_block_2]
-    print(tf)
+    print(tf.df)
     # fmt: on
 
 
@@ -46,7 +46,7 @@ def comparison_qc_3() -> None:
         "comparison", "sensor_codes", compare_to=error_codes, operator="is_in", into=True
     )
     # [end_block_4]
-    print(tf)
+    print(tf.df)
     # fmt: on
 
 
@@ -58,14 +58,14 @@ def range_qc_1() -> None:
     tf = tf.qc_check(
         "range",
         "temperature",
-        min_value=-10,
+        min_value=-30,
         max_value=50,
         closed="none",  # Range is not inclusive of min and max value
         within=False,  # Flag values outside of this range
         into=True,
     )
     # [end_block_5]
-    print(tf)
+    print(tf.df)
 
 
 def spike_qc_1() -> None:
@@ -78,7 +78,7 @@ def spike_qc_1() -> None:
         "spike", "temperature", threshold=10.0, into=True
     )
     # [end_block_7]
-    print(tf)
+    print(tf.df)
     # fmt: on
 
 
@@ -96,7 +96,7 @@ def time_range_qc_1() -> None:
         into=True
     )
     # [end_block_9]
-    print(tf)
+    print(tf.df)
     # fmt: on
 
 
@@ -113,4 +113,61 @@ def time_range_qc_2() -> None:
         into=True,
     )
     # [end_block_10]
-    print(tf)
+    print(tf.df)
+
+
+def create_flat_line_time_series() -> ts.TimeFrame:
+    dates = [datetime(2023, 1, 1) + timedelta(hours=i) for i in range(10)]
+    temperature = [18.0, 20.0, 20.0, 20.0, 20.0, 22.0, 21.0, 0.0, 0.0, 0.0]
+    df = pl.DataFrame({"timestamp": dates, "temperature": temperature})
+    return ts.TimeFrame(df=df, time_name="timestamp")
+
+
+def create_near_flat_line_time_series() -> ts.TimeFrame:
+    dates = [datetime(2023, 1, 1) + timedelta(hours=i) for i in range(10)]
+    # Values drift slightly around 20, then jump to 22 and drift slightly around 21
+    temperature = [18.0, 20.0, 20.005, 20.001, 19.991, 22.0, 20.99, 21.003, 21.009, 20.997]
+    df = pl.DataFrame({"timestamp": dates, "temperature": temperature})
+    return ts.TimeFrame(df=df, time_name="timestamp")
+
+
+def flat_line_qc_1() -> None:
+    # fmt: off
+    with suppress_output():
+        tf = create_flat_line_time_series()
+
+    # [start_block_11]
+    tf = tf.qc_check(
+        "flat_line", "temperature", min_count=3, into=True
+    )
+    # [end_block_11]
+    print(tf.df)
+    # fmt: on
+
+
+def flat_line_qc_2() -> None:
+    # fmt: off
+    with suppress_output():
+        tf = create_flat_line_time_series()
+
+    # [start_block_12]
+    tf = tf.qc_check(
+        "flat_line", "temperature", min_count=3, ignore_value=0.0, into=True
+    )
+    # [end_block_12]
+    print(tf.df)
+    # fmt: on
+
+
+def flat_line_qc_3() -> None:
+    # fmt: off
+    with suppress_output():
+        tf = create_near_flat_line_time_series()
+
+    # [start_block_13]
+    tf = tf.qc_check(
+        "flat_line", "temperature", min_count=3, tolerance=0.1, into=True
+    )
+    # [end_block_13]
+    print(tf.df)
+    # fmt: on

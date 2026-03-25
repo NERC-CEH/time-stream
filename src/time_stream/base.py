@@ -31,16 +31,21 @@ Main responsibilities
 """
 
 from copy import deepcopy
-from datetime import datetime
+from datetime import datetime, time
 from typing import Any, Self, Sequence, Type
 
 import polars as pl
 
-from time_stream.aggregation import AggregationFunction
+from time_stream.aggregation import (
+    AggregationCtx,
+    AggregationFunction,
+    RollingAggregationPipeline,
+    StandardAggregationPipeline,
+)
 from time_stream.bitwise import BitwiseFlag
 from time_stream.calculations import calculate_min_max_envelope
-from time_stream.enums import DuplicateOption, TimeAnchor, ValidationErrorOptions
-from time_stream.exceptions import ColumnNotFoundError, MetadataError
+from time_stream.enums import ClosedInterval, DuplicateOption, RollingAlignment, TimeAnchor, ValidationErrorOptions
+from time_stream.exceptions import ColumnNotFoundError, MetadataError, TimeWindowError
 from time_stream.flag_manager import FlagColumn, FlagManager, FlagSystemType
 from time_stream.formatting import timeframe_repr
 from time_stream.infill import InfillMethod
@@ -48,7 +53,7 @@ from time_stream.metadata import ColumnMetadataDict
 from time_stream.period import Period
 from time_stream.qc import QCCheck
 from time_stream.time_manager import TimeManager
-from time_stream.utils import check_columns_in_dataframe, configure_period_object, pad_time
+from time_stream.utils import TimeWindow, check_columns_in_dataframe, configure_period_object, pad_time
 
 
 class TimeFrame:
@@ -520,6 +525,7 @@ class TimeFrame:
         columns: str | list[str] | None = None,
         missing_criteria: tuple[str, float | int] | None = None,
         aggregation_time_anchor: TimeAnchor | None = None,
+        time_window: tuple[time, time] | tuple[time, time, str | ClosedInterval] | TimeWindow | None = None,
         **kwargs,
     ) -> Self:
         """Apply an aggregation function to a column in this TimeFrame, check the aggregation satisfies user
@@ -531,12 +537,33 @@ class TimeFrame:
             columns: The column(s) containing the data to be aggregated. If omitted, will use all data columns.
             missing_criteria: How the aggregation handles missing data
             aggregation_time_anchor: The time anchor for the aggregation result.
+            time_window: Optional restriction of which time-of-day observations are included in each
+                aggregation period. Only supported when the aggregation period is daily or longer and the data
+                periodicity is sub-daily.
+
+                Accepts a :class:`TimeWindow` instance, or a ``(start, end, closed[optional])`` tuple, where:
+
+                - ``start``: :class:`datetime.time` object for start of the window
+                - ``end``: :class:`datetime.time` object for end of the window
+                - ``closed``: Define which sides of the interval are closed (inclusive)
+                  {'both', 'left', 'right', 'none'} (default = "both")
             **kwargs: Parameters specific to the aggregation function.
 
         Returns:
             A TimeFrame containing the aggregated data.
         """
-        # Get the aggregation function instance and run the apply method
+        # Normalise time_window tuple to a TimeWindow instance
+        if isinstance(time_window, tuple):
+            if len(time_window) == 2:
+                start, end = time_window
+                closed = ClosedInterval.BOTH
+            elif len(time_window) == 3:
+                start, end, closed = time_window
+                closed = ClosedInterval(closed)
+            else:
+                raise TimeWindowError(f"Unexpected number of arguments passed as a time_window tuple: {time_window}")
+            time_window = TimeWindow(start=start, end=end, closed=closed)
+
         agg_func = AggregationFunction.get(aggregation_function, **kwargs)
         aggregation_period = configure_period_object(aggregation_period)
         aggregation_time_anchor = TimeAnchor(aggregation_time_anchor) if aggregation_time_anchor else self.time_anchor
@@ -544,16 +571,22 @@ class TimeFrame:
         if not columns:
             columns = self.data_columns
 
-        agg_df = agg_func.apply(
-            self.df,
-            self.time_name,
-            self.time_anchor,
-            self.periodicity,
+        ctx = AggregationCtx(
+            df=self.df,
+            time_name=self.time_name,
+            time_anchor=self.time_anchor,
+            periodicity=self.periodicity,
+        )
+
+        agg_df = StandardAggregationPipeline(
+            agg_func,
+            ctx,
             aggregation_period,
             columns,
             missing_criteria=missing_criteria,
             aggregation_time_anchor=aggregation_time_anchor,
-        )
+            time_window=time_window,
+        ).execute()
 
         # The resulting resolution and offset needs to be extracted from the aggregation period
         new_resolution = aggregation_period.without_offset()
@@ -566,6 +599,79 @@ class TimeFrame:
             offset=new_offset,
             periodicity=aggregation_period,
             time_anchor=aggregation_time_anchor,
+        )
+        tf.metadata = deepcopy(self.metadata)
+        return tf
+
+    def rolling_aggregate(
+        self,
+        window_size: Period | str,
+        aggregation_function: str | Type[AggregationFunction] | AggregationFunction,
+        columns: str | list[str] | None = None,
+        missing_criteria: tuple[str, float | int] | None = None,
+        alignment: RollingAlignment | str = RollingAlignment.TRAILING,
+        **kwargs,
+    ) -> Self:
+        """Apply a rolling aggregation function to this TimeFrame and return a new TimeFrame with the same
+        temporal structure.
+
+        Unlike :meth:`aggregate`, which reduces the resolution of the data, rolling aggregation preserves the
+        original timestamps: each row in the output corresponds to a row in the input, with the aggregation
+        computed over a sliding window of the specified size.
+
+        Args:
+            window_size: The size of the rolling window.
+            aggregation_function: The aggregation function to apply.
+            columns: The column(s) containing the data to be aggregated. If omitted, will use all data columns.
+            missing_criteria: How the aggregation handles missing data. When the actual number of values in
+                a window is below the threshold the result is flagged as invalid via a ``valid_<column>`` column.
+            alignment: Where the window is positioned relative to each timestamp:
+
+                - ``TRAILING`` (default): window looks backward - ``(t - window_size, t]``.
+                  Edge effects appear at the start of the series.
+                - ``LEADING``: window looks forward - ``[t, t + window_size)``.
+                  Edge effects appear at the end of the series.
+                - ``CENTER``: window is centered - ``[t - window_size/2, t + window_size/2]``.
+                  Edge effects appear at both ends. Not supported for calendar-based window sizes.
+
+                Accepts a :class:`~time_stream.enums.RollingAlignment` instance or a string
+                (``'trailing'``, ``'leading'``, ``'center'``).
+            **kwargs: Parameters specific to the aggregation function.
+
+        Returns:
+            A TimeFrame with the same resolution, periodicity, and time anchor as this TimeFrame,
+            containing the rolling aggregation results.
+        """
+        agg_func = AggregationFunction.get(aggregation_function, **kwargs)
+        window_size = configure_period_object(window_size)
+        alignment = RollingAlignment(alignment) if isinstance(alignment, str) else alignment
+
+        if not columns:
+            columns = self.data_columns
+
+        ctx = AggregationCtx(
+            df=self.df,
+            time_name=self.time_name,
+            time_anchor=self.time_anchor,
+            periodicity=self.periodicity,
+        )
+
+        agg_df = RollingAggregationPipeline(
+            agg_func,
+            ctx,
+            window_size,
+            columns,
+            missing_criteria=missing_criteria,
+            alignment=alignment,
+        ).execute()
+
+        tf = TimeFrame(
+            df=agg_df,
+            time_name=self.time_name,
+            resolution=self.resolution,
+            offset=self.offset,
+            periodicity=self.periodicity,
+            time_anchor=self.time_anchor,
         )
         tf.metadata = deepcopy(self.metadata)
         return tf

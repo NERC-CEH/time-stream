@@ -1,14 +1,16 @@
 import re
-from datetime import datetime
+from datetime import datetime, time, timedelta
+from typing import Any
 
 import polars as pl
 import pytest
 from polars.testing import assert_series_equal
 
 from time_stream import Period
-from time_stream.enums import TimeAnchor
-from time_stream.exceptions import ColumnNotFoundError
+from time_stream.enums import ClosedInterval, TimeAnchor
+from time_stream.exceptions import ColumnNotFoundError, TimeWindowError
 from time_stream.utils import (
+    TimeWindow,
     check_alignment,
     check_columns_in_dataframe,
     check_periodicity,
@@ -2073,3 +2075,128 @@ class TestEpochCheck:
     def test_epoch_agnostic_period_passes(self, period: Period) -> None:
         """Test that epoch agnostic Periods pass the epoch check."""
         epoch_check(period)
+
+
+class TestTimeWindow:
+    def test_default_closed_is_both(self) -> None:
+        """Omitting closed defaults to ClosedInterval.BOTH."""
+        tw = TimeWindow(start=time(10, 30), end=time(14, 0))
+        assert tw.closed == ClosedInterval.BOTH
+
+    @pytest.mark.parametrize(
+        "start,end,closed",
+        [
+            (time(10, 30), time(14, 0), ClosedInterval.BOTH),
+            (time(10, 30), time(14, 0), ClosedInterval.LEFT),
+            (time(10, 30), time(14, 0), ClosedInterval.RIGHT),
+            (time(10, 30), time(14, 0), ClosedInterval.NONE),
+        ],
+        ids=["both closed", "left closed", "right closed", "none closed"],
+    )
+    def test_valid_construction(self, start: time, end: time, closed: ClosedInterval) -> None:
+        """TimeWindow stores start, end, and closed correctly."""
+        tw = TimeWindow(start=start, end=end, closed=closed)
+        assert tw.start == start
+        assert tw.end == end
+        assert tw.closed == closed
+
+    @pytest.mark.parametrize(
+        "start,end",
+        [
+            (time(10, 0), time(10, 0)),
+            (time(23, 0), time(1, 0)),
+            ("10:30", time(14, 0)),
+            (time(10, 30), "14:00"),
+        ],
+        ids=["start equals end", "start after end", "non-time start", "non-time end"],
+    )
+    def test_invalid_construction_raises(self, start: Any, end: Any) -> None:
+        """Invalid start/end combinations raise TimeWindowError."""
+        with pytest.raises(TimeWindowError):
+            TimeWindow(start=start, end=end)  # type: ignore[arg-type]
+
+    @pytest.mark.parametrize(
+        "start,end,expected_duration",
+        [
+            (time(10, 30), time(14, 0), timedelta(hours=3, minutes=30)),
+            (time(9, 0), time(17, 0), timedelta(hours=8)),
+            (time(12, 0, 0), time(12, 0, 30), timedelta(seconds=30)),
+        ],
+        ids=["hours and minutes", "exact hours", "sub-minute"],
+    )
+    def test_duration(self, start: time, end: time, expected_duration: timedelta) -> None:
+        """duration returns the timedelta between end and start."""
+        tw = TimeWindow(start=start, end=end)
+        assert tw.duration == expected_duration
+
+    @pytest.mark.parametrize(
+        "start,end,closed,periodicity,expected",
+        [
+            (time(10, 30), time(14, 0), ClosedInterval.BOTH, Period.of_minutes(30), 8),
+            (time(10, 30), time(14, 0), ClosedInterval.LEFT, Period.of_minutes(30), 7),
+            (time(10, 30), time(14, 0), ClosedInterval.RIGHT, Period.of_minutes(30), 7),
+            (time(10, 30), time(14, 0), ClosedInterval.NONE, Period.of_minutes(30), 6),
+            (time(10, 0), time(10, 15), ClosedInterval.NONE, Period.of_minutes(30), 0),
+            (time(10, 0), time(14, 0), ClosedInterval.BOTH, Period.of_hours(1), 5),
+        ],
+        ids=[
+            "both closed, 30-min",
+            "left closed, 30-min",
+            "right closed, 30-min",
+            "none closed, 30-min",
+            "narrow window none closed returns zero",
+            "both closed, hourly",
+        ],
+    )
+    def test_expected_count(
+        self, start: time, end: time, closed: ClosedInterval, periodicity: Period, expected: int
+    ) -> None:
+        """expected_count returns the number of on-grid timestamps within the window."""
+        tw = TimeWindow(start=start, end=end, closed=closed)
+        assert tw.expected_count(periodicity) == expected
+
+    def test_filter_df_keeps_rows_in_window(self) -> None:
+        """filter_df returns only rows whose time-of-day falls within the window."""
+        df = pl.DataFrame(
+            {
+                "timestamp": [
+                    datetime(2025, 1, 1, 9, 0),
+                    datetime(2025, 1, 1, 10, 0),
+                    datetime(2025, 1, 1, 11, 0),
+                    datetime(2025, 1, 1, 12, 0),
+                    datetime(2025, 1, 1, 13, 0),
+                ],
+                "value": [1, 2, 3, 4, 5],
+            }
+        )
+        tw = TimeWindow(start=time(10, 0), end=time(12, 0))  # BOTH closed by default
+        result = tw.filter_df(df, "timestamp")
+        assert result["value"].to_list() == [2, 3, 4]
+
+    @pytest.mark.parametrize(
+        "closed,expected_values",
+        [
+            (ClosedInterval.BOTH, [2, 3, 4]),
+            (ClosedInterval.LEFT, [2, 3]),
+            (ClosedInterval.RIGHT, [3, 4]),
+            (ClosedInterval.NONE, [3]),
+        ],
+        ids=["both closed", "left closed", "right closed", "none closed"],
+    )
+    def test_filter_df_closed_boundaries(self, closed: ClosedInterval, expected_values: list[int]) -> None:
+        """filter_df respects the closed parameter when including/excluding boundary timestamps."""
+        df = pl.DataFrame(
+            {
+                "timestamp": [
+                    datetime(2025, 1, 1, 9, 0),
+                    datetime(2025, 1, 1, 10, 0),
+                    datetime(2025, 1, 1, 11, 0),
+                    datetime(2025, 1, 1, 12, 0),
+                    datetime(2025, 1, 1, 13, 0),
+                ],
+                "value": [1, 2, 3, 4, 5],
+            }
+        )
+        tw = TimeWindow(start=time(10, 0), end=time(12, 0), closed=closed)
+        result = tw.filter_df(df, "timestamp")
+        assert result["value"].to_list() == expected_values

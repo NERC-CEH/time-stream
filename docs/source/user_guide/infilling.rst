@@ -22,7 +22,7 @@ With **Time-Stream** you state intent, not mechanics:
 
 .. code-block:: python
 
-    tf.infill("linear", "flow", max_gap=3)
+    tf.infill("linear", "flow", max_gap_size=3)
 
 That's it, a single line with clear intent: "I want to use the *linear* infill method on my *flow* data,
 but only for *gaps* ≤ 3 steps".
@@ -39,8 +39,6 @@ Let's take our example 15-minute river flow data that contains a few short outag
   <https://docs.scipy.org/doc/scipy/reference/generated/scipy.interpolate.PchipInterpolator.html>`_) for ≥2 step gaps.
 
 **Input:**
-
-.. _example_input_data:
 
 15-minute river flow timeseries, including some missing data.
 
@@ -85,6 +83,7 @@ of your **TimeFrame**.
 Let's look at the method in more detail:
 
 .. automethod:: time_stream.TimeFrame.infill
+   :no-index:
 
 Infill methods
 --------------
