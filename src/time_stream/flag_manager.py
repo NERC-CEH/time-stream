@@ -24,7 +24,7 @@ from time_stream.exceptions import (
     FlagSystemTypeError,
 )
 
-FlagSystemType = dict[str, int] | type[BitwiseFlag]
+FlagSystemType = dict[str, int] | type[BitwiseFlag] | list[str] | None
 
 
 @dataclass
@@ -115,14 +115,14 @@ class FlagManager:
         """Registered flag columns."""
         return self._flag_columns
 
-    def register_flag_system(self, flag_system_name: str, flag_system: FlagSystemType) -> None:
+    def register_flag_system(self, flag_system_name: str, flag_system: FlagSystemType = None) -> None:
         """Registers a flag system with the flag manager.  A flag system will contain flag values and their meanings.
 
         A flag system can be used to create flag columns that are specific to a particular type of flag.
         The flag system must contain valid bitwise values and their name. Using bitwise values
         allows for multiple flags to be set on a single value.
 
-        For example, if we had a quality_control flag system, we could define it as follows:
+        For example, if we had a quality_control flag system, we could define it as follows using a dict:
 
         > flag_system_name = "quality_control"
         > flag_dict = {
@@ -132,20 +132,56 @@ class FlagManager:
         > }
 
         The flag_dict itself can be passed to this method, or a BitwiseFlag object can be created from the dict:
+
         > flag_system = BitwiseFlag(flag_dict, name=flag_system_name)
+
+        Alternatively, a list of category names can be passed and bit values will be assigned automatically.
+        The list is sorted before assigning values, so the same set of names always produces the same mapping:
+
+        > flag_system = ["OUT_OF_RANGE", "SPIKE", "LOW_BATTERY"]
+
+        would produce a dict equivalent to:
+
+        > flag_dict = {
+        >     "LOW_BATTERY": 1,
+        >     "OUT_OF_RANGE": 2,
+        >     "SPIKE": 4,
+        > }
+
+        An empty list or ``None`` produces a default flag system with a single member at value 1:
+
+        > flag_dict = {
+        >     "FLAGGED": 1
+        > }
 
         Args:
             flag_system_name: The name of the new flag system.
-            flag_system: The flag system containing flag values and their meanings.
+            flag_system: The flag system containing flag values and their meanings. Defaults to ``None``.
 
         Raises:
-            FlagSystemTypeError: If the flag system is not a valid type.
+            DuplicateFlagSystemError: If a flag system with the same name is already registered.
+            FlagSystemTypeError: If the flag system is not a valid type, or the list contains duplicate names.
         """
         if flag_system_name in self._flag_systems:
             raise DuplicateFlagSystemError(f"Flag system '{flag_system_name}' already exists.")
 
-        if isinstance(flag_system, BitwiseMeta):
+        default_flag_dict = {"FLAGGED": 1}
+
+        if flag_system is None:
+            self._flag_systems[flag_system_name] = BitwiseFlag(flag_system_name, default_flag_dict)
+
+        elif isinstance(flag_system, BitwiseMeta):
             self._flag_systems[flag_system_name] = flag_system
+
+        elif isinstance(flag_system, list):
+            if len(set(flag_system)) != len(flag_system):
+                raise FlagSystemTypeError("Flag system list contains duplicate category names.")
+            if len(flag_system) == 0:
+                flag_dict = default_flag_dict
+            else:
+                sorted_categories = sorted(flag_system)
+                flag_dict = {name: 2**i for i, name in enumerate(sorted_categories)}
+            self._flag_systems[flag_system_name] = BitwiseFlag(flag_system_name, flag_dict)
 
         elif isinstance(flag_system, dict):
             self._flag_systems[flag_system_name] = BitwiseFlag(flag_system_name, flag_system)
@@ -153,7 +189,7 @@ class FlagManager:
         else:
             raise FlagSystemTypeError(
                 f"Unknown type of flag system: {type(flag_system)}. "
-                f"Expected dict[str, int] or a ``BitwiseFlag`` subclass."
+                f"Expected dict[str, int], list[str], or a ``BitwiseFlag`` subclass."
             )
 
     def get_flag_system(self, flag_system_name: str) -> type[BitwiseFlag]:

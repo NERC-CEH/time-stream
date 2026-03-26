@@ -15,6 +15,7 @@ from time_stream.exceptions import (
     DuplicateFlagSystemError,
     FlagSystemError,
     FlagSystemNotFoundError,
+    FlagSystemTypeError,
 )
 from time_stream.flag_manager import FlagColumn, FlagManager
 
@@ -42,6 +43,46 @@ class TestRegisterFlagSystem:
 
         with pytest.raises(DuplicateFlagSystemError):
             flag_manager.register_flag_system("quality_control", new_flag_system)
+
+    def test_add_valid_list_flag_system(self) -> None:
+        """Test adding a flag system from a list of category names."""
+        flag_manager = FlagManager()
+        flag_manager.register_flag_system("new_flags", ["FLAG_A", "FLAG_B", "FLAG_C"])
+
+        assert "new_flags" in flag_manager.flag_systems
+
+        # check the bit values were correctly assigned
+        flag_system = flag_manager.get_flag_system("new_flags")
+        values = sorted(flag_system.to_dict().values())
+        assert values == [1, 2, 4]
+
+    def test_list_flag_system_is_sorted(self) -> None:
+        """Test that unsorted list input produces the same flag system as sorted input."""
+        fm1 = FlagManager()
+        fm1.register_flag_system("flags", ["C", "A", "B"])
+        fm2 = FlagManager()
+        fm2.register_flag_system("flags", ["A", "B", "C"])
+        assert fm1.get_flag_system("flags") == fm2.get_flag_system("flags")
+
+    def test_empty_list_produces_default_flagged(self) -> None:
+        """Test that an empty list produces a default FLAGGED flag at value 1."""
+        flag_manager = FlagManager()
+        flag_manager.register_flag_system("default_flags", [])
+        flag_system = flag_manager.get_flag_system("default_flags")
+        assert flag_system.to_dict() == {"FLAGGED": 1}
+
+    def test_none_produces_default_flagged(self) -> None:
+        """Test that None produces a default FLAGGED flag at value 1."""
+        flag_manager = FlagManager()
+        flag_manager.register_flag_system("default_flags")
+        flag_system = flag_manager.get_flag_system("default_flags")
+        assert flag_system.to_dict() == {"FLAGGED": 1}
+
+    def test_duplicate_list_entries_raises_error(self) -> None:
+        """Test that duplicate names in the list raise FlagSystemTypeError."""
+        flag_manager = FlagManager()
+        with pytest.raises(FlagSystemTypeError):
+            flag_manager.register_flag_system("new_flags", ["FLAG_A", "FLAG_B", "FLAG_A"])
 
 
 class TestRegisterFlagColumn:

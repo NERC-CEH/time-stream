@@ -416,14 +416,18 @@ class TimeFrame:
         tf.sort_time()
         return tf
 
-    def register_flag_system(self, name: str, flag_system: FlagSystemType) -> None:
+    def register_flag_system(self, name: str, flag_system: FlagSystemType = None) -> None:
         """Register a named flag system with the internal flag manager.
 
         Args:
             name: Short name for the flag system
             flag_system: The flag system to register, provided either as:
                             - a dict mapping of flag names to single-bit integer values, or;
-                            - a ``BitwiseFlag`` enum class, whose members are single-bit integers.
+                            - a ``BitwiseFlag`` enum class, whose members are single-bit integers, or;
+                            - a list of category name strings, from which bit values are auto-generated.
+                              The list is sorted before assigning values, so the same set of names always
+                              produces the same mapping. An empty list or ``None`` produces a single
+                              ``FLAGGED`` flag at value 1.
         """
         self._flag_manager.register_flag_system(name, flag_system)
 
