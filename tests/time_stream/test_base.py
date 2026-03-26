@@ -132,17 +132,23 @@ class TestSelectColumns:
         assert col2_tf == expected
         assert_frame_equal(tf.df, original_df)
 
-    def test_select_column_with_flags(self) -> None:
+    def test_select_column_does_not_auto_include_flags(self) -> None:
+        """Flag columns are not automatically included when selecting a data column."""
         tf = TimeFrame(self.df, time_name="time").with_flag_system("system", {"A": 1, "B": 2, "C": 4})
-        tf.init_flag_column("col1", "system", "flag_col")
-
-        expected = TimeFrame(self.df.select(["time", "col1"]), time_name="time").with_flag_system(
-            "system", {"A": 1, "B": 2, "C": 4}
-        )
-        expected.init_flag_column("col1", "system", "flag_col")
+        tf.init_flag_column("system", "flag_col")
 
         result = tf.select(["col1"])
-        assert result == expected
+        assert "flag_col" not in result.df.columns
+        assert "flag_col" not in result.flag_columns
+
+    def test_select_column_with_explicit_flag_column(self) -> None:
+        """Flag columns are preserved when explicitly included in select."""
+        tf = TimeFrame(self.df, time_name="time").with_flag_system("system", {"A": 1, "B": 2, "C": 4})
+        tf.init_flag_column("system", "flag_col")
+
+        result = tf.select(["col1", "flag_col"])
+        assert "flag_col" in result.df.columns
+        assert "flag_col" in result.flag_columns
 
 
 class TestGetItem:
@@ -370,15 +376,15 @@ class TestInitFlagColumn:
         # Shouldn't have any flag columns to start with
         assert tf._flag_manager._flag_columns == {}
 
-        tf.init_flag_column("value", "quality_control", "flag_column")
-        assert tf._flag_manager._flag_columns == {"flag_column": FlagColumn("flag_column", "value", flag_system)}
+        tf.init_flag_column("quality_control", "flag_column")
+        assert tf._flag_manager._flag_columns == {"flag_column": FlagColumn("flag_column", flag_system)}
 
         assert "flag_column" in tf.flag_columns
 
     def test_init_column_adds_to_metadata(self) -> None:
         """Test that a new flag column gets added to the column metadata dict."""
         tf, flag_system = self.setup_tf()
-        tf.init_flag_column("value", "quality_control", "flag_column")
+        tf.init_flag_column("quality_control", "flag_column")
         expected = {"time": {}, "value": {}, "existing_flags": {}, "flag_column": {}}
         assert tf.column_metadata == expected
 
@@ -389,7 +395,7 @@ class TestInitFlagColumn:
         # Shouldn't have any flag columns to start with
         assert tf._flag_manager._flag_columns == {}
 
-        tf.init_flag_column("value", "quality_control", "flag_column", 1)
+        tf.init_flag_column("quality_control", "flag_column", 1)
         expected_values = pl.Series("flag_column", [1, 1, 1], dtype=pl.Int64)
         assert_series_equal(tf.df["flag_column"], expected_values)
 
@@ -400,7 +406,7 @@ class TestInitFlagColumn:
         # Shouldn't have any flag columns to start with
         assert tf._flag_manager._flag_columns == {}
 
-        tf.init_flag_column("value", "quality_control", "flag_column", [1, 2, 4])
+        tf.init_flag_column("quality_control", "flag_column", [1, 2, 4])
         expected_values = pl.Series("flag_column", [1, 2, 4], dtype=pl.Int64)
         assert_series_equal(tf.df["flag_column"], expected_values)
 
@@ -411,10 +417,10 @@ class TestInitFlagColumn:
         # Shouldn't have any flag columns to start with
         assert tf._flag_manager._flag_columns == {}
 
-        tf.init_flag_column("value", "quality_control")
-        default_name = "value__flag__quality_control"
+        tf.init_flag_column("quality_control")
+        default_name = "__flag__quality_control"
 
-        assert tf._flag_manager._flag_columns == {default_name: FlagColumn(default_name, "value", flag_system)}
+        assert tf._flag_manager._flag_columns == {default_name: FlagColumn(default_name, flag_system)}
 
         assert default_name in tf.flag_columns
 
@@ -422,9 +428,31 @@ class TestInitFlagColumn:
         """Test that a new flag column gets added to the column metadata dict."""
         tf, flag_system = self.setup_tf()
 
-        tf.init_flag_column("value", "quality_control")
-        expected = {"time": {}, "value": {}, "existing_flags": {}, "value__flag__quality_control": {}}
+        tf.init_flag_column("quality_control")
+        expected = {"time": {}, "value": {}, "existing_flags": {}, "__flag__quality_control": {}}
         assert tf.column_metadata == expected
+
+    def test_auto_name_collision_avoidance(self) -> None:
+        """Test that a numeric suffix is appended when the auto-generated name already exists."""
+        tf, flag_system = self.setup_tf()
+
+        tf.init_flag_column("quality_control")
+        tf.init_flag_column("quality_control")
+
+        assert "__flag__quality_control" in tf.flag_columns
+        assert "__flag__quality_control__1" in tf.flag_columns
+
+    def test_auto_name_collision_avoidance_multiple(self) -> None:
+        """Test that the numeric suffix increments correctly across multiple collisions."""
+        tf, flag_system = self.setup_tf()
+
+        tf.init_flag_column("quality_control")
+        tf.init_flag_column("quality_control")
+        tf.init_flag_column("quality_control")
+
+        assert "__flag__quality_control" in tf.flag_columns
+        assert "__flag__quality_control__1" in tf.flag_columns
+        assert "__flag__quality_control__2" in tf.flag_columns
 
 
 class TestTimeSeriesEquality:

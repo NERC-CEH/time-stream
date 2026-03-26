@@ -55,7 +55,7 @@ class TestRegisterFlagColumn:
     def test_flag_column_success(self) -> None:
         """Test registering a flag column with a valid flag system."""
         flag_manager = self.setup_flag_manager()
-        flag_manager.register_flag_column("flag_column", "base_column", "quality_control")
+        flag_manager.register_flag_column("flag_column", "quality_control")
         assert "flag_column" in flag_manager.flag_columns
 
     def test_flag_column_invalid_flag_system_raises_error(self) -> None:
@@ -63,17 +63,17 @@ class TestRegisterFlagColumn:
         flag_manager = self.setup_flag_manager()
 
         with pytest.raises(FlagSystemNotFoundError):
-            flag_manager.register_flag_column("flag_column", "base_column", "bad_system")
+            flag_manager.register_flag_column("flag_column", "bad_system")
 
     def test_flag_column_invalid_column_name_raises_error(self) -> None:
         """Test registering a flag column with a duplicate column name raises error."""
         # Register once
         flag_manager = self.setup_flag_manager()
-        flag_manager.register_flag_column("flag_column", "base_column", "quality_control")
+        flag_manager.register_flag_column("flag_column", "quality_control")
 
         with pytest.raises(FlagSystemError):
             # Register twice - should raise error
-            flag_manager.register_flag_column("flag_column", "base_column", "quality_control")
+            flag_manager.register_flag_column("flag_column", "quality_control")
 
 
 class TestGetFlagSystem:
@@ -127,8 +127,8 @@ class TestCopy:
         flag_manager = FlagManager()
         flag_manager.register_flag_system("system1", {"FLAG_A": 1, "FLAG_B": 2, "FLAG_C": 4})
         flag_manager.register_flag_system("system2", BitwiseFlag("system2", {"FLAG_1": 1, "FLAG_2": 2}))
-        flag_manager.register_flag_column(name="flag_col_1", base="base1", flag_system_name="system1")
-        flag_manager.register_flag_column(name="flag_col_2", base="base2", flag_system_name="system2")
+        flag_manager.register_flag_column(name="flag_col_1", flag_system_name="system1")
+        flag_manager.register_flag_column(name="flag_col_2", flag_system_name="system2")
         return flag_manager
 
     def assert_copy(self, flag_manager_copy: FlagManager) -> None:
@@ -150,12 +150,11 @@ class TestCopy:
         for name, flag_column in flag_manager.flag_columns.items():
             copy_flag_column = flag_manager_copy.flag_columns[name]
             assert copy_flag_column.name == flag_column.name
-            assert copy_flag_column.base == flag_column.base
 
         # Test that the copy created is independent of the original
         # Change the original
         flag_manager.register_flag_system("new_system", {"A": 1})
-        flag_manager.register_flag_column(name="new_flags", base="base3", flag_system_name="new_system")
+        flag_manager.register_flag_column(name="new_flags", flag_system_name="new_system")
 
         # Copy should not see the new entries
         assert "new_sys" not in flag_manager_copy.flag_systems
@@ -186,7 +185,7 @@ class TestAddFlag:
             "time",
         ).with_flag_system("system1", {"FLAG_A": 1, "FLAG_B": 2, "FLAG_C": 4})
 
-        tf.init_flag_column("value", "system1", "flag_col_1")
+        tf.init_flag_column("system1", "flag_col_1")
         return tf
 
     def test_add_flag_to_flag_column_no_expr(self) -> None:
@@ -270,7 +269,7 @@ class TestRemoveFlag:
             "time",
         ).with_flag_system("system1", {"FLAG_A": 1, "FLAG_B": 2, "FLAG_C": 4})
 
-        tf.register_flag_column("flag_col_1", "value", "system1")
+        tf.register_flag_column("flag_col_1", "system1")
         return tf
 
     def test_remove_flag_from_flag_column_no_expr(self) -> None:
@@ -342,14 +341,14 @@ class TestEqualityFlagManager:
         flag_manager_original = FlagManager()
         flag_manager_original.register_flag_system("system1", {"FLAG_A": 1, "FLAG_B": 2, "FLAG_C": 4})
         flag_manager_original.register_flag_system("system2", {"FLAG_1": 1, "FLAG_2": 2})
-        flag_manager_original.register_flag_column(name="flag_col_1", base="base1", flag_system_name="system1")
-        flag_manager_original.register_flag_column(name="flag_col_2", base="base2", flag_system_name="system2")
+        flag_manager_original.register_flag_column(name="flag_col_1", flag_system_name="system1")
+        flag_manager_original.register_flag_column(name="flag_col_2", flag_system_name="system2")
 
         flag_manager_same = FlagManager()
         flag_manager_same.register_flag_system("system1", {"FLAG_A": 1, "FLAG_B": 2, "FLAG_C": 4})
         flag_manager_same.register_flag_system("system2", {"FLAG_1": 1, "FLAG_2": 2})
-        flag_manager_same.register_flag_column(name="flag_col_1", base="base1", flag_system_name="system1")
-        flag_manager_same.register_flag_column(name="flag_col_2", base="base2", flag_system_name="system2")
+        flag_manager_same.register_flag_column(name="flag_col_1", flag_system_name="system1")
+        flag_manager_same.register_flag_column(name="flag_col_2", flag_system_name="system2")
 
         assert flag_manager_original == flag_manager_same
 
@@ -406,11 +405,11 @@ class TestEqualityFlagManager:
         """Test that flag manager objects with different flag columns are not considered equal."""
         flag_manager_original = FlagManager()
         flag_manager_original.register_flag_system("system1", {"FLAG_A": 1, "FLAG_B": 2, "FLAG_C": 4})
-        flag_manager_original.register_flag_column(name="flag_col_1", base="base1", flag_system_name="system1")
+        flag_manager_original.register_flag_column(name="flag_col_1", flag_system_name="system1")
 
         flag_manager_different = FlagManager()
         flag_manager_different.register_flag_system("system1", {"FLAG_A": 1, "FLAG_B": 2, "FLAG_C": 4})
-        flag_manager_different.register_flag_column(name="different1", base="base1", flag_system_name="system1")
+        flag_manager_different.register_flag_column(name="different1", flag_system_name="system1")
 
         assert flag_manager_original != flag_manager_different
 
@@ -418,33 +417,17 @@ class TestEqualityFlagManager:
         assert flag_manager_original.flag_systems == flag_manager_different.flag_systems
         assert flag_manager_original.flag_columns != flag_manager_different.flag_columns
 
-    def test_different_column_base(self) -> None:
-        """Test that flag manager objects with different flag columns are not considered equal."""
-        flag_manager_original = FlagManager()
-        flag_manager_original.register_flag_system("system1", {"FLAG_A": 1, "FLAG_B": 2, "FLAG_C": 4})
-        flag_manager_original.register_flag_column(name="flag_col_1", base="base1", flag_system_name="system1")
-
-        flag_manager_different = FlagManager()
-        flag_manager_different.register_flag_system("system1", {"FLAG_A": 1, "FLAG_B": 2, "FLAG_C": 4})
-        flag_manager_different.register_flag_column(name="flag_col_1", base="different1", flag_system_name="system1")
-
-        assert flag_manager_original != flag_manager_different
-
-        # Check the expected property is the difference
-        assert flag_manager_original.flag_systems, flag_manager_different.flag_systems
-        assert flag_manager_original.flag_columns != flag_manager_different.flag_columns
-
     def test_different_column_system(self) -> None:
         """Test that flag manager objects with different flag columns are not considered equal."""
         flag_manager_original = FlagManager()
         flag_manager_original.register_flag_system("system1", {"FLAG_A": 1, "FLAG_B": 2, "FLAG_C": 4})
         flag_manager_original.register_flag_system("system2", {"FLAG_1": 1, "FLAG_2": 2})
-        flag_manager_original.register_flag_column(name="flag_col_1", base="base1", flag_system_name="system1")
+        flag_manager_original.register_flag_column(name="flag_col_1", flag_system_name="system1")
 
         flag_manager_different = FlagManager()
         flag_manager_different.register_flag_system("system1", {"FLAG_A": 1, "FLAG_B": 2, "FLAG_C": 4})
         flag_manager_different.register_flag_system("system2", {"FLAG_1": 1, "FLAG_2": 2})
-        flag_manager_different.register_flag_column(name="flag_col_1", base="base1", flag_system_name="system2")
+        flag_manager_different.register_flag_column(name="flag_col_1", flag_system_name="system2")
 
         assert flag_manager_original != flag_manager_different
 
@@ -456,12 +439,12 @@ class TestEqualityFlagManager:
         """Test that flag manager objects with additional flag columns are not considered equal."""
         flag_manager_original = FlagManager()
         flag_manager_original.register_flag_system("system1", {"FLAG_A": 1, "FLAG_B": 2, "FLAG_C": 4})
-        flag_manager_original.register_flag_column(name="flag_col_1", base="base1", flag_system_name="system1")
+        flag_manager_original.register_flag_column(name="flag_col_1", flag_system_name="system1")
 
         flag_manager_different = FlagManager()
         flag_manager_different.register_flag_system("system1", {"FLAG_A": 1, "FLAG_B": 2, "FLAG_C": 4})
-        flag_manager_different.register_flag_column(name="flag_col_1", base="base1", flag_system_name="system1")
-        flag_manager_different.register_flag_column(name="flag_col_2", base="base1", flag_system_name="system1")
+        flag_manager_different.register_flag_column(name="flag_col_1", flag_system_name="system1")
+        flag_manager_different.register_flag_column(name="flag_col_2", flag_system_name="system1")
 
         assert flag_manager_original != flag_manager_different
 
@@ -475,14 +458,14 @@ class TestEqualityFlagColumn:
     def setup_flag_systems() -> tuple[BitwiseFlag, BitwiseFlag, FlagColumn]:
         flag_system1 = BitwiseFlag("system1", {"FLAG_A": 1, "FLAG_B": 2, "FLAG_C": 4})
         flag_system2 = BitwiseFlag("system2", {"FLAG_1": 1, "FLAG_2": 2})
-        flag_column_original = FlagColumn("flag_col_1", "base1", flag_system1)
+        flag_column_original = FlagColumn("flag_col_1", flag_system1)
 
         return flag_system1, flag_system2, flag_column_original
 
     def test_equal(self) -> None:
         """Test that two identical flag column objects are considered equal."""
         flag_system1, flag_system2, flag_column_original = self.setup_flag_systems()
-        flag_column_same = FlagColumn("flag_col_1", "base1", flag_system1)
+        flag_column_same = FlagColumn("flag_col_1", flag_system1)
 
         assert flag_column_original == flag_column_same
 
@@ -490,39 +473,24 @@ class TestEqualityFlagColumn:
         """Test that two flag column objects with different names are not considered equal."""
         flag_system1, flag_system2, flag_column_original = self.setup_flag_systems()
 
-        flag_column_different = FlagColumn("different1", "base1", flag_system1)
+        flag_column_different = FlagColumn("different1", flag_system1)
 
         assert flag_column_original != flag_column_different
 
         # Check the expected property is the difference
         assert flag_column_original.name != flag_column_different.name
-        assert flag_column_original.base == flag_column_different.base
-        assert flag_column_original.flag_system == flag_column_different.flag_system
-
-    def test_different_base(self) -> None:
-        """Test that two flag column objects with different base columns are not considered equal."""
-        flag_system1, flag_system2, flag_column_original = self.setup_flag_systems()
-
-        flag_column_different = FlagColumn("flag_col_1", "different1", flag_system1)
-
-        assert flag_column_original != flag_column_different
-
-        # Check the expected property is the difference
-        assert flag_column_original.name == flag_column_different.name
-        assert flag_column_original.base != flag_column_different.base
         assert flag_column_original.flag_system == flag_column_different.flag_system
 
     def test_different_system(self) -> None:
         """Test that two flag column objects with different flag systems are not considered equal."""
         flag_system1, flag_system2, flag_column_original = self.setup_flag_systems()
 
-        flag_column_different = FlagColumn("flag_col_1", "base1", flag_system2)
+        flag_column_different = FlagColumn("flag_col_1", flag_system2)
 
         assert flag_column_original != flag_column_different
 
         # Check the expected property is the difference
         assert flag_column_original.name == flag_column_different.name
-        assert flag_column_original.base == flag_column_different.base
         assert flag_column_original.flag_system != flag_column_different.flag_system
 
     @pytest.mark.parametrize(

@@ -438,34 +438,29 @@ class TimeFrame:
         """
         return self._flag_manager.get_flag_system(name)
 
-    def register_flag_column(self, column_name: str, base: str, flag_system: str) -> None:
+    def register_flag_column(self, column_name: str, flag_system: str) -> None:
         """Mark the specified existing column as a flag column.
 
-        This does not modify the DataFrame; it only records that ``name`` is a flag column associated with the
-        value column ``base``, with values handled by the flag system ``flag_system``.
+        This does not modify the DataFrame; it only records that ``column_name`` is a flag column
+        with values handled by the flag system ``flag_system``.
 
         Args:
             column_name: A column name to mark as a flag column.
-            base: Name of the value/data column this flag column refers to.
             flag_system: The name of the flag system.
         """
-        check_columns_in_dataframe(self.df, [column_name, base])
-        self._flag_manager.register_flag_column(column_name, base, flag_system)
+        check_columns_in_dataframe(self.df, column_name)
+        self._flag_manager.register_flag_column(column_name, flag_system)
 
-    def init_flag_column(
-        self, base: str, flag_system: str, column_name: str | None = None, data: int | Sequence[int] = 0
-    ) -> None:
+    def init_flag_column(self, flag_system: str, column_name: str | None = None, data: int | Sequence[int] = 0) -> None:
         """Add a new column to the TimeFrame DataFrame, setting it as a Flag Column.
 
         Args:
-            base: Name of the value/data column this flag column will refer to.
             flag_system: The name of the flag system.
             column_name: Optional name for the new flag column. If omitted, a name of the
-                    form "{base}__flag__{flag_system}" is used.
+                    form ``__flag__{flag_system}`` is used, with an integer suffix appended if the name
+                    already exists (e.g. ``__flag__CORE_FLAGS__1``).
             data: The default value to populate the flag column with. Can be a scalar or list-like. Defaults to 0.
         """
-        check_columns_in_dataframe(self.df, base)
-
         # Validate that the flag system exists
         self.get_flag_system(flag_system)
 
@@ -477,11 +472,16 @@ class TimeFrame:
 
         # Determine name of flag column
         if not column_name:
-            column_name = f"{base}__flag__{flag_system}"
+            column_name = f"__flag__{flag_system}"
+            if column_name in self.df.columns:
+                col_suffix = 1
+                while f"{column_name}__{col_suffix}" in self.df.columns:
+                    col_suffix += 1
+                column_name = f"{column_name}__{col_suffix}"
 
         # Add and register as a flag column
         self._df = self.df.with_columns(data.alias(column_name))
-        self.register_flag_column(column_name, base, flag_system)
+        self.register_flag_column(column_name, flag_system)
         self._column_metadata.sync()
 
     def get_flag_column(self, flag_column_name: str) -> FlagColumn:
@@ -769,19 +769,18 @@ class TimeFrame:
     def select(
         self,
         column_names: str | Sequence[str],
-        include_flag_columns: bool = True,
     ) -> Self:
         """Return a new TimeFrame instance to include only the specified columns.
 
-        By default, this:
+        This:
           - carries over TimeFrame-level metadata,
           - prunes column-level metadata to the kept columns,
           - rebuilds the flag manager to include only kept flag columns.
 
+        Flag columns are not automatically included; name them explicitly if you want them retained.
+
         Args:
             column_names:  Column name(s) to retain in the updated TimeFrame.
-            include_flag_columns: If True, include any registered flag columns whose base is among the
-                                  kept value columns.
 
         Returns:
              New TimeFrame instance with only selected columns.
@@ -796,13 +795,6 @@ class TimeFrame:
         # Include primary time column (if not already included)
         if self.time_name not in column_names:
             column_names.insert(0, self.time_name)
-
-        # Optionally include associated flag columns
-        if include_flag_columns:
-            for flag_name, flag_column in self._flag_manager.flag_columns.items():
-                # include if its base (value col) is being kept
-                if flag_column.base in column_names:
-                    column_names.append(flag_name)
 
         # Build new frame
         new_df = self.df.select(column_names)
@@ -824,9 +816,7 @@ class TimeFrame:
         # keep only flag columns that survived
         for flag_name, flag_column in self._flag_manager.flag_columns.items():
             if flag_name in column_names:
-                new_flag_manager.register_flag_column(
-                    flag_name, flag_column.base, flag_column.flag_system.system_name()
-                )
+                new_flag_manager.register_flag_column(flag_name, flag_column.flag_system.system_name())
 
         tf._flag_manager = new_flag_manager
         tf._column_metadata.sync()
@@ -868,7 +858,7 @@ class TimeFrame:
         """
         if isinstance(key, str):
             key = [key]
-        return self.select(key, include_flag_columns=False)
+        return self.select(key)
 
     def __str__(self) -> str:
         """Return the string representation of the TimeFrame dataframe."""
