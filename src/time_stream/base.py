@@ -45,7 +45,7 @@ from time_stream.aggregation import (
 from time_stream.bitwise import BitwiseFlag
 from time_stream.calculations import calculate_min_max_envelope
 from time_stream.enums import ClosedInterval, DuplicateOption, RollingAlignment, TimeAnchor, ValidationErrorOptions
-from time_stream.exceptions import ColumnNotFoundError, MetadataError, TimeWindowError
+from time_stream.exceptions import ColumnNotFoundError, ColumnTypeError, MetadataError, TimeWindowError
 from time_stream.flag_manager import FlagColumn, FlagManager, FlagSystemType
 from time_stream.formatting import timeframe_repr
 from time_stream.infill import InfillMethod
@@ -521,6 +521,60 @@ class TimeFrame:
         """
         flag_column = self.get_flag_column(column_name)
         self._df = flag_column.remove_flag(self.df, flag_value, expr)
+
+    def decode_flag_column(self, flag_column_name: str) -> Self:
+        """Decode an integer flag column to a List(String) column of active flag names.
+
+        Replaces the column in-place (same name, dtype changes from integer to List(String)).
+        Each row contains the names of flags that are set, sorted by ascending bit value.
+        A value of 0 produces an empty list.
+
+        The column remains registered as a flag column. add_flag and remove_flag continue
+        to work transparently on the decoded column.
+
+        Args:
+            flag_column_name: Name of the registered integer flag column to decode.
+
+        Returns:
+            A new TimeFrame with the flag column replaced by a List(String) column.
+
+        Raises:
+            ColumnNotFoundError: If flag_column_name is not a registered flag column.
+            ColumnTypeError: If the flag column is not an integer dtype.
+        """
+        flag_column = self.get_flag_column(flag_column_name)
+        if not self.df[flag_column_name].dtype.is_integer():
+            raise ColumnTypeError(
+                f"Flag column '{flag_column_name}' must be an integer dtype, got '{self.df[flag_column_name].dtype}'."
+            )
+        tf = self.with_df(flag_column.decode(self.df))
+        tf._flag_manager.flag_columns[flag_column_name].is_decoded = True
+        return tf
+
+    def encode_flag_column(self, flag_column_name: str) -> Self:
+        """Encode a List(String) flag column back to a bitwise integer column.
+
+        Replaces the column in-place (same name, dtype changes from List(String) to integer).
+        Each flag name in the list contributes its bit value. An empty list produces 0.
+
+        Args:
+            flag_column_name: Name of the registered flag column containing List(String) data.
+
+        Returns:
+            A new TimeFrame with the flag column replaced by an integer column.
+
+        Raises:
+            ColumnNotFoundError: If flag_column_name is not a registered flag column.
+            ColumnTypeError: If the flag column is not a List(String) dtype.
+            BitwiseFlagUnknownError: If the column contains any flag name not in the flag system.
+        """
+        flag_column = self.get_flag_column(flag_column_name)
+        col_dtype = self.df[flag_column_name].dtype
+        if not (isinstance(col_dtype, pl.List) and col_dtype.inner == pl.String):
+            raise ColumnTypeError(f"Flag column '{flag_column_name}' must be List(String) dtype, got '{col_dtype}'.")
+        tf = self.with_df(flag_column.encode(self.df))
+        tf._flag_manager.flag_columns[flag_column_name].is_decoded = False
+        return tf
 
     def aggregate(
         self,

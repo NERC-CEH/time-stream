@@ -295,6 +295,17 @@ class TestAddFlag:
 
         assert_series_equal(result, expected)
 
+    def test_add_flag_on_decoded_column(self) -> None:
+        """Test that add_flag on a decoded column leaves the column in List(String) with the flag added."""
+        tf = self.setup_tf()
+        tf_decoded = tf.decode_flag_column("flag_col_1")
+
+        tf_decoded.add_flag("flag_col_1", "FLAG_A")
+
+        result = tf_decoded.df["flag_col_1"]
+        assert result.dtype == pl.List(pl.String)
+        assert result.to_list() == [["FLAG_A"], ["FLAG_A"], ["FLAG_A"]]
+
 
 class TestRemoveFlag:
     @staticmethod
@@ -374,6 +385,17 @@ class TestRemoveFlag:
 
         with pytest.raises(ColumnNotFoundError):
             tf.add_flag("value", 1)
+
+    def test_remove_flag_on_decoded_column(self) -> None:
+        """Test that remove_flag on a decoded column leaves the column in List(String) with the flag removed."""
+        tf = self.setup_tf()
+        tf_decoded = tf.decode_flag_column("flag_col_1")
+
+        tf_decoded.remove_flag("flag_col_1", "FLAG_A")
+
+        result = tf_decoded.df["flag_col_1"]
+        assert result.dtype == pl.List(pl.String)
+        assert result.to_list() == [[], ["FLAG_B"], ["FLAG_B", "FLAG_C"]]
 
 
 class TestEqualityFlagManager:
@@ -549,3 +571,133 @@ class TestEqualityFlagColumn:
         flag_system1, flag_system2, flag_column_original = self.setup_flag_systems()
 
         assert flag_column_original != non_fs
+
+
+class TestDecodeFlagColumn:
+    @staticmethod
+    def setup_tf() -> TimeFrame:
+        tf = TimeFrame(
+            pl.DataFrame(
+                {
+                    "time": [datetime(2025, 1, 1), datetime(2025, 1, 2), datetime(2025, 1, 3), datetime(2025, 1, 4)],
+                    "value": [1, 2, 3, 4],
+                    "flag_col_1": [0, 1, 5, 7],
+                }
+            ),
+            "time",
+        ).with_flag_system("system1", {"FLAG_A": 1, "FLAG_B": 2, "FLAG_C": 4})
+        tf.register_flag_column("flag_col_1", "system1")
+        return tf
+
+    def test_output_dtype_is_list_string(self) -> None:
+        """Test that the decoded column has dtype List(String)."""
+        tf = self.setup_tf()
+        tf_decoded = tf.decode_flag_column("flag_col_1")
+        assert tf_decoded.df["flag_col_1"].dtype == pl.List(pl.String)
+
+    def test_same_column_name_after_decode(self) -> None:
+        """Test that the column name is preserved after decoding."""
+        tf = self.setup_tf()
+        tf_decoded = tf.decode_flag_column("flag_col_1")
+        assert "flag_col_1" in tf_decoded.df.columns
+
+    @pytest.mark.parametrize(
+        "row, expected",
+        [
+            (0, []),
+            (1, ["FLAG_A"]),
+            (2, ["FLAG_A", "FLAG_C"]),
+            (3, ["FLAG_A", "FLAG_B", "FLAG_C"]),
+        ],
+        ids=["zero", "single_flag", "two_flags", "all_flags_ascending_order"],
+    )
+    def test_integer_decodes_to_flag_names(self, row: int, expected: list[str]) -> None:
+        """Test that integer values decode to the correct flag name lists in ascending bit-value order."""
+        tf = self.setup_tf()
+        tf_decoded = tf.decode_flag_column("flag_col_1")
+        assert tf_decoded.df["flag_col_1"].to_list()[row] == expected
+        assert tf_decoded.get_flag_column("flag_col_1").is_decoded is True
+
+    def test_returns_new_timeframe(self) -> None:
+        """Test that decode_flag_column returns a new TimeFrame (original unchanged)."""
+        tf = self.setup_tf()
+        tf_decoded = tf.decode_flag_column("flag_col_1")
+        assert tf.get_flag_column("flag_col_1").is_decoded is False
+        assert tf_decoded is not tf
+
+    def test_unregistered_column_raises_column_not_found_error(self) -> None:
+        """Test that decoding an unregistered column raises ColumnNotFoundError."""
+        tf = self.setup_tf()
+        with pytest.raises(ColumnNotFoundError):
+            tf.decode_flag_column("value")
+
+
+class TestEncodeFlagColumn:
+    @staticmethod
+    def setup_tf() -> TimeFrame:
+        tf = TestDecodeFlagColumn.setup_tf()
+        return tf.decode_flag_column("flag_col_1")
+
+    def test_output_dtype_is_int64(self) -> None:
+        """Test that the encoded column has dtype Int64."""
+        tf_decoded = self.setup_tf()
+        tf_encoded = tf_decoded.encode_flag_column("flag_col_1")
+        assert tf_encoded.df["flag_col_1"].dtype == pl.Int64
+
+    def test_same_column_name_after_encode(self) -> None:
+        """Test that the column name is preserved after encoding."""
+        tf_decoded = self.setup_tf()
+        tf_encoded = tf_decoded.encode_flag_column("flag_col_1")
+        assert "flag_col_1" in tf_encoded.df.columns
+
+    @pytest.mark.parametrize(
+        "row, expected",
+        [
+            (0, 0),
+            (1, 1),
+            (2, 5),
+            (3, 7),
+        ],
+        ids=["empty_list", "single_flag", "two_flags", "all_flags"],
+    )
+    def test_flag_names_encode_to_integer(self, row: int, expected: int) -> None:
+        """Test that flag name lists encode to the correct bitwise integer values."""
+        tf_decoded = self.setup_tf()
+        tf_encoded = tf_decoded.encode_flag_column("flag_col_1")
+        assert tf_encoded.df["flag_col_1"].to_list()[row] == expected
+        assert tf_encoded.get_flag_column("flag_col_1").is_decoded is False
+
+    def test_returns_new_timeframe(self) -> None:
+        """Test that encode_flag_column returns a new TimeFrame (original unchanged)."""
+        tf_decoded = self.setup_tf()
+        tf_encoded = tf_decoded.encode_flag_column("flag_col_1")
+        assert tf_decoded.get_flag_column("flag_col_1").is_decoded is True
+        assert tf_encoded is not tf_decoded
+
+    def test_column_remains_registered(self) -> None:
+        """Test that the column is still registered as a flag column after encoding."""
+        tf_decoded = self.setup_tf()
+        tf_encoded = tf_decoded.encode_flag_column("flag_col_1")
+        assert tf_encoded.get_flag_column("flag_col_1") is not None
+
+    def test_unregistered_column_raises_column_not_found_error(self) -> None:
+        """Test that encoding an unregistered column raises ColumnNotFoundError."""
+        tf_decoded = self.setup_tf()
+        with pytest.raises(ColumnNotFoundError):
+            tf_decoded.encode_flag_column("value")
+
+    def test_unknown_flag_name_raises_error(self) -> None:
+        """Test that encoding a column containing an unknown flag name raises BitwiseFlagUnknownError."""
+        tf = TestDecodeFlagColumn.setup_tf()
+        df_with_unknown = tf.df.with_columns(pl.Series("flag_col_1", [["FLAG_A", "UNKNOWN"], [], [], []]))
+        tf_manual = tf.with_df(df_with_unknown)
+        tf_manual._flag_manager.flag_columns["flag_col_1"].is_decoded = True
+        with pytest.raises(BitwiseFlagUnknownError):
+            tf_manual.encode_flag_column("flag_col_1")
+
+    def test_decode_then_encode_produces_original_values(self) -> None:
+        """Test that decode followed by encode produces the original integer values."""
+        tf = TestDecodeFlagColumn.setup_tf()
+        original = tf.df["flag_col_1"].clone()
+        tf_roundtrip = tf.decode_flag_column("flag_col_1").encode_flag_column("flag_col_1")
+        assert_series_equal(tf_roundtrip.df["flag_col_1"], original)
