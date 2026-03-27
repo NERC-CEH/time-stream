@@ -17,6 +17,7 @@ import polars as pl
 
 from time_stream.bitwise import BitwiseFlag, BitwiseMeta
 from time_stream.exceptions import (
+    BitwiseFlagUnknownError,
     ColumnNotFoundError,
     DuplicateFlagSystemError,
     FlagSystemError,
@@ -36,13 +37,69 @@ class FlagColumn:
     Attributes:
         name: Name of the flag column in the DataFrame.
         flag_system: The enum class that defines the available flags and their bit values.
+        is_decoded: Whether the column is currently in decoded List(String) form rather than integer form.
     """
 
     name: str
     flag_system: type[BitwiseFlag]
+    is_decoded: bool = False
+
+    def decode(self, df: pl.DataFrame) -> pl.DataFrame:
+        """Replace the integer flag column with a List(String) column of active flag names.
+
+        Each row contains the names of flags that are set, sorted by ascending bit value. A value of 0 produces an
+        empty list.
+
+        Args:
+            df: The DataFrame containing the integer flag column.
+
+        Returns:
+            A new DataFrame with the flag column replaced by a List(String) column.
+        """
+
+        # Sort the flag system mapping into ascending bit value order
+        flag_map = sorted(self.flag_system.to_dict().items(), key=lambda kv: kv[1])
+
+        # Build expressions for decoding each flag value
+        exprs = [
+            pl.when((pl.col(self.name) & pl.lit(val)) != 0).then(pl.lit(name)).otherwise(pl.lit(None))
+            for name, val in flag_map
+        ]
+        return df.with_columns(pl.concat_list(exprs).list.drop_nulls().alias(self.name))
+
+    def encode(self, df: pl.DataFrame) -> pl.DataFrame:
+        """Replace a List(String) flag column with a bitwise integer column.
+
+        Each flag name in the list contributes its bit value. An empty list produces 0.
+
+        Args:
+            df: The DataFrame containing the decoded List(String) flag column.
+
+        Returns:
+            A new DataFrame with the flag column replaced by an integer column.
+
+        Raises:
+            BitwiseFlagUnknownError: If any flag name in the column is not in the flag system.
+        """
+        flag_map = self.flag_system.to_dict()
+        present = set(df[self.name].explode().drop_nulls().unique().to_list())
+        unknown = present - flag_map.keys()
+        if unknown:
+            raise BitwiseFlagUnknownError(f"Unknown flag names in column '{self.name}': {sorted(unknown)}.")
+
+        exprs = [
+            pl.when(pl.col(self.name).list.contains(pl.lit(name)))
+            .then(pl.lit(val, dtype=pl.Int64))
+            .otherwise(pl.lit(0, dtype=pl.Int64))
+            for name, val in flag_map.items()
+        ]
+        return df.with_columns(pl.sum_horizontal(exprs).alias(self.name))
 
     def add_flag(self, df: pl.DataFrame, flag: int | str, expr: pl.Expr = pl.lit(True)) -> pl.DataFrame:
         """Adds a flag value to this FlagColumn using a bitwise OR operation.
+
+        If the column is currently decoded (List(String)), it is encoded first, the flag is applied,
+        and the result is decoded again.
 
         Args:
             df: The dataframe to add the flag value to.
@@ -54,12 +111,20 @@ class FlagColumn:
             A new DataFrame with the flag column updated.
         """
         flag = self.flag_system.get_single_flag(flag)
-        return df.with_columns(
+        if self.is_decoded:
+            df = self.encode(df)
+        df = df.with_columns(
             pl.when(expr).then(pl.col(self.name) | pl.lit(flag.value)).otherwise(pl.col(self.name)).alias(self.name)
         )
+        if self.is_decoded:
+            df = self.decode(df)
+        return df
 
     def remove_flag(self, df: pl.DataFrame, flag: int | str, expr: pl.Expr = pl.lit(True)) -> pl.DataFrame:
         """Remove a flag value from this FlagColumn using a bitwise AND operation.
+
+        If the column is currently decoded (List(String)), it is encoded first, the flag is removed,
+        and the result is decoded again.
 
         Args:
             df: The dataframe to remove the flag value from.
@@ -71,12 +136,20 @@ class FlagColumn:
             A new DataFrame with the flag column updated.
         """
         flag = self.flag_system.get_single_flag(flag)
-        return df.with_columns(
+        if self.is_decoded:
+            df = self.encode(df)
+        df = df.with_columns(
             pl.when(expr).then(pl.col(self.name) & ~pl.lit(flag.value)).otherwise(pl.col(self.name)).alias(self.name)
         )
+        if self.is_decoded:
+            df = self.decode(df)
+        return df
 
     def __eq__(self, other: object) -> bool:
         """Check if two FlagColumn instances are equal.
+
+        Compares name and flag_system only. is_decoded is runtime state and is excluded
+        from the comparison.
 
         Args:
             other: The object to compare.
@@ -246,6 +319,7 @@ class FlagManager:
         # register flag columns in the new copy with their associated system names
         for name, flag_column in self._flag_columns.items():
             out.register_flag_column(name, flag_column.flag_system.system_name())
+            out.flag_columns[name].is_decoded = flag_column.is_decoded
 
         return out
 
