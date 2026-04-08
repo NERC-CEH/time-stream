@@ -5,7 +5,7 @@ import polars as pl
 import pytest
 
 from time_stream import TimeFrame
-from time_stream.bitwise import BitwiseFlag
+from time_stream.flags.bitwise_flag_system import BitwiseFlag
 from time_stream.formatting import (
     format_headers,
     format_key_value_pairs,

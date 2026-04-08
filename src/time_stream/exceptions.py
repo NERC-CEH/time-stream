@@ -136,6 +136,22 @@ class PeriodValidationError(PeriodError):
     """Raised when a validation on objects in the Period module fails."""
 
 
+class CategoricalFlagError(TimeStreamError):
+    """Base class for CategoricalFlag-related errors."""
+
+
+class CategoricalFlagTypeError(CategoricalFlagError):
+    """Raised when a categorical flag value or mapping has the wrong type."""
+
+
+class CategoricalFlagValueError(CategoricalFlagError):
+    """Raised when a categorical flag mapping contains duplicate values."""
+
+
+class CategoricalFlagUnknownError(CategoricalFlagError):
+    """Raised when a categorical flag lookup fails."""
+
+
 class FlagSystemError(TimeStreamError):
     """Base class for flag-system related errors."""
 

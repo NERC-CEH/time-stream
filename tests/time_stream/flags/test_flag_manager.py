@@ -1,23 +1,22 @@
 import copy
 from datetime import datetime
-from typing import Any
 from unittest.mock import Mock
 
 import polars as pl
 import pytest
-from polars.testing import assert_series_equal
 
 from time_stream import TimeFrame
-from time_stream.bitwise import BitwiseFlag
 from time_stream.exceptions import (
     BitwiseFlagUnknownError,
+    CategoricalFlagUnknownError,
     ColumnNotFoundError,
     DuplicateFlagSystemError,
     FlagSystemError,
     FlagSystemNotFoundError,
     FlagSystemTypeError,
 )
-from time_stream.flag_manager import FlagColumn, FlagManager
+from time_stream.flags.bitwise_flag_system import BitwiseFlag
+from time_stream.flags.flag_manager import BitwiseFlagColumn, CategoricalFlagColumn, FlagManager
 
 
 class TestRegisterFlagSystem:
@@ -28,12 +27,12 @@ class TestRegisterFlagSystem:
         flag_manager.register_flag_system("new_flags", new_flag_system)
         assert "new_flags" in flag_manager.flag_systems
 
-    def test_add_valid_class_flag_system(self) -> None:
-        """Test adding a new valid bitwise class based flag system."""
+    def test_add_valid_dict_int_categorical_flag_system(self) -> None:
+        """Test adding a categorical flag system from a dict[str, int]."""
         flag_manager = FlagManager()
-        new_flag_system = BitwiseFlag("new_flags", {"FLAG_A": 1, "FLAG_B": 2, "FLAG_C": 4})
-        flag_manager.register_flag_system("new_flags", new_flag_system)
+        flag_manager.register_flag_system("new_flags", {"FLAG_A": 0, "FLAG_B": 1}, flag_type="categorical")
         assert "new_flags" in flag_manager.flag_systems
+        assert flag_manager.flag_systems["new_flags"].to_dict() == {"FLAG_A": 0, "FLAG_B": 1}
 
     def test_add_duplicate_flag_system_raises_error(self) -> None:
         """Test adding a duplicate flag system raises error."""
@@ -84,6 +83,26 @@ class TestRegisterFlagSystem:
         with pytest.raises(FlagSystemTypeError):
             flag_manager.register_flag_system("new_flags", ["FLAG_A", "FLAG_B", "FLAG_A"])
 
+    def test_list_categorical_produces_sequential_integers(self) -> None:
+        """Test that a list with flag_type='categorical' assigns sequential integers in sorted order."""
+        flag_manager = FlagManager()
+        flag_manager.register_flag_system("new_flags", ["FLAG_A", "FLAG_B", "FLAG_C"], flag_type="categorical")
+        flag_system = flag_manager.get_flag_system("new_flags")
+        assert flag_system.to_dict() == {"FLAG_A": 0, "FLAG_B": 1, "FLAG_C": 2}
+
+    def test_dict_int_categorical_flag_system(self) -> None:
+        """Test that a dict[str, int] with flag_type='categorical' creates a categorical system."""
+        flag_manager = FlagManager()
+        flag_manager.register_flag_system("new_flags", {"FLAG_A": 0, "FLAG_B": 1}, flag_type="categorical")
+        flag_system = flag_manager.get_flag_system("new_flags")
+        assert flag_system.to_dict() == {"FLAG_A": 0, "FLAG_B": 1}
+
+    def test_unsupported_type_raises(self) -> None:
+        """Test that passing an unsupported type raises FlagSystemTypeError."""
+        flag_manager = FlagManager()
+        with pytest.raises(FlagSystemTypeError):
+            flag_manager.register_flag_system("bad", 12345)  # type: ignore[arg-type]
+
 
 class TestRegisterFlagColumn:
     @staticmethod
@@ -116,6 +135,24 @@ class TestRegisterFlagColumn:
             # Register twice - should raise error
             flag_manager.register_flag_column("flag_column", "quality_control")
 
+    def test_categorical_flag_column_scalar(self) -> None:
+        """Test registering a categorical flag column in scalar mode."""
+        fm = FlagManager()
+        fm.register_flag_system("qc", {"FLAG_A": 0, "FLAG_B": 1}, flag_type="categorical")
+        fm.register_flag_column("flag_col", "qc", list_mode=False)
+        col = fm.get_flag_column("flag_col")
+        assert isinstance(col, CategoricalFlagColumn)
+        assert col.list_mode is False
+
+    def test_categorical_flag_column_list(self) -> None:
+        """Test registering a categorical flag column in list mode."""
+        fm = FlagManager()
+        fm.register_flag_system("qc", {"FLAG_A": 0, "FLAG_B": 1}, flag_type="categorical")
+        fm.register_flag_column("flag_col", "qc", list_mode=True)
+        col = fm.get_flag_column("flag_col")
+        assert isinstance(col, CategoricalFlagColumn)
+        assert col.list_mode is True
+
 
 class TestGetFlagSystem:
     @staticmethod
@@ -144,7 +181,7 @@ class TestGetFlagColumn:
     @staticmethod
     def setup_flag_manager() -> tuple[FlagManager, Mock]:
         flag_manager = FlagManager()
-        mock_flag_column = Mock(FlagColumn)
+        mock_flag_column = Mock(BitwiseFlagColumn)
         flag_manager._flag_columns = {"flag_column": mock_flag_column}
 
         return flag_manager, mock_flag_column
@@ -167,7 +204,7 @@ class TestCopy:
     def setup_flag_manager() -> FlagManager:
         flag_manager = FlagManager()
         flag_manager.register_flag_system("system1", {"FLAG_A": 1, "FLAG_B": 2, "FLAG_C": 4})
-        flag_manager.register_flag_system("system2", BitwiseFlag("system2", {"FLAG_1": 1, "FLAG_2": 2}))
+        flag_manager.register_flag_system("system2", {"FLAG_1": 1, "FLAG_2": 2})
         flag_manager.register_flag_column(name="flag_col_1", flag_system_name="system1")
         flag_manager.register_flag_column(name="flag_col_2", flag_system_name="system2")
         return flag_manager
@@ -216,186 +253,96 @@ class TestCopy:
         self.assert_copy(flag_manager_copy)
 
 
-class TestAddFlag:
-    @staticmethod
-    def setup_tf() -> TimeFrame:
+class TestRegisterFlagColumnValidation:
+    def test_categorical_invalid_values_raise_error(self) -> None:
+        """Test that registering a categorical flag column with invalid values raises an error."""
         tf = TimeFrame(
             pl.DataFrame(
-                {"time": [datetime(2025, 1, 1), datetime(2025, 1, 2), datetime(2025, 1, 3)], "value": [1, 2, 3]}
+                {
+                    "time": [datetime(2025, 1, 1), datetime(2025, 1, 2)],
+                    "qc_flags": [0, 99],
+                }
             ),
             "time",
-        ).with_flag_system("system1", {"FLAG_A": 1, "FLAG_B": 2, "FLAG_C": 4})
+        ).with_flag_system("qc", {"FLAG_A": 0, "FLAG_B": 1}, flag_type="categorical")
 
-        tf.init_flag_column("system1", "flag_col_1")
-        return tf
+        with pytest.raises(CategoricalFlagUnknownError):
+            tf.register_flag_column("qc_flags", "qc")
 
-    def test_add_flag_to_flag_column_no_expr(self) -> None:
-        """Test that adding a flag to a valid flag column with no expression sets all values in the
-        column to that flag"""
-        tf = self.setup_tf()
+    def test_categorical_valid_values_succeed(self) -> None:
+        """Test that registering a categorical flag column with only valid values succeeds."""
+        tf = TimeFrame(
+            pl.DataFrame(
+                {
+                    "time": [datetime(2025, 1, 1), datetime(2025, 1, 2)],
+                    "qc_flags": [0, 1],
+                }
+            ),
+            "time",
+        ).with_flag_system("qc", {"FLAG_A": 0, "FLAG_B": 1}, flag_type="categorical")
 
-        tf.add_flag("flag_col_1", 1)
-        result = tf.df["flag_col_1"]
-        expected = pl.Series("flag_col_1", [1, 1, 1])
+        tf.register_flag_column("qc_flags", "qc")
+        assert "qc_flags" in tf.flag_columns
 
-        assert_series_equal(result, expected)
+    def test_categorical_null_values_are_allowed(self) -> None:
+        """Test that null values in a categorical column are accepted."""
+        tf = TimeFrame(
+            pl.DataFrame(
+                {
+                    "time": [datetime(2025, 1, 1), datetime(2025, 1, 2)],
+                    "qc_flags": pl.Series([0, None], dtype=pl.Int32),
+                }
+            ),
+            "time",
+        ).with_flag_system("qc", {"FLAG_A": 0, "FLAG_B": 1}, flag_type="categorical")
 
-    def test_add_flag_to_flag_column_with_expr(self) -> None:
-        """Test that adding a flag to a valid flag column with an expression sets all values in the
-        column that match that expression to that flag"""
-        tf = self.setup_tf()
+        tf.register_flag_column("qc_flags", "qc")
+        assert "qc_flags" in tf.flag_columns
 
-        tf.add_flag("flag_col_1", 1, pl.col("value").gt(1))
-        result = tf.df["flag_col_1"]
-        expected = pl.Series("flag_col_1", [0, 1, 1])
-
-        assert_series_equal(result, expected)
-
-    def test_add_flag_by_name_to_flag_column(self) -> None:
-        """Test that adding a flag to a valid flag column using the flag name (rather than value)
-        sets all values in the column that match that expression to the correct flag value"""
-        tf = self.setup_tf()
-
-        tf.add_flag("flag_col_1", "FLAG_C")
-        result = tf.df["flag_col_1"]
-        expected = pl.Series("flag_col_1", [4, 4, 4])
-
-        assert_series_equal(result, expected)
-
-    def test_adding_non_existent_flag_to_flag_column_raises_error(self) -> None:
-        """Test that trying to add an invalid flag to a valid flag column raises error"""
-        tf = self.setup_tf()
-
-        with pytest.raises(BitwiseFlagUnknownError):
-            tf.add_flag("flag_col_1", 10)
-
-    def test_add_flag_to_data_column_raises_error(self) -> None:
-        """Test that trying to add a flag to a data column raises error"""
-        tf = self.setup_tf()
-
-        with pytest.raises(ColumnNotFoundError):
-            tf.add_flag("value", 1)
-
-    def test_add_flag_twice(self) -> None:
-        """Test that adding a flag twice uses the bitwise math, so doesn't actually add the value twice"""
-        tf = self.setup_tf()
-
-        tf.add_flag("flag_col_1", 1)
-
-        result = tf.df["flag_col_1"]
-        expected = pl.Series("flag_col_1", [1, 1, 1])
-
-        assert_series_equal(result, expected)
-
-        # adding a second time should leave it as is
-        tf.add_flag("flag_col_1", 1)
-
-        result = tf.df["flag_col_1"]
-        expected = pl.Series("flag_col_1", [1, 1, 1])
-
-        assert_series_equal(result, expected)
-
-    def test_add_flag_on_decoded_column(self) -> None:
-        """Test that add_flag on a decoded column leaves the column in List(String) with the flag added."""
-        tf = self.setup_tf()
-        tf_decoded = tf.decode_flag_column("flag_col_1")
-
-        tf_decoded.add_flag("flag_col_1", "FLAG_A")
-
-        result = tf_decoded.df["flag_col_1"]
-        assert result.dtype == pl.List(pl.String)
-        assert result.to_list() == [["FLAG_A"], ["FLAG_A"], ["FLAG_A"]]
-
-
-class TestRemoveFlag:
-    @staticmethod
-    def setup_tf() -> TimeFrame:
+    def test_bitwise_valid_combinations_succeed(self) -> None:
+        """Test that a bitwise column containing valid flag combinations is accepted."""
         tf = TimeFrame(
             pl.DataFrame(
                 {
                     "time": [datetime(2025, 1, 1), datetime(2025, 1, 2), datetime(2025, 1, 3)],
-                    "value": [1, 2, 3],
-                    "flag_col_1": [1, 3, 7],
+                    "flags": [0, 3, 7],
                 }
             ),
             "time",
-        ).with_flag_system("system1", {"FLAG_A": 1, "FLAG_B": 2, "FLAG_C": 4})
+        ).with_flag_system("qc", {"FLAG_A": 1, "FLAG_B": 2, "FLAG_C": 4})
 
-        tf.register_flag_column("flag_col_1", "system1")
-        return tf
+        tf.register_flag_column("flags", "qc")
+        assert "flags" in tf.flag_columns
 
-    def test_remove_flag_from_flag_column_no_expr(self) -> None:
-        """Test that removing a flag from a valid flag column with no expression works as expected"""
-        tf = self.setup_tf()
+    def test_bitwise_null_values_are_allowed(self) -> None:
+        """Test that null values in a bitwise column are accepted."""
+        tf = TimeFrame(
+            pl.DataFrame(
+                {
+                    "time": [datetime(2025, 1, 1), datetime(2025, 1, 2)],
+                    "flags": pl.Series([1, None], dtype=pl.Int32),
+                }
+            ),
+            "time",
+        ).with_flag_system("qc", {"FLAG_A": 1, "FLAG_B": 2})
 
-        tf.remove_flag("flag_col_1", 1)
-        result = tf.df["flag_col_1"]
-        expected = pl.Series("flag_col_1", [0, 2, 6])
+        tf.register_flag_column("flags", "qc")
+        assert "flags" in tf.flag_columns
 
-        assert_series_equal(result, expected)
-
-    def test_remove_flag_twice(self) -> None:
-        """Test that removing a flag twice uses the bitwise math, so doesn't actually remove the value twice"""
-        tf = self.setup_tf()
-
-        tf.remove_flag("flag_col_1", 1)
-        result = tf.df["flag_col_1"]
-        expected = pl.Series("flag_col_1", [0, 2, 6])
-        assert_series_equal(result, expected)
-
-        # removing a second time should leave it as is
-        tf.remove_flag("flag_col_1", 1)
-        result = tf.df["flag_col_1"]
-        expected = pl.Series("flag_col_1", [0, 2, 6])
-        assert_series_equal(result, expected)
-
-    def test_remove_flag_from_flag_column_with_expr(self) -> None:
-        """Test that removing a flag from a valid flag column with an expression removes flag from only those rows"""
-        tf = self.setup_tf()
-
-        tf.remove_flag("flag_col_1", 1, pl.col("value").gt(1))
-        result = tf.df["flag_col_1"]
-        expected = pl.Series("flag_col_1", [1, 2, 6])
-
-        assert_series_equal(result, expected)
-
-    def test_remove_flag_by_name_from_flag_column(self) -> None:
-        """
-        Test that removing a flag from a valid flag column using the flag name (rather than value) works as
-        expected.
-        """
-        tf = self.setup_tf()
-
-        tf.remove_flag("flag_col_1", "FLAG_B")
-        result = tf.df["flag_col_1"]
-        expected = pl.Series("flag_col_1", [1, 1, 5])
-
-        assert_series_equal(result, expected)
-
-    def test_removing_non_existent_flag_from_flag_column_raises_error(self) -> None:
-        """Test that trying to remove an invalid flag to a valid flag column raises error"""
-        tf = self.setup_tf()
+    def test_bitwise_invalid_values_raise_error(self) -> None:
+        """Test that a bitwise column with bits outside the known mask raises BitwiseFlagUnknownError."""
+        tf = TimeFrame(
+            pl.DataFrame(
+                {
+                    "time": [datetime(2025, 1, 1), datetime(2025, 1, 2)],
+                    "flags": [1, 8],  # 8 has no corresponding flag
+                }
+            ),
+            "time",
+        ).with_flag_system("qc", {"FLAG_A": 1, "FLAG_B": 2, "FLAG_C": 4})
 
         with pytest.raises(BitwiseFlagUnknownError):
-            tf.add_flag("flag_col_1", 10)
-
-    def test_remove_flag_from_data_column_raises_error(self) -> None:
-        """Test that trying to remove a flag to a data column raises error"""
-        tf = self.setup_tf()
-
-        with pytest.raises(ColumnNotFoundError):
-            tf.add_flag("value", 1)
-
-    def test_remove_flag_on_decoded_column(self) -> None:
-        """Test that remove_flag on a decoded column leaves the column in List(String) with the flag removed."""
-        tf = self.setup_tf()
-        tf_decoded = tf.decode_flag_column("flag_col_1")
-
-        tf_decoded.remove_flag("flag_col_1", "FLAG_A")
-
-        result = tf_decoded.df["flag_col_1"]
-        assert result.dtype == pl.List(pl.String)
-        assert result.to_list() == [[], ["FLAG_B"], ["FLAG_B", "FLAG_C"]]
+            tf.register_flag_column("flags", "qc")
 
 
 class TestEqualityFlagManager:
@@ -514,190 +461,3 @@ class TestEqualityFlagManager:
         # Check the expected property is the difference
         assert flag_manager_original.flag_systems == flag_manager_different.flag_systems
         assert flag_manager_original.flag_columns != flag_manager_different.flag_columns
-
-
-class TestEqualityFlagColumn:
-    @staticmethod
-    def setup_flag_systems() -> tuple[BitwiseFlag, BitwiseFlag, FlagColumn]:
-        flag_system1 = BitwiseFlag("system1", {"FLAG_A": 1, "FLAG_B": 2, "FLAG_C": 4})
-        flag_system2 = BitwiseFlag("system2", {"FLAG_1": 1, "FLAG_2": 2})
-        flag_column_original = FlagColumn("flag_col_1", flag_system1)
-
-        return flag_system1, flag_system2, flag_column_original
-
-    def test_equal(self) -> None:
-        """Test that two identical flag column objects are considered equal."""
-        flag_system1, flag_system2, flag_column_original = self.setup_flag_systems()
-        flag_column_same = FlagColumn("flag_col_1", flag_system1)
-
-        assert flag_column_original == flag_column_same
-
-    def test_different_name(self) -> None:
-        """Test that two flag column objects with different names are not considered equal."""
-        flag_system1, flag_system2, flag_column_original = self.setup_flag_systems()
-
-        flag_column_different = FlagColumn("different1", flag_system1)
-
-        assert flag_column_original != flag_column_different
-
-        # Check the expected property is the difference
-        assert flag_column_original.name != flag_column_different.name
-        assert flag_column_original.flag_system == flag_column_different.flag_system
-
-    def test_different_system(self) -> None:
-        """Test that two flag column objects with different flag systems are not considered equal."""
-        flag_system1, flag_system2, flag_column_original = self.setup_flag_systems()
-
-        flag_column_different = FlagColumn("flag_col_1", flag_system2)
-
-        assert flag_column_original != flag_column_different
-
-        # Check the expected property is the difference
-        assert flag_column_original.name == flag_column_different.name
-        assert flag_column_original.flag_system != flag_column_different.flag_system
-
-    @pytest.mark.parametrize(
-        "non_fs",
-        [
-            "hello",
-            123,
-            {"key": "value"},
-            pl.DataFrame(),
-        ],
-        ids=["str", "int", "dict", "df"],
-    )
-    def test_different_object(self, non_fs: Any) -> None:
-        """Test that comparing against non-flag system objects are not equal."""
-        flag_system1, flag_system2, flag_column_original = self.setup_flag_systems()
-
-        assert flag_column_original != non_fs
-
-
-class TestDecodeFlagColumn:
-    @staticmethod
-    def setup_tf() -> TimeFrame:
-        tf = TimeFrame(
-            pl.DataFrame(
-                {
-                    "time": [datetime(2025, 1, 1), datetime(2025, 1, 2), datetime(2025, 1, 3), datetime(2025, 1, 4)],
-                    "value": [1, 2, 3, 4],
-                    "flag_col_1": [0, 1, 5, 7],
-                }
-            ),
-            "time",
-        ).with_flag_system("system1", {"FLAG_A": 1, "FLAG_B": 2, "FLAG_C": 4})
-        tf.register_flag_column("flag_col_1", "system1")
-        return tf
-
-    def test_output_dtype_is_list_string(self) -> None:
-        """Test that the decoded column has dtype List(String)."""
-        tf = self.setup_tf()
-        tf_decoded = tf.decode_flag_column("flag_col_1")
-        assert tf_decoded.df["flag_col_1"].dtype == pl.List(pl.String)
-
-    def test_same_column_name_after_decode(self) -> None:
-        """Test that the column name is preserved after decoding."""
-        tf = self.setup_tf()
-        tf_decoded = tf.decode_flag_column("flag_col_1")
-        assert "flag_col_1" in tf_decoded.df.columns
-
-    @pytest.mark.parametrize(
-        "row, expected",
-        [
-            (0, []),
-            (1, ["FLAG_A"]),
-            (2, ["FLAG_A", "FLAG_C"]),
-            (3, ["FLAG_A", "FLAG_B", "FLAG_C"]),
-        ],
-        ids=["zero", "single_flag", "two_flags", "all_flags_ascending_order"],
-    )
-    def test_integer_decodes_to_flag_names(self, row: int, expected: list[str]) -> None:
-        """Test that integer values decode to the correct flag name lists in ascending bit-value order."""
-        tf = self.setup_tf()
-        tf_decoded = tf.decode_flag_column("flag_col_1")
-        assert tf_decoded.df["flag_col_1"].to_list()[row] == expected
-        assert tf_decoded.get_flag_column("flag_col_1").is_decoded is True
-
-    def test_returns_new_timeframe(self) -> None:
-        """Test that decode_flag_column returns a new TimeFrame (original unchanged)."""
-        tf = self.setup_tf()
-        tf_decoded = tf.decode_flag_column("flag_col_1")
-        assert tf.get_flag_column("flag_col_1").is_decoded is False
-        assert tf_decoded is not tf
-
-    def test_unregistered_column_raises_column_not_found_error(self) -> None:
-        """Test that decoding an unregistered column raises ColumnNotFoundError."""
-        tf = self.setup_tf()
-        with pytest.raises(ColumnNotFoundError):
-            tf.decode_flag_column("value")
-
-
-class TestEncodeFlagColumn:
-    @staticmethod
-    def setup_tf() -> TimeFrame:
-        tf = TestDecodeFlagColumn.setup_tf()
-        return tf.decode_flag_column("flag_col_1")
-
-    def test_output_dtype_is_int64(self) -> None:
-        """Test that the encoded column has dtype Int64."""
-        tf_decoded = self.setup_tf()
-        tf_encoded = tf_decoded.encode_flag_column("flag_col_1")
-        assert tf_encoded.df["flag_col_1"].dtype == pl.Int64
-
-    def test_same_column_name_after_encode(self) -> None:
-        """Test that the column name is preserved after encoding."""
-        tf_decoded = self.setup_tf()
-        tf_encoded = tf_decoded.encode_flag_column("flag_col_1")
-        assert "flag_col_1" in tf_encoded.df.columns
-
-    @pytest.mark.parametrize(
-        "row, expected",
-        [
-            (0, 0),
-            (1, 1),
-            (2, 5),
-            (3, 7),
-        ],
-        ids=["empty_list", "single_flag", "two_flags", "all_flags"],
-    )
-    def test_flag_names_encode_to_integer(self, row: int, expected: int) -> None:
-        """Test that flag name lists encode to the correct bitwise integer values."""
-        tf_decoded = self.setup_tf()
-        tf_encoded = tf_decoded.encode_flag_column("flag_col_1")
-        assert tf_encoded.df["flag_col_1"].to_list()[row] == expected
-        assert tf_encoded.get_flag_column("flag_col_1").is_decoded is False
-
-    def test_returns_new_timeframe(self) -> None:
-        """Test that encode_flag_column returns a new TimeFrame (original unchanged)."""
-        tf_decoded = self.setup_tf()
-        tf_encoded = tf_decoded.encode_flag_column("flag_col_1")
-        assert tf_decoded.get_flag_column("flag_col_1").is_decoded is True
-        assert tf_encoded is not tf_decoded
-
-    def test_column_remains_registered(self) -> None:
-        """Test that the column is still registered as a flag column after encoding."""
-        tf_decoded = self.setup_tf()
-        tf_encoded = tf_decoded.encode_flag_column("flag_col_1")
-        assert tf_encoded.get_flag_column("flag_col_1") is not None
-
-    def test_unregistered_column_raises_column_not_found_error(self) -> None:
-        """Test that encoding an unregistered column raises ColumnNotFoundError."""
-        tf_decoded = self.setup_tf()
-        with pytest.raises(ColumnNotFoundError):
-            tf_decoded.encode_flag_column("value")
-
-    def test_unknown_flag_name_raises_error(self) -> None:
-        """Test that encoding a column containing an unknown flag name raises BitwiseFlagUnknownError."""
-        tf = TestDecodeFlagColumn.setup_tf()
-        df_with_unknown = tf.df.with_columns(pl.Series("flag_col_1", [["FLAG_A", "UNKNOWN"], [], [], []]))
-        tf_manual = tf.with_df(df_with_unknown)
-        tf_manual._flag_manager.flag_columns["flag_col_1"].is_decoded = True
-        with pytest.raises(BitwiseFlagUnknownError):
-            tf_manual.encode_flag_column("flag_col_1")
-
-    def test_decode_then_encode_produces_original_values(self) -> None:
-        """Test that decode followed by encode produces the original integer values."""
-        tf = TestDecodeFlagColumn.setup_tf()
-        original = tf.df["flag_col_1"].clone()
-        tf_roundtrip = tf.decode_flag_column("flag_col_1").encode_flag_column("flag_col_1")
-        assert_series_equal(tf_roundtrip.df["flag_col_1"], original)

@@ -8,9 +8,9 @@ from polars.testing import assert_frame_equal, assert_frame_not_equal, assert_se
 
 from time_stream.aggregation import Percentile
 from time_stream.base import TimeFrame
-from time_stream.bitwise import BitwiseFlag
-from time_stream.exceptions import ColumnNotFoundError, MetadataError
-from time_stream.flag_manager import FlagColumn
+from time_stream.exceptions import ColumnNotFoundError, FlagSystemNotFoundError, MetadataError
+from time_stream.flags.bitwise_flag_system import BitwiseFlag
+from time_stream.flags.flag_manager import BitwiseFlagColumn
 from time_stream.period import Period
 
 
@@ -355,7 +355,7 @@ class TestMetadata:
 
 class TestInitFlagColumn:
     @staticmethod
-    def setup_tf() -> tuple[TimeFrame, BitwiseFlag]:
+    def setup_tf() -> tuple[TimeFrame, type[BitwiseFlag]]:
         df = pl.DataFrame(
             {
                 "time": [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)],
@@ -363,9 +363,9 @@ class TestInitFlagColumn:
                 "existing_flags": [0, 1, 2],
             }
         )
-        flag_system = BitwiseFlag("quality_control", {"OUT_OF_RANGE": 1, "SPIKE": 2, "LOW_BATTERY": 4})
         tf = TimeFrame(df=df, time_name="time")
-        tf.register_flag_system("quality_control", flag_system)
+        tf.register_flag_system("quality_control", {"OUT_OF_RANGE": 1, "SPIKE": 2, "LOW_BATTERY": 4})
+        flag_system = tf.get_flag_system("quality_control")
 
         return tf, flag_system
 
@@ -377,7 +377,7 @@ class TestInitFlagColumn:
         assert tf._flag_manager._flag_columns == {}
 
         tf.init_flag_column("quality_control", "flag_column")
-        assert tf._flag_manager._flag_columns == {"flag_column": FlagColumn("flag_column", flag_system)}
+        assert tf._flag_manager._flag_columns == {"flag_column": BitwiseFlagColumn("flag_column", flag_system)}
 
         assert "flag_column" in tf.flag_columns
 
@@ -420,7 +420,7 @@ class TestInitFlagColumn:
         tf.init_flag_column("quality_control")
         default_name = "__flag__quality_control"
 
-        assert tf._flag_manager._flag_columns == {default_name: FlagColumn(default_name, flag_system)}
+        assert tf._flag_manager._flag_columns == {default_name: BitwiseFlagColumn(default_name, flag_system)}
 
         assert default_name in tf.flag_columns
 
@@ -453,6 +453,19 @@ class TestInitFlagColumn:
         assert "__flag__quality_control" in tf.flag_columns
         assert "__flag__quality_control__1" in tf.flag_columns
         assert "__flag__quality_control__2" in tf.flag_columns
+
+    def test_init_flag_column_default_dtype_and_values(self) -> None:
+        """Test that the default bitwise column is Int64 initialised with zeros."""
+        tf, _ = self.setup_tf()
+        tf.init_flag_column("quality_control", "flag_column")
+        expected = pl.Series("flag_column", [0, 0, 0], dtype=pl.Int64)
+        assert_series_equal(tf.df["flag_column"], expected)
+
+    def test_init_flag_column_invalid_system_raises(self) -> None:
+        """Test that an unknown flag system name raises FlagSystemNotFoundError."""
+        tf, _ = self.setup_tf()
+        with pytest.raises(FlagSystemNotFoundError):
+            tf.init_flag_column("no_such_system", "flag_column")
 
 
 class TestTimeSeriesEquality:
