@@ -9,8 +9,8 @@ from polars.testing import assert_frame_equal, assert_frame_not_equal, assert_se
 from time_stream.aggregation import Percentile
 from time_stream.base import TimeFrame
 from time_stream.exceptions import ColumnNotFoundError, FlagSystemNotFoundError, MetadataError
-from time_stream.flags.bitwise_flag_system import BitwiseFlag
 from time_stream.flags.flag_manager import BitwiseFlagColumn
+from time_stream.flags.flag_system import FlagSystemBase
 from time_stream.period import Period
 
 
@@ -200,7 +200,7 @@ class TestGetItem:
 
         expected_error = "Columns not found in dataframe: ['col0']"
         with pytest.raises(ColumnNotFoundError, match=re.escape(expected_error)):
-            tf["col0"]
+            tf["col0"]  # noqa - expected "no effect" warning
 
 
 class TestColumnMetadata:
@@ -327,7 +327,7 @@ class TestMetadata:
     def test_retrieve_metadata_for_nonexistent_key_raises_error(self) -> None:
         """Test that an error is raised for a non-existent key."""
         with pytest.raises(KeyError):
-            self.tf.metadata["nonexistent_key"]
+            self.tf.metadata["nonexistent_key"]  # noqa - expected "no effect" warning
 
     def test_set_metadata(self) -> None:
         """Test that we can set the metadata object directly"""
@@ -355,7 +355,7 @@ class TestMetadata:
 
 class TestInitFlagColumn:
     @staticmethod
-    def setup_tf() -> tuple[TimeFrame, type[BitwiseFlag]]:
+    def setup_tf() -> tuple[TimeFrame, type[FlagSystemBase]]:
         df = pl.DataFrame(
             {
                 "time": [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)],
@@ -469,9 +469,6 @@ class TestInitFlagColumn:
 
 
 class TestTimeSeriesEquality:
-    def setUp(self) -> None:
-        """Set up multiple TimeSeries objects for testing."""
-
     df_original = pl.DataFrame(
         {"time": [datetime(2024, 1, 1), datetime(2024, 2, 1), datetime(2024, 3, 1)], "value": [10, 20, 30]}
     )

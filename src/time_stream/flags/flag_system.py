@@ -106,7 +106,7 @@ class FlagSystemBase:
         raise NotImplementedError
 
     @classmethod
-    def validate_column(cls, series: pl.Series, list_mode: bool | None = None) -> None:
+    def validate_column(cls, series: "pl.Series", list_mode: bool | None = None) -> None:
         """Validate that all non-null values in ``series`` are valid for this flag system.
 
         Subclasses must override this method.

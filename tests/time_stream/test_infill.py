@@ -386,7 +386,7 @@ class TestApply:
         return tf
 
     @pytest.mark.parametrize(
-        "interpolator,df,expected",
+        "interpolator,df,expected_values",
         [
             (LinearInterpolation(), LINEAR, [1.0, 2.0, 3.0, 4.0, 5.0]),
             (LinearInterpolation(), QUADRATIC, [0.0, 2.0, 4.0, 10.0, 16.0, 26.0, 36.0]),
@@ -396,11 +396,11 @@ class TestApply:
             (CubicInterpolation(), CUBIC, [0.0, 1.0, 8.0, 27.0, 64.0, 125.0, 216.0, 343.0, 512.0]),
         ],
     )
-    def test_apply(self, interpolator: InfillMethod, df: pl.DataFrame, expected: list) -> None:
+    def test_apply(self, interpolator: InfillMethod, df: pl.DataFrame, expected_values: list) -> None:
         """Test that the apply method works as expected with good data."""
         tf = self.create_tf(df)
         result = interpolator.apply(tf.df, tf.time_name, tf.periodicity, "values")
-        expected = self.create_tf(pl.DataFrame({"values": expected}))
+        expected = self.create_tf(pl.DataFrame({"values": expected_values}))
         assert_frame_equal(result, expected.df, check_column_order=False)
 
     @pytest.mark.parametrize(
@@ -436,7 +436,7 @@ class TestApply:
         assert_frame_equal(result, expected.df, check_column_order=False)
 
     @pytest.mark.parametrize(
-        "df,max_gap_size,observation_interval,expected",
+        "df,max_gap_size,observation_interval,expected_values",
         [
             (START_GAP_WITH_MID_GAP, None, None, [None, 2.0, 3.0, 4.0, 5.0, 6.0]),
             (END_GAP_WITH_MID_GAP, None, None, [1.0, 2.0, 3.0, 4.0, 5.0, None]),
@@ -456,14 +456,14 @@ class TestApply:
         ],
     )
     def test_apply_edge_cases(
-        self, df: pl.DataFrame, max_gap_size: int, observation_interval: datetime, expected: list
+        self, df: pl.DataFrame, max_gap_size: int, observation_interval: datetime, expected_values: list
     ) -> None:
         """Test that the apply method works when dealing with edge cases"""
         tf = self.create_tf(df)
         result = LinearInterpolation().apply(
             tf.df, tf.time_name, tf.periodicity, "values", observation_interval, max_gap_size
         )
-        expected = self.create_tf(pl.DataFrame({"values": expected}))
+        expected = self.create_tf(pl.DataFrame({"values": expected_values}))
         assert_frame_equal(result, expected.df, check_column_order=False)
 
 

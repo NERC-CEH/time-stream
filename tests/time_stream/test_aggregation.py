@@ -308,7 +308,7 @@ class TestAggregationFunction:
         expected_error = "Class 'InvalidClass' must inherit from 'AggregationFunction'."
 
         with pytest.raises(RegistryKeyTypeError, match=expected_error):
-            AggregationFunction.get(InvalidClass)
+            AggregationFunction.get(InvalidClass)  # noqa - expect class warning
 
     @pytest.mark.parametrize(
         "get_input",
@@ -474,7 +474,7 @@ class TestSimpleAggregations:
             column,
             aggregation_time_anchor=input_tf.time_anchor,
         ).execute()
-        assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False)
+        assert_frame_equal(result, expected_df, check_dtypes=False, check_column_order=False)
 
     @pytest.mark.parametrize(
         "input_tf,aggregator,target_period,column,timestamps,counts,values,timestamps_of,kwargs",
@@ -617,7 +617,7 @@ class TestSimpleAggregations:
             column,
             aggregation_time_anchor=input_tf.time_anchor,
         ).execute()
-        assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False)
+        assert_frame_equal(result, expected_df, check_dtypes=False, check_column_order=False)
 
     @pytest.mark.parametrize(
         "input_tf,aggregator,target_period,column,timestamps,counts,values,timestamps_of,kwargs",
@@ -760,7 +760,7 @@ class TestSimpleAggregations:
             column,
             aggregation_time_anchor=input_tf.time_anchor,
         ).execute()
-        assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False)
+        assert_frame_equal(result, expected_df, check_dtypes=False, check_column_order=False)
 
     @pytest.mark.parametrize(
         "input_tf,aggregator,target_period,column,timestamps,counts,values,timestamps_of,kwargs",
@@ -906,7 +906,7 @@ class TestSimpleAggregations:
             column,
             aggregation_time_anchor=input_tf.time_anchor,
         ).execute()
-        assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False)
+        assert_frame_equal(result, expected_df, check_dtypes=False, check_column_order=False)
 
     @pytest.mark.parametrize(
         "input_tf,aggregator,target_period,column,timestamps,expected_counts,actual_counts,values,timestamps_of",
@@ -960,7 +960,7 @@ class TestSimpleAggregations:
             column,
             aggregation_time_anchor=input_tf.time_anchor,
         ).execute()
-        assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False)
+        assert_frame_equal(result, expected_df, check_dtypes=False, check_column_order=False)
 
 
 class TestComplexPeriodicityAggregations:
@@ -1072,7 +1072,7 @@ class TestComplexPeriodicityAggregations:
             column,
             aggregation_time_anchor=input_tf.time_anchor,
         ).execute()
-        assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False)
+        assert_frame_equal(result, expected_df, check_dtypes=False, check_column_order=False)
 
     @pytest.mark.parametrize(
         "input_tf,aggregator,target_period,column,timestamps,expected_counts,actual_counts,values,timestamps_of,kwargs",
@@ -1176,7 +1176,7 @@ class TestComplexPeriodicityAggregations:
             column,
             aggregation_time_anchor=input_tf.time_anchor,
         ).execute()
-        assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False)
+        assert_frame_equal(result, expected_df, check_dtypes=False, check_column_order=False)
 
     @pytest.mark.parametrize(
         "input_tf,aggregator,target_period,column,timestamps,expected_counts,actual_counts,values,timestamps_of,kwargs",
@@ -1280,7 +1280,7 @@ class TestComplexPeriodicityAggregations:
             column,
             aggregation_time_anchor=input_tf.time_anchor,
         ).execute()
-        assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False)
+        assert_frame_equal(result, expected_df, check_dtypes=False, check_column_order=False)
 
     @pytest.mark.parametrize(
         "input_tf,aggregator,target_period,column,timestamps,expected_counts,actual_counts,values,timestamps_of,kwargs",
@@ -1384,7 +1384,7 @@ class TestComplexPeriodicityAggregations:
             column,
             aggregation_time_anchor=input_tf.time_anchor,
         ).execute()
-        assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False)
+        assert_frame_equal(result, expected_df, check_dtypes=False, check_column_order=False)
 
 
 class TestEndAnchorAggregations:
@@ -1520,7 +1520,7 @@ class TestEndAnchorAggregations:
             column,
             aggregation_time_anchor=TimeAnchor.END,
         ).execute()
-        assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False)
+        assert_frame_equal(result, expected_df, check_dtypes=False, check_column_order=False)
 
     @pytest.mark.parametrize(
         "input_tf,aggregator,target_period,column,timestamps,expected_counts,actual_counts,values,timestamps_of",
@@ -1581,7 +1581,7 @@ class TestEndAnchorAggregations:
             column,
             aggregation_time_anchor=TimeAnchor.START,
         ).execute()
-        assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False)
+        assert_frame_equal(result, expected_df, check_dtypes=False, check_column_order=False)
 
 
 class TestMissingCriteriaAggregations:
@@ -1623,7 +1623,7 @@ class TestMissingCriteriaAggregations:
             aggregation_time_anchor=self.input_tf.time_anchor,
         ).execute()
 
-        assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False, check_exact=False)
+        assert_frame_equal(result, expected_df, check_dtypes=False, check_column_order=False, check_exact=False)
 
     @pytest.mark.parametrize(
         "valid,criteria",
@@ -1684,7 +1684,7 @@ class TestMissingCriteriaAggregations:
             aggregation_time_anchor=self.input_tf.time_anchor,
         ).execute()
 
-        assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False, check_exact=False)
+        assert_frame_equal(result, expected_df, check_dtypes=False, check_column_order=False, check_exact=False)
 
 
 class TestMeanSumWithMissingData:
@@ -1715,7 +1715,7 @@ class TestMeanSumWithMissingData:
             aggregation_time_anchor=input_tf.time_anchor,
         ).execute()
 
-        assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False, check_exact=False)
+        assert_frame_equal(result, expected_df, check_dtypes=False, check_column_order=False, check_exact=False)
 
 
 class TestPaddedAggregations:
@@ -1838,7 +1838,7 @@ class TestPercentileAggregation:
             "value",
             aggregation_time_anchor=input_tf.time_anchor,
         ).execute()
-        assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False)
+        assert_frame_equal(result, expected_df, check_dtypes=False, check_column_order=False)
 
     @pytest.mark.parametrize("percentile", [0.000000001, 0.999999, 101, 10000, 1.1, -1, -0.000000000001])
     def test_invalid_percentile(self, percentile: float) -> None:
@@ -1916,7 +1916,7 @@ class TestConditionalCount:
             "value",
             aggregation_time_anchor=input_tf.time_anchor,
         ).execute()
-        assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False, check_exact=False)
+        assert_frame_equal(result, expected_df, check_dtypes=False, check_column_order=False, check_exact=False)
 
     def test_count_null(self) -> None:
         """Test that a condition interrogating null values works as expected"""
@@ -1943,7 +1943,7 @@ class TestConditionalCount:
             "value",
             aggregation_time_anchor=padded_tf.time_anchor,
         ).execute()
-        assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False, check_exact=False)
+        assert_frame_equal(result, expected_df, check_dtypes=False, check_column_order=False, check_exact=False)
 
 
 class TestAngularMean:
@@ -1989,7 +1989,7 @@ class TestAngularMean:
             column,
             aggregation_time_anchor=input_tf.time_anchor,
         ).execute()
-        assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False)
+        assert_frame_equal(result, expected_df, check_dtypes=False, check_column_order=False)
 
 
 class TestTimeWindowValidation:
@@ -2132,7 +2132,7 @@ class TestTimeWindowAggregation:
             columns=col_list,
             time_window=time_window,
         )
-        assert_frame_equal(result.df, expected_df, check_dtype=False, check_column_order=False)
+        assert_frame_equal(result.df, expected_df, check_dtypes=False, check_column_order=False)
 
 
 class TestRollingAggregation:
@@ -2241,7 +2241,7 @@ class TestRollingAggregation:
         ).execute()
 
         assert_frame_equal(
-            result, expected_df, check_dtype=False, check_column_order=False, check_exact=False, atol=0.00001
+            result, expected_df, check_dtypes=False, check_column_order=False, check_exact=False, atol=0.00001
         )
 
     def test_rolling_angular_mean(self) -> None:
@@ -2321,7 +2321,7 @@ class TestRollingAggregation:
         ).execute()
 
         assert_frame_equal(
-            result, expected_df, check_dtype=False, check_column_order=False, check_exact=False, atol=0.00001
+            result, expected_df, check_dtypes=False, check_column_order=False, check_exact=False, atol=0.00001
         )
 
     def test_rolling_aggregation_over_day_threshold(self) -> None:
@@ -2375,7 +2375,7 @@ class TestRollingAggregation:
             alignment=RollingAlignment.LEADING,
         ).execute()
 
-        assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False)
+        assert_frame_equal(result, expected_df, check_dtypes=False, check_column_order=False)
 
     def test_trailing_alignment(self) -> None:
         """Check TRAILING alignment produces backward-looking windows with edge effects at the start."""
@@ -2410,7 +2410,7 @@ class TestRollingAggregation:
             alignment=RollingAlignment.TRAILING,
         ).execute()
 
-        assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False, check_exact=False)
+        assert_frame_equal(result, expected_df, check_dtypes=False, check_column_order=False, check_exact=False)
 
     def test_center_alignment(self) -> None:
         """Check CENTER alignment produces symmetric windows with edge effects at both ends."""
@@ -2445,7 +2445,7 @@ class TestRollingAggregation:
             alignment=RollingAlignment.CENTER,
         ).execute()
 
-        assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False, check_exact=False)
+        assert_frame_equal(result, expected_df, check_dtypes=False, check_column_order=False, check_exact=False)
 
     def test_rolling_aggregation_calendar_period(self) -> None:
         """Check rolling aggregation works correctly with calendar-based (monthly) window sizes."""
@@ -2482,7 +2482,7 @@ class TestRollingAggregation:
             alignment=RollingAlignment.TRAILING,
         ).execute()
 
-        assert_frame_equal(result, expected_df, check_dtype=False, check_column_order=False, check_exact=False)
+        assert_frame_equal(result, expected_df, check_dtypes=False, check_column_order=False, check_exact=False)
 
     def test_default_alignment_is_trailing(self) -> None:
         """Check that the default alignment is TRAILING."""
@@ -2594,7 +2594,7 @@ class TestRollingAggregateMethod:
             expected_counts=[3] * 12,
             actual_counts=[1, 2] + ([3] * 10),
         )
-        assert_frame_equal(result.df, expected_df, check_dtype=False, check_column_order=False, check_exact=False)
+        assert_frame_equal(result.df, expected_df, check_dtypes=False, check_column_order=False, check_exact=False)
 
     def test_rolling_aggregate_missing_criteria(self) -> None:
         """Check that missing_criteria correctly flags rows with insufficient window coverage."""
@@ -2634,7 +2634,7 @@ class TestRollingAggregateMethod:
             expected_counts=[3] * 12,
             actual_counts=([3] * 10) + [2, 1],
         )
-        assert_frame_equal(result.df, expected_df, check_dtype=False, check_column_order=False, check_exact=False)
+        assert_frame_equal(result.df, expected_df, check_dtypes=False, check_column_order=False, check_exact=False)
 
     def test_rolling_aggregate_mean_center(self) -> None:
         """Check CENTER mean values are correct end-to-end through rolling_aggregate."""
@@ -2651,7 +2651,7 @@ class TestRollingAggregateMethod:
             expected_counts=[3] * 12,
             actual_counts=[2] + ([3] * 10) + [2],
         )
-        assert_frame_equal(result.df, expected_df, check_dtype=False, check_column_order=False, check_exact=False)
+        assert_frame_equal(result.df, expected_df, check_dtypes=False, check_column_order=False, check_exact=False)
 
     def test_rolling_aggregate_multiple_columns(self) -> None:
         """Check rolling_aggregate produces correct output for multiple columns."""

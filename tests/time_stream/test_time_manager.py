@@ -575,10 +575,9 @@ class TestHandleMisalignedRows:
 
         try:
             actual_df = time_manager._handle_misaligned_rows(df)
+            assert_frame_equal(actual_df, df)
         except ResolutionError as err:
             pytest.fail(f"No ResolutionError was expected to be raised. Error:{str(err)}")
-
-        assert_frame_equal(actual_df, df)
 
     def test_valid_PT30M_resolution_with_yearly_gaps(self) -> None:
         """No modifications should be made data with gaps within valid PT30M data."""
@@ -602,10 +601,9 @@ class TestHandleMisalignedRows:
 
         try:
             actual_df = time_manager._handle_misaligned_rows(df)
+            assert_frame_equal(actual_df, df)
         except ResolutionError as err:
             pytest.fail(f"No ResolutionError was expected to be raised. Error:{str(err)}")
-
-        assert_frame_equal(actual_df, df)
 
     def test_valid_monthly_resolution_with_yearly_gaps(self) -> None:
         """No modifications should be made data with gaps within valid monthly resolution data."""
@@ -635,10 +633,9 @@ class TestHandleMisalignedRows:
 
         try:
             actual_df = time_manager._handle_misaligned_rows(df)
+            assert_frame_equal(actual_df, df)
         except ResolutionError as err:
             pytest.fail(f"No ResolutionError was expected to be raised. Error:{str(err)}")
-
-        assert_frame_equal(actual_df, df)
 
     @pytest.mark.parametrize("input_timestamps, period, error_dates", invalid_resolution_test_cases)
     def test_invalid_with_error(self, input_timestamps: list[datetime], period: Period, error_dates: list[str]) -> None:
