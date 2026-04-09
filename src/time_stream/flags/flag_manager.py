@@ -16,7 +16,7 @@ Typical use from within the ``TimeFrame`` class:
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Literal, Self
+from typing import Literal
 
 import polars as pl
 
@@ -33,7 +33,7 @@ from time_stream.flags.bitwise_flag_system import BitwiseFlag
 from time_stream.flags.categorical_flag_system import CategoricalFlag
 from time_stream.flags.flag_system import FlagSystemBase
 
-FlagSystemType = dict[str, int] | dict[str, str] | list[str] | None
+FlagSystemType = dict[str, int | str] | list[str] | None
 FlagSystemLiteral = Literal["bitwise", "categorical"]
 
 
@@ -605,7 +605,7 @@ class FlagManager:
         except KeyError:
             raise ColumnNotFoundError(f"No such flag column: '{name}'.")
 
-    def copy(self) -> Self:
+    def copy(self) -> "FlagManager":
         """Create a deep copy of this ``FlagManager``, duplicating all registered systems and columns.
 
         Returns:
@@ -628,7 +628,7 @@ class FlagManager:
 
         return out
 
-    def __copy__(self) -> Self:
+    def __copy__(self) -> "FlagManager":
         return self.copy()
 
     def __eq__(self, other: object) -> bool:

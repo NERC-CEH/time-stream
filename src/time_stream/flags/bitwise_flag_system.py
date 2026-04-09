@@ -139,7 +139,7 @@ class BitwiseFlag(FlagSystemBase, int, Flag, metaclass=BitwiseMeta):
         Raises:
             BitwiseFlagUnknownError: If the series contains values with bits not in this flag system.
         """
-        known_mask = sum(cls.to_dict().values())
+        known_mask = sum(int(v) for v in cls.to_dict().values())
         s = series.drop_nulls()
         invalid = s.filter((s & ~known_mask) != 0).unique().to_list()  # type: ignore[arg-type]
 

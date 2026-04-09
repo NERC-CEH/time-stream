@@ -30,9 +30,11 @@ Main responsibilities
    - Column selection: return reduced TimeFrame with metadata and flags synced consistently.
 """
 
+from __future__ import annotations
+
 from copy import deepcopy
 from datetime import datetime, time
-from typing import Any, Self, Sequence, Type
+from typing import Any, Sequence, Type
 
 import polars as pl
 
@@ -48,7 +50,6 @@ from time_stream.exceptions import (
     ColumnNotFoundError,
     ColumnTypeError,
     MetadataError,
-    TimeWindowError,
 )
 from time_stream.flags.categorical_flag_system import CategoricalFlag
 from time_stream.flags.flag_manager import (
@@ -196,7 +197,7 @@ class TimeFrame:
         self._column_metadata = ColumnMetadataDict(lambda: self.df.columns)
         self._flag_manager = FlagManager()
 
-    def copy(self, share_df: bool = True) -> Self:
+    def copy(self, share_df: bool = True) -> TimeFrame:
         """Return a shallow copy of this ``TimeFrame``, either sharing or cloning the underlying DataFrame.
 
         Args:
@@ -222,7 +223,7 @@ class TimeFrame:
 
         return out
 
-    def with_df(self, new_df: pl.DataFrame) -> Self:
+    def with_df(self, new_df: pl.DataFrame) -> TimeFrame:
         """Return a new TimeFrame with a new DataFrame, checking the integrity of the time values hasn't
         been compromised between the old and new TimeFrame.
 
@@ -236,7 +237,7 @@ class TimeFrame:
         tf._column_metadata.sync()
         return tf
 
-    def with_metadata(self, metadata: dict[str, Any]) -> Self:
+    def with_metadata(self, metadata: dict[str, Any]) -> TimeFrame:
         """Return a new TimeFrame with TimeFrame-level metadata.
 
         Args:
@@ -249,7 +250,7 @@ class TimeFrame:
         tf.metadata = metadata
         return tf
 
-    def with_column_metadata(self, metadata: dict[str, dict[str, Any]]) -> Self:
+    def with_column_metadata(self, metadata: dict[str, dict[str, Any]]) -> TimeFrame:
         """Return a new TimeFrame with column-level metadata.
 
         Args:
@@ -265,7 +266,7 @@ class TimeFrame:
 
     def with_flag_system(
         self, name: str, flag_system: FlagSystemType, flag_type: FlagSystemLiteral = "bitwise"
-    ) -> Self:
+    ) -> TimeFrame:
         """Return a new TimeFrame, with a flag system registered.
 
         Args:
@@ -281,7 +282,7 @@ class TimeFrame:
         tf.register_flag_system(name, flag_system, flag_type)
         return tf
 
-    def with_periodicity(self, periodicity: str | Period) -> Self:
+    def with_periodicity(self, periodicity: str | Period) -> TimeFrame:
         """Return a new TimeFrame, with a new periodicity registered.
 
         Args:
@@ -409,7 +410,7 @@ class TimeFrame:
         """Sort the TimeFrame DataFrame by the time column."""
         self._df = self.df.sort(self.time_name)
 
-    def pad(self, start: datetime | None = None, end: datetime | None = None) -> Self:
+    def pad(self, start: datetime | None = None, end: datetime | None = None) -> TimeFrame:
         """Pad the time series with missing datetime rows, filling in NULLs for missing values.
 
         Args:
@@ -540,7 +541,7 @@ class TimeFrame:
 
         # 3. Determine name of flag column
         if not column_name:
-            column_name = f"__flag__{flag_system_name}"
+            column_name: str = f"__flag__{flag_system_name}"
             if column_name in self.df.columns:
                 col_suffix = 1
                 while f"{column_name}__{col_suffix}" in self.df.columns:
@@ -611,7 +612,7 @@ class TimeFrame:
         flag_column = self.get_flag_column(column_name)
         self._df = flag_column.remove_flag(self.df, flag_value, expr)
 
-    def decode_flag_column(self, flag_column_name: str) -> Self:
+    def decode_flag_column(self, flag_column_name: str) -> TimeFrame:
         """Decode a flag column from raw values to human-readable flag names.
 
         For ``BitwiseFlagColumn``: replaces the integer column with a ``List(String)`` column
@@ -643,7 +644,7 @@ class TimeFrame:
         tf._flag_manager.flag_columns[flag_column_name].is_decoded = True
         return tf
 
-    def encode_flag_column(self, flag_column_name: str) -> Self:
+    def encode_flag_column(self, flag_column_name: str) -> TimeFrame:
         """Encode a decoded flag column back to raw values.
 
         For ``BitwiseFlagColumn``: replaces the ``List(String)`` column back to a bitwise integer
@@ -683,7 +684,7 @@ class TimeFrame:
         aggregation_time_anchor: TimeAnchor | None = None,
         time_window: tuple[time, time] | tuple[time, time, str | ClosedInterval] | TimeWindow | None = None,
         **kwargs,
-    ) -> Self:
+    ) -> TimeFrame:
         """Apply an aggregation function to a column in this TimeFrame, check the aggregation satisfies user
         requirements and return a new derived TimeFrame containing the aggregated data.
 
@@ -709,23 +710,16 @@ class TimeFrame:
             A TimeFrame containing the aggregated data.
         """
         # Normalise time_window tuple to a TimeWindow instance
-        if isinstance(time_window, tuple):
-            if len(time_window) == 2:
-                start, end = time_window
-                closed = ClosedInterval.BOTH
-            elif len(time_window) == 3:
-                start, end, closed = time_window
-                closed = ClosedInterval(closed)
-            else:
-                raise TimeWindowError(f"Unexpected number of arguments passed as a time_window tuple: {time_window}")
-            time_window = TimeWindow(start=start, end=end, closed=closed)
+        normalised_time_window = TimeWindow.from_tuple(time_window) if isinstance(time_window, tuple) else time_window
 
         agg_func = AggregationFunction.get(aggregation_function, **kwargs)
-        aggregation_period = configure_period_object(aggregation_period)
-        aggregation_time_anchor = TimeAnchor(aggregation_time_anchor) if aggregation_time_anchor else self.time_anchor
+        aggregation_period: Period = configure_period_object(aggregation_period)
+        aggregation_time_anchor: TimeAnchor = (
+            TimeAnchor(aggregation_time_anchor) if aggregation_time_anchor else self.time_anchor
+        )
 
         if not columns:
-            columns = self.data_columns
+            columns: list[str] = self.data_columns
 
         ctx = AggregationCtx(
             df=self.df,
@@ -741,7 +735,7 @@ class TimeFrame:
             columns,
             missing_criteria=missing_criteria,
             aggregation_time_anchor=aggregation_time_anchor,
-            time_window=time_window,
+            time_window=normalised_time_window,
         ).execute()
 
         # The resulting resolution and offset needs to be extracted from the aggregation period
@@ -767,7 +761,7 @@ class TimeFrame:
         missing_criteria: tuple[str, float | int] | None = None,
         alignment: RollingAlignment | str = RollingAlignment.TRAILING,
         **kwargs,
-    ) -> Self:
+    ) -> TimeFrame:
         """Apply a rolling aggregation function to this TimeFrame and return a new TimeFrame with the same
         temporal structure.
 
@@ -799,11 +793,11 @@ class TimeFrame:
             containing the rolling aggregation results.
         """
         agg_func = AggregationFunction.get(aggregation_function, **kwargs)
-        window_size = configure_period_object(window_size)
-        alignment = RollingAlignment(alignment) if isinstance(alignment, str) else alignment
+        window_size: Period = configure_period_object(window_size)
+        alignment: RollingAlignment = RollingAlignment(alignment) if isinstance(alignment, str) else alignment
 
         if not columns:
-            columns = self.data_columns
+            columns: list[str] = self.data_columns
 
         ctx = AggregationCtx(
             df=self.df,
@@ -898,7 +892,7 @@ class TimeFrame:
         observation_interval: tuple[datetime, datetime | None] | None = None,
         max_gap_size: int | None = None,
         **kwargs,
-    ) -> Self:
+    ) -> TimeFrame:
         """Apply an infilling method to a column in the TimeFrame to fill in missing data.
 
         Args:
@@ -924,8 +918,8 @@ class TimeFrame:
 
     def select(
         self,
-        column_names: str | Sequence[str],
-    ) -> Self:
+        column_names: str | list[str],
+    ) -> TimeFrame:
         """Return a new TimeFrame instance to include only the specified columns.
 
         This:
@@ -945,7 +939,7 @@ class TimeFrame:
             raise ColumnNotFoundError("No columns specified.")
 
         if isinstance(column_names, str):
-            column_names = [column_names]
+            column_names: list[str] = [column_names]
         check_columns_in_dataframe(self.df, column_names)
 
         # Include primary time column (if not already included)
@@ -979,7 +973,7 @@ class TimeFrame:
         tf._column_metadata.sync()
         return tf
 
-    def calculate_min_max_envelope(self, columns: list[str] = None) -> Self:
+    def calculate_min_max_envelope(self, columns: list[str] = None) -> TimeFrame:
         """Calculate the min-max envelope for the TimeFrame.
 
         For each unique date-time find the historical min and max values across the time series. For example,
@@ -993,7 +987,7 @@ class TimeFrame:
             columns: The columns to calculate the min-max envelope on. If None, then all data columns will be used.
 
         Returns:
-            Self: A new copy of the TimeFrame instance with an updated df attribute.
+            TimeFrame: A new copy of the TimeFrame instance with an updated df attribute.
 
         """
         df_with_min_max = calculate_min_max_envelope(tf=self, columns=columns)
@@ -1001,7 +995,7 @@ class TimeFrame:
 
         return tf
 
-    def __getitem__(self, key: str | Sequence[str]) -> Self:
+    def __getitem__(self, key: str | list[str]) -> TimeFrame:
         """Access columns using indexing syntax.
 
         Args:
@@ -1014,7 +1008,7 @@ class TimeFrame:
             This is equivalent to ``tf.select([...])``.
         """
         if isinstance(key, str):
-            key = [key]
+            key: list[str] = [key]
         return self.select(key)
 
     def __str__(self) -> str:
@@ -1025,10 +1019,10 @@ class TimeFrame:
         """Returns the representation of the TimeFrame"""
         return timeframe_repr(self)
 
-    def __copy__(self) -> Self:
+    def __copy__(self) -> TimeFrame:
         return self.copy(share_df=True)
 
-    def __deepcopy__(self, memo: dict) -> Self:
+    def __deepcopy__(self, memo: dict) -> TimeFrame:
         return self.copy(share_df=False)
 
     def __eq__(self, other: object) -> bool:

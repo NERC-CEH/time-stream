@@ -12,7 +12,13 @@ import polars as pl
 
 from time_stream import Period
 from time_stream.enums import ClosedInterval, DuplicateOption, TimeAnchor
-from time_stream.exceptions import ColumnNotFoundError, DuplicateValueError, TimeWindowError, UnhandledEnumError
+from time_stream.exceptions import (
+    ColumnNotFoundError,
+    DuplicateValueError,
+    PeriodValidationError,
+    TimeWindowError,
+    UnhandledEnumError,
+)
 
 
 @dataclass(frozen=True)
@@ -40,6 +46,32 @@ class TimeWindow:
             raise TimeWindowError("'start' and 'end' must be datetime.time objects.")
         if self.start >= self.end:
             raise TimeWindowError(f"'start' ({self.start}) must be strictly before 'end' ({self.end}).")
+
+    @classmethod
+    def from_tuple(cls, t: tuple[time, time] | tuple[time, time, str | ClosedInterval]) -> "TimeWindow":
+        """Construct a ``TimeWindow`` from a 2- or 3-element tuple.
+
+        Args:
+            t: ``(start, end, closed[optional])`` tuple, where:
+
+                - ``start``: :class:`datetime.time` object for start of the window
+                - ``end``: :class:`datetime.time` object for end of the window
+                - ``closed``: Define which sides of the interval are closed (inclusive)
+                   {'both', 'left', 'right', 'none'} (default = "both")
+
+        Returns:
+            A ``TimeWindow`` instance.
+
+        Raises:
+            TimeWindowError: If the tuple does not have 2 or 3 elements.
+        """
+        if len(t) == 2:
+            start, end = t
+            return cls(start=start, end=end)
+        if len(t) == 3:
+            start, end, closed = t
+            return cls(start=start, end=end, closed=ClosedInterval(closed))
+        raise TimeWindowError(f"Unexpected number of arguments passed as a time_window tuple: {t}")
 
     @property
     def duration(self) -> timedelta:
@@ -284,18 +316,19 @@ def configure_period_object(period: str | Period | None) -> Period:
     Returns:
          A Period object.
     """
-    if isinstance(period, Period):
-        return period
-
     if period is None:
         # Default to a period that accepts all datetimes
         return Period.of_microseconds(1)
 
-    # If it's a string, let's assume it's provided as a valid ISO duration string. And create a Period object
-    if isinstance(period, str):
-        period = Period.of_duration(period)
-
-    return period
+    if isinstance(period, Period):
+        return period
+    elif isinstance(period, str):
+        # If it's a string, let's assume it's provided as a valid ISO duration string. And create a Period object
+        return Period.of_duration(period)
+    else:
+        raise PeriodValidationError(
+            f"Incorrect type for defining a Period object. Expected str | Period. Got {type(period)}"
+        )
 
 
 def epoch_check(period: Period) -> None:

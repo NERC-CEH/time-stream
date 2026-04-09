@@ -74,7 +74,7 @@ def get_date_columns(tf: TimeFrame) -> list[str] | None:
     Using the resolution of the time frame, the various components of the date are split out into separate column names
     This allows grouping by the date components in order to calculate various properties of the data across each
     instance of that date-component-combination. For example, extracting every temperature value occurring on 1st Jan
-    over a 10 year time series and calculating the maximum temperature value.
+    over a 10-year time series and calculating the maximum temperature value.
 
     Note that the date columns returned are expected to also match the corresponding datetime function name used to
     extract the relevant data. For example (datetime.minute()).
@@ -89,3 +89,4 @@ def get_date_columns(tf: TimeFrame) -> list[str] | None:
     for iso_regex, date_columns in RESOLUTION_MAPPING.items():
         if re.fullmatch(iso_regex, iso_duration):
             return date_columns
+    return None
