@@ -587,8 +587,8 @@ class FlagManager:
           Bitwise values must be powers of two.
         - ``dict[str, str]`` - categorical by default (``flag_type`` inferred as ``"categorical"`` unless
           ``"categorical_list"`` is explicitly passed).
-        - ``list[str]`` - flag names are sorted; bitwise assigns powers of two, categorical assigns
-          sequential integers starting from 0. An empty list produces the default ``FLAGGED`` flag.
+        - ``list[str]`` - flag names are sorted; bitwise assigns powers of two, categorical uses
+          each string as both the flag name and its value. An empty list produces the default ``FLAGGED`` flag.
 
         Args:
             flag_system_name: The name of the new flag system.
@@ -615,11 +615,11 @@ class FlagManager:
 
             if flag_type == "categorical_list":
                 sorted_categories = sorted(flag_system)
-                flag_dict = {name: i for i, name in enumerate(sorted_categories)}
+                flag_dict = {name: name for name in sorted_categories}
                 self._flag_systems[flag_system_name] = CategoricalListFlag(flag_system_name, flag_dict)
             elif flag_type == "categorical":
                 sorted_categories = sorted(flag_system)
-                flag_dict = {name: i for i, name in enumerate(sorted_categories)}
+                flag_dict = {name: name for name in sorted_categories}
                 self._flag_systems[flag_system_name] = CategoricalSingleFlag(flag_system_name, flag_dict)
             else:
                 sorted_categories = sorted(flag_system)

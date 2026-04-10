@@ -88,12 +88,12 @@ class TestRegisterFlagSystem:
         with pytest.raises(FlagSystemTypeError):
             flag_manager.register_flag_system("new_flags", ["FLAG_A", "FLAG_B", "FLAG_A"])
 
-    def test_list_categorical_produces_sequential_integers(self) -> None:
-        """Test that a list with flag_type='categorical' assigns sequential integers in sorted order."""
+    def test_list_categorical_uses_strings_as_values(self) -> None:
+        """Test that a list with flag_type='categorical' uses each string as both name and value."""
         flag_manager = FlagManager()
         flag_manager.register_flag_system("new_flags", ["FLAG_A", "FLAG_B", "FLAG_C"], flag_type="categorical")
         flag_system = flag_manager.get_flag_system("new_flags")
-        assert flag_system.to_dict() == {"FLAG_A": 0, "FLAG_B": 1, "FLAG_C": 2}
+        assert flag_system.to_dict() == {"FLAG_A": "FLAG_A", "FLAG_B": "FLAG_B", "FLAG_C": "FLAG_C"}
 
     def test_dict_int_categorical_flag_system(self) -> None:
         """Test that a dict[str, int] with flag_type='categorical' creates a categorical system."""
