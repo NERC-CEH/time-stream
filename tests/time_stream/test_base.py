@@ -8,7 +8,13 @@ from polars.testing import assert_frame_equal, assert_frame_not_equal, assert_se
 
 from time_stream.aggregation import Percentile
 from time_stream.base import TimeFrame
-from time_stream.exceptions import ColumnNotFoundError, FlagSystemNotFoundError, MetadataError
+from time_stream.exceptions import (
+    BitwiseFlagUnknownError,
+    CategoricalFlagUnknownError,
+    ColumnNotFoundError,
+    FlagSystemNotFoundError,
+    MetadataError,
+)
 from time_stream.flags.flag_manager import BitwiseFlagColumn
 from time_stream.flags.flag_system import FlagSystemBase
 from time_stream.period import Period
@@ -829,3 +835,194 @@ class TestCalculateMinMaxEnvelope:
         actual_tf = tf.calculate_min_max_envelope()
 
         assert_frame_equal(expected_df, actual_tf.df, check_column_order=False)
+
+
+class TestFilterByFlag:
+    @staticmethod
+    def setup_bitwise_tf() -> TimeFrame:
+        tf = TimeFrame(
+            pl.DataFrame(
+                {
+                    "time": [
+                        datetime(2025, 1, 1),
+                        datetime(2025, 1, 2),
+                        datetime(2025, 1, 3),
+                        datetime(2025, 1, 4),
+                        datetime(2025, 1, 5),
+                    ],
+                    "value": [10, 20, 30, 40, 50],
+                }
+            ),
+            "time",
+        ).with_flag_system("qc", {"FLAG_A": 1, "FLAG_B": 2, "FLAG_C": 4})
+        tf.init_flag_column("qc", "flag_col")
+        tf.add_flag("flag_col", "FLAG_A", pl.col("value").is_in([20, 40]))
+        tf.add_flag("flag_col", "FLAG_B", pl.col("value").is_in([30, 40]))
+        tf.add_flag("flag_col", "FLAG_C", pl.col("value") == 50)
+        return tf
+
+    @staticmethod
+    def setup_categorical_scalar_tf() -> TimeFrame:
+        tf = TimeFrame(
+            pl.DataFrame(
+                {
+                    "time": [
+                        datetime(2025, 1, 1),
+                        datetime(2025, 1, 2),
+                        datetime(2025, 1, 3),
+                        datetime(2025, 1, 4),
+                        datetime(2025, 1, 5),
+                    ],
+                    "value": [10, 20, 30, 40, 50],
+                }
+            ),
+            "time",
+        ).with_flag_system("qc", {"FLAG_A": 0, "FLAG_B": 1, "FLAG_C": 2}, flag_type="categorical")
+        tf.init_flag_column("qc", "cat_flag")
+        tf.add_flag("cat_flag", "FLAG_A", pl.col("value").is_in([20, 50]))
+        tf.add_flag("cat_flag", "FLAG_B", pl.col("value") == 30)
+        tf.add_flag("cat_flag", "FLAG_C", pl.col("value") == 40)
+        return tf
+
+    @staticmethod
+    def setup_categorical_list_tf() -> TimeFrame:
+        tf = TimeFrame(
+            pl.DataFrame(
+                {
+                    "time": [
+                        datetime(2025, 1, 1),
+                        datetime(2025, 1, 2),
+                        datetime(2025, 1, 3),
+                        datetime(2025, 1, 4),
+                        datetime(2025, 1, 5),
+                    ],
+                    "value": [10, 20, 30, 40, 50],
+                }
+            ),
+            "time",
+        ).with_flag_system("qc", {"FLAG_A": 0, "FLAG_B": 1, "FLAG_C": 2}, flag_type="categorical")
+        tf.init_flag_column("qc", "list_flag", list_mode=True)
+        tf.add_flag("list_flag", "FLAG_A", pl.col("value").is_in([20, 40]))
+        tf.add_flag("list_flag", "FLAG_B", pl.col("value").is_in([30, 40]))
+        tf.add_flag("list_flag", "FLAG_C", pl.col("value") == 50)
+        return tf
+
+    def test_bitwise_include_single_flag_by_name(self) -> None:
+        """Rows where FLAG_A is set should be returned."""
+        tf = self.setup_bitwise_tf()
+        result = tf.filter_by_flag("flag_col", "FLAG_A")
+        assert result.df["value"].to_list() == [20, 40]
+
+    def test_bitwise_include_single_flag_by_int(self) -> None:
+        """Filtering by int value should work identically to filtering by name."""
+        tf = self.setup_bitwise_tf()
+        result = tf.filter_by_flag("flag_col", 1)
+        assert result.df["value"].to_list() == [20, 40]
+
+    def test_bitwise_exclude_single_flag(self) -> None:
+        """Rows where FLAG_A is set should be excluded."""
+        tf = self.setup_bitwise_tf()
+        result = tf.filter_by_flag("flag_col", "FLAG_A", include=False)
+        assert result.df["value"].to_list() == [10, 30, 50]
+
+    def test_bitwise_include_multiple_flags(self) -> None:
+        """A list of flags uses any-of logic - rows where FLAG_A or FLAG_C is set."""
+        tf = self.setup_bitwise_tf()
+        result = tf.filter_by_flag("flag_col", ["FLAG_A", "FLAG_C"])
+        assert result.df["value"].to_list() == [20, 40, 50]
+
+    def test_bitwise_combined_value_matched_by_constituent_flag(self) -> None:
+        """A row with FLAG_A|FLAG_B combined is matched by filtering on FLAG_B alone."""
+        tf = self.setup_bitwise_tf()
+        result = tf.filter_by_flag("flag_col", "FLAG_B")
+        assert result.df["value"].to_list() == [30, 40]
+
+    def test_bitwise_unknown_flag_raises_error(self) -> None:
+        """An unrecognised flag name should raise error."""
+        tf = self.setup_bitwise_tf()
+        with pytest.raises(BitwiseFlagUnknownError):
+            tf.filter_by_flag("flag_col", "FLAG_Z")
+
+    def test_bitwise_decoded_include(self) -> None:
+        """filter_by_flag works on a decoded bitwise flag column."""
+        tf = self.setup_bitwise_tf().decode_flag_column("flag_col")
+        result = tf.filter_by_flag("flag_col", "FLAG_A")
+        assert result.df["value"].to_list() == [20, 40]
+
+    def test_bitwise_decoded_exclude(self) -> None:
+        """Exclusion works correctly on a decoded bitwise flag column."""
+        tf = self.setup_bitwise_tf().decode_flag_column("flag_col")
+        result = tf.filter_by_flag("flag_col", "FLAG_A", include=False)
+        assert result.df["value"].to_list() == [10, 30, 50]
+
+    def test_bitwise_decoded_multiple_flags(self) -> None:
+        """Multiple flags use any-of logic on a decoded bitwise flag column."""
+        tf = self.setup_bitwise_tf().decode_flag_column("flag_col")
+        result = tf.filter_by_flag("flag_col", ["FLAG_A", "FLAG_C"])
+        assert result.df["value"].to_list() == [20, 40, 50]
+
+    def test_categorical_scalar_include_by_name(self) -> None:
+        """Rows where the flag is FLAG_A should be returned."""
+        tf = self.setup_categorical_scalar_tf()
+        result = tf.filter_by_flag("cat_flag", "FLAG_A")
+        assert result.df["value"].to_list() == [20, 50]
+
+    def test_categorical_scalar_include_by_value(self) -> None:
+        """Filtering by int value should work identically to filtering by name."""
+        tf = self.setup_categorical_scalar_tf()
+        result = tf.filter_by_flag("cat_flag", 1)
+        assert result.df["value"].to_list() == [30]
+
+    def test_categorical_scalar_exclude(self) -> None:
+        """Rows where the flag is FLAG_C should be excluded."""
+        tf = self.setup_categorical_scalar_tf()
+        result = tf.filter_by_flag("cat_flag", "FLAG_C", include=False)
+        assert result.df["value"].to_list() == [10, 20, 30, 50]
+
+    def test_categorical_scalar_multiple_flags(self) -> None:
+        """Rows where the flag is FLAG_A or FLAG_B should be returned."""
+        tf = self.setup_categorical_scalar_tf()
+        result = tf.filter_by_flag("cat_flag", ["FLAG_A", "FLAG_B"])
+        assert result.df["value"].to_list() == [20, 30, 50]
+
+    def test_categorical_scalar_decoded_include(self) -> None:
+        """filter_by_flag works on a decoded categorical scalar column."""
+        tf = self.setup_categorical_scalar_tf().decode_flag_column("cat_flag")
+        result = tf.filter_by_flag("cat_flag", "FLAG_A")
+        assert result.df["value"].to_list() == [20, 50]
+
+    def test_categorical_scalar_unknown_flag_raises_error(self) -> None:
+        """An unrecognised flag name should raise error."""
+        tf = self.setup_categorical_scalar_tf()
+        with pytest.raises(CategoricalFlagUnknownError):
+            tf.filter_by_flag("cat_flag", "FLAG_Z")
+
+    def test_categorical_list_include_by_name(self) -> None:
+        """Rows where FLAG_A is in the list should be returned."""
+        tf = self.setup_categorical_list_tf()
+        result = tf.filter_by_flag("list_flag", "FLAG_A")
+        assert result.df["value"].to_list() == [20, 40]
+
+    def test_categorical_list_exclude(self) -> None:
+        """Rows where FLAG_C is in the list should be excluded."""
+        tf = self.setup_categorical_list_tf()
+        result = tf.filter_by_flag("list_flag", "FLAG_C", include=False)
+        assert result.df["value"].to_list() == [10, 20, 30, 40]
+
+    def test_categorical_list_multiple_flags(self) -> None:
+        """Rows where FLAG_A or FLAG_C is in the list should be returned."""
+        tf = self.setup_categorical_list_tf()
+        result = tf.filter_by_flag("list_flag", ["FLAG_A", "FLAG_C"])
+        assert result.df["value"].to_list() == [20, 40, 50]
+
+    def test_categorical_list_decoded_include(self) -> None:
+        """filter_by_flag works on a decoded categorical list column."""
+        tf = self.setup_categorical_list_tf().decode_flag_column("list_flag")
+        result = tf.filter_by_flag("list_flag", "FLAG_A")
+        assert result.df["value"].to_list() == [20, 40]
+
+    def test_invalid_column_name_raises_error(self) -> None:
+        """Passing an unregistered column name should raise error."""
+        tf = self.setup_bitwise_tf()
+        with pytest.raises(ColumnNotFoundError):
+            tf.filter_by_flag("nonexistent_col", "FLAG_A")

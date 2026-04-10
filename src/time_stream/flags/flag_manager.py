@@ -108,6 +108,20 @@ class FlagColumn(ABC):
         """
         raise NotImplementedError
 
+    @abstractmethod
+    def filter_expr(self, flags: list[int | str]) -> pl.Expr:
+        """Return a boolean Polars expression that is True for rows where any of the given flags are set.
+
+        Handles both encoded and decoded column states internally.
+
+        Args:
+            flags: One or more flag names or values to match against.
+
+        Returns:
+            A boolean Polars expression.
+        """
+        raise NotImplementedError
+
 
 @dataclass
 class BitwiseFlagColumn(FlagColumn):
@@ -222,6 +236,33 @@ class BitwiseFlagColumn(FlagColumn):
         if self.is_decoded:
             df = self.decode(df)
         return df
+
+    def filter_expr(self, flags: list[int | str]) -> pl.Expr:
+        """Return a boolean expression that is True for rows where any of the given flags are set.
+
+        For an encoded column, does a bitwise OR to check for existence.
+        For a decoded column, checks whether the list contains any of the flag names.
+
+        Args:
+            flags: One or more flag names or bit values to match against.
+
+        Returns:
+            A boolean Polars expression.
+
+        Raises:
+            BitwiseFlagUnknownError: If any flag is not in the flag system.
+        """
+        # Fetch the actual flag enum members based on the flag values provided
+        flag_members = [self.flag_system.get_flag(f) for f in flags]
+
+        if self.is_decoded:
+            exprs = [pl.col(self.name).list.contains(pl.lit(f.name)) for f in flag_members]
+            return pl.any_horizontal(exprs)
+
+        combined = 0
+        for f in flag_members:
+            combined |= int(f)
+        return (pl.col(self.name) & pl.lit(combined)) != 0
 
     def __eq__(self, other: object) -> bool:
         """Check if two ``BitwiseFlagColumn`` instances are equal.
@@ -430,6 +471,31 @@ class CategoricalFlagColumn(FlagColumn):
         if self.is_decoded:
             df = self.decode(df)
         return df
+
+    def filter_expr(self, flags: list[int | str]) -> pl.Expr:
+        """Return a boolean expression that is True for rows where any of the given flags are set.
+
+        For scalar mode, checks whether the column value is any of the given flag values.
+        For list mode, checks whether the list contains any of the given flag values.
+
+        Args:
+            flags: One or more flag names or values to match against.
+
+        Returns:
+            A boolean Polars expression.
+
+        Raises:
+            CategoricalFlagUnknownError: If any flag is not in the flag system.
+        """
+        # Fetch the actual flag enum members based on the flag values provided
+        flag_members = [self.flag_system.get_flag(f) for f in flags]
+        values = [f.name if self.is_decoded else f.value for f in flag_members]
+
+        if self.list_mode:
+            exprs = [pl.col(self.name).list.contains(pl.lit(v)) for v in values]
+            return pl.any_horizontal(exprs)
+
+        return pl.col(self.name).is_in(values)
 
     def __eq__(self, other: object) -> bool:
         """Check if two ``CategoricalFlagColumn`` instances are equal.
