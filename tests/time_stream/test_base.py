@@ -1026,3 +1026,145 @@ class TestFilterByFlag:
         tf = self.setup_bitwise_tf()
         with pytest.raises(ColumnNotFoundError):
             tf.filter_by_flag("nonexistent_col", "FLAG_A")
+
+
+class TestQCCheckWithFlagParams:
+    """Tests for TimeFrame.qc_check() with the flag_params parameter."""
+
+    @staticmethod
+    def setup_tf() -> TimeFrame:
+        """Set up a TimeFrame with a bitwise flag column."""
+        df = pl.DataFrame(
+            {
+                "time": [datetime(2024, 1, i) for i in range(1, 6)],
+                "value": [5.0, 15.0, 3.0, 20.0, 8.0],
+            }
+        )
+        tf = TimeFrame(df=df, time_name="time")
+        tf.register_flag_system("flags", {"FLAG_A": 1, "FLAG_B": 2})
+        tf.init_flag_column("flags", "flag_col")
+        return tf
+
+    def test_no_flag_params_returns_series(self) -> None:
+        """Without flag_params, qc_check returns the expected boolean Series."""
+        tf = self.setup_tf()
+        result = tf.qc_check("range", "value", min_value=0.0, max_value=10.0, within=False)
+        expected = pl.Series([False, True, False, True, False])
+        assert_series_equal(result, expected, check_names=False)
+
+    def test_with_bitwise_flag(self) -> None:
+        """With flag_params, flag is set on rows where the QC check fails."""
+        tf = self.setup_tf()
+        result = tf.qc_check(
+            "range", "value", flag_params=("flag_col", "FLAG_A"), min_value=0.0, max_value=10.0, within=False
+        )
+        expected = pl.Series("flag_col", [0, 1, 0, 1, 0], dtype=pl.Int64)
+        assert_series_equal(result.df["flag_col"], expected)
+
+    def test_original_tf_not_modified(self) -> None:
+        """qc_check with flag_params does not modify the original TimeFrame."""
+        tf = self.setup_tf()
+        tf.qc_check("range", "value", flag_params=("flag_col", "FLAG_A"), min_value=0.0, max_value=10.0, within=False)
+        expected = pl.Series("flag_col", [0, 0, 0, 0, 0], dtype=pl.Int64)
+        assert_series_equal(tf.df["flag_col"], expected)
+
+    def test_unregistered_flag_column_raises(self) -> None:
+        """An unregistered flag column name raises ColumnNotFoundError."""
+        tf = self.setup_tf()
+        with pytest.raises(ColumnNotFoundError):
+            tf.qc_check(
+                "range", "value", flag_params=("nonexistent_col", "FLAG_A"), min_value=0.0, max_value=10.0, within=False
+            )
+
+    def test_with_categorical_flag(self) -> None:
+        """Flag is set correctly when using a categorical flag column."""
+        df = pl.DataFrame(
+            {
+                "time": [datetime(2024, 1, i) for i in range(1, 4)],
+                "value": [5.0, 15.0, 3.0],
+            }
+        )
+        tf = TimeFrame(df=df, time_name="time")
+        tf.register_flag_system("flags", {"FLAG_A": 0, "FLAG_B": 1}, flag_type="categorical")
+        tf.init_flag_column("flags", "flag_col")
+        result = tf.qc_check(
+            "range", "value", flag_params=("flag_col", "FLAG_B"), min_value=0.0, max_value=10.0, within=False
+        )
+        expected = pl.Series("flag_col", [None, 1, None], dtype=pl.Int32)
+        assert_series_equal(result.df["flag_col"], expected)
+
+
+class TestInfillWithFlagParams:
+    """Tests for TimeFrame.infill() with the flag_params parameter."""
+
+    @staticmethod
+    def setup_tf() -> TimeFrame:
+        """Set up a TimeFrame with nulls and a bitwise flag column."""
+        df = pl.DataFrame(
+            {
+                "time": [datetime(2024, 1, i) for i in range(1, 6)],
+                "value": [1.0, None, 3.0, None, 5.0],
+            }
+        )
+        tf = TimeFrame(df=df, time_name="time", resolution=Period.of_days(1), periodicity=Period.of_days(1))
+        tf.register_flag_system("flags", {"FLAG_A": 1, "FLAG_B": 2})
+        tf.init_flag_column("flags", "flag_col")
+        return tf
+
+    def test_without_flag_params_no_flags_set(self) -> None:
+        """Without flag_params, infill returns a TimeFrame with no flags set."""
+        tf = self.setup_tf()
+        result = tf.infill("linear", "value")
+        expected = pl.Series("flag_col", [0, 0, 0, 0, 0], dtype=pl.Int64)
+        assert_series_equal(result.df["flag_col"], expected)
+
+    def test_bitwise_flag_set_on_infilled_rows(self) -> None:
+        """Flag is set only on rows that were null before infilling."""
+        tf = self.setup_tf()
+        result = tf.infill("linear", "value", flag_params=("flag_col", "FLAG_A"))
+        expected = pl.Series("flag_col", [0, 1, 0, 1, 0], dtype=pl.Int64)
+        assert_series_equal(result.df["flag_col"], expected)
+
+    def test_with_max_gap_size_flags_only_filled_gaps(self) -> None:
+        """With max_gap_size, flags are set only on gaps that were actually filled."""
+        df = pl.DataFrame(
+            {
+                "time": [datetime(2024, 1, i) for i in range(1, 8)],
+                "value": [1.0, None, 3.0, None, None, None, 7.0],
+            }
+        )
+        tf = TimeFrame(df=df, time_name="time", resolution=Period.of_days(1), periodicity=Period.of_days(1))
+        tf.register_flag_system("flags", {"FLAG_A": 1, "FLAG_B": 2})
+        tf.init_flag_column("flags", "flag_col")
+        # max_gap_size=1: only the single-row gap (index 1) gets filled and flagged
+        result = tf.infill("linear", "value", max_gap_size=1, flag_params=("flag_col", "FLAG_A"))
+        expected = pl.Series("flag_col", [0, 1, 0, 0, 0, 0, 0], dtype=pl.Int64)
+        assert_series_equal(result.df["flag_col"], expected)
+
+    def test_nothing_to_infill_flags_unchanged(self) -> None:
+        """When there are no nulls, flags remain all zero."""
+        df = pl.DataFrame(
+            {
+                "time": [datetime(2024, 1, i) for i in range(1, 4)],
+                "value": [1.0, 2.0, 3.0],
+            }
+        )
+        tf = TimeFrame(df=df, time_name="time", resolution=Period.of_days(1), periodicity=Period.of_days(1))
+        tf.register_flag_system("flags", {"FLAG_A": 1, "FLAG_B": 2})
+        tf.init_flag_column("flags", "flag_col")
+        result = tf.infill("linear", "value", flag_params=("flag_col", "FLAG_A"))
+        expected = pl.Series("flag_col", [0, 0, 0], dtype=pl.Int64)
+        assert_series_equal(result.df["flag_col"], expected)
+
+    def test_unregistered_flag_column_raises(self) -> None:
+        """An unregistered flag column name raises ColumnNotFoundError."""
+        tf = self.setup_tf()
+        with pytest.raises(ColumnNotFoundError):
+            tf.infill("linear", "value", flag_params=("nonexistent_col", "FLAG_A"))
+
+    def test_original_tf_not_modified(self) -> None:
+        """infill with flag_params does not modify the original TimeFrame."""
+        tf = self.setup_tf()
+        tf.infill("linear", "value", flag_params=("flag_col", "FLAG_A"))
+        expected = pl.Series("flag_col", [0, 0, 0, 0, 0], dtype=pl.Int64)
+        assert_series_equal(tf.df["flag_col"], expected)
