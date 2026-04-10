@@ -12,10 +12,13 @@ Flag system types are enum-based and created from a name and a ``dict[str, int |
 
 from collections.abc import Mapping
 from enum import EnumType
-from typing import TYPE_CHECKING, Any, ClassVar, Self
+from typing import TYPE_CHECKING, Any, ClassVar, Literal, Self
 
 if TYPE_CHECKING:
     import polars as pl
+
+
+FlagSystemLiteral = Literal["bitwise", "categorical", "categorical_list"]
 
 
 class FlagMeta(EnumType):
@@ -28,6 +31,8 @@ class FlagMeta(EnumType):
     This matters for dynamic creation - e.g. ``BitwiseFlag("QC", {"MISSING": 1})`` always produces
     a new class object, so two calls with identical members would otherwise compare unequal.
     """
+
+    flag_type: FlagSystemLiteral
 
     def __repr__(cls) -> str:
         """Return a string representation listing all enum members and their values."""
@@ -61,6 +66,8 @@ class FlagSystemBase:
     """
 
     __members__: ClassVar[Mapping[str, Any]]
+
+    flag_type: FlagSystemLiteral
 
     @classmethod
     def system_name(cls) -> str:
@@ -106,14 +113,13 @@ class FlagSystemBase:
         raise NotImplementedError
 
     @classmethod
-    def validate_column(cls, series: "pl.Series", list_mode: bool | None = None) -> None:
+    def validate_column(cls, series: "pl.Series") -> None:
         """Validate that all non-null values in ``series`` are valid for this flag system.
 
         Subclasses must override this method.
 
         Args:
             series: The Polars Series to validate.
-            list_mode: Whether the series contains lists of values (categorical systems only).
 
         Raises:
             NotImplementedError: If the subclass does not implement this method.

@@ -16,7 +16,12 @@ from time_stream.exceptions import (
     FlagSystemTypeError,
 )
 from time_stream.flags.bitwise_flag_system import BitwiseFlag
-from time_stream.flags.flag_manager import BitwiseFlagColumn, CategoricalFlagColumn, FlagManager
+from time_stream.flags.flag_manager import (
+    BitwiseFlagColumn,
+    CategoricalListFlagColumn,
+    CategoricalSingleFlagColumn,
+    FlagManager,
+)
 
 
 class TestRegisterFlagSystem:
@@ -135,23 +140,21 @@ class TestRegisterFlagColumn:
             # Register twice - should raise error
             flag_manager.register_flag_column("flag_column", "quality_control")
 
-    def test_categorical_flag_column_scalar(self) -> None:
-        """Test registering a categorical flag column in scalar mode."""
+    def test_categorical_single_flag_column(self) -> None:
+        """Test that a categorical flag system produces a CategoricalSingleFlagColumn."""
         fm = FlagManager()
         fm.register_flag_system("qc", {"FLAG_A": 0, "FLAG_B": 1}, flag_type="categorical")
-        fm.register_flag_column("flag_col", "qc", list_mode=False)
+        fm.register_flag_column("flag_col", "qc")
         col = fm.get_flag_column("flag_col")
-        assert isinstance(col, CategoricalFlagColumn)
-        assert col.list_mode is False
+        assert isinstance(col, CategoricalSingleFlagColumn)
 
-    def test_categorical_flag_column_list(self) -> None:
-        """Test registering a categorical flag column in list mode."""
+    def test_categorical_list_flag_column(self) -> None:
+        """Test that a categorical_list flag system produces a CategoricalListFlagColumn."""
         fm = FlagManager()
-        fm.register_flag_system("qc", {"FLAG_A": 0, "FLAG_B": 1}, flag_type="categorical")
-        fm.register_flag_column("flag_col", "qc", list_mode=True)
+        fm.register_flag_system("qc", {"FLAG_A": 0, "FLAG_B": 1}, flag_type="categorical_list")
+        fm.register_flag_column("flag_col", "qc")
         col = fm.get_flag_column("flag_col")
-        assert isinstance(col, CategoricalFlagColumn)
-        assert col.list_mode is True
+        assert isinstance(col, CategoricalListFlagColumn)
 
 
 class TestGetFlagSystem:

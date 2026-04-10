@@ -4,9 +4,10 @@ Flag System Management Module.
 This module provides a small registry for use by the ``TimeFrame`` class for flag systems and for flag columns
 in the TimeFrame's DataFrame.
 
-Two flag system types are supported:
+Three flag system types are supported:
   - ``BitwiseFlag`` - power-of-two integer values; multiple flags can be combined per row.
-  - ``CategoricalFlag`` - arbitrary int or str values; each row holds one value (or a list of values).
+  - ``CategoricalSingleFlag`` - arbitrary int or str values; each row holds exactly one value (mutually exclusive).
+  - ``CategoricalListFlag`` - arbitrary int or str values; each row holds a list of values (flags can coexist).
 
 Typical use from within the ``TimeFrame`` class:
     1) Register a flag system by name
@@ -16,7 +17,6 @@ Typical use from within the ``TimeFrame`` class:
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Literal
 
 import polars as pl
 
@@ -30,11 +30,10 @@ from time_stream.exceptions import (
     FlagSystemTypeError,
 )
 from time_stream.flags.bitwise_flag_system import BitwiseFlag
-from time_stream.flags.categorical_flag_system import CategoricalFlag
-from time_stream.flags.flag_system import FlagSystemBase
+from time_stream.flags.categorical_flag_system import CategoricalListFlag, CategoricalSingleFlag
+from time_stream.flags.flag_system import FlagSystemBase, FlagSystemLiteral
 
 FlagSystemType = dict[str, int | str] | list[str] | None
-FlagSystemLiteral = Literal["bitwise", "categorical"]
 
 
 class FlagColumn(ABC):
@@ -44,7 +43,8 @@ class FlagColumn(ABC):
     ``remove_flag`` operations. Concrete subclasses implement the appropriate semantics:
 
     - ``BitwiseFlagColumn`` - bitwise OR/AND operations on integer columns.
-    - ``CategoricalFlagColumn`` - set value or list append/filter operations.
+    - ``CategoricalSingleFlagColumn`` - set/clear a single value per row.
+    - ``CategoricalListFlagColumn`` - append/remove values from a list per row.
 
     Attributes:
         name: Name of the flag column in the DataFrame.
@@ -245,58 +245,44 @@ class BitwiseFlagColumn(FlagColumn):
 
 
 @dataclass
-class CategoricalFlagColumn(FlagColumn):
-    """Represents a categorical flag column in a TimeFrame.
+class CategoricalSingleFlagColumn(FlagColumn):
+    """Represents a categorical flag column where each row holds exactly one flag value (or null).
 
-    A categorical flag column stores arbitrary int or str flag values governed by a ``CategoricalFlag``
-    system. Each row holds a single value (scalar mode) or a list of values (list mode).
+    Flags are mutually exclusive - setting a new flag replaces the existing value. Governed by a
+    ``CategoricalSingleFlag`` system.
 
     Attributes:
         name: Name of the flag column in the DataFrame.
-        flag_system: The ``CategoricalFlag`` enum class that defines the available flag values.
-        list_mode: If ``True``, the column stores ``List`` values and flags are appended/removed from
-            the list. If ``False``, the column stores a single nullable value per row.
+        flag_system: The ``CategoricalSingleFlag`` enum class that defines the available flag values.
         is_decoded: Whether the column is currently in decoded (flag-name) form rather than raw-value form.
     """
 
     name: str
-    flag_system: type[CategoricalFlag]
-    list_mode: bool = False
+    flag_system: type[CategoricalSingleFlag]
     is_decoded: bool = False
 
     def decode(self, df: pl.DataFrame) -> pl.DataFrame:
         """Replace raw flag values with their flag names.
 
-        In scalar mode each value is replaced by its name (e.g. ``123 -> "good"``).
-        In list mode each element of each list is replaced by its name.
+        Each value is replaced by its name (e.g. ``123 -> "good"``).
 
         Args:
             df: The DataFrame containing the raw-value flag column.
 
         Returns:
-            A new DataFrame with the flag column replaced by a ``Utf8`` (scalar) or ``List(Utf8)`` (list mode)
-            column of flag names.
+            A new DataFrame with the flag column replaced by a ``Utf8`` column of flag names.
         """
         flag_map = self.flag_system.to_dict()
         old = list(flag_map.values())
         new = list(flag_map.keys())
-
-        if self.list_mode:
-            return df.with_columns(
-                pl.col(self.name)
-                .list.eval(pl.element().replace_strict(old=old, new=new, default=None, return_dtype=pl.Utf8))
-                .alias(self.name)
-            )
-        else:
-            return df.with_columns(
-                pl.col(self.name).replace_strict(old=old, new=new, default=None, return_dtype=pl.Utf8).alias(self.name)
-            )
+        return df.with_columns(
+            pl.col(self.name).replace_strict(old=old, new=new, default=None, return_dtype=pl.Utf8).alias(self.name)
+        )
 
     def encode(self, df: pl.DataFrame) -> pl.DataFrame:
         """Replace flag names back to their raw values.
 
-        In scalar mode each name is replaced by its value (e.g. ``"good" -> 123``).
-        In list mode each element of each list is replaced by its value.
+        Each name is replaced by its value (e.g. ``"good" -> 123``).
 
         Args:
             df: The DataFrame containing the decoded (flag-name) flag column.
@@ -311,30 +297,16 @@ class CategoricalFlagColumn(FlagColumn):
         vtype = self.flag_system.value_type()
         return_dtype = pl.Int32 if vtype is int else pl.Utf8
 
-        if self.list_mode:
-            present = set(df[self.name].explode().drop_nulls().unique().to_list())
-        else:
-            present = set(df[self.name].drop_nulls().unique().to_list())
-
+        present = set(df[self.name].drop_nulls().unique().to_list())
         unknown = present - flag_map.keys()
         if unknown:
             raise CategoricalFlagUnknownError(f"Unknown flag names in column '{self.name}': {sorted(unknown)}.")
 
         old = list(flag_map.keys())
         new = list(flag_map.values())
-
-        if self.list_mode:
-            return df.with_columns(
-                pl.col(self.name)
-                .list.eval(pl.element().replace_strict(old=old, new=new, default=None, return_dtype=return_dtype))
-                .alias(self.name)
-            )
-        else:
-            return df.with_columns(
-                pl.col(self.name)
-                .replace_strict(old=old, new=new, default=None, return_dtype=return_dtype)
-                .alias(self.name)
-            )
+        return df.with_columns(
+            pl.col(self.name).replace_strict(old=old, new=new, default=None, return_dtype=return_dtype).alias(self.name)
+        )
 
     def add_flag(
         self,
@@ -343,23 +315,19 @@ class CategoricalFlagColumn(FlagColumn):
         expr: pl.Expr = pl.lit(True),
         overwrite: bool = True,
     ) -> pl.DataFrame:
-        """Set or append a flag value on rows where ``expr`` is true.
+        """Set the flag value on rows where ``expr`` is true.
 
-        In scalar mode, sets the column value to ``flag`` where ``expr`` is true. When ``overwrite`` is
-        ``False``, only rows whose current value is null are updated.
-
-        In list mode, appends ``flag`` to the list where ``expr`` is true and the flag is not already
-        present. ``overwrite`` is not applicable in list mode.
+        When ``overwrite`` is ``False``, only rows whose current value is null are updated.
 
         If the column is currently decoded, it is encoded first, the flag is applied, and the result is
         decoded again.
 
         Args:
             df: The DataFrame containing the flag column.
-            flag: The flag name or value to set/append.
+            flag: The flag name or value to set.
             expr: A Polars expression defining which rows to update.
                   Defaults to ``pl.lit(True)``, meaning all rows.
-            overwrite: Scalar mode only. If ``True`` (default), replaces any existing value. If ``False``,
+            overwrite: If ``True`` (default), replaces any existing value. If ``False``,
                 only updates rows whose current value is null.
 
         Returns:
@@ -369,34 +337,162 @@ class CategoricalFlagColumn(FlagColumn):
         if self.is_decoded:
             df = self.encode(df)
         col_dtype = df[self.name].dtype
-
-        if self.list_mode:
-            df = df.with_columns(
-                pl.when(expr & ~pl.col(self.name).list.contains(pl.lit(value)))
-                .then(pl.concat_list([pl.col(self.name), pl.lit(value).implode()]))
-                .otherwise(pl.col(self.name))
-                .alias(self.name)
-            )
-        else:
-            condition = expr if overwrite else (expr & pl.col(self.name).is_null())
-            df = df.with_columns(
-                pl.when(condition).then(pl.lit(value, dtype=col_dtype)).otherwise(pl.col(self.name)).alias(self.name)
-            )
-
+        condition = expr if overwrite else (expr & pl.col(self.name).is_null())
+        df = df.with_columns(
+            pl.when(condition).then(pl.lit(value, dtype=col_dtype)).otherwise(pl.col(self.name)).alias(self.name)
+        )
         if self.is_decoded:
             df = self.decode(df)
         return df
 
-    def remove_flag(
-        self,
-        df: pl.DataFrame,
-        flag: int | str,
-        expr: pl.Expr = pl.lit(True),
-    ) -> pl.DataFrame:
-        """Remove a flag value from rows where ``expr`` is true.
+    def remove_flag(self, df: pl.DataFrame, flag: int | str, expr: pl.Expr = pl.lit(True)) -> pl.DataFrame:
+        """Set the column value to null on rows where ``expr`` is true.
 
-        In scalar mode, sets the column value to null where ``expr`` is true. In list mode, removes all
-        occurrences of ``flag`` from the list where ``expr`` is true.
+        If the column is currently decoded, it is encoded first, the flag is removed, and the result is
+        decoded again.
+
+        Args:
+            df: The DataFrame containing the flag column.
+            flag: The flag name or value to remove.
+            expr: A Polars expression defining which rows to update.
+                  Defaults to ``pl.lit(True)``, meaning all rows.
+
+        Returns:
+            A new DataFrame with the flag column updated.
+        """
+        self.flag_system.get_flag(flag)
+        if self.is_decoded:
+            df = self.encode(df)
+        col_dtype = df[self.name].dtype
+        df = df.with_columns(
+            pl.when(expr).then(pl.lit(None, dtype=col_dtype)).otherwise(pl.col(self.name)).alias(self.name)
+        )
+        if self.is_decoded:
+            df = self.decode(df)
+        return df
+
+    def __eq__(self, other: object) -> bool:
+        """Check if two ``CategoricalSingleFlagColumn`` instances are equal.
+
+        Compares ``name`` and ``flag_system`` only. ``is_decoded`` is runtime state and is excluded
+        from the comparison.
+
+        Args:
+            other: The object to compare.
+
+        Returns:
+            True if both instances have the same name and flag system, False otherwise.
+        """
+        if not isinstance(other, CategoricalSingleFlagColumn):
+            return False
+        return self.name == other.name and self.flag_system == other.flag_system
+
+    # Make class instances unhashable
+    __hash__ = None
+
+
+@dataclass
+class CategoricalListFlagColumn(FlagColumn):
+    """Represents a categorical flag column where each row holds a list of flag values.
+
+    Flags can coexist - multiple flags can be present in a single row simultaneously. Governed by a
+    ``CategoricalListFlag`` system.
+
+    Attributes:
+        name: Name of the flag column in the DataFrame.
+        flag_system: The ``CategoricalListFlag`` enum class that defines the available flag values.
+        is_decoded: Whether the column is currently in decoded (flag-name) form rather than raw-value form.
+    """
+
+    name: str
+    flag_system: type[CategoricalListFlag]
+    is_decoded: bool = False
+
+    def decode(self, df: pl.DataFrame) -> pl.DataFrame:
+        """Replace raw flag values in each list with their flag names.
+
+        Each element of each list is replaced by its name.
+
+        Args:
+            df: The DataFrame containing the raw-value flag column.
+
+        Returns:
+            A new DataFrame with the flag column replaced by a ``List(Utf8)`` column of flag names.
+        """
+        flag_map = self.flag_system.to_dict()
+        old = list(flag_map.values())
+        new = list(flag_map.keys())
+        return df.with_columns(
+            pl.col(self.name)
+            .list.eval(pl.element().replace_strict(old=old, new=new, default=None, return_dtype=pl.Utf8))
+            .alias(self.name)
+        )
+
+    def encode(self, df: pl.DataFrame) -> pl.DataFrame:
+        """Replace flag names in each list back to their raw values.
+
+        Each element of each list is replaced by its value.
+
+        Args:
+            df: The DataFrame containing the decoded (flag-name) flag column.
+
+        Returns:
+            A new DataFrame with the flag column replaced by its original value dtype.
+
+        Raises:
+            CategoricalFlagUnknownError: If any flag name in the column is not in the flag system.
+        """
+        flag_map = self.flag_system.to_dict()
+        vtype = self.flag_system.value_type()
+        return_dtype = pl.Int32 if vtype is int else pl.Utf8
+
+        present = set(df[self.name].explode().drop_nulls().unique().to_list())
+        unknown = present - flag_map.keys()
+        if unknown:
+            raise CategoricalFlagUnknownError(f"Unknown flag names in column '{self.name}': {sorted(unknown)}.")
+
+        old = list(flag_map.keys())
+        new = list(flag_map.values())
+        return df.with_columns(
+            pl.col(self.name)
+            .list.eval(pl.element().replace_strict(old=old, new=new, default=None, return_dtype=return_dtype))
+            .alias(self.name)
+        )
+
+    def add_flag(self, df: pl.DataFrame, flag: int | str, expr: pl.Expr = pl.lit(True)) -> pl.DataFrame:
+        """Append a flag value to the list on rows where ``expr`` is true.
+
+        If the flag is already present in a row's list, it is not added again.
+
+        If the column is currently decoded, it is encoded first, the flag is applied, and the result is
+        decoded again.
+
+        Args:
+            df: The DataFrame containing the flag column.
+            flag: The flag name or value to append.
+            expr: A Polars expression defining which rows to update.
+                  Defaults to ``pl.lit(True)``, meaning all rows.
+
+        Returns:
+            A new DataFrame with the flag column updated.
+        """
+        value = self.flag_system.get_flag(flag)
+        if self.is_decoded:
+            df = self.encode(df)
+        df = df.with_columns(
+            pl.when(expr & ~pl.col(self.name).list.contains(pl.lit(value)))
+            .then(pl.concat_list([pl.col(self.name), pl.lit(value).implode()]))
+            .otherwise(pl.col(self.name))
+            .alias(self.name)
+        )
+        if self.is_decoded:
+            df = self.decode(df)
+        return df
+
+    def remove_flag(self, df: pl.DataFrame, flag: int | str, expr: pl.Expr = pl.lit(True)) -> pl.DataFrame:
+        """Remove all occurrences of a flag value from the list on rows where ``expr`` is true.
+
+        If the flag is not present, the row is unchanged.
 
         If the column is currently decoded, it is encoded first, the flag is removed, and the result is
         decoded again.
@@ -413,39 +509,31 @@ class CategoricalFlagColumn(FlagColumn):
         value = self.flag_system.get_flag(flag)
         if self.is_decoded:
             df = self.encode(df)
-        col_dtype = df[self.name].dtype
-
-        if self.list_mode:
-            df = df.with_columns(
-                pl.when(expr)
-                .then(pl.col(self.name).list.eval(pl.element().filter(pl.element() != pl.lit(value))))
-                .otherwise(pl.col(self.name))
-                .alias(self.name)
-            )
-        else:
-            df = df.with_columns(
-                pl.when(expr).then(pl.lit(None, dtype=col_dtype)).otherwise(pl.col(self.name)).alias(self.name)
-            )
-
+        df = df.with_columns(
+            pl.when(expr)
+            .then(pl.col(self.name).list.eval(pl.element().filter(pl.element() != pl.lit(value))))
+            .otherwise(pl.col(self.name))
+            .alias(self.name)
+        )
         if self.is_decoded:
             df = self.decode(df)
         return df
 
     def __eq__(self, other: object) -> bool:
-        """Check if two ``CategoricalFlagColumn`` instances are equal.
+        """Check if two ``CategoricalListFlagColumn`` instances are equal.
 
-        Compares ``name``, ``flag_system``, and ``list_mode``. ``is_decoded`` is runtime state and is
-        excluded from the comparison.
+        Compares ``name`` and ``flag_system`` only. ``is_decoded`` is runtime state and is excluded
+        from the comparison.
 
         Args:
             other: The object to compare.
 
         Returns:
-            True if both instances have the same name, flag system, and list mode, False otherwise.
+            True if both instances have the same name and flag system, False otherwise.
         """
-        if not isinstance(other, CategoricalFlagColumn):
+        if not isinstance(other, CategoricalListFlagColumn):
             return False
-        return self.name == other.name and self.flag_system == other.flag_system and self.list_mode == other.list_mode
+        return self.name == other.name and self.flag_system == other.flag_system
 
     # Make class instances unhashable
     __hash__ = None
@@ -455,7 +543,7 @@ class FlagManager:
     """Registry for flag systems and flag columns.
 
     This class:
-      * registers **flag systems** (bitwise or categorical) under a string name;
+      * registers **flag systems** (bitwise, categorical single, or categorical list) under a string name;
       * registers **flag columns** linked to a specific flag system.
     """
 
@@ -481,28 +569,32 @@ class FlagManager:
     ) -> None:
         """Register a flag system with the flag manager.
 
-        Two kinds of flag system are supported:
+        Three kinds of flag system are supported:
 
         **Bitwise** (``BitwiseFlag``): values are powers of two, enabling multiple flags to be combined
         on a single integer per row. Pass ``flag_type="bitwise"`` (the default).
 
-        **Categorical** (``CategoricalFlag``): values are arbitrary ``int`` or ``str``; each row holds
-        one value (or a list of values in list mode). Pass ``flag_type="categorical"``.
+        **Categorical single** (``CategoricalSingleFlag``): values are arbitrary ``int`` or ``str``; each
+        row holds exactly one value (flags are mutually exclusive). Pass ``flag_type="categorical"``.
+
+        **Categorical list** (``CategoricalListFlag``): values are arbitrary ``int`` or ``str``; each row
+        holds a list of values (flags can coexist). Pass ``flag_type="categorical_list"``.
 
         Accepted inputs for ``flag_system``:
 
         - ``None`` - produces a default bitwise system with a single ``FLAGGED`` flag at value 1.
         - ``dict[str, int]`` - interpreted as bitwise or categorical depending on ``flag_type``.
           Bitwise values must be powers of two.
-        - ``dict[str, str]`` - always categorical; ``flag_type`` is ignored.
+        - ``dict[str, str]`` - categorical by default (``flag_type`` inferred as ``"categorical"`` unless
+          ``"categorical_list"`` is explicitly passed).
         - ``list[str]`` - flag names are sorted; bitwise assigns powers of two, categorical assigns
           sequential integers starting from 0. An empty list produces the default ``FLAGGED`` flag.
 
         Args:
             flag_system_name: The name of the new flag system.
             flag_system: The flag system definition. Defaults to ``None``.
-            flag_type: Whether to create a ``"bitwise"`` or ``"categorical"`` flag system. Only
-                relevant when ``flag_system`` is a ``dict[str, int]`` or ``list[str]``.
+            flag_type: Whether to create a ``"bitwise"``, ``"categorical"``, or ``"categorical_list"``
+                flag system. Only relevant when ``flag_system`` is a ``dict[str, int]`` or ``list[str]``.
 
         Raises:
             DuplicateFlagSystemError: If a flag system with the same name is already registered.
@@ -521,22 +613,28 @@ class FlagManager:
             if len(set(flag_system)) != len(flag_system):
                 raise FlagSystemTypeError("Flag system list contains duplicate category names.")
 
-            if flag_type == "categorical":
+            if flag_type == "categorical_list":
                 sorted_categories = sorted(flag_system)
                 flag_dict = {name: i for i, name in enumerate(sorted_categories)}
-                self._flag_systems[flag_system_name] = CategoricalFlag(flag_system_name, flag_dict)
+                self._flag_systems[flag_system_name] = CategoricalListFlag(flag_system_name, flag_dict)
+            elif flag_type == "categorical":
+                sorted_categories = sorted(flag_system)
+                flag_dict = {name: i for i, name in enumerate(sorted_categories)}
+                self._flag_systems[flag_system_name] = CategoricalSingleFlag(flag_system_name, flag_dict)
             else:
                 sorted_categories = sorted(flag_system)
                 flag_dict = {name: 2**i for i, name in enumerate(sorted_categories)}
                 self._flag_systems[flag_system_name] = BitwiseFlag(flag_system_name, flag_dict)
 
         elif isinstance(flag_system, dict):
-            # Check if all values in dict are string, in which case we know this should be a categorical flag system
-            if all(isinstance(v, str) for v in flag_system.values()):
+            # A dict[str, str] implies categorical; infer it if the caller hasn't specified a categorical type
+            if all(isinstance(v, str) for v in flag_system.values()) and flag_type == "bitwise":
                 flag_type = "categorical"
 
-            if flag_type == "categorical":
-                self._flag_systems[flag_system_name] = CategoricalFlag(flag_system_name, flag_system)
+            if flag_type == "categorical_list":
+                self._flag_systems[flag_system_name] = CategoricalListFlag(flag_system_name, flag_system)
+            elif flag_type == "categorical":
+                self._flag_systems[flag_system_name] = CategoricalSingleFlag(flag_system_name, flag_system)
             else:
                 self._flag_systems[flag_system_name] = BitwiseFlag(flag_system_name, flag_system)
 
@@ -553,7 +651,7 @@ class FlagManager:
             flag_system_name: The registered flag system name.
 
         Returns:
-            The ``BitwiseFlag`` or ``CategoricalFlag`` enum class that defines the flag system.
+            The ``BitwiseFlag``, ``CategoricalSingleFlag``, or ``CategoricalListFlag`` enum class.
 
         Raises:
             FlagSystemNotFoundError: If no flag system with ``flag_system_name`` is registered.
@@ -563,17 +661,15 @@ class FlagManager:
         except KeyError:
             raise FlagSystemNotFoundError(f"No such flag system: '{flag_system_name}'")
 
-    def register_flag_column(self, name: str, flag_system_name: str, list_mode: bool | None = None) -> None:
+    def register_flag_column(self, name: str, flag_system_name: str) -> None:
         """Mark the specified existing column as a flag column.
 
-        For categorical flag systems, ``list_mode`` controls whether the column stores a list of values
-        per row (``True``) or a single nullable value (``False``). Inferred from the column dtype by the
-        caller; ignored for bitwise flag systems.
+        The column type (``BitwiseFlagColumn``, ``CategoricalSingleFlagColumn``, or
+        ``CategoricalListFlagColumn``) is determined by the flag system type.
 
         Args:
             name: A column name to mark as a flag column.
             flag_system_name: The name of the flag system.
-            list_mode: For categorical systems, whether the column is in list mode. ``None`` for bitwise.
 
         Raises:
             FlagSystemError: If a flag column with ``name`` is already registered.
@@ -583,9 +679,11 @@ class FlagManager:
             raise FlagSystemError(f"Flag column '{name}' already registered. System: '{flag_system_name}'.")
 
         flag_system = self.get_flag_system(flag_system_name)
-        if issubclass(flag_system, CategoricalFlag):
-            self._flag_columns[name] = CategoricalFlagColumn(name, flag_system, bool(list_mode))
-        elif issubclass(flag_system, BitwiseFlag):
+        if flag_system.flag_type == "categorical_list":
+            self._flag_columns[name] = CategoricalListFlagColumn(name, flag_system)
+        elif flag_system.flag_type == "categorical":
+            self._flag_columns[name] = CategoricalSingleFlagColumn(name, flag_system)
+        else:
             self._flag_columns[name] = BitwiseFlagColumn(name, flag_system)
 
     def get_flag_column(self, name: str) -> FlagColumn:
@@ -595,7 +693,8 @@ class FlagManager:
             name: Flag column name.
 
         Returns:
-            The corresponding ``BitwiseFlagColumn`` or ``CategoricalFlagColumn`` instance.
+            The corresponding ``BitwiseFlagColumn``, ``CategoricalSingleFlagColumn``, or
+            ``CategoricalListFlagColumn`` instance.
 
         Raises:
             ColumnNotFoundError: If no flag column with ``name`` is registered.
@@ -613,17 +712,11 @@ class FlagManager:
         """
         out = FlagManager()
 
-        # register flag systems in the new copy under the same names as previous
         for name, flag_system in self._flag_systems.items():
-            flag_type: FlagSystemLiteral = "categorical" if issubclass(flag_system, CategoricalFlag) else "bitwise"
-            out.register_flag_system(name, flag_system.to_dict(), flag_type=flag_type)
+            out.register_flag_system(name, flag_system.to_dict(), flag_type=flag_system.flag_type)
 
-        #  register flag columns in the new copy with their associated system names
         for name, flag_column in self._flag_columns.items():
-            if isinstance(flag_column, CategoricalFlagColumn):
-                out.register_flag_column(name, flag_column.flag_system.system_name(), flag_column.list_mode)
-            else:
-                out.register_flag_column(name, flag_column.flag_system.system_name())
+            out.register_flag_column(name, flag_column.flag_system.system_name())
             out.flag_columns[name].is_decoded = flag_column.is_decoded
 
         return out

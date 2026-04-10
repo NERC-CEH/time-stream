@@ -1,12 +1,17 @@
 """
 Categorical Flag Module.
 
-Provides a flag system for arbitrary integer or string flag values.
+Provides flag systems for arbitrary integer or string flag values.
 
 Unlike ``BitwiseFlag``, values do not need to be powers of two - they are separate categories such as
 ``{"good": 0, "questionable": 1, "bad": 2}`` or string codes like ``{"good": "G", "bad": "B"}``.
 
-Inherits from ``FlagSystemBase`` for the shared flag system interface and from ``enum.Enum`` for member access.
+Two categorical flag system types are supported:
+
+- ``CategoricalSingleFlag`` - each row holds exactly one flag value (or null). Flags are mutually exclusive.
+- ``CategoricalListFlag`` - each row holds a list of flag values. Flags can coexist.
+
+Both inherit from ``FlagSystemBase`` for the shared flag system interface and from ``enum.Enum`` for member access.
 
 Validation includes:
   - all values are ``int`` or all values are ``str``,
@@ -22,28 +27,37 @@ from time_stream.exceptions import (
     CategoricalFlagUnknownError,
     CategoricalFlagValueError,
 )
-from time_stream.flags.flag_system import FlagMeta, FlagSystemBase
+from time_stream.flags.flag_system import FlagMeta, FlagSystemBase, FlagSystemLiteral
 
 
-class CategoricalMeta(FlagMeta):
-    """Metaclass for ``CategoricalFlag`` enums.
+class CategoricalSingleMeta(FlagMeta):
+    """Metaclass for ``CategoricalSingleFlag`` enums.
 
-    ``BitwiseMeta`` and ``CategoricalMeta`` are kept as distinct subclasses so that a ``BitwiseFlag``
-    class and a ``CategoricalFlag`` class with the same name and member values are never equal.
+    Kept distinct from ``BitwiseMeta`` and ``CategoricalListMeta`` so that flag system classes of
+    different types are never considered equal.
     """
 
+    flag_type: FlagSystemLiteral = "categorical"
 
-class CategoricalFlag(FlagSystemBase, Enum, metaclass=CategoricalMeta):
-    """A categorical flag enum with arbitrary ``int`` or ``str`` values.
 
-    Inherits from ``FlagSystemBase`` for the shared flag system interface (``system_name``, ``to_dict``,
+class CategoricalListMeta(CategoricalSingleMeta):
+    """Metaclass for ``CategoricalListFlag`` enums."""
+
+    flag_type: FlagSystemLiteral = "categorical_list"
+
+
+class CategoricalSingleFlag(FlagSystemBase, Enum, metaclass=CategoricalSingleMeta):
+    """A categorical flag enum where each row holds exactly one flag value (or null).
+
+    Flags are mutually exclusive - setting a new flag replaces the existing value. Inherits from
+    ``FlagSystemBase`` for the shared flag system interface (``system_name``, ``to_dict``,
     ``get_flag``, ``value_type``) and from ``enum.Enum`` for member access.
 
     Flag values must all be the same type (``int`` or ``str``) and must be unique. Dynamic creation
     is supported, e.g.::
 
-        QC = CategoricalFlag("QC", {"good": 0, "questionable": 1, "bad": 2})
-        CODES = CategoricalFlag("CODES", {"good": "G", "bad": "B"})
+        QC = CategoricalSingleFlag("QC", {"good": 0, "questionable": 1, "bad": 2})
+        CODES = CategoricalSingleFlag("CODES", {"good": "G", "bad": "B"})
     """
 
     def __init_subclass__(cls, **kwargs: object) -> None:
@@ -86,7 +100,7 @@ class CategoricalFlag(FlagSystemBase, Enum, metaclass=CategoricalMeta):
             raise CategoricalFlagValueError(f"Duplicate values in categorical flag mapping for '{name}': {values}.")
 
     @classmethod
-    def get_flag(cls, flag: int | str) -> "CategoricalFlag":
+    def get_flag(cls, flag: int | str) -> "CategoricalSingleFlag":
         """Look up a flag by name or by value.
 
         For string-valued systems, a string argument is checked against names first, then against values.
@@ -97,7 +111,7 @@ class CategoricalFlag(FlagSystemBase, Enum, metaclass=CategoricalMeta):
             flag: The flag name (``str``) or value (``int`` for int-valued systems, ``str`` for str-valued systems).
 
         Returns:
-            The corresponding ``CategoricalFlag`` member.
+            The corresponding ``CategoricalSingleFlag`` member.
 
         Raises:
             CategoricalFlagUnknownError: If ``flag`` does not match any name or value.
@@ -133,20 +147,44 @@ class CategoricalFlag(FlagSystemBase, Enum, metaclass=CategoricalMeta):
         return type(first.value)
 
     @classmethod
-    def validate_column(cls, series: pl.Series, list_mode: bool | None = None) -> None:
+    def validate_column(cls, series: pl.Series) -> None:
         """Validate that all non-null values in ``series`` are valid for this flag system.
 
         Args:
-            series: The Polars Series to validate.
-            list_mode: Whether the series contains lists of values. If ``True``, the series is
-                exploded before validation.
+            series: The Polars Series to validate. Expected to contain scalar values.
 
         Raises:
             CategoricalFlagUnknownError: If the series contains values not in this flag system.
         """
         valid_values = set(cls.to_dict().values())
-        flat = series.explode().drop_nulls() if list_mode else series.drop_nulls()
-        unknown = set(flat.unique().to_list()) - valid_values
+        unknown = set(series.drop_nulls().unique().to_list()) - valid_values
+
+        if unknown:
+            raise CategoricalFlagUnknownError(
+                f"Column '{series.name}' contains values not in flag system '{cls.system_name()}': {sorted(unknown)}."
+            )
+
+
+class CategoricalListFlag(CategoricalSingleFlag, metaclass=CategoricalListMeta):
+    """A categorical flag enum where each row holds a list of flag values.
+
+    Flags can coexist - multiple flags can be present in a single row simultaneously. Inherits all
+    validation and lookup behaviour from ``CategoricalSingleFlag``.
+    """
+
+    @classmethod
+    def validate_column(cls, series: pl.Series) -> None:
+        """Validate that all non-null values in ``series`` are valid for this flag system.
+
+        Args:
+            series: The Polars Series to validate. Expected to contain lists of values; the series
+                is exploded before validation.
+
+        Raises:
+            CategoricalFlagUnknownError: If the series contains values not in this flag system.
+        """
+        valid_values = set(cls.to_dict().values())
+        unknown = set(series.explode().drop_nulls().unique().to_list()) - valid_values
 
         if unknown:
             raise CategoricalFlagUnknownError(

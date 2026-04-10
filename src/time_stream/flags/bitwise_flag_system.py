@@ -23,15 +23,17 @@ from time_stream.exceptions import (
     BitwiseFlagUnknownError,
     BitwiseFlagValueError,
 )
-from time_stream.flags.flag_system import FlagMeta, FlagSystemBase
+from time_stream.flags.flag_system import FlagMeta, FlagSystemBase, FlagSystemLiteral
 
 
 class BitwiseMeta(FlagMeta):
     """Metaclass for ``BitwiseFlag`` enums.
 
-    ``BitwiseMeta`` and ``CategoricalMeta`` are kept as distinct subclasses so that a ``BitwiseFlag``
-    class and a ``CategoricalFlag`` class with the same name and member values are never equal.
+    Kept distinct from ``CategoricalSingleMeta`` and ``CategoricalListMeta`` so that flag system
+    classes of different types are never considered equal.
     """
+
+    flag_type: FlagSystemLiteral = "bitwise"
 
 
 class BitwiseFlag(FlagSystemBase, int, Flag, metaclass=BitwiseMeta):
@@ -127,14 +129,13 @@ class BitwiseFlag(FlagSystemBase, int, Flag, metaclass=BitwiseMeta):
         return int
 
     @classmethod
-    def validate_column(cls, series: pl.Series, list_mode: bool | None = None) -> None:
+    def validate_column(cls, series: pl.Series) -> None:
         """Validate that all non-null values in ``series`` are valid bitwise combinations.
 
         A value is valid if all of its set bits correspond to flags defined in this system.
 
         Args:
             series: The Polars Series to validate.
-            list_mode: Unused for bitwise flag systems.
 
         Raises:
             BitwiseFlagUnknownError: If the series contains values with bits not in this flag system.
