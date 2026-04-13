@@ -52,15 +52,13 @@ from time_stream.exceptions import (
     ColumnTypeError,
     MetadataError,
 )
-from time_stream.flags.categorical_flag_system import CategoricalFlag
 from time_stream.flags.flag_manager import (
-    CategoricalFlagColumn,
+    CategoricalSingleFlagColumn,
     FlagColumn,
     FlagManager,
-    FlagSystemLiteral,
     FlagSystemType,
 )
-from time_stream.flags.flag_system import FlagSystemBase
+from time_stream.flags.flag_system import FlagSystemBase, FlagSystemLiteral
 from time_stream.formatting import timeframe_repr
 from time_stream.infill import InfillMethod
 from time_stream.metadata import ColumnMetadataDict
@@ -485,27 +483,20 @@ class TimeFrame:
         check_columns_in_dataframe(self.df, column_name)
         flag_system = self.get_flag_system(flag_system_name)
 
-        # Determine whether this flag column will be categorical, and if so, should be initialised in "list" mode
-        if issubclass(flag_system, CategoricalFlag):
-            list_mode = isinstance(self.df[column_name].dtype, pl.List)
-        else:
-            list_mode = None
-
-        flag_system.validate_column(self.df[column_name], list_mode=list_mode)
-        self._flag_manager.register_flag_column(column_name, flag_system_name, list_mode)
+        flag_system.validate_column(self.df[column_name])
+        self._flag_manager.register_flag_column(column_name, flag_system_name)
 
     def init_flag_column(
         self,
         flag_system_name: str,
         column_name: str | None = None,
         data: int | str | Sequence[int | str] | None = None,
-        list_mode: bool = False,
     ) -> None:
         """Add a new column to the TimeFrame DataFrame, setting it as a Flag Column.
 
         For bitwise flag systems, the column is initialised with integer values (default 0).
-        For categorical flag systems, the column is initialised with null values in scalar
-        mode (default), or with empty lists in list mode.
+        For ``CategoricalSingleFlag`` systems, the column is initialised with null values.
+        For ``CategoricalListFlag`` systems, the column is initialised with empty lists.
 
         Args:
             flag_system_name: The name of the registered flag system.
@@ -514,27 +505,24 @@ class TimeFrame:
                     already exists (e.g. ``__flag__CORE_FLAGS__1``).
             data: The default value(s) to populate the flag column with. Can be a scalar or
                     list-like. For bitwise systems defaults to ``0``; for categorical systems defaults
-                    to ``None`` (null) in scalar mode or an empty list in list mode.
-            list_mode: Categorical systems only. If ``True``, the column is created as a
-                    ``List`` column where each row holds a list of flag values. Ignored for
-                    bitwise systems.
+                    to ``None`` (null) in single mode or an empty list in list mode.
         """
         flag_sys = self.get_flag_system(flag_system_name)
-        categorical = issubclass(flag_sys, CategoricalFlag)
+        flag_type = flag_sys.flag_type
 
         # 1. Resolve dtype
-        if categorical:
+        if flag_type in ("categorical", "categorical_list"):
             inner_dtype = pl.Int32 if flag_sys.value_type() is int else pl.Utf8
-            col_dtype = pl.List(inner_dtype) if list_mode else inner_dtype
+            col_dtype = pl.List(inner_dtype) if flag_type == "categorical_list" else inner_dtype
         else:
             col_dtype = pl.Int64
 
         # 2. Build column - if it's a scalar or missing, use pl.lit; otherwise it's a sequence so cast to a Series
         if isinstance(data, (int, str)) or data is None:
             if data is None:
-                if categorical and list_mode:
+                if flag_type == "categorical_list":
                     data = []
-                elif not categorical:
+                elif flag_type == "bitwise":
                     data = 0
             col_data = pl.lit(data, dtype=col_dtype)
         else:
@@ -551,7 +539,7 @@ class TimeFrame:
 
         # 4. Add and register as a flag column
         self._df = self.df.with_columns(col_data.alias(column_name))
-        self._flag_manager.register_flag_column(column_name, flag_system_name, list_mode)
+        self._flag_manager.register_flag_column(column_name, flag_system_name)
         self._column_metadata.sync()
 
     def get_flag_column(self, flag_column_name: str) -> FlagColumn:
@@ -591,7 +579,7 @@ class TimeFrame:
                 existing value. If ``False``, only updates rows whose current value is null.
         """
         flag_column = self.get_flag_column(flag_column_name)
-        if isinstance(flag_column, CategoricalFlagColumn):
+        if isinstance(flag_column, CategoricalSingleFlagColumn):
             self._df = flag_column.add_flag(self.df, flag_value, expr, overwrite)
         else:
             self._df = flag_column.add_flag(self.df, flag_value, expr)
@@ -994,8 +982,7 @@ class TimeFrame:
         new_flag_manager = FlagManager()
         # re-register flag systems
         for name, flag_system in self._flag_manager.flag_systems.items():
-            flag_type: FlagSystemLiteral = "categorical" if issubclass(flag_system, CategoricalFlag) else "bitwise"
-            new_flag_manager.register_flag_system(name, flag_system.to_dict(), flag_type)
+            new_flag_manager.register_flag_system(name, flag_system.to_dict(), flag_system.flag_type)
 
         # keep only flag columns that survived
         for flag_name, flag_column in self._flag_manager.flag_columns.items():

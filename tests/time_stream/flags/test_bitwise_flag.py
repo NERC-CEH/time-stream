@@ -14,7 +14,7 @@ from time_stream.exceptions import (
     ColumnNotFoundError,
 )
 from time_stream.flags.bitwise_flag_system import BitwiseFlag
-from time_stream.flags.categorical_flag_system import CategoricalFlag
+from time_stream.flags.categorical_flag_system import CategoricalSingleFlag
 
 
 class Flags(BitwiseFlag):
@@ -117,10 +117,6 @@ class TestBitwiseFlagValidateColumn:
         with pytest.raises(BitwiseFlagUnknownError):
             Flags.validate_column(pl.Series("flags", [1, 8]))  # 8 not defined in Flags
 
-    def test_list_mode_is_ignored(self) -> None:
-        """Test that list_mode=True is accepted but has no effect for bitwise systems."""
-        Flags.validate_column(pl.Series("flags", [1, 2, 4]), list_mode=True)
-
 
 class TestBitwiseFlagEquality:
     def test_equality(self) -> None:
@@ -154,7 +150,7 @@ class TestBitwiseFlagEquality:
             123,
             {"key": "value"},
             pl.DataFrame(),
-            CategoricalFlag("flags", {"FLAG_A": 0, "FLAG_B": 1, "FLAG_C": 2}),
+            CategoricalSingleFlag("flags", {"FLAG_A": 0, "FLAG_B": 1, "FLAG_C": 2}),
         ],
         ids=["str", "int", "dict", "df", "categorical_flag"],
     )
