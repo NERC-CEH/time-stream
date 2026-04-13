@@ -16,7 +16,12 @@ from time_stream.exceptions import (
     FlagSystemTypeError,
 )
 from time_stream.flags.bitwise_flag_system import BitwiseFlag
-from time_stream.flags.flag_manager import BitwiseFlagColumn, CategoricalFlagColumn, FlagManager
+from time_stream.flags.flag_manager import (
+    BitwiseFlagColumn,
+    CategoricalListFlagColumn,
+    CategoricalSingleFlagColumn,
+    FlagManager,
+)
 
 
 class TestRegisterFlagSystem:
@@ -83,12 +88,12 @@ class TestRegisterFlagSystem:
         with pytest.raises(FlagSystemTypeError):
             flag_manager.register_flag_system("new_flags", ["FLAG_A", "FLAG_B", "FLAG_A"])
 
-    def test_list_categorical_produces_sequential_integers(self) -> None:
-        """Test that a list with flag_type='categorical' assigns sequential integers in sorted order."""
+    def test_list_categorical_uses_strings_as_values(self) -> None:
+        """Test that a list with flag_type='categorical' uses each string as both name and value."""
         flag_manager = FlagManager()
         flag_manager.register_flag_system("new_flags", ["FLAG_A", "FLAG_B", "FLAG_C"], flag_type="categorical")
         flag_system = flag_manager.get_flag_system("new_flags")
-        assert flag_system.to_dict() == {"FLAG_A": 0, "FLAG_B": 1, "FLAG_C": 2}
+        assert flag_system.to_dict() == {"FLAG_A": "FLAG_A", "FLAG_B": "FLAG_B", "FLAG_C": "FLAG_C"}
 
     def test_dict_int_categorical_flag_system(self) -> None:
         """Test that a dict[str, int] with flag_type='categorical' creates a categorical system."""
@@ -135,23 +140,21 @@ class TestRegisterFlagColumn:
             # Register twice - should raise error
             flag_manager.register_flag_column("flag_column", "quality_control")
 
-    def test_categorical_flag_column_scalar(self) -> None:
-        """Test registering a categorical flag column in scalar mode."""
+    def test_categorical_single_flag_column(self) -> None:
+        """Test that a categorical flag system produces a CategoricalSingleFlagColumn."""
         fm = FlagManager()
         fm.register_flag_system("qc", {"FLAG_A": 0, "FLAG_B": 1}, flag_type="categorical")
-        fm.register_flag_column("flag_col", "qc", list_mode=False)
+        fm.register_flag_column("flag_col", "qc")
         col = fm.get_flag_column("flag_col")
-        assert isinstance(col, CategoricalFlagColumn)
-        assert col.list_mode is False
+        assert isinstance(col, CategoricalSingleFlagColumn)
 
-    def test_categorical_flag_column_list(self) -> None:
-        """Test registering a categorical flag column in list mode."""
+    def test_categorical_list_flag_column(self) -> None:
+        """Test that a categorical_list flag system produces a CategoricalListFlagColumn."""
         fm = FlagManager()
-        fm.register_flag_system("qc", {"FLAG_A": 0, "FLAG_B": 1}, flag_type="categorical")
-        fm.register_flag_column("flag_col", "qc", list_mode=True)
+        fm.register_flag_system("qc", {"FLAG_A": 0, "FLAG_B": 1}, flag_type="categorical_list")
+        fm.register_flag_column("flag_col", "qc")
         col = fm.get_flag_column("flag_col")
-        assert isinstance(col, CategoricalFlagColumn)
-        assert col.list_mode is True
+        assert isinstance(col, CategoricalListFlagColumn)
 
 
 class TestGetFlagSystem:

@@ -1,4 +1,4 @@
-"""Tests for the CategoricalFlag system and its integration with TimeFrame."""
+"""Tests for the CategoricalSingleFlag and CategoricalListFlag systems and their integration with TimeFrame."""
 
 from datetime import datetime
 from typing import Any
@@ -15,23 +15,23 @@ from time_stream.exceptions import (
     ColumnTypeError,
 )
 from time_stream.flags.bitwise_flag_system import BitwiseFlag
-from time_stream.flags.categorical_flag_system import CategoricalFlag
-from time_stream.flags.flag_manager import CategoricalFlagColumn
+from time_stream.flags.categorical_flag_system import CategoricalListFlag, CategoricalSingleFlag
+from time_stream.flags.flag_manager import CategoricalListFlagColumn, CategoricalSingleFlagColumn
 
 
-class FlagsInt(CategoricalFlag):
+class FlagsInt(CategoricalSingleFlag):
     FLAG_A = 97
     FLAG_B = 98
     FLAG_C = 99
 
 
-class FlagsStr(CategoricalFlag):
+class FlagsStr(CategoricalSingleFlag):
     FLAG_A = "A"
     FLAG_B = "B"
     FLAG_C = "C"
 
 
-class TestCategoricalFlag:
+class TestCategoricalSingleFlag:
     def test_valid_int_flags(self) -> None:
         assert FlagsInt.FLAG_A.value == 97
         assert FlagsInt.FLAG_B.value == 98
@@ -45,14 +45,14 @@ class TestCategoricalFlag:
     def test_mixed_value_types_raises(self) -> None:
         """Test that mixing int and str values raises CategoricalFlagTypeError."""
         with pytest.raises(CategoricalFlagTypeError):
-            CategoricalFlag._check_value_types({"FLAG_A": 0, "FLAG_B": "B"})
+            CategoricalSingleFlag._check_value_types({"FLAG_A": 0, "FLAG_B": "B"})
 
     @pytest.mark.parametrize("value", [1.23, [1], {"a": "B"}])
     def test_invalid_flag_value_not_int_or_str(self, value: Any) -> None:
         """Test that a non-int or str flag raises error."""
         with pytest.raises(CategoricalFlagTypeError):
 
-            class _Flags(CategoricalFlag):  # noqa - expect class unused warning
+            class _Flags(CategoricalSingleFlag):  # noqa - expect class unused warning
                 INVALID_FLAG = value
 
     def test_value_type_int(self) -> None:
@@ -66,7 +66,7 @@ class TestCategoricalFlag:
     def test_duplicate_values_raises(self) -> None:
         """Test that duplicate values raise CategoricalFlagValueError."""
         with pytest.raises(CategoricalFlagValueError):
-            CategoricalFlag._check_unique_values("dup", {"FLAG_A": 0, "ALSO_FLAG_A": 0, "FLAG_B": 1})
+            CategoricalSingleFlag._check_unique_values("dup", {"FLAG_A": 0, "ALSO_FLAG_A": 0, "FLAG_B": 1})
 
 
 class TestCategoricalFlagValidateColumn:
@@ -98,33 +98,47 @@ class TestCategoricalFlagValidateColumn:
         with pytest.raises(CategoricalFlagUnknownError):
             FlagsStr.validate_column(pl.Series("flags", ["A", "UNKNOWN"]))
 
-    def test_list_mode_valid_values_pass(self) -> None:
-        """Test that a list series with only valid values passes."""
-        FlagsInt.validate_column(pl.Series("flags", [[98, 99], [97], []]), list_mode=True)
 
-    def test_list_mode_invalid_value_raises(self) -> None:
+class TestCategoricalListFlagValidateColumn:
+    def test_list_valid_values_pass(self) -> None:
+        """Test that a list series with only valid values passes."""
+
+        class ListFlags(CategoricalListFlag):
+            FLAG_A = 97
+            FLAG_B = 98
+            FLAG_C = 99
+
+        ListFlags.validate_column(pl.Series("flags", [[98, 99], [97], []]))
+
+    def test_list_invalid_value_raises(self) -> None:
         """Test that a list series containing an unknown value raises CategoricalFlagUnknownError."""
+
+        class ListFlags(CategoricalListFlag):
+            FLAG_A = 97
+            FLAG_B = 98
+            FLAG_C = 99
+
         with pytest.raises(CategoricalFlagUnknownError):
-            FlagsInt.validate_column(pl.Series("flags", [[0, 99], [1]]), list_mode=True)
+            ListFlags.validate_column(pl.Series("flags", [[0, 99], [1]]))
 
 
 class TestCategoricalFlagEquality:
     def test_equality(self) -> None:
-        """Test that two CategoricalFlag classes with the same name and mapping are equal."""
-        original = CategoricalFlag("flags", {"FLAG_A": 0, "FLAG_B": 1})
-        same = CategoricalFlag("flags", {"FLAG_A": 0, "FLAG_B": 1})
+        """Test that two CategoricalSingleFlag classes with the same name and mapping are equal."""
+        original = CategoricalSingleFlag("flags", {"FLAG_A": 0, "FLAG_B": 1})
+        same = CategoricalSingleFlag("flags", {"FLAG_A": 0, "FLAG_B": 1})
         assert original == same
 
     def test_inequality_different_name(self) -> None:
         """Test that different names produce unequal classes."""
-        original = CategoricalFlag("flags", {"FLAG_A": 0, "FLAG_B": 1})
-        different = CategoricalFlag("other", {"FLAG_A": 0, "FLAG_B": 1})
+        original = CategoricalSingleFlag("flags", {"FLAG_A": 0, "FLAG_B": 1})
+        different = CategoricalSingleFlag("other", {"FLAG_A": 0, "FLAG_B": 1})
         assert original != different
 
     def test_inequality_different_values(self) -> None:
         """Test that different values produce unequal classes."""
-        original = CategoricalFlag("flags", {"FLAG_A": 0, "FLAG_B": 1})
-        different = CategoricalFlag("flags", {"FLAG_A": 0, "FLAG_B": 2})
+        original = CategoricalSingleFlag("flags", {"FLAG_A": 0, "FLAG_B": 1})
+        different = CategoricalSingleFlag("flags", {"FLAG_A": 0, "FLAG_B": 2})
         assert original != different
 
     @pytest.mark.parametrize(
@@ -133,16 +147,16 @@ class TestCategoricalFlagEquality:
         ids=["str", "int", "dict", "df", "bitwise_flag"],
     )
     def test_different_object(self, non_cat: Any) -> None:
-        """Test that comparing against a non-categorical flag objects are not equal."""
-        original = CategoricalFlag("flags", {"FLAG_A": 0, "FLAG_B": 1, "FLAG_C": 2})
+        """Test that comparing against a non-categorical flag object is not equal."""
+        original = CategoricalSingleFlag("flags", {"FLAG_A": 0, "FLAG_B": 1, "FLAG_C": 2})
         assert original != non_cat
 
 
 class TestCategoricalFlagGetFlag:
     def setup_method(self) -> None:
         """Set up int and str flag systems for each test."""
-        self.int_cf = CategoricalFlag("qc", {"FLAG_A": 0, "FLAG_B": 1, "FLAG_C": 2})
-        self.str_cf = CategoricalFlag("met", {"FLAG_A": "A", "FLAG_B": "B", "FLAG_C": "S"})
+        self.int_cf = CategoricalSingleFlag("qc", {"FLAG_A": 0, "FLAG_B": 1, "FLAG_C": 2})
+        self.str_cf = CategoricalSingleFlag("met", {"FLAG_A": "A", "FLAG_B": "B", "FLAG_C": "S"})
 
     def test_get_int_by_name(self) -> None:
         """Test looking up a member by name returns the correct enum member."""
@@ -193,30 +207,30 @@ def make_tf() -> TimeFrame:
 
 
 def make_int_scalar_tf() -> TimeFrame:
-    """Create a TimeFrame with an int categorical flag system and scalar flag column."""
+    """Create a TimeFrame with an int categorical single flag system and scalar flag column."""
     tf = make_tf().with_flag_system("qc", {"FLAG_A": 0, "FLAG_B": 1, "FLAG_C": 2}, flag_type="categorical")
     tf.init_flag_column("qc", "flag_col")
     return tf
 
 
 def make_str_scalar_tf() -> TimeFrame:
-    """Create a TimeFrame with a str categorical flag system and scalar flag column."""
+    """Create a TimeFrame with a str categorical single flag system and scalar flag column."""
     tf = make_tf().with_flag_system("met", {"FLAG_A": "A", "FLAG_B": "B", "FLAG_C": "C"})
     tf.init_flag_column("met", "flag_col")
     return tf
 
 
 def make_int_list_tf() -> TimeFrame:
-    """Create a TimeFrame with an int categorical flag system and list-mode flag column."""
-    tf = make_tf().with_flag_system("qc", {"FLAG_A": 0, "FLAG_B": 1, "FLAG_C": 2}, flag_type="categorical")
-    tf.init_flag_column("qc", "flag_col", list_mode=True)
+    """Create a TimeFrame with an int categorical list flag system and list flag column."""
+    tf = make_tf().with_flag_system("qc", {"FLAG_A": 0, "FLAG_B": 1, "FLAG_C": 2}, flag_type="categorical_list")
+    tf.init_flag_column("qc", "flag_col")
     return tf
 
 
 def make_str_list_tf() -> TimeFrame:
-    """Create a TimeFrame with a str categorical flag system and list-mode flag column."""
-    tf = make_tf().with_flag_system("met", {"FLAG_A": "A", "FLAG_B": "B"})
-    tf.init_flag_column("met", "flag_col", list_mode=True)
+    """Create a TimeFrame with a str categorical list flag system and list flag column."""
+    tf = make_tf().with_flag_system("met", {"FLAG_A": "A", "FLAG_B": "B"}, flag_type="categorical_list")
+    tf.init_flag_column("met", "flag_col")
     return tf
 
 
@@ -531,23 +545,19 @@ class TestEncodeFlagColumn:
             tf_bad.encode_flag_column("flag_col")
 
 
-class TestRegisterFlagColumnInfersMode:
-    def test_scalar_column_registered_as_scalar(self) -> None:
-        """Test that an existing Int32 column is registered in scalar mode."""
+class TestRegisterFlagColumnBySystemType:
+    def test_single_flag_system_creates_single_column(self) -> None:
+        """Test that a CategoricalSingleFlag system produces a CategoricalSingleFlagColumn."""
         tf = make_tf().with_flag_system("qc", {"FLAG_A": 0, "FLAG_B": 1}, flag_type="categorical")
         df = tf.df.with_columns(pl.lit(None, dtype=pl.Int32).alias("my_flags"))
         tf2 = tf.with_df(df)
         tf2.register_flag_column("my_flags", "qc")
-        col = tf2.get_flag_column("my_flags")
-        assert isinstance(col, CategoricalFlagColumn)
-        assert col.list_mode is False
+        assert isinstance(tf2.get_flag_column("my_flags"), CategoricalSingleFlagColumn)
 
-    def test_list_column_registered_as_list(self) -> None:
-        """Test that an existing List(Int32) column is inferred as list mode automatically."""
-        tf = make_tf().with_flag_system("qc", {"FLAG_A": 0, "FLAG_B": 1}, flag_type="categorical")
+    def test_list_flag_system_creates_list_column(self) -> None:
+        """Test that a CategoricalListFlag system produces a CategoricalListFlagColumn."""
+        tf = make_tf().with_flag_system("qc", {"FLAG_A": 0, "FLAG_B": 1}, flag_type="categorical_list")
         df = tf.df.with_columns(pl.Series("my_flags", [[], [], []], dtype=pl.List(pl.Int32)))
         tf2 = tf.with_df(df)
         tf2.register_flag_column("my_flags", "qc")
-        col = tf2.get_flag_column("my_flags")
-        assert isinstance(col, CategoricalFlagColumn)
-        assert col.list_mode is True
+        assert isinstance(tf2.get_flag_column("my_flags"), CategoricalListFlagColumn)
