@@ -594,12 +594,8 @@ class CategoricalListFlagColumn(FlagColumn):
         # Fetch the actual flag enum members based on the flag values provided
         flag_members = [self.flag_system.get_flag(f) for f in flags]
         values = [f.name if self.is_decoded else f.value for f in flag_members]
-
-        if self.list_mode:
-            exprs = [pl.col(self.name).list.contains(pl.lit(v)) for v in values]
-            return pl.any_horizontal(exprs)
-
-        return pl.col(self.name).is_in(values)
+        exprs = [pl.col(self.name).list.contains(pl.lit(v)) for v in values]
+        return pl.any_horizontal(exprs)
 
     def __eq__(self, other: object) -> bool:
         """Check if two ``CategoricalListFlagColumn`` instances are equal.
