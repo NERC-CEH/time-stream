@@ -22,6 +22,7 @@ Main responsibilities
    - Register reusable flag systems (`BitwiseFlag` or `CategoricalFlag`).
    - Initialise flag columns linked to data columns.
    - Add/remove flags with Polars expressions.
+   - Filter TimeFrame based on flag values
 
 4. **Data operations**:
    - Aggregation: run `AggregationFunction` pipelines with support for missing-data criteria and time anchoring.
@@ -661,6 +662,38 @@ class TimeFrame:
             raise ColumnTypeError(f"Flag column '{flag_column_name}' is not in decoded form.")
         tf = self.with_df(flag_column.encode(self.df))
         tf._flag_manager.flag_columns[flag_column_name].is_decoded = False
+        return tf
+
+    def filter_by_flag(
+        self,
+        flag_column_name: str,
+        flag: int | str | list[int | str],
+        include: bool = True,
+    ) -> TimeFrame:
+        """Return a new TimeFrame filtered to rows that have (or lack) specific flags set.
+
+        For bitwise flag columns, a row matches if any of the given flags are set (bitwise OR check).
+        For categorical flag columns, a row matches if its value (or any list element in list mode) is any of the given
+        flag values.
+
+        Args:
+            flag_column_name: The name of the registered flag column to filter on.
+            flag: One or more flag names or values to filter against.
+            include: Whether to keep only rows that have the flag(s) (``True``) or keep only rows that do not have
+                        the flag(s) (``False``)
+
+        Returns:
+            A new TimeFrame containing only the rows that satisfy the filter condition.
+        """
+        flags = flag if isinstance(flag, list) else [flag]
+        flag_column = self.get_flag_column(flag_column_name)
+        expr = flag_column.filter_expr(flags)
+        if not include:
+            # Fill null ensures that rows that don't have any flag values (null) are kept
+            expr = ~expr.fill_null(False)
+        tf = self.copy()
+        tf._df = self.df.filter(expr)
+        tf._column_metadata.sync()
         return tf
 
     def aggregate(
