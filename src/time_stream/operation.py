@@ -12,9 +12,11 @@ Key features:
 """
 
 from abc import ABC
-from typing import ClassVar, Self
+from typing import ClassVar, Self, TypeVar
 
 from time_stream.exceptions import DuplicateRegistryKeyError, RegistryKeyTypeError, UnknownRegistryKeyError
+
+T = TypeVar("T", bound="Operation")
 
 
 class Operation(ABC):
@@ -46,7 +48,7 @@ class Operation(ABC):
         return sorted(cls._REGISTRY.keys())
 
     @classmethod
-    def register(cls, register_cls: type[Self]) -> type[Self]:
+    def register(cls, register_cls: type[T]) -> type[T]:
         """A method used as a decorator for subclasses to add to the register by its `name` attribute.
 
         Args:
@@ -65,7 +67,7 @@ class Operation(ABC):
         return register_cls
 
     @classmethod
-    def get(cls, spec: str | type[Self] | Self, **kwargs) -> Self:
+    def get(cls, spec: str | type[T] | T, **kwargs) -> T:
         """Resolve `spec` to an instance of `Self`:
 
         Args:

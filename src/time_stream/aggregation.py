@@ -371,8 +371,8 @@ class StandardAggregationPipeline(AggregationPipeline):
             index_column=self.ctx.time_name,
             every=self.aggregation_period.pl_interval,
             offset=self.aggregation_period.pl_offset,
-            closed=closed,
-            label=label,
+            closed=closed,  # type: ignore[arg-type] - Polars Literal is a string
+            label=label,  # type: ignore[arg-type] - Polars Literal is a string
         )
 
     def _static_expected_count_expr(self) -> pl.Expr | None:

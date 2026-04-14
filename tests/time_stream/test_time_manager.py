@@ -41,7 +41,8 @@ class TestValidateAlignment:
     def test_validate_alignment_success(self, tm: TimeManager) -> None:
         """Test that a correct alignment to time series passes the validation."""
         tm._resolution = Period.of_years(1)
-        tm._configure_period_properties()
+        tm._alignment = TimeManager._configure_alignment_property(tm._resolution, tm._offset)
+        tm._periodicity = TimeManager._configure_periodicity_property(None, tm._alignment)
 
         times = pl.Series([datetime(2020, 1, 1), datetime(2021, 1, 1), datetime(2022, 1, 1)])
         tm._validate_alignment(times)
@@ -49,7 +50,8 @@ class TestValidateAlignment:
     def test_validate_alignment_fails(self, tm: TimeManager) -> None:
         """Test that an incorrect alignment to time series fails the validation."""
         tm._resolution = Period.of_years(1)
-        tm._configure_period_properties()
+        tm._alignment = TimeManager._configure_alignment_property(tm._resolution, tm._offset)
+        tm._periodicity = TimeManager._configure_periodicity_property(None, tm._alignment)
 
         times = pl.Series([datetime(2020, 1, 1), datetime(2021, 6, 1), datetime(2022, 1, 1)])
 
@@ -62,7 +64,8 @@ class TestValidateAlignment:
         """Test that a correct alignment to time series passes the validation, when an offset has been given."""
         tm._resolution = Period.of_years(1)
         tm._offset = "+T9H"
-        tm._configure_period_properties()
+        tm._alignment = TimeManager._configure_alignment_property(tm._resolution, tm._offset)
+        tm._periodicity = TimeManager._configure_periodicity_property(None, tm._alignment)
 
         times = pl.Series([datetime(2020, 1, 1, 9), datetime(2021, 1, 1, 9), datetime(2022, 1, 1, 9)])
 
@@ -72,7 +75,8 @@ class TestValidateAlignment:
         """Test that an incorrect alignment to time series fails the validation, when an offset has been given."""
         tm._resolution = Period.of_years(1)
         tm._offset = "+T9H"
-        tm._configure_period_properties()
+        tm._alignment = TimeManager._configure_alignment_property(tm._resolution, tm._offset)
+        tm._periodicity = TimeManager._configure_periodicity_property(None, tm._alignment)
 
         times = pl.Series([datetime(2020, 1, 1, 9, 1), datetime(2021, 1, 1, 9), datetime(2022, 1, 1, 9)])
 
@@ -90,7 +94,6 @@ class TestValidatePeriodicity:
     def test_validate_periodicity_success(self, tm: TimeManager) -> None:
         """Test that a correct periodicity to time series passes the validation."""
         tm._periodicity = Period.of_years(1)
-        tm._configure_period_properties()
 
         # 1 value per year allowed
         times = pl.Series([datetime(2020, 1, 1), datetime(2021, 7, 19, 5), datetime(2022, 12, 25, 9, 30)])
@@ -99,7 +102,6 @@ class TestValidatePeriodicity:
     def test_validate_periodicity_fails(self, tm: TimeManager) -> None:
         """Test that an incorrect periodicity to time series fails the validation."""
         tm._periodicity = Period.of_years(1)
-        tm._configure_period_properties()
 
         times = pl.Series([datetime(2020, 1, 1), datetime(2020, 6, 1), datetime(2022, 1, 1)])
 
@@ -111,7 +113,6 @@ class TestValidatePeriodicity:
     def test_validate_periodicity_with_offset_success(self, tm: TimeManager) -> None:
         """Test that a correct periodicity to time series passes the validation, when an offset has been given."""
         tm._periodicity = Period.of_years(1).with_month_offset(3)
-        tm._configure_period_properties()
 
         # 1 value per year, from April to April, allowed
         times = pl.Series([datetime(2020, 1, 1), datetime(2020, 4, 1, 1), datetime(2021, 12, 9, 23)])
@@ -121,7 +122,6 @@ class TestValidatePeriodicity:
     def test_validate_periodicity_with_offset_fails(self, tm: TimeManager) -> None:
         """Test that an incorrect periodicity to time series fails the validation, when an offset has been given."""
         tm._periodicity = Period.of_years(1).with_month_offset(3)
-        tm._configure_period_properties()
 
         times = pl.Series([datetime(2020, 1, 1), datetime(2020, 3, 1, 1), datetime(2021, 12, 9, 23)])
 
@@ -318,112 +318,153 @@ class TestCheckTimeIntegrity:
             self.tm._check_time_integrity(self.df, new_df)
 
 
-class TestConfigurePeriodProperties:
-    def test_resolution_str_no_offset_defaults_periodicity_to_alignment(self, tm: TimeManager) -> None:
-        tm._resolution = "PT15M"
-        tm._configure_period_properties()
+class TestConfigureResolutionProperty:
+    def test_resolution_string_parsed(self) -> None:
+        """A valid ISO duration string is parsed into a Period."""
+        result = TimeManager._configure_resolution_property("PT15M")
+        assert result == Period.of_minutes(15)
 
-        assert isinstance(tm._resolution, Period)
-        assert isinstance(tm._alignment, Period)
-        assert isinstance(tm._periodicity, Period)
+    def test_resolution_period_passthrough(self) -> None:
+        """A Period object without an offset is returned as-is."""
+        period = Period.of_days(1)
+        assert TimeManager._configure_resolution_property(period) is period
 
-        assert tm._resolution == Period.of_minutes(15)
-        assert tm._offset is None
-        assert tm._alignment == Period.of_minutes(15)
-        assert tm._periodicity == Period.of_minutes(15)
+    def test_resolution_none_defaults_to_microsecond(self) -> None:
+        """None resolution defaults to 1 microsecond."""
+        assert TimeManager._configure_resolution_property(None) == Period.of_microseconds(1)
 
-    def test_offset_and_default_periodicity(self, tm: TimeManager) -> None:
-        tm._resolution = "P1D"
-        tm._offset = "+T9H"
-        tm._configure_period_properties()
-
-        assert isinstance(tm._resolution, Period)
-        assert isinstance(tm._offset, str)
-        assert isinstance(tm._alignment, Period)
-        assert isinstance(tm._periodicity, Period)
-
-        assert tm._resolution == Period.of_days(1)
-        assert tm._offset == "+T9H"
-        assert tm._alignment == Period.of_days(1).with_hour_offset(9)
-        assert tm._periodicity == Period.of_days(1).with_hour_offset(9)
-
-    def test_override_periodicity(self, tm: TimeManager) -> None:
-        tm._resolution = "P1D"
-        tm._periodicity = "P1Y+9MT9H"
-        tm._configure_period_properties()
-
-        assert isinstance(tm._resolution, Period)
-        assert isinstance(tm._alignment, Period)
-        assert isinstance(tm._periodicity, Period)
-
-        assert tm._resolution == Period.of_days(1)
-        assert tm._offset is None
-        assert tm._alignment == Period.of_days(1)
-        assert tm._periodicity == Period.of_years(1).with_month_offset(9).with_hour_offset(9)
-
-    def test_defaults(self, tm: TimeManager) -> None:
-        tm._configure_period_properties()
-
-        assert isinstance(tm._resolution, Period)
-        assert tm._offset is None
-        assert isinstance(tm._alignment, Period)
-        assert isinstance(tm._periodicity, Period)
-
-        assert tm._resolution == Period.of_microseconds(1)
-        assert tm._alignment == Period.of_microseconds(1)
-        assert tm._periodicity == Period.of_microseconds(1)
-
-    def test_non_iso_standard_resolution_string_raises(self, tm: TimeManager) -> None:
-        """Periods can be created with a modified iso string specified an offset. We want the resolution parameter to
-        be a "non-offset" period (which we can apply a specified offset too later).
+    def test_non_iso_standard_resolution_string_raises(self) -> None:
+        """Periods can be created with a modified iso string specifying an offset. We want the resolution parameter to
+        be a "non-offset" period (which we can apply a specified offset to later).
         """
-        tm._resolution = "P1D+9H"
         with pytest.raises(PeriodParsingError):
-            tm._configure_period_properties()
+            TimeManager._configure_resolution_property("P1D+9H")
 
-    def test_explicit_resolution_with_offset_raises(self, tm: TimeManager) -> None:
+    def test_explicit_resolution_with_offset_raises(self) -> None:
         """Periods can have an offset. We want the resolution parameter to be a "non-offset" period
-        (which we can apply a specified offset too later).
+        (which we can apply a specified offset to later).
         """
-        tm._resolution = Period.of_days(1).with_hour_offset(9)
         with pytest.raises(PeriodValidationError):
-            tm._configure_period_properties()
+            TimeManager._configure_resolution_property(Period.of_days(1).with_hour_offset(9))
 
-    def test_non_offset_string_raises(self, tm: TimeManager) -> None:
-        """The offset parameter should be provided as an offset string (e.g. +1D, +1DT9H, etc.)"""
-        tm._offset = "P1D+9H"
-        with pytest.raises(PeriodParsingError):
-            tm._configure_period_properties()
-
-    def test_invalid_resolution_type_raises(self, tm: TimeManager) -> None:
-        tm._resolution = 123  # type: ignore
+    def test_invalid_resolution_type_raises(self) -> None:
         with pytest.raises(TypeError):
-            tm._configure_period_properties()
+            TimeManager._configure_resolution_property(123)  # type: ignore
 
-    def test_invalid_offset_type_raises(self, tm: TimeManager) -> None:
-        tm._offset = Period.of_years(1)  # type: ignore
+    def test_invalid_resolution_string_raises(self) -> None:
+        with pytest.raises(PeriodParsingError):
+            TimeManager._configure_resolution_property("NOT_A_PERIOD")
+
+
+class TestConfigureOffsetProperty:
+    def test_none_passthrough(self) -> None:
+        """None is returned unchanged."""
+        assert TimeManager._configure_offset_property(None) is None
+
+    def test_string_passthrough(self) -> None:
+        """A string is returned unchanged."""
+        assert TimeManager._configure_offset_property("+T9H") == "+T9H"
+
+    def test_invalid_offset_type_raises(self) -> None:
         with pytest.raises(TypeError):
-            tm._configure_period_properties()
+            TimeManager._configure_offset_property(Period.of_years(1))  # type: ignore
 
-    def test_invalid_periodicity_type_raises(self, tm: TimeManager) -> None:
-        tm._periodicity = 123  # type: ignore
+
+class TestConfigureAlignmentProperty:
+    def test_resolution_only(self) -> None:
+        """Alignment equals resolution when no offset is given."""
+        result = TimeManager._configure_alignment_property(Period.of_days(1), None)
+        assert result == Period.of_days(1)
+
+    def test_resolution_with_offset(self) -> None:
+        """Alignment is the combined resolution+offset period."""
+        result = TimeManager._configure_alignment_property(Period.of_days(1), "+T9H")
+        assert result == Period.of_days(1).with_hour_offset(9)
+
+    def test_non_offset_string_raises(self) -> None:
+        """The offset parameter should be provided as an offset string (e.g. +T9H)."""
+        with pytest.raises(PeriodParsingError):
+            TimeManager._configure_alignment_property(Period.of_days(1), "P1D+9H")
+
+    def test_invalid_offset_string_raises(self) -> None:
+        with pytest.raises(PeriodParsingError):
+            TimeManager._configure_alignment_property(Period.of_days(1), "NOT_A_PERIOD")
+
+
+class TestConfigurePeriodicityProperty:
+    def test_none_defaults_to_alignment(self) -> None:
+        """None periodicity defaults to the alignment period."""
+        alignment = Period.of_minutes(15)
+        result = TimeManager._configure_periodicity_property(None, alignment)
+        assert result == alignment
+
+    def test_string_parsed(self) -> None:
+        """A valid duration string is parsed into a Period."""
+        alignment = Period.of_days(1)
+        result = TimeManager._configure_periodicity_property("P1Y+9MT9H", alignment)
+        assert result == Period.of_years(1).with_month_offset(9).with_hour_offset(9)
+
+    def test_period_passthrough(self) -> None:
+        """A Period object is returned as-is."""
+        alignment = Period.of_days(1)
+        period = Period.of_years(1)
+        assert TimeManager._configure_periodicity_property(period, alignment) is period
+
+    def test_invalid_periodicity_type_raises(self) -> None:
         with pytest.raises(TypeError):
-            tm._configure_period_properties()
+            TimeManager._configure_periodicity_property(123, Period.of_days(1))  # type: ignore
 
-    def test_invalid_resolution_string_raises(self, tm: TimeManager) -> None:
-        tm._resolution = "NOT_A_PERIOD"
+    def test_invalid_periodicity_string_raises(self) -> None:
         with pytest.raises(PeriodParsingError):
-            tm._configure_period_properties()
+            TimeManager._configure_periodicity_property("NOT_A_PERIOD", Period.of_days(1))
 
-    def test_invalid_offset_string_raises(self, tm: TimeManager) -> None:
-        tm._offset = "NOT_A_PERIOD"
-        with pytest.raises(PeriodParsingError):
-            tm._configure_period_properties()
 
-    def test_invalid_periodicity_string_raises(self, tm: TimeManager) -> None:
-        tm._periodicity = "NOT_A_PERIOD"
-        with pytest.raises(PeriodParsingError):
-            tm._configure_period_properties()
+class TestConfigureProperties:
+    """Integration tests for the configure property methods called in sequence."""
+
+    def test_resolution_str_no_offset_defaults_periodicity_to_alignment(self) -> None:
+        resolution = TimeManager._configure_resolution_property("PT15M")
+        offset = TimeManager._configure_offset_property(None)
+        alignment = TimeManager._configure_alignment_property(resolution, offset)
+        periodicity = TimeManager._configure_periodicity_property(None, alignment)
+
+        assert resolution == Period.of_minutes(15)
+        assert offset is None
+        assert alignment == Period.of_minutes(15)
+        assert periodicity == Period.of_minutes(15)
+
+    def test_offset_and_default_periodicity(self) -> None:
+        resolution = TimeManager._configure_resolution_property("P1D")
+        offset = TimeManager._configure_offset_property("+T9H")
+        alignment = TimeManager._configure_alignment_property(resolution, offset)
+        periodicity = TimeManager._configure_periodicity_property(None, alignment)
+
+        assert resolution == Period.of_days(1)
+        assert offset == "+T9H"
+        assert alignment == Period.of_days(1).with_hour_offset(9)
+        assert periodicity == Period.of_days(1).with_hour_offset(9)
+
+    def test_override_periodicity(self) -> None:
+        resolution = TimeManager._configure_resolution_property("P1D")
+        offset = TimeManager._configure_offset_property(None)
+        alignment = TimeManager._configure_alignment_property(resolution, offset)
+        periodicity = TimeManager._configure_periodicity_property("P1Y+9MT9H", alignment)
+
+        assert resolution == Period.of_days(1)
+        assert offset is None
+        assert alignment == Period.of_days(1)
+        assert periodicity == Period.of_years(1).with_month_offset(9).with_hour_offset(9)
+
+    def test_defaults(self) -> None:
+        resolution = TimeManager._configure_resolution_property(None)
+        offset = TimeManager._configure_offset_property(None)
+        alignment = TimeManager._configure_alignment_property(resolution, offset)
+        periodicity = TimeManager._configure_periodicity_property(None, alignment)
+
+        assert resolution == Period.of_microseconds(1)
+        assert offset is None
+        assert alignment == Period.of_microseconds(1)
+        assert periodicity == Period.of_microseconds(1)
 
 
 invalid_resolution_test_cases = (
@@ -534,10 +575,9 @@ class TestHandleMisalignedRows:
 
         try:
             actual_df = time_manager._handle_misaligned_rows(df)
+            assert_frame_equal(actual_df, df)
         except ResolutionError as err:
             pytest.fail(f"No ResolutionError was expected to be raised. Error:{str(err)}")
-
-        assert_frame_equal(actual_df, df)
 
     def test_valid_PT30M_resolution_with_yearly_gaps(self) -> None:
         """No modifications should be made data with gaps within valid PT30M data."""
@@ -561,10 +601,9 @@ class TestHandleMisalignedRows:
 
         try:
             actual_df = time_manager._handle_misaligned_rows(df)
+            assert_frame_equal(actual_df, df)
         except ResolutionError as err:
             pytest.fail(f"No ResolutionError was expected to be raised. Error:{str(err)}")
-
-        assert_frame_equal(actual_df, df)
 
     def test_valid_monthly_resolution_with_yearly_gaps(self) -> None:
         """No modifications should be made data with gaps within valid monthly resolution data."""
@@ -594,10 +633,9 @@ class TestHandleMisalignedRows:
 
         try:
             actual_df = time_manager._handle_misaligned_rows(df)
+            assert_frame_equal(actual_df, df)
         except ResolutionError as err:
             pytest.fail(f"No ResolutionError was expected to be raised. Error:{str(err)}")
-
-        assert_frame_equal(actual_df, df)
 
     @pytest.mark.parametrize("input_timestamps, period, error_dates", invalid_resolution_test_cases)
     def test_invalid_with_error(self, input_timestamps: list[datetime], period: Period, error_dates: list[str]) -> None:

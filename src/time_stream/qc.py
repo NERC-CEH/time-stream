@@ -135,7 +135,7 @@ class ComparisonCheck(QCCheck):
             "<=": pl.col(column) <= self.compare_to,
             "==": pl.col(column) == self.compare_to,
             "!=": pl.col(column) != self.compare_to,
-            "is_in": pl.col(column).is_in(self.compare_to),
+            "is_in": pl.col(column).is_in(self.compare_to if isinstance(self.compare_to, list) else [self.compare_to]),
         }
 
         if self.operator not in operator_map:
@@ -187,7 +187,7 @@ class RangeCheck(QCCheck):
             col_expr = pl.col(column).dt.time()
 
             # Consider ranges that cross midnight, e.g. min_value = 11:00, max_value = 01:00
-            if self.min_value > self.max_value:
+            if self.min_value > self.max_value:  # type: ignore[arg-type] - we know the types are the same by now
                 # Swap the values so the comparison operators work the correct way around
                 self.min_value, self.max_value = self.max_value, self.min_value
 

@@ -58,15 +58,13 @@ class TimeManager:
             time_anchor: The time anchor to which the date/times conform to.
         """
         self._time_name = time_name
-        self._resolution = resolution
-        self._offset = offset
-        self._alignment = None
-        self._periodicity = periodicity
+        self._resolution = self._configure_resolution_property(resolution)
+        self._offset = self._configure_offset_property(offset)
+        self._alignment = self._configure_alignment_property(self._resolution, self._offset)
+        self._periodicity = self._configure_periodicity_property(periodicity, self._alignment)
         self._on_duplicates = DuplicateOption(on_duplicates)
         self._on_misaligned_rows = ValidationErrorOptions(on_misaligned_rows)
         self._time_anchor = TimeAnchor(time_anchor)
-
-        self._configure_period_properties()
 
     @property
     def time_name(self) -> str:
@@ -92,51 +90,90 @@ class TimeManager:
     def time_anchor(self) -> TimeAnchor:
         return self._time_anchor
 
-    def _configure_period_properties(self) -> None:
-        """Normalise and derive the period properties: ``resolution``, ``offset``, ``alignment`` (resolution+offset),
-        and ``periodicity``.
+    @staticmethod
+    def _configure_resolution_property(resolution: str | Period | None) -> Period:
+        """Normalise and derive the period properties of ``resolution``
 
-        ``resolution``: Parses string into Period object. If none, default to 1 microsecond to allow any resolution.
-        ``offset``: Checks if valid offset string. If none, no action - no offset used.
-        ``alignment``: Represents resolution+offset. Uses string form of those objects to create a new Period object
-                       e.g. P1D+PT9H.
-        ``periodicity``: Parses string into Period object. If none, default to same Period as the alignment object
-                         (i.e., to represent one value per alignment bucket).
+        Parses string into Period object. If none, default to 1 microsecond to allow any resolution.
 
-        Raises:
-            TypeError:  If any of ``_resolution``, ``_offset``, or ``_periodicity`` is not ``str``,
-                        ``Period``, or ``None``.
+        Args:
+            resolution: Sampling interval for the timeseries.
+
+        Returns:
+            Resolution period object
         """
-        # Configure resolution parameter
-        if self._resolution is None:
-            self._resolution = Period.of_microseconds(1)
-        elif isinstance(self._resolution, str):
-            self._resolution = Period.of_iso_duration(self._resolution)
-        elif isinstance(self._resolution, Period):
+        if resolution is None:
+            return Period.of_microseconds(1)
+        elif isinstance(resolution, str):
+            return Period.of_iso_duration(resolution)
+        elif isinstance(resolution, Period):
             # Check that this is a non-offset period
-            if self._resolution.has_offset():
-                raise PeriodValidationError(f"Resolution must be a non-offset period. Got: '{self._resolution}'")
+            if resolution.has_offset():
+                raise PeriodValidationError(f"Resolution must be a non-offset period. Got: '{resolution}'")
+            return resolution
         else:
-            raise TypeError(f"Resolution must be str | Period | None. Got: '{type(self._resolution)}'")
+            raise TypeError(f"Resolution must be str | Period | None. Got: '{type(resolution)}'")
 
-        # Configure offset parameter
-        if isinstance(self._offset, str):
-            pass
-        elif self._offset is not None:
-            raise TypeError(f"Offset must be str | None. Got: '{type(self._offset)}'")
+    @staticmethod
+    def _configure_offset_property(offset: str | None) -> str | None:
+        """Normalise and derive the period properties of ``offset``
 
+        Checks if valid offset string. If none, no action - no offset used.
+
+        Args:
+            offset: Offset applied from the natural boundary of ``resolution`` to position the datetime values along the
+                    timeline.
+
+        Returns:
+            Offset object
+        """
+        if not isinstance(offset, (str, type(None))):
+            raise TypeError(f"Offset must be str | None. Got: '{type(offset)}'")
+        return offset
+
+    @staticmethod
+    def _configure_alignment_property(resolution: Period, offset: str | None) -> Period:
+        """Normalise and derive the period properties of ``alignment``
+
+        Represents resolution+offset. Uses string form of those objects to create a new Period object, e.g. P1D+PT9
+
+        Args:
+            resolution: Sampling interval for the timeseries.
+            offset: Offset applied from the natural boundary of ``resolution`` to position the datetime values along the
+                    timeline.
+
+        Returns:
+            Alignment object
+        """
         # Configure alignment parameter (resolution + offset)
-        offset_str = self._offset or ""
-        self._alignment = Period.of_duration(str(self._resolution) + offset_str)
+        offset_str = offset or ""
+        alignment = Period.of_duration(str(resolution) + offset_str)
+        return alignment
 
+    @staticmethod
+    def _configure_periodicity_property(periodicity: str | Period | None, alignment: Period) -> Period:
+        """Normalise and derive the period properties of ``periodicity``
+
+        Parses string into Period object. If none, default to same Period as the alignment object
+        (i.e., to represent one value per alignment bucket).
+
+        Args:
+            periodicity: Defines the allowed "frequency" of datetimes in your timeseries, i.e., how many datetime
+                         entries are allowed within a given period of time.
+            alignment: A Period object representing resolution+offset
+        Returns:
+            Resolution period object
+        """
         # Configure periodicity parameter
-        if self._periodicity is None:
+        if periodicity is None:
             # Default to the alignment Period
-            self._periodicity = Period.of_duration(str(self._alignment))
-        elif isinstance(self._periodicity, str):
-            self._periodicity = Period.of_duration(self._periodicity)
-        elif not isinstance(self._periodicity, Period):
-            raise TypeError(f"Periodicity must be str | Period | None. Got: '{type(self._periodicity)}'")
+            return Period.of_duration(str(alignment))
+        elif isinstance(periodicity, str):
+            return Period.of_duration(periodicity)
+        elif isinstance(periodicity, Period):
+            return periodicity
+        else:
+            raise TypeError(f"Periodicity must be str | Period | None. Got: '{type(periodicity)}'")
 
     def validate(self, df: pl.DataFrame) -> None:
         """Carry out a series of validations on the temporal aspects of the TimeFrame.
