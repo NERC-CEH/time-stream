@@ -900,8 +900,8 @@ class TestFilterByFlag:
                 }
             ),
             "time",
-        ).with_flag_system("qc", {"FLAG_A": 0, "FLAG_B": 1, "FLAG_C": 2}, flag_type="categorical")
-        tf.init_flag_column("qc", "list_flag", list_mode=True)
+        ).with_flag_system("qc", {"FLAG_A": 0, "FLAG_B": 1, "FLAG_C": 2}, flag_type="categorical_list")
+        tf.init_flag_column("qc", "list_flag")
         tf.add_flag("list_flag", "FLAG_A", pl.col("value").is_in([20, 40]))
         tf.add_flag("list_flag", "FLAG_B", pl.col("value").is_in([30, 40]))
         tf.add_flag("list_flag", "FLAG_C", pl.col("value") == 50)

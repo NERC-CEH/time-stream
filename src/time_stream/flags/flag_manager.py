@@ -412,6 +412,22 @@ class CategoricalSingleFlagColumn(FlagColumn):
             df = self.decode(df)
         return df
 
+    def filter_expr(self, flags: list[int | str]) -> pl.Expr:
+        """Return a boolean expression that is True for rows where the column value matches any of the given flags.
+
+        Args:
+            flags: One or more flag names or values to match against.
+
+        Returns:
+            A boolean Polars expression.
+
+        Raises:
+            CategoricalFlagUnknownError: If any flag is not in the flag system.
+        """
+        flag_members = [self.flag_system.get_flag(f) for f in flags]
+        values = [f.name if self.is_decoded else f.value for f in flag_members]
+        return pl.col(self.name).is_in(values)
+
     def __eq__(self, other: object) -> bool:
         """Check if two ``CategoricalSingleFlagColumn`` instances are equal.
 
@@ -578,12 +594,8 @@ class CategoricalListFlagColumn(FlagColumn):
         # Fetch the actual flag enum members based on the flag values provided
         flag_members = [self.flag_system.get_flag(f) for f in flags]
         values = [f.name if self.is_decoded else f.value for f in flag_members]
-
-        if self.list_mode:
-            exprs = [pl.col(self.name).list.contains(pl.lit(v)) for v in values]
-            return pl.any_horizontal(exprs)
-
-        return pl.col(self.name).is_in(values)
+        exprs = [pl.col(self.name).list.contains(pl.lit(v)) for v in values]
+        return pl.any_horizontal(exprs)
 
     def __eq__(self, other: object) -> bool:
         """Check if two ``CategoricalListFlagColumn`` instances are equal.
