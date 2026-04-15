@@ -852,7 +852,7 @@ class TimeFrame:
         check: str | Type[QCCheck] | QCCheck,
         column_name: str,
         observation_interval: tuple[datetime, datetime | None] | None = None,
-        into: str | bool = False,
+        flag_params: tuple[str, str | int] | None = None,
         **kwargs,
     ) -> "TimeFrame | pl.Series":
         """Apply a quality control check to the TimeFrame.
@@ -861,8 +861,9 @@ class TimeFrame:
             check: The QC check to apply.
             column_name: The column to perform the check on.
             observation_interval: Optional time interval to limit the check to.
-            into: Whether to add the result of the QC to the TimeFrame dataframe (True | string name of column to add),
-                  or just return a boolean Series of the QC result (False).
+            flag_params: Tuple of (flag column name [str], flag value [str | int].
+                            If provided, add given flag value to the flag column where the QC check returns ``True``.
+                            If not provided, the result of the QC check is returned as a boolean series.
             **kwargs: Parameters specific to the check type.
 
         Returns:
@@ -885,33 +886,23 @@ class TimeFrame:
         check_instance = QCCheck.get(check, **kwargs)
         qc_result = check_instance.apply(self.df, self.time_name, column_name, observation_interval)
 
-        # Return the boolean series, if requested
-        if not into:
+        if not flag_params:
+            # Return the boolean series, if requested
             return qc_result
-
-        # Determine the name of the column for the QC result
-        if isinstance(into, str):
-            qc_result_col_name = into
         else:
-            qc_result_col_name = f"__qc__{column_name}__{check_instance.name}"
-
-        if qc_result_col_name in self.df.columns:
-            # Auto-suffix the column name to avoid accidental overwrite
-            col_suffix = 1
-            while f"{qc_result_col_name}__{col_suffix}" in self.df.columns:
-                col_suffix += 1
-            qc_result_col_name = f"{qc_result_col_name}__{col_suffix}"
-
-        # Create a copy of the current TimeFrame, and update the dataframe with the QC result
-        new_df = self.df.with_columns(pl.Series(qc_result_col_name, qc_result))
-        return self.with_df(new_df)
+            # Otherwise, create a copy of the current TimeFrame, and update the dataframe with the QC result
+            flag_column_name, flag_value = flag_params
+            tf_result = self.copy()
+            tf_result.add_flag(flag_column_name, flag_value, qc_result)
+            return tf_result
 
     def infill(
         self,
         infill_method: str | Type[InfillMethod] | InfillMethod,
         column_name: str,
-        observation_interval: tuple[datetime, datetime | None] | None = None,
         max_gap_size: int | None = None,
+        observation_interval: tuple[datetime, datetime | None] | None = None,
+        flag_params: tuple[str, str | int] | None = None,
         **kwargs,
     ) -> TimeFrame:
         """Apply an infilling method to a column in the TimeFrame to fill in missing data.
@@ -919,9 +910,12 @@ class TimeFrame:
         Args:
             infill_method: The method to use for infilling
             column_name: The column to infill
-            observation_interval: Optional time interval to limit the check to.
             max_gap_size: The maximum size of consecutive null gaps that should be filled. Any gap larger than this
                           will not be infilled and will remain as null.
+            observation_interval: Optional time interval to limit the check to.
+            flag_params: Tuple of (flag column name [str], flag value [str | int].
+                            If provided, add given flag value to the flag column on rows that were infilled.
+                            If not provided, no flags added.
             **kwargs: Parameters specific to the infill method.
 
         Returns:
@@ -933,9 +927,23 @@ class TimeFrame:
             self.df, self.time_name, self.periodicity, column_name, observation_interval, max_gap_size
         )
 
-        # Create result TimeFrame
         # Create a copy of the current TimeFrame, and update the dataframe with the infilled data
-        return self.with_df(infill_result)
+        tf_result = self.with_df(infill_result)
+
+        if flag_params:
+            # Add flag where we have infilled data
+            flag_column_name, flag_value = flag_params
+
+            before = self.df[column_name]
+            after = tf_result.df[column_name]
+
+            before_is_null = before.is_null() | before.is_nan()
+            after_is_null = after.is_null() | after.is_nan()
+
+            mask = before_is_null.ne(after_is_null)
+            tf_result.add_flag(flag_column_name, flag_value, mask)
+
+        return tf_result
 
     def select(
         self,
