@@ -93,39 +93,110 @@ Each method has its strengths, depending on your data. The currently available m
 
 Simple infilling techniques
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
-- ``"alt_data"`` - **infill using data from an alternative source.**
 
-  Either another column in your TimeFrame, or data from a different DataFrame entirely.
+``alt_data``
+^^^^^^^^^^^^
+:class:`time_stream.infill.AltData`
+
+    **What it does:** Infills using data from an alternative source - either another column in your
+    TimeFrame, or data from a different DataFrame entirely.
+
+    **When to use:** When you have a secondary data source that can stand in for missing values,
+    such as a nearby gauge or a modelled estimate.
+
+    **Additional args:**
+        ``alt_data_column``: The name of the column providing the alternative data.
+        ``correction_factor``: An optional multiplier to apply to the alternative data (default: 1.0).
+        ``alt_df``: A separate Polars DataFrame containing the alternative data. If omitted, the
+        column is taken from the current TimeFrame.
+
+    **Example usage:** ``tf_filled = tf.infill("alt_data", "flow", alt_data_column="flow_model", alt_df=model_df)``
 
 Polynomial interpolation
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
-- ``"linear"`` - **straight-line interpolation between neighbouring points.**
+``linear``
+^^^^^^^^^^
+:class:`time_stream.infill.LinearInterpolation`
 
-  Simple and neutral; best for short gaps.
+    **What it does:** Straight-line interpolation between neighbouring known points.
 
-- ``"quadratic"`` - **second-order polynomial curve.**
+    **When to use:** Simple and neutral; best for short gaps where the underlying signal is
+    unlikely to curve significantly.
 
-  Captures gentle curvature; suitable when changes aren't linear.
+    **Additional args:** None.
 
-- ``"cubic"`` - **third-order polynomial curve.**
+    **Example usage:** ``tf_filled = tf.infill("linear", "flow", max_gap_size=3)``
 
-  Smooth transitions; can be useful for variables with cyclical patterns.
+``quadratic``
+^^^^^^^^^^^^^
+:class:`time_stream.infill.QuadraticInterpolation`
 
-- ``"bspline"`` - **B-spline interpolation (configurable order).**
+    **What it does:** Second-order polynomial curve through neighbouring known points.
 
-  Flexible piecewise polynomials; user decides.
+    **When to use:** Captures gentle curvature; suitable when changes are not strictly linear
+    but you do not need a high-order fit.
+
+    **Additional args:** None.
+
+    **Example usage:** ``tf_filled = tf.infill("quadratic", "flow", max_gap_size=3)``
+
+``cubic``
+^^^^^^^^^
+:class:`time_stream.infill.CubicInterpolation`
+
+    **What it does:** Third-order polynomial curve through neighbouring known points.
+
+    **When to use:** Produces smooth transitions; can be useful for variables with cyclical
+    patterns or gradually changing curvature.
+
+    **Additional args:** None.
+
+    **Example usage:** ``tf_filled = tf.infill("cubic", "flow", max_gap_size=3)``
+
+``bspline``
+^^^^^^^^^^^
+:class:`time_stream.infill.BSplineInterpolation`
+
+    **What it does:** B-spline interpolation with a configurable polynomial order.
+
+    **When to use:** When you want full control over the interpolation order. The other
+    polynomial methods (linear, quadratic, cubic) are convenience wrappers around this.
+
+    **Additional args:**
+        ``order``: Order of the B-spline (1-5, where 1=linear, 2=quadratic, 3=cubic).
+
+    **Example usage:** ``tf_filled = tf.infill("bspline", "flow", max_gap_size=3, order=4)``
 
 Shape-preserving methods
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
-- ``"pchip"`` - **Piecewise Cubic Hermite Interpolating Polynomial.**
+``pchip``
+^^^^^^^^^
+:class:`time_stream.infill.PchipInterpolation`
 
-  Preserves monotonicity and avoids overshoot; can help to avoid unrealistic fluctuations between values.
+    **What it does:** Piecewise Cubic Hermite Interpolating Polynomial.
 
-- ``"akima"`` - **Akima spline**.
+    **When to use:** Preserves monotonicity and avoids overshoot; can help to avoid unrealistic
+    fluctuations between known values. A good default when you want a smooth curve that respects
+    the shape of your data.
 
-  A smooth curve fit for data with significant local variations and potential outliers.
+    **Additional args:** None.
+
+    **Example usage:** ``tf_filled = tf.infill("pchip", "flow", max_gap_size=3)``
+
+``akima``
+^^^^^^^^^
+:class:`time_stream.infill.AkimaInterpolation`
+
+    **What it does:** Akima spline - a smooth curve fit that reduces oscillations near outliers.
+
+    **When to use:** Best for data with significant local variations and potential outliers,
+    where standard cubic interpolation might overshoot.
+
+    **Additional args:** None.
+
+    **Example usage:** ``tf_filled = tf.infill("akima", "flow", max_gap_size=5)``
 
 .. note::
 
@@ -166,7 +237,7 @@ Example:
        observation_interval=(datetime(2024, 1, 1), datetime(2024, 12, 31)),
    )
 
-This will only attempt infilling **between January to Decemeber 2024**; gaps outside that interval remain untouched.
+This will only attempt infilling **between January to December 2024**; gaps outside that interval remain untouched.
 
 Max gap size
 ------------
@@ -189,6 +260,33 @@ Example:
    The definition of "gap size" depends on the **TimeFrame resolution**.
    At 15-minute resolution, ``max_gap_size=2`` = 30 minutes; at daily resolution,
    ``max_gap_size=2`` = 2 days.
+
+Flagging infilled values
+------------------------
+
+When :meth:`~time_stream.TimeFrame.infill` replaces a null value with an interpolated one, you
+often want a record of which rows were touched. Pass ``flag_params=(flag_column_name, flag_value)``
+and **Time-Stream** will add the given flag to every row that went from null to non-null during
+the infill. The flag column must already exist - see :doc:`flagging` for how to create one.
+
+**Code:**
+
+.. literalinclude:: ../../../src/time_stream/examples/examples_infilling.py
+    :language: python
+    :start-after: [start_block_3]
+    :end-before: [end_block_3]
+    :dedent:
+
+**Output:**
+
+.. jupyter-execute::
+    :hide-code:
+
+    import examples_infilling
+    examples_infilling.flagged_infill()
+
+Only rows whose value changed from null to non-null are flagged; rows that were already populated,
+or that remain null because the gap exceeded ``max_gap_size``, are left untouched.
 
 Examples
 ========
@@ -264,3 +362,11 @@ You should do your research into which is most appropriate.
    tf = examples_infilling.all_infills()
 
 .. plot:: ../../src/time_stream/examples/examples_infilling.py plot_all_infills
+
+API reference
+=============
+
+.. autosummary::
+
+    ~time_stream.infilling
+    ~time_stream.TimeFrame.infill

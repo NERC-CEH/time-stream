@@ -5,6 +5,7 @@ This module provides a framework for applying quality control checks to TimeFram
 implemented as subclasses of ``QCCheck`` and can be registered and instantiated by name, class, or instance.
 
 It supports various QC checks including:
+
 - ComparisonCheck: Compare values against thresholds or sets.
 - RangeCheck: Verify values fall within or outside a given range.
 - TimeRangeCheck: Apply range checks directly to the time column.

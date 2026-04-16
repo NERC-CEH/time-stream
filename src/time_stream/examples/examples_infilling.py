@@ -89,6 +89,25 @@ def alt_data_infill() -> None:
     print(tf_infill.df)
 
 
+def flagged_infill() -> None:
+    with suppress_output():
+        df = get_example_df(library="polars")
+
+    tf = ts.TimeFrame(df, "time", resolution="PT15M", periodicity="PT15M")
+
+    # [start_block_3]
+    # Register a flag system and create a flag column before running infill
+    tf.register_flag_system("INFILL_FLAGS", ["INFILLED"])
+    tf.init_flag_column("INFILL_FLAGS", "flow_flags")
+
+    # Run the infill and mark rows that were filled in
+    tf_infill = tf.infill("linear", "flow", max_gap_size=3, flag_params=("flow_flags", "INFILLED"))
+    # [end_block_3]
+
+    with pl.Config(tbl_rows=16):
+        print(tf_infill.df)
+
+
 def all_infills() -> pl.DataFrame:
     with suppress_output():
         tf = create_simple_time_series_with_gaps()

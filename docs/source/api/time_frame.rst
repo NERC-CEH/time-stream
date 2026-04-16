@@ -4,6 +4,9 @@
 TimeFrame
 =========
 
+.. automodule:: time_stream.base
+     :no-members:
+
 .. currentmodule:: time_stream
 
 .. autoclass:: TimeFrame
@@ -82,3 +85,6 @@ Flagging
     ~TimeFrame.get_flag_column
     ~TimeFrame.add_flag
     ~TimeFrame.remove_flag
+    ~TimeFrame.decode_flag_column
+    ~TimeFrame.encode_flag_column
+    ~TimeFrame.filter_by_flag
