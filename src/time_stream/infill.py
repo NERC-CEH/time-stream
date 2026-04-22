@@ -366,7 +366,12 @@ class AltData(InfillMethod):
 
     name = "alt_data"
 
-    def __init__(self, alt_data_column: str, correction_factor: float = 1.0, alt_df: pl.DataFrame | None = None):
+    def __init__(
+        self,
+        alt_data_column: str,
+        correction_factor: float = 1.0,  # | pl.Expr/DataFrame
+        alt_df: pl.DataFrame | None = None,
+    ):
         """Initialize the alternative data infill method.
 
         Args:
@@ -407,6 +412,8 @@ class AltData(InfillMethod):
                 suffix="_alt",
             )
 
+        # correction factor
+        # update to deal with either int or expr/df/list of 'dynamic' correction factors.
         infilled = df.with_columns(
             pl.when(pl.col(infill_column).is_null())
             .then(pl.col(alt_data_column_name) * self.correction_factor)
