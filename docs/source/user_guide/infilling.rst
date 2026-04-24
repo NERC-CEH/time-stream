@@ -368,5 +368,5 @@ API reference
 
 .. autosummary::
 
-    ~time_stream.infilling
+    ~time_stream.infill
     ~time_stream.TimeFrame.infill

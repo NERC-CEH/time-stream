@@ -16,7 +16,7 @@ body:
       label: Steps to reproduce
       description: Minimal steps to trigger the bug.
       placeholder: |
-        1. Install with `uv pip install my-package`
+        1. Install with `uv pip install time-stream`
         2. Run `...`
         3. See error
     validations:

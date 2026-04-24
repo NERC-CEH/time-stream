@@ -9,7 +9,7 @@ if TYPE_CHECKING:
 
 
 try:
-    __version__ = version("my-package")
+    __version__ = version("time-stream")
 except PackageNotFoundError:
     __version__ = "unknown"
 

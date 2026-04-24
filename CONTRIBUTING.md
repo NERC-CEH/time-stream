@@ -50,9 +50,9 @@ If you are proposing a feature:
 
 ## Get Started
 
-Ready to contribute? Here's how to set up my-package for local development.
+Ready to contribute? Here's how to set up time-stream for local development.
 
-1. Fork the my-package repo on GitHub.
+1. Fork the time-stream repo on GitHub.
 
 1. Clone your fork locally:
 
