@@ -11,7 +11,7 @@ authors:
 abstract: "Time Series Toolkit for Rapid Environmental Analysis and Monitoring: A Python library for handling and analysing timeseries data with a focus on maintaining the integrity of the temporal properties of the data."
 repository-code: "https://github.com/NERC-CEH/time-stream"
 license: MIT
-version: 0.1.0
+version: 1.0.0
 contact:
   - given-names: "Richard"
     family-names: "Smith"
