@@ -1,20 +1,13 @@
 #!/bin/sh
 #
-# An example hook script to verify what is about to be committed.
-# Called by "git commit" with no arguments.  The hook should
-# exit with non-zero status after issuing an appropriate message if
-# it wants to stop the commit.
+# Pre-commit hook: runs ruff format and lint checks via uv.
+# Requires uv on PATH: https://docs.astral.sh/uv/getting-started/installation/
 #
-# To enable this hook, rename this file to "pre-commit".
-
-if git rev-parse --verify HEAD >/dev/null 2>&1
-then
-	against=HEAD
-else
-	# Initial commit: diff against an empty tree object
-	against=$(git hash-object -t tree /dev/null)
-fi
-
+# Installed automatically by post-generation hook via:
+#   git config core.hooksPath .githooks
+#
+# To install manually in an existing clone:
+#   make install-hooks
 
 # Redirect output to stderr.
 exec 1>&2
@@ -25,30 +18,30 @@ format_err=0
 check_err=0
 err=0
 
-echo 'Running "ruff format --check"'
-ruff format --check
+echo 'Running "uv run ruff format --check"'
+uv run ruff format --check
 
 if [ "$?" -eq 1 ]; then
-	format_err=1
-	err=1
+    format_err=1
+    err=1
 fi
 
-echo 'Running "ruff check"'
-ruff check
+echo 'Running "uv run ruff check"'
+uv run ruff check
 
 if [ "$?" -eq 1 ]; then
-	check_err=1
-	err=1
+    check_err=1
+    err=1
 fi
 
 if [ "${format_err}" -eq 1 ] ; then
-	echo "${RED}Run \"ruff format\" before committing${NC}"
+    echo "${RED}Run \"ruff format\" before committing${NC}"
 fi
 
 if [ "${check_err}" -eq 1 ] ; then
-	echo "${RED}Correct ruff errors before committing${NC}"
+    echo "${RED}Correct ruff errors before committing${NC}"
 fi
 
 if [ "${err}" -eq 1 ] ; then
-	exit 1
+    exit 1
 fi
