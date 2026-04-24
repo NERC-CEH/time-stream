@@ -256,7 +256,7 @@ class TestColumnMetadata:
     def test_set_non_dict_raises_error(self) -> None:
         """Test that error raised when setting a non-dict object as the metadata for a column"""
         with pytest.raises(MetadataError):
-            _ = self.tf.column_metadata["col1"] = 123  # noqa - expecting typehint error
+            _ = self.tf.column_metadata["col1"] = 123  # type: ignore[assignment]  # noqa - expecting typehint error
 
     def test_set_column_metadata(self) -> None:
         """Test that we can set the column metadata object directly. Existing metadata should be maintained"""
@@ -383,7 +383,7 @@ class TestInitFlagColumn:
         assert tf._flag_manager._flag_columns == {}
 
         tf.init_flag_column("quality_control", "flag_column")
-        assert tf._flag_manager._flag_columns == {"flag_column": BitwiseFlagColumn("flag_column", flag_system)}
+        assert tf._flag_manager._flag_columns == {"flag_column": BitwiseFlagColumn("flag_column", flag_system)}  # type: ignore[arg-type]
 
         assert "flag_column" in tf.flag_columns
 
@@ -426,7 +426,7 @@ class TestInitFlagColumn:
         tf.init_flag_column("quality_control")
         default_name = "__flag__quality_control"
 
-        assert tf._flag_manager._flag_columns == {default_name: BitwiseFlagColumn(default_name, flag_system)}
+        assert tf._flag_manager._flag_columns == {default_name: BitwiseFlagColumn(default_name, flag_system)}  # type: ignore[arg-type]
 
         assert default_name in tf.flag_columns
 

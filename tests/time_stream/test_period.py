@@ -293,7 +293,7 @@ class TestDateTimeAdjustersPostInit:
     def test_post_init_raises_with_none(self, retreat: Callable | None, advance: Callable | None) -> None:
         """Test DateTimeAdjusters.__post_init__ to ensure it raises AssertionError when retreat or advance is None."""
         with pytest.raises(PeriodConfigError):
-            p.DateTimeAdjusters(retreat=retreat, advance=advance).__post_init__()
+            p.DateTimeAdjusters(retreat=retreat, advance=advance).__post_init__()  # type: ignore[arg-type]
 
 
 class TestSecondString:
@@ -2627,7 +2627,7 @@ class TestPeriodMatch:
         )
         matcher = pattern.match("2023-10-25T01:02:03.456789")
         expected = p.PeriodFields("2023-10-25T01:02:03.456789", 2023, 10, 25, 1, 2, 3, 456789)
-        assert p._period_match("prefix", matcher) == expected
+        assert p._period_match("prefix", matcher) == expected  # type: ignore[arg-type]
 
 
 class TestTotalMicroseconds2:
@@ -3309,7 +3309,7 @@ class TestPeriodTimedelta:
     def test_is_valid(self, text: Any) -> None:
         """Test Period.timedelta property is valid for a set of Period instances"""
         period: Period = Period.of(text)
-        delta: datetime.timedelta = period.timedelta
+        delta: datetime.timedelta | None = period.timedelta
 
         if delta is None:
             assert period._properties.step == p._STEP_MONTHS
@@ -3468,7 +3468,7 @@ class TestPeriodNaiveFormatter:
     def test_is_valid(self, text: Any) -> None:
         """Test Period.naive_formatter method is valid for a set of Period instances"""
         period: Period = Period.of(text)
-        naive_formatter: Callable[[datetime], str] = period.naive_formatter()
+        naive_formatter: Callable[[datetime.datetime], str] = period.naive_formatter()
         assert callable(naive_formatter)
 
     @pytest.mark.parametrize("text", sorted(_GOOD_ISO_DURATION | _GOOD_DURATION | _GOOD_DATE_AND_DURATION | _GOOD_REPR))
@@ -3760,7 +3760,7 @@ class TestPeriodAwareFormatter:
     def test_is_valid(self, text: Any) -> None:
         """Test Period.aware_formatter method is valid for a set of Period instances"""
         period: Period = Period.of(text)
-        aware_formatter: Callable[[datetime], str] = period.aware_formatter()
+        aware_formatter: Callable[[datetime.datetime], str] = period.aware_formatter()
         assert callable(aware_formatter)
 
     @pytest.mark.parametrize(
@@ -4047,7 +4047,7 @@ class TestPeriodFormatter:
     def test_is_valid(self, text: Any) -> None:
         """Test Period.formatter method is valid for a set of Period instances"""
         period: Period = Period.of(text)
-        formatter: Callable[[datetime], str] = period.formatter()
+        formatter: Callable[[datetime.datetime], str] = period.formatter()
         assert callable(formatter)
 
     @pytest.mark.parametrize(

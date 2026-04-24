@@ -36,7 +36,7 @@ class FlagMeta(EnumType):
 
     def __repr__(cls) -> str:
         """Return a string representation listing all enum members and their values."""
-        members = ", ".join(f"{name}={member.value}" for name, member in cls.__members__.items())
+        members = ", ".join(f"{name}={member.value}" for name, member in cls.__members__.items())  # type: ignore[attr-defined]
         return f"<{cls.__name__} ({members})>"
 
     def __eq__(cls, other: object) -> bool:
@@ -50,13 +50,13 @@ class FlagMeta(EnumType):
         """
         if not isinstance(other, FlagMeta) or type(cls) is not type(other):
             return False
-        cls_members = {n: m.value for n, m in cls.__members__.items()}
-        other_members = {n: m.value for n, m in other.__members__.items()}
+        cls_members = {n: m.value for n, m in cls.__members__.items()}  # type: ignore[attr-defined]
+        other_members = {n: m.value for n, m in other.__members__.items()}  # type: ignore[attr-defined]
         return cls.__name__ == other.__name__ and cls_members == other_members
 
     def __hash__(cls) -> int:
         """Hash based on class name and member name/value pairs."""
-        return hash((cls.__name__, tuple(sorted((n, m.value) for n, m in cls.__members__.items()))))
+        return hash((cls.__name__, tuple(sorted((n, m.value) for n, m in cls.__members__.items()))))  # type: ignore[attr-defined]
 
 
 class FlagSystemBase:

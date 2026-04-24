@@ -77,11 +77,11 @@ def generate_expected_df(
     timestamps: list[datetime],
     aggregator: type[AggregationFunction],
     columns: str | list[str],
-    values: dict[str, list[float | int]],
+    values: dict[str, list[Any]],
     expected_counts: list[int],
     actual_counts: list[int],
-    timestamps_of: list[datetime] = None,
-    valid: dict[str, list[bool]] = None,
+    timestamps_of: list[datetime] | None = None,
+    valid: dict[str, list[bool]] | None = None,
 ) -> pl.DataFrame:
     """Helper function to create a dataframe of expected results from an aggregation test.
 
@@ -308,7 +308,7 @@ class TestAggregationFunction:
         expected_error = "Class 'InvalidClass' must inherit from 'AggregationFunction'."
 
         with pytest.raises(RegistryKeyTypeError, match=expected_error):
-            AggregationFunction.get(InvalidClass)  # noqa - expect class warning
+            AggregationFunction.get(InvalidClass)  # type: ignore[arg-type]  # noqa - expect class warning
 
     @pytest.mark.parametrize(
         "get_input",
@@ -457,7 +457,7 @@ class TestSimpleAggregations:
         counts: list,
         values: dict,
         timestamps_of: list | None,
-        kwargs: dict[str, Any] | None,
+        kwargs: dict[str, Any],
     ) -> None:
         """Test aggregations of microsecond-based (i.e., 1 day or less) resolution data, to another
         microsecond-based resolution."""
@@ -744,7 +744,7 @@ class TestSimpleAggregations:
         counts: list,
         values: dict,
         timestamps_of: list | None,
-        kwargs: dict[str, Any] | None,
+        kwargs: dict[str, Any],
     ) -> None:
         """Test aggregations of month-based resolution data, to a month-based resolution."""
         expected_df = generate_expected_df(timestamps, aggregator, column, values, counts, counts, timestamps_of)

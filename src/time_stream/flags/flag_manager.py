@@ -16,6 +16,7 @@ Typical use from within the ``TimeFrame`` class:
 """
 
 from abc import ABC, abstractmethod
+from collections.abc import Mapping
 from dataclasses import dataclass
 
 import polars as pl
@@ -33,7 +34,7 @@ from time_stream.flags.bitwise_flag_system import BitwiseFlag
 from time_stream.flags.categorical_flag_system import CategoricalListFlag, CategoricalSingleFlag
 from time_stream.flags.flag_system import FlagSystemBase, FlagSystemLiteral
 
-FlagSystemType = dict[str, int | str] | list[str] | None
+FlagSystemType = Mapping[str, int | str] | list[str] | None
 
 
 class FlagColumn(ABC):
@@ -81,7 +82,7 @@ class FlagColumn(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def add_flag(self, df: pl.DataFrame, flag: int | str, expr: pl.Expr = pl.lit(True)) -> pl.DataFrame:
+    def add_flag(self, df: pl.DataFrame, flag: int | str, expr: pl.Expr | pl.Series = pl.lit(True)) -> pl.DataFrame:
         """Add a flag value to rows where ``expr`` is true.
 
         Args:
@@ -95,7 +96,7 @@ class FlagColumn(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def remove_flag(self, df: pl.DataFrame, flag: int | str, expr: pl.Expr = pl.lit(True)) -> pl.DataFrame:
+    def remove_flag(self, df: pl.DataFrame, flag: int | str, expr: pl.Expr | pl.Series = pl.lit(True)) -> pl.DataFrame:
         """Remove a flag value from rows where ``expr`` is true.
 
         Args:
@@ -136,7 +137,7 @@ class BitwiseFlagColumn(FlagColumn):
     """
 
     name: str
-    flag_system: type[BitwiseFlag]
+    flag_system: type[BitwiseFlag]  # type: ignore[override]
     is_decoded: bool = False
 
     def decode(self, df: pl.DataFrame) -> pl.DataFrame:
@@ -189,7 +190,7 @@ class BitwiseFlagColumn(FlagColumn):
         ]
         return df.with_columns(pl.sum_horizontal(exprs).alias(self.name))
 
-    def add_flag(self, df: pl.DataFrame, flag: int | str, expr: pl.Expr = pl.lit(True)) -> pl.DataFrame:
+    def add_flag(self, df: pl.DataFrame, flag: int | str, expr: pl.Expr | pl.Series = pl.lit(True)) -> pl.DataFrame:
         """Add a flag value to this ``BitwiseFlagColumn`` using a bitwise OR operation.
 
         If the column is currently decoded, it is encoded first, the flag is applied, and the result is decoded again.
@@ -213,7 +214,7 @@ class BitwiseFlagColumn(FlagColumn):
             df = self.decode(df)
         return df
 
-    def remove_flag(self, df: pl.DataFrame, flag: int | str, expr: pl.Expr = pl.lit(True)) -> pl.DataFrame:
+    def remove_flag(self, df: pl.DataFrame, flag: int | str, expr: pl.Expr | pl.Series = pl.lit(True)) -> pl.DataFrame:
         """Remove a flag value from this ``BitwiseFlagColumn`` using a bitwise AND NOT operation.
 
         If the column is currently decoded, it is encoded first, the flag is removed, and the result is decoded again.
@@ -282,7 +283,7 @@ class BitwiseFlagColumn(FlagColumn):
         return self.name == other.name and self.flag_system == other.flag_system
 
     # Make class instances unhashable
-    __hash__ = None
+    __hash__ = None  # type: ignore[assignment]
 
 
 @dataclass
@@ -299,7 +300,7 @@ class CategoricalSingleFlagColumn(FlagColumn):
     """
 
     name: str
-    flag_system: type[CategoricalSingleFlag]
+    flag_system: type[CategoricalSingleFlag]  # type: ignore[override]
     is_decoded: bool = False
 
     def decode(self, df: pl.DataFrame) -> pl.DataFrame:
@@ -353,7 +354,7 @@ class CategoricalSingleFlagColumn(FlagColumn):
         self,
         df: pl.DataFrame,
         flag: int | str,
-        expr: pl.Expr = pl.lit(True),
+        expr: pl.Expr | pl.Series = pl.lit(True),
         overwrite: bool = True,
     ) -> pl.DataFrame:
         """Set the flag value on rows where ``expr`` is true.
@@ -386,7 +387,7 @@ class CategoricalSingleFlagColumn(FlagColumn):
             df = self.decode(df)
         return df
 
-    def remove_flag(self, df: pl.DataFrame, flag: int | str, expr: pl.Expr = pl.lit(True)) -> pl.DataFrame:
+    def remove_flag(self, df: pl.DataFrame, flag: int | str, expr: pl.Expr | pl.Series = pl.lit(True)) -> pl.DataFrame:
         """Set the column value to null on rows where ``expr`` is true.
 
         If the column is currently decoded, it is encoded first, the flag is removed, and the result is
@@ -445,7 +446,7 @@ class CategoricalSingleFlagColumn(FlagColumn):
         return self.name == other.name and self.flag_system == other.flag_system
 
     # Make class instances unhashable
-    __hash__ = None
+    __hash__ = None  # type: ignore[assignment]
 
 
 @dataclass
@@ -462,7 +463,7 @@ class CategoricalListFlagColumn(FlagColumn):
     """
 
     name: str
-    flag_system: type[CategoricalListFlag]
+    flag_system: type[CategoricalListFlag]  # type: ignore[override]
     is_decoded: bool = False
 
     def decode(self, df: pl.DataFrame) -> pl.DataFrame:
@@ -516,7 +517,7 @@ class CategoricalListFlagColumn(FlagColumn):
             .alias(self.name)
         )
 
-    def add_flag(self, df: pl.DataFrame, flag: int | str, expr: pl.Expr = pl.lit(True)) -> pl.DataFrame:
+    def add_flag(self, df: pl.DataFrame, flag: int | str, expr: pl.Expr | pl.Series = pl.lit(True)) -> pl.DataFrame:
         """Append a flag value to the list on rows where ``expr`` is true.
 
         If the flag is already present in a row's list, it is not added again.
@@ -546,7 +547,7 @@ class CategoricalListFlagColumn(FlagColumn):
             df = self.decode(df)
         return df
 
-    def remove_flag(self, df: pl.DataFrame, flag: int | str, expr: pl.Expr = pl.lit(True)) -> pl.DataFrame:
+    def remove_flag(self, df: pl.DataFrame, flag: int | str, expr: pl.Expr | pl.Series = pl.lit(True)) -> pl.DataFrame:
         """Remove all occurrences of a flag value from the list on rows where ``expr`` is true.
 
         If the flag is not present, the row is unchanged.
@@ -614,7 +615,7 @@ class CategoricalListFlagColumn(FlagColumn):
         return self.name == other.name and self.flag_system == other.flag_system
 
     # Make class instances unhashable
-    __hash__ = None
+    __hash__ = None  # type: ignore[assignment]
 
 
 class FlagManager:
@@ -684,7 +685,7 @@ class FlagManager:
         default_flag_dict = {"FLAGGED": 1}
 
         if not flag_system:
-            self._flag_systems[flag_system_name] = BitwiseFlag(flag_system_name, default_flag_dict)
+            self._flag_systems[flag_system_name] = BitwiseFlag(flag_system_name, default_flag_dict)  # type: ignore[assignment]
             return
 
         if isinstance(flag_system, list):
@@ -694,15 +695,15 @@ class FlagManager:
             if flag_type == "categorical_list":
                 sorted_categories = sorted(flag_system)
                 flag_dict = {name: name for name in sorted_categories}
-                self._flag_systems[flag_system_name] = CategoricalListFlag(flag_system_name, flag_dict)
+                self._flag_systems[flag_system_name] = CategoricalListFlag(flag_system_name, flag_dict)  # type: ignore[assignment]
             elif flag_type == "categorical":
                 sorted_categories = sorted(flag_system)
                 flag_dict = {name: name for name in sorted_categories}
-                self._flag_systems[flag_system_name] = CategoricalSingleFlag(flag_system_name, flag_dict)
+                self._flag_systems[flag_system_name] = CategoricalSingleFlag(flag_system_name, flag_dict)  # type: ignore[assignment]
             else:
                 sorted_categories = sorted(flag_system)
                 flag_dict = {name: 2**i for i, name in enumerate(sorted_categories)}
-                self._flag_systems[flag_system_name] = BitwiseFlag(flag_system_name, flag_dict)
+                self._flag_systems[flag_system_name] = BitwiseFlag(flag_system_name, flag_dict)  # type: ignore[assignment]
 
         elif isinstance(flag_system, dict):
             # A dict[str, str] implies categorical; infer it if the caller hasn't specified a categorical type
@@ -710,11 +711,11 @@ class FlagManager:
                 flag_type = "categorical"
 
             if flag_type == "categorical_list":
-                self._flag_systems[flag_system_name] = CategoricalListFlag(flag_system_name, flag_system)
+                self._flag_systems[flag_system_name] = CategoricalListFlag(flag_system_name, flag_system)  # type: ignore[assignment]
             elif flag_type == "categorical":
-                self._flag_systems[flag_system_name] = CategoricalSingleFlag(flag_system_name, flag_system)
+                self._flag_systems[flag_system_name] = CategoricalSingleFlag(flag_system_name, flag_system)  # type: ignore[assignment]
             else:
-                self._flag_systems[flag_system_name] = BitwiseFlag(flag_system_name, flag_system)
+                self._flag_systems[flag_system_name] = BitwiseFlag(flag_system_name, flag_system)  # type: ignore[assignment]
 
         else:
             raise FlagSystemTypeError(
@@ -758,11 +759,11 @@ class FlagManager:
 
         flag_system = self.get_flag_system(flag_system_name)
         if flag_system.flag_type == "categorical_list":
-            self._flag_columns[name] = CategoricalListFlagColumn(name, flag_system)
+            self._flag_columns[name] = CategoricalListFlagColumn(name, flag_system)  # type: ignore[arg-type]
         elif flag_system.flag_type == "categorical":
-            self._flag_columns[name] = CategoricalSingleFlagColumn(name, flag_system)
+            self._flag_columns[name] = CategoricalSingleFlagColumn(name, flag_system)  # type: ignore[arg-type]
         else:
-            self._flag_columns[name] = BitwiseFlagColumn(name, flag_system)
+            self._flag_columns[name] = BitwiseFlagColumn(name, flag_system)  # type: ignore[arg-type]
 
     def get_flag_column(self, name: str) -> FlagColumn:
         """Look up a registered flag column by name.
@@ -817,4 +818,4 @@ class FlagManager:
         return self._flag_systems == other._flag_systems and self._flag_columns == other._flag_columns
 
     # Make class instances unhashable
-    __hash__ = None
+    __hash__ = None  # type: ignore[assignment]

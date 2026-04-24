@@ -81,6 +81,7 @@ homepage = "https://github.com/NERC-CEH/time-stream"
 venvPath = "."
 venv = ".venv"
 include = ["src", "tests"]
+exclude = ["src/time_stream/examples"]
 
 [tool.ruff]
 src = ["src", "tests"]

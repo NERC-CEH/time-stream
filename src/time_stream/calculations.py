@@ -18,7 +18,7 @@ RESOLUTION_MAPPING = {
 }
 
 
-def calculate_min_max_envelope(tf: TimeFrame, columns: list[str] = None) -> pl.DataFrame:
+def calculate_min_max_envelope(tf: TimeFrame, columns: list[str] | None = None) -> pl.DataFrame:
     """Calculate the min-max envelope for a TimeFrame.
 
     For each unique date-time find the historical min and max values across the time series. For example, for a daily

@@ -63,7 +63,7 @@ class Operation(ABC):
         key = cls._normalize_key(register_cls.name)
         if key in cls._REGISTRY:
             raise DuplicateRegistryKeyError(f"Key '{key}' already registered for {cls.__name__}")
-        cls._REGISTRY[key] = register_cls
+        cls._REGISTRY[key] = register_cls  # type: ignore[assignment]
         return register_cls
 
     @classmethod
@@ -87,12 +87,12 @@ class Operation(ABC):
         """
         # If it's already an instance, return it
         if isinstance(spec, cls):
-            return spec
+            return spec  # type: ignore[return-value]
 
         # If it's a string, look it up in the registry
         elif isinstance(spec, str):
             try:
-                return cls._REGISTRY[cls._normalize_key(spec)](**kwargs)
+                return cls._REGISTRY[cls._normalize_key(spec)](**kwargs)  # type: ignore[return-value]
             except KeyError:
                 raise UnknownRegistryKeyError(
                     f"Unknown name '{spec}' for class type '{cls.__name__}'. Available: {cls.available()}."
@@ -101,7 +101,7 @@ class Operation(ABC):
         # If it's a class, instantiate it
         elif isinstance(spec, type):
             if issubclass(spec, cls):
-                return spec(**kwargs)  # type: ignore[call-arg] - subclass __init__ will vary
+                return spec(**kwargs)  # type: ignore[call-arg,return-value]
             else:
                 raise RegistryKeyTypeError(f"Class '{spec.__name__}' must inherit from '{cls.__name__}'.")
 

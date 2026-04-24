@@ -115,7 +115,10 @@ class TimeWindow:
         Returns:
             The expected number of observations within the window for the given periodicity.
         """
-        count = self.duration // periodicity.timedelta
+        td = periodicity.timedelta
+        if td is None:
+            raise ValueError("Cannot compute expected count for a month-based period (no fixed timedelta).")
+        count = self.duration // td
         if self.closed == ClosedInterval.BOTH:
             count += 1
         elif self.closed == ClosedInterval.NONE:
@@ -240,8 +243,14 @@ def pad_time(
     min_datetime = start if start else existing_datetimes.min()
     max_datetime = end if end else existing_datetimes.max()
 
+    if not isinstance(min_datetime, datetime) or not isinstance(max_datetime, datetime):
+        raise ValueError("Cannot pad an empty time series.")
+
     if min_datetime >= max_datetime:
         raise ValueError(f"Invalid datetime range to pad. Start: {min_datetime}. End: {max_datetime}")
+
+    dtype = df[time_name].dtype
+    time_unit = dtype.time_unit if isinstance(dtype, pl.Datetime) else "us"
 
     # Generate a series of the datetimes we would expect with a full time series between the start and end date
     expected_datetimes = pl.datetime_range(
@@ -249,11 +258,11 @@ def pad_time(
         max_datetime,
         interval=periodicity.pl_interval,
         eager=True,
-        time_unit=df[time_name].dtype.time_unit,
+        time_unit=time_unit,
     )
 
     # Find any missing datetimes between expected and existing
-    missing_datetimes = expected_datetimes.filter(~expected_datetimes.is_in(existing_datetimes))
+    missing_datetimes = expected_datetimes.filter(~expected_datetimes.is_in(existing_datetimes.implode()))
     missing_df = pl.DataFrame({time_name: missing_datetimes})
 
     # Perform a join to create a complete time series

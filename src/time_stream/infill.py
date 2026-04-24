@@ -167,7 +167,7 @@ class InfillMethodPipeline:
 
         # Make a mask to ensure that Nulls at the beginning and end of the series remain null.
         not_null_mask = pl.col(self.column).is_not_null()
-        row_idx = pl.arange(0, pl.count())
+        row_idx = pl.arange(0, pl.len())
         filter_expr = filter_expr & row_idx.is_between(
             (row_idx.filter(not_null_mask).min()),  # first True
             (row_idx.filter(not_null_mask).max()),  # last True
@@ -339,7 +339,7 @@ class AkimaInterpolation(ScipyInterpolation):
     """
 
     name = "akima"
-    min_points_required = 5
+    min_points_required = 5  # type: ignore[override]
 
     def _create_interpolator(self, x_valid: np.ndarray, y_valid: np.ndarray) -> Any:
         """Create scipy Akima interpolator."""
@@ -353,7 +353,7 @@ class PchipInterpolation(ScipyInterpolation):
     """
 
     name = "pchip"
-    min_points_required = 2
+    min_points_required = 2  # type: ignore[override]
 
     def _create_interpolator(self, x_valid: np.ndarray, y_valid: np.ndarray) -> Any:
         """Create scipy PCHIP interpolator."""

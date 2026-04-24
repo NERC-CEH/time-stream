@@ -24,9 +24,10 @@ from time_stream.time_manager import TimeManager
 @pytest.fixture
 def tm() -> TimeManager:
     tm = object.__new__(TimeManager)  # skips __init__
-    tm._resolution = None
+
+    tm._resolution = None  # type: ignore[assignment]
     tm._offset = None
-    tm._periodicity = None
+    tm._periodicity = None  # type: ignore[assignment]
     tm._time_anchor = TimeAnchor.START
     tm._time_name = "time"
 
