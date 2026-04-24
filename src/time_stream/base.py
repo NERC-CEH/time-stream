@@ -1,34 +1,34 @@
 """
 Core TimeFrame Data Model.
 
-This module defines the `TimeFrame` class, the central abstraction of the time_stream package.
-A `TimeFrame` wraps a Polars DataFrame and adds functionality for handling temporal data, quality flags, metadata, and
-derived operations.
+This module defines the :class:`TimeFrame` class, the central abstraction of the time_stream package.
+A :class:`TimeFrame` wraps a Polars DataFrame and adds functionality for handling temporal data, quality flags,
+metadata, and derived operations.
 
 Main responsibilities
 ---------------------
-1. **Time management** (via `TimeManager`):
+1. **Time management**:
    - Validates that the time column exists and has a temporal dtype.
    - Enforces resolution and periodicity of the time series.
-   - Uses time anchoring to define the period over which values are valid (`POINT`, `START`, `END`).
-   - Detects duplicates and resolves them according to a strategy (`ERROR`, `KEEP_FIRST`, `KEEP_LAST`, `DROP`, `MERGE`).
+   - Uses time anchoring to define the period over which values are valid.
+   - Detects duplicates and resolves them according to a strategy.
    - Prevents mutation of time values between operations.
 
 2. **Metadata management**:
    - TimeFrame-level metadata (`.metadata`).
    - Per-column metadata (`.column_metadata`) that stays in sync with the DataFrame.
 
-3. **Flag management** (via `FlagManager`):
-   - Register reusable flag systems (`BitwiseFlag` or `CategoricalFlag`).
+3. **Flag management**:
+   - Register reusable flag systems.
    - Initialise flag columns linked to data columns.
    - Add/remove flags with Polars expressions.
    - Filter TimeFrame based on flag values
 
 4. **Data operations**:
-   - Aggregation: run `AggregationFunction` pipelines with support for missing-data criteria and time anchoring.
-   - Quality control: apply `QCCheck` classes to detect anomalies or enforce validation rules.
-   - Infilling: apply `InfillMethod` classes to fill missing values according to defined strategies.
-   - Column selection: return reduced TimeFrame with metadata and flags synced consistently.
+   - Aggregation: run aggregation pipelines with support for missing-data criteria and time anchoring.
+   - Quality control: apply quality control routines to detect anomalies or enforce validation rules.
+   - Infilling: apply infill methods to fill missing values according to defined strategies.
+   - Column selection: return reduced :class:`TimeFrame` with metadata and flags synced consistently.
 """
 
 from __future__ import annotations
@@ -443,14 +443,12 @@ class TimeFrame:
 
         Args:
             name: Short name for the flag system.
-            flag_system: The flag system definition. Accepted types:
-                - ``None`` - produces a default bitwise system with a single ``FLAGGED`` flag at value 1.
-                - ``dict[str, int]`` - bitwise or categorical depending on ``flag_type``.
-                  Bitwise values must be powers of two.
-                - ``dict[str, str]`` - always categorical; ``flag_type`` is ignored.
-                - ``list[str]`` - flag names are sorted; bitwise assigns powers of two, categorical
-                  assigns sequential integers starting from 0. An empty list produces the default
-                  ``FLAGGED`` flag.
+            flag_system: The flag system definition. Accepted types are ``None`` (default bitwise
+                system with a single ``FLAGGED`` flag at value 1), ``dict[str, int]`` (bitwise or
+                categorical depending on ``flag_type`` - bitwise values must be powers of two),
+                ``dict[str, str]`` (always categorical; ``flag_type`` is ignored), or ``list[str]``
+                (flag names are sorted; bitwise assigns powers of two, categorical uses each name
+                as both key and value - an empty list produces the default ``FLAGGED`` flag).
             flag_type: Whether to create a ``"bitwise"`` or ``"categorical"`` flag system. Only
                 relevant when ``flag_system`` is a ``dict[str, int]`` or ``list[str]``.
         """
@@ -868,19 +866,6 @@ class TimeFrame:
 
         Returns:
             Result of the QC check, either as a boolean Series or added to the TimeFrame dataframe
-
-        Examples:
-            # Threshold check
-            ts_flagged = tf.qc_check("comparison", "battery_voltage", compare_to=12.0, operator="<")
-
-            # Range check
-            ts_flagged = tf.qc_check("range", "temperature", min_value=-50, max_value=50)
-
-            # Spike check
-            ts_flagged = tf.qc_check("spike", "wind_speed", threshold=5.0)
-
-            # Value check for error codes
-            ts_flagged = tf.qc_check("comparison", "status_code", compare_to=[99, -999, "ERROR"])
         """
         # Get the QC check instance and run the apply method
         check_instance = QCCheck.get(check, **kwargs)

@@ -117,6 +117,7 @@ This project is licensed under the `GNU General Public License v3.0 <https://git
     user_guide/rolling_aggregation
     user_guide/infilling
     user_guide/quality_control
+    user_guide/flagging
     user_guide/calculations
 
 .. toctree::
@@ -125,7 +126,9 @@ This project is licensed under the `GNU General Public License v3.0 <https://git
     :caption: API reference
 
     api/time_frame
-
+    api/aggregation
+    api/infilling
+    api/quality_control
 
 .. toctree::
     :hidden:

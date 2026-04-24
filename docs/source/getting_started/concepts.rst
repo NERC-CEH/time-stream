@@ -184,25 +184,26 @@ the end of the measurement, or a single instant?*.
 Flagging system
 ===============
 
-**What it is:** attaches status codes to data values without expanding the DataFrame schema with many new columns.
-Each flag is a named bit in an integer mask, meaning that multiple flags can be combined in one column.
+**What it is:** attaches status annotations to rows of your data without expanding the DataFrame schema
+with many new columns.
 
-- A ``flag system`` defines the available flags.
-- A ``flag column`` accompanies a data column, is governed by a *flag system*, and stores the combined bitmask.
+- A ``flag system`` defines the available flags and how they are stored. Three types are supported:
+
+  - **Bitwise** - flags are powers-of-two integers; multiple flags combine per row via bitwise OR.
+  - **Categorical single** - each row holds exactly one value from a set of named flags.
+  - **Categorical list** - each row holds a list of values, so multiple flags can coexist.
+
+- A ``flag column`` is a column in the DataFrame governed by a flag system. It stores the flag
+  values for each row.
 - Flags propagate alongside the data so downstream processes can test them quickly.
 
 .. mermaid::
 
    flowchart LR
-     %% Inputs
-     subgraph Data["Data column"]
-       D["flow"]
-     end
-
      subgraph Checks["QC checks"]
-       C1["Range check<br/>"]
-       C2["Spike check<br/>"]
-       C3["Error code check<br/>"]
+       C1["Range check"]
+       C2["Spike check"]
+       C3["Error code check"]
      end
 
      subgraph MapBits["Map to flags (enum)"]
@@ -216,33 +217,31 @@ Each flag is a named bit in an integer mask, meaning that multiple flags can be 
      end
 
      subgraph Flags["Flag column"]
-       F["flow_flag = 3"]
+       F["qc_flag = 3"]
      end
 
-     %% Edges
-     D --> C1 --> M1 --> OR
-     D --> C2 --> M2 --> OR
-     D --> C3
+     C1 --> M1 --> OR
+     C2 --> M2 --> OR
+     C3
 
      OR --> F
 
-     %% Decode path (optional)
      F -- decode --> MapBits
 
-     %% Style definitions
      classDef pass fill:#d1fad1,stroke:#237804,color:#000,stroke-width:1px;
      classDef fail fill:#ffe2e2,stroke:#a8071a,color:#000,stroke-width:1px;
 
-     %% Assign colors
      class C1 fail
      class C2 fail
      class C3 pass
 
 **Why it matters:**
 
-- Many flags can be packed into one integer column allowing for **compact storage**.
+- Multiple flags can be packed into one column allowing for **compact storage**.
 - Enables **traceability** in your data - you can see which values were infilled, estimated, or failed QC.
 - Provides **consistency**, as the same flag system can be reused across datasets and projects.
+
+See more details and examples here: :doc:`flagging user guide </user_guide/flagging>`
 
 Aggregation
 ===========
