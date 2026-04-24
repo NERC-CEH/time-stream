@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "time-stream"
-version = "0.1.0"
+version = "1.0.0"
 description = "Time-Stream: Time Series Toolkit for Rapid Environmental Analysis and Monitoring"
 readme = "README.md"
 authors = [
