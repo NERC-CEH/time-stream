@@ -130,7 +130,7 @@ class TestFormatKeyValuePairs:
 
     def test_none_key(self) -> None:
         """Test formatting with None key."""
-        result = format_key_value_pairs(None, "value")
+        result = format_key_value_pairs(None, "value")  # type: ignore[arg-type]
         assert result == ""
 
     def test_none_args(self) -> None:

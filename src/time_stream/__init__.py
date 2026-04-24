@@ -1,6 +1,5 @@
+from importlib.metadata import PackageNotFoundError, version
 from typing import TYPE_CHECKING, Any
-
-import autosemver
 
 if TYPE_CHECKING:
     # These imports are only for static type checkers (e.g., Pyright, IDEs).
@@ -8,11 +7,11 @@ if TYPE_CHECKING:
     from time_stream.base import TimeFrame
     from time_stream.period import Period
 
-try:
-    __version__ = autosemver.packaging.get_current_version(project_name="time_stream")
-except Exception:
-    __version__ = "0.0.0"
 
+try:
+    __version__ = version("time-stream")
+except PackageNotFoundError:
+    __version__ = "unknown"
 
 # Declare the public API of the package. This tells `from time_stream import *` what to include.
 __all__ = ["TimeFrame", "Period"]  # noqa

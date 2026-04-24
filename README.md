@@ -1,4 +1,4 @@
-![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 ![Language](https://img.shields.io/github/languages/top/NERC-CEH/time-stream)
 [![tests badge](https://github.com/NERC-CEH/time-stream/actions/workflows/pipeline.yml/badge.svg)](https://github.com/NERC-CEH/time-stream/actions)
 [![Docs](https://img.shields.io/badge/docs-%F0%9F%93%9A%20online-blue)](https://nerc-ceh.github.io/time-stream)
@@ -20,7 +20,7 @@ with special attention to:
 
 ## License
 
-This project is licensed under the [GNU General Public License v3.0](LICENSE).
+This project is licensed under the [MIT license](LICENSE).
 
 ## Contributing
 
@@ -147,3 +147,9 @@ make html
 # View documentation
 open _build/html/index.html
 ```
+
+## Citation
+
+If you use this software, please cite it using the metadata in [`CITATION.cff`](./CITATION.cff).
+
+Built with [Cookiecutter](https://github.com/cookiecutter/cookiecutter) and the [NERC-CEH/fdri-cookiecutter-pypackage](https://github.com/NERC-CEH/fdri-cookiecutter-pypackage) template.

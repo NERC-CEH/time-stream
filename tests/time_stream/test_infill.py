@@ -102,7 +102,7 @@ class TestInfillMethod:
             pass
 
         with pytest.raises(RegistryKeyTypeError):
-            InfillMethod.get(InvalidClass)  # noqa - expecting type warning
+            InfillMethod.get(InvalidClass)  # type: ignore[arg-type]  # noqa - expecting type warning
 
     @pytest.mark.parametrize("get_input", [123, [LinearInterpolation, QuadraticInterpolation], {AkimaInterpolation}])
     def test_get_with_invalid_type(self, get_input: Any) -> None:

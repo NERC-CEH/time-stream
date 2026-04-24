@@ -79,7 +79,7 @@ class TestQCCheck:
             pass
 
         with pytest.raises(RegistryKeyTypeError):
-            QCCheck.get(InvalidClass)  # noqa - expecting type warning
+            QCCheck.get(InvalidClass)  # type: ignore[arg-type]  # noqa - expecting type warning
 
     @pytest.mark.parametrize("get_input", [123, [SpikeCheck, ComparisonCheck], {RangeCheck}])
     def test_get_with_invalid_type(self, get_input: str) -> None:
@@ -566,7 +566,8 @@ class TestCheckWithDateRange:
         assert_series_equal(result, expected)
 
     def test_with_date_range(self) -> None:
-        """Test the check is applied to part of the time series if a date range provided"""
+        """Test the ch
+        eck is applied to part of the time series if a date range provided"""
         check = ComparisonCheck(1, ">")
         result = check.apply(
             self.tf.df, self.tf.time_name, "value_a", observation_interval=(datetime(2023, 8, 1), datetime(2023, 8, 5))

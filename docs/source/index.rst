@@ -86,6 +86,7 @@ Below are some of the top contributors to the project:
 
 .. contributors:: NERC-CEH/time-stream
     :avatars:
+    :exclude: dependabot[bot]
 
 Contributing
 ============

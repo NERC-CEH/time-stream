@@ -470,6 +470,8 @@ class RollingAggregationPipeline(AggregationPipeline):
             return "left", "0us"
         else:
             td = self.aggregation_period.timedelta
+            if td is None:
+                raise ValueError("Center rolling alignment requires a fixed-duration period (not month-based).")
             half_us = int(td.total_seconds() * 1_000_000) // 2
             return "both", f"-{half_us}us"
 

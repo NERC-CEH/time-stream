@@ -78,7 +78,7 @@ class TestBitwiseFlag:
     def test_get_flag_invalid_type(self) -> None:
         """Test that a non-int/str argument raises an error."""
         with pytest.raises(BitwiseFlagTypeError):
-            Flags.get_flag(3.5)  # noqa - expecting wrong type
+            Flags.get_flag(3.5)  # type: ignore[arg-type]  # noqa - expecting wrong type
 
     def test_to_dict(self) -> None:
         """Test creating a dictionary from a bitwise flag."""

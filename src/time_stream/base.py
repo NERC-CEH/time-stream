@@ -35,7 +35,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from datetime import datetime, time
-from typing import Any, Sequence, Type
+from typing import Any, Sequence, Type, overload
 
 import polars as pl
 
@@ -291,7 +291,7 @@ class TimeFrame:
             A new TimeFrame with a new periodicity set.
         """
         tf = self.copy()
-        tf._periodicity = periodicity
+        tf._time_manager._periodicity = configure_period_object(periodicity)
         tf._time_manager.validate(tf.df)
         return tf
 
@@ -528,7 +528,7 @@ class TimeFrame:
 
         # 3. Determine name of flag column
         if not column_name:
-            column_name: str = f"__flag__{flag_system_name}"
+            column_name = f"__flag__{flag_system_name}"
             if column_name in self.df.columns:
                 col_suffix = 1
                 while f"{column_name}__{col_suffix}" in self.df.columns:
@@ -555,7 +555,7 @@ class TimeFrame:
         self,
         flag_column_name: str,
         flag_value: int | str,
-        expr: pl.Expr = pl.lit(True),
+        expr: pl.Expr | pl.Series = pl.lit(True),
         overwrite: bool = True,
     ) -> None:
         """Add flag value to flag column, where expression is True.
@@ -582,7 +582,7 @@ class TimeFrame:
         else:
             self._df = flag_column.add_flag(self.df, flag_value, expr)
 
-    def remove_flag(self, column_name: str, flag_value: int | str, expr: pl.Expr = pl.lit(True)) -> None:
+    def remove_flag(self, column_name: str, flag_value: int | str, expr: pl.Expr | pl.Series = pl.lit(True)) -> None:
         """Remove a flag value from a flag column, where expression is True.
 
         For bitwise flag columns, clears the flag bit via bitwise AND NOT.
@@ -732,13 +732,11 @@ class TimeFrame:
         normalised_time_window = TimeWindow.from_tuple(time_window) if isinstance(time_window, tuple) else time_window
 
         agg_func = AggregationFunction.get(aggregation_function, **kwargs)
-        aggregation_period: Period = configure_period_object(aggregation_period)
-        aggregation_time_anchor: TimeAnchor = (
-            TimeAnchor(aggregation_time_anchor) if aggregation_time_anchor else self.time_anchor
-        )
+        aggregation_period = configure_period_object(aggregation_period)
+        aggregation_time_anchor = TimeAnchor(aggregation_time_anchor) if aggregation_time_anchor else self.time_anchor
 
         if not columns:
-            columns: list[str] = self.data_columns
+            columns = self.data_columns
 
         ctx = AggregationCtx(
             df=self.df,
@@ -812,11 +810,11 @@ class TimeFrame:
             containing the rolling aggregation results.
         """
         agg_func = AggregationFunction.get(aggregation_function, **kwargs)
-        window_size: Period = configure_period_object(window_size)
-        alignment: RollingAlignment = RollingAlignment(alignment) if isinstance(alignment, str) else alignment
+        window_size = configure_period_object(window_size)
+        alignment = RollingAlignment(alignment) if isinstance(alignment, str) else alignment
 
         if not columns:
-            columns: list[str] = self.data_columns
+            columns = self.data_columns
 
         ctx = AggregationCtx(
             df=self.df,
@@ -844,6 +842,29 @@ class TimeFrame:
         )
         tf.metadata = deepcopy(self.metadata)
         return tf
+
+    # @overload lets type checkers know the return type depends on whether flag_params is provided.
+    # Without overloads, callers always get TimeFrame | Series, making e.g. .df access after qc_check a type error.
+    @overload
+    def qc_check(
+        self,
+        check: str | Type[QCCheck] | QCCheck,
+        column_name: str,
+        observation_interval: tuple[datetime, datetime | None] | None = ...,
+        flag_params: None = ...,
+        **kwargs,
+    ) -> pl.Series: ...
+
+    @overload
+    def qc_check(
+        self,
+        check: str | Type[QCCheck] | QCCheck,
+        column_name: str,
+        observation_interval: tuple[datetime, datetime | None] | None = ...,
+        *,
+        flag_params: tuple[str, str | int],
+        **kwargs,
+    ) -> "TimeFrame": ...
 
     def qc_check(
         self,
@@ -953,7 +974,7 @@ class TimeFrame:
             raise ColumnNotFoundError("No columns specified.")
 
         if isinstance(column_names, str):
-            column_names: list[str] = [column_names]
+            column_names = [column_names]
         check_columns_in_dataframe(self.df, column_names)
 
         # Include primary time column (if not already included)
@@ -986,7 +1007,7 @@ class TimeFrame:
         tf._column_metadata.sync()
         return tf
 
-    def calculate_min_max_envelope(self, columns: list[str] = None) -> TimeFrame:
+    def calculate_min_max_envelope(self, columns: list[str] | None = None) -> TimeFrame:
         """Calculate the min-max envelope for the TimeFrame.
 
         For each unique date-time find the historical min and max values across the time series. For example,
@@ -1021,7 +1042,7 @@ class TimeFrame:
             This is equivalent to ``tf.select([...])``.
         """
         if isinstance(key, str):
-            key: list[str] = [key]
+            key = [key]
         return self.select(key)
 
     def __str__(self) -> str:
@@ -1062,4 +1083,4 @@ class TimeFrame:
         )
 
     # Make class instances unhashable
-    __hash__ = None
+    __hash__ = None  # type: ignore[assignment]

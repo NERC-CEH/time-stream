@@ -1,12 +1,27 @@
 [build-system]
-requires = ["setuptools >= 61.0,<81",
-    "autosemver"]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [project]
-requires-python = ">=3.12"
+name = "time-stream"
+version = "0.1.0"
+description = "Time-Stream: Time Series Toolkit for Rapid Environmental Analysis and Monitoring"
+readme = "README.md"
+authors = [
+    { name = "Dom Ginger", email = "domgin@ceh.ac.uk" },
+    { name = "Nathan Shaw", email = "natsha@ceh.ac.uk" },
+    { name = "Lewis Chambers", email = "lewcha@ceh.ac.uk" },
+    { name = "Rod Scott", email = "rjsc@ceh.ac.uk" },
+    { name = "Simon Stanley", email = "simsta@ceh.ac.uk" },
+    { name = "Richard Smith", email = "ricsmi@ceh.ac.uk" },
+    { name = "Jonathan Cooper", email = "jcoop@ceh.ac.uk" },
+]
+classifiers = [
+"License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+]
+license = { file = "LICENSE" }
 dependencies = [
-    "setuptools >= 61.0,<81",
-    "autosemver",
     "config>=0.5.1",
     "polars>=1.1.0",
     "pyarrow>=17.0.0",
@@ -19,65 +34,54 @@ dependencies = [
     "pandas>=2.3.2",
     "sphinx-autodoc-typehints>=3.2.0",
 ]
-name = "time-stream"
-dynamic = ["version"]
-authors = [
-    { name = "Dom Ginger", email = "domgin@ceh.ac.uk" },
-    { name = "Nathan Shaw", email = "natsha@ceh.ac.uk" },
-    { name = "Lewis Chambers", email = "lewcha@ceh.ac.uk" },
-    { name = "Rod Scott", email = "rjsc@ceh.ac.uk" },
-    { name = "Simon Stanley", email = "simsta@ceh.ac.uk" },
-    { name = "Richard Smith", email = "ricsmi@ceh.ac.uk" },
-    { name = "Jonathan Cooper", email = "jcoop@ceh.ac.uk" },
-]
-description = "Time-Stream: Time Series Toolkit for Rapid Environmental Analysis and Monitoring"
-readme = "README.md"
-license = "GPL-3.0-only"
+requires-python = ">= 3.12"
 
 [dependency-groups]
-test = ["pytest", "pytest-cov",  "freezegun", "pytest-benchmark", "pytest-benchmark[histogram]"]
-docs = ["sphinx", "sphinx-copybutton", "sphinx-rtd-theme", "nbsphinx", "jupyter_sphinx", "snowballstemmer<3"]
-lint = ["ruff"]
 dev = [
-  { include-group = "test"},
-  { include-group = "docs"},
-  { include-group = "lint"},
-  "shibuya>=2025.9.25",
-  "sphinx-contributors>=0.2.7",
-  "sphinx-design>=0.6.1",
-  "sphinx-iconify>=0.2.1",
-  "sphinx-tabs>=3.4.7",
-  "sphinxcontrib-mermaid>=1.0.0",
+    { include-group = "lint" },
+    { include-group = "test" },
+    { include-group = "typecheck" },
+    { include-group = "docs" },
+]
+lint = [
+    "ruff",
+]
+test = [
+    "coverage",
+    "pytest",
+    "pytest-cov",
+]
+typecheck = [
+    "pyright",
+]
+docs = [
+    "sphinx",
+    "shibuya>=2025.9.25",
+    "sphinx-copybutton",
+    "sphinx-design>=0.6.1",
+    "sphinx-iconify>=0.2.1",
+    "sphinx-autodoc-typehints",
+    "sphinx-autobuild",
+    "sphinx-contributors>=0.2.7",
+    "myst-parser",
+    "sphinx-tabs>=3.4.7",
+    "sphinxcontrib-mermaid>=1.0.0",
+    "nbsphinx",
+    "jupyter_sphinx",
+    "snowballstemmer<3"
 ]
 
-[tool.setuptools.dynamic]
-version = { attr = "time_stream.__version__" }
+[project.urls]
+bugs = "https://github.com/NERC-CEH/time-stream/issues"
+changelog = "https://github.com/NERC-CEH/time-stream/releases"
+documentation = "https://nerc-ceh.github.io/time-stream/"
+homepage = "https://github.com/NERC-CEH/time-stream"
 
-[tool.setuptools.packages.find]
-where = ["src"]
-include = ["time_stream*"]
-
-[tool.setuptools.package-data]
-"*" = ["*.*"]
-
-[tool.pytest.ini_options]
-addopts = "--cov=time_stream --cov-report=term-missing --benchmark-skip"
-markers = ["slow: Marks slow tests"]
-
-
-[tool.coverage.run]
-omit = [
-    "*__init__.py",
-    "src/time_stream/__main__.py",
-    "src/time_stream/period.py",
-    "src/time_stream/examples/*",
-    "src/time_stream/docs/*",
-]
-
-filterwarnings = [
-    "ignore::DeprecationWarning:autosemver.*:",
-    "ignore::DeprecationWarning:pkg_resources.*:",
-]
+[tool.pyright]
+venvPath = "."
+venv = ".venv"
+include = ["src", "tests"]
+exclude = ["src/time_stream/examples"]
 
 [tool.ruff]
 src = ["src", "tests"]
@@ -111,3 +115,42 @@ strict = true
 [tool.ruff.lint.per-file-ignores]
 # Ignore "import not at top of file" for examples code snippets
 "src/time_stream/examples/*.py" = ["PLC0415"]
+
+[tool.coverage.run]
+branch = true
+parallel = true
+source = ["src/", "tests/"]
+omit = [
+    "*__init__.py",
+    "src/time_stream/__main__.py",
+    "src/time_stream/period.py",
+    "src/time_stream/examples/*",
+    "src/time_stream/docs/*",
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+fail_under = 90
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "if typing.TYPE_CHECKING:",
+    "@overload",
+    "@typing.overload",
+    "class .*\\bProtocol\\):",
+    "@(abc\\.)?abstractmethod",
+    "raise NotImplementedError",
+    "except PackageNotFoundError",
+    "if __name__ == .__main__.",
+    "\\.\\.\\.",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--cov=time_stream --cov-report=term-missing"
+markers = ["slow: Marks slow tests"]
+
+[tool.uv]
+package = true
+default-groups = ["dev"]
+

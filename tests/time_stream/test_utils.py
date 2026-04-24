@@ -161,7 +161,7 @@ class TestTruncateToPeriod:
     def test_truncate_to_year_period(self, period: Period, anchor: TimeAnchor, expected: list) -> None:
         """Test that truncating a time series to a given year period works as expected."""
         result = truncate_to_period(self.dt, period, anchor)
-        assert_series_equal(result, expected)
+        assert_series_equal(result, pl.Series(expected))
 
     @pytest.mark.parametrize(
         "period,anchor,expected",
