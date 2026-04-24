@@ -58,11 +58,14 @@ Flagging in **Time-Stream** is built around two concepts: `Flag systems`_ and `F
 Flag systems
 ------------
 
-A flag system is a user-defined set of named flags. **Time-Stream** supports three flag system types, each suited to
-a different annotation pattern. You pick the type via the ``flag_type`` argument of
-:meth:`~time_stream.TimeFrame.register_flag_system`, with ``"bitwise"`` as the default. Multiple flag systems can
-coexist on the same TimeFrame - for example a ``QC_FLAGS`` bitwise system alongside a ``PROVENANCE`` categorical list
-system.
+A flag system is a user-defined set of named flags. Each flag has a **name** (a human-readable label used as a
+descriptive lookup) and a **value** (the compact representation stored in the DataFrame). **Time-Stream** supports
+three flag system types, each suited to a different annotation pattern. You pick the type via the ``flag_type``
+argument of :meth:`~time_stream.TimeFrame.register_flag_system`, with ``"bitwise"`` as the default. Multiple flag
+systems can coexist on the same TimeFrame - for example a ``QC_FLAGS`` bitwise system alongside a ``PROVENANCE``
+categorical list system.
+
+.. _bitwise:
 
 ``bitwise``
 ^^^^^^^^^^^
@@ -126,14 +129,27 @@ system.
 ``categorical``
 ^^^^^^^^^^^^^^^
 
-    **What it does:** Each row holds exactly one value, or null. Values are arbitrary ``int`` or ``str`` - they do not
-    need to be powers of two. Setting a new flag replaces the previous value on each matching row, so flags are
-    mutually exclusive.
+    **What it does:** Each row holds exactly one value, or null. Values can be any ``int`` or ``str``. Setting a new
+    flag replaces the previous value on each matching row, so flags are mutually exclusive.
 
     **When to use:** For "one verdict per row" annotations - e.g. an overall QC rating of ``good``, ``questionable``
     or ``bad``, or a sensor status code column.
 
     **Accepted inputs to** ``register_flag_system``:
+
+    - ``list[str]`` with ``flag_type="categorical"`` - each name is used as both the name and the value:
+
+      .. literalinclude:: ../../../src/time_stream/examples/examples_flagging.py
+         :language: python
+         :start-after: [start_block_21]
+         :end-before: [end_block_21]
+         :dedent:
+
+      .. jupyter-execute::
+         :hide-code:
+
+         import examples_flagging
+         examples_flagging.register_categorical_name_list()
 
     - ``dict[str, int]`` with ``flag_type="categorical"`` - arbitrary integer values:
 
@@ -164,35 +180,29 @@ system.
          import examples_flagging
          examples_flagging.register_categorical_string()
 
-    - ``list[str]`` with ``flag_type="categorical"`` - each name is used as both the key and the value:
-
-      .. literalinclude:: ../../../src/time_stream/examples/examples_flagging.py
-         :language: python
-         :start-after: [start_block_21]
-         :end-before: [end_block_21]
-         :dedent:
-
-      .. jupyter-execute::
-         :hide-code:
-
-         import examples_flagging
-         examples_flagging.register_categorical_name_list()
-
-
 ``categorical_list``
 ^^^^^^^^^^^^^^^^^^^^
 
     **What it does:** Defines the same vocabulary as ``categorical``, but applied to a flag column each row holds a
-    *list* of values rather than a single one. Adding a flag appends to the list, so multiple flags can coexist on a
-    row - stored as distinct entries rather than combined bits.
+    *list* of values rather than a single one. Adding a flag appends to the list, so a row can carry multiple flags
+    simultaneously.
 
-    **When to use:** When flags need to accumulate on a row but a bitwise encoding doesn't fit - for example a list of
-    provenance tags or free-form error codes where values are not powers of two.
+    **When to use:** When you need multiple flags per row and your values are strings or integer codes - for example,
+    a list of provenance labels ("QC'ED", "INTERPOLATED") or numeric status codes (100, 404).
 
     **Accepted inputs to** ``register_flag_system``: The same forms as ``categorical`` above
     (``dict[str, int]``, ``dict[str, str]``, or ``list[str]``), but with ``flag_type="categorical_list"``. The only
     difference is when this flag system is applied to a flag column, a ``categorical_list`` system will allow
     multiple flags per row.
+
+    .. note::
+
+        ``categorical_list`` and `bitwise`_ both allow multiple flags to coexist on a single row. The difference is
+        in how they are stored: ``categorical_list`` keeps each flag value as a distinct entry in a list column,
+        making the raw data immediately readable; ``bitwise`` encodes all active flags into a single integer, which
+        is more compact but requires decoding to interpret. Either type supports
+        :meth:`~time_stream.TimeFrame.add_flag`, :meth:`~time_stream.TimeFrame.remove_flag`, and
+        :meth:`~time_stream.TimeFrame.filter_by_flag`.
 
 Flag columns
 ------------
