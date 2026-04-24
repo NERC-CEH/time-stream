@@ -6,6 +6,7 @@ Polars and SciPy. Infill methods are implemented as subclasses of ``InfillMethod
 and instantiated by name, class, or instance.
 
 The infill pipeline handles:
+
 - Padding the time series to ensure consistent timestamps
 - Identifying gaps and their sizes
 - Applying constraints such as maximum gap size and observation intervals

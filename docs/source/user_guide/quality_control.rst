@@ -23,11 +23,12 @@ QC checks are lightweight, configurable, and explicit:
 .. code-block:: python
 
    tf_flagged = tf.qc_check(
-      "comparison", "rainfall", compare_to=0, operator="<", into="rainfall_flag"
+      "comparison", "rainfall", compare_to=0, operator="<",
+      flag_params=("rainfall_flag", "FLAGGED"),
    )
 
 A single call with rich meaning: "I want to *QC check* when my *rainfall* data is *less than* a value of *0*,
-with results saved to a column named *rainfall_flag*.
+and record the result in the *rainfall_flag* flag column."
 
 Key benefits
 ------------
@@ -48,189 +49,240 @@ In more detail
 ==============
 
 The :meth:`~time_stream.TimeFrame.qc_check` method applies a single QC check to one column.
-It can return a boolean mask (for filtering) or update the TimeFrame with a new column containing the results
-of the QC check. Each QC check is configurable through parameters specific to that check - see examples below.
+Each QC check is configurable through parameters specific to that check.
 
-Comparison check
-----------------
+Let's look at the method in more detail:
 
-Compare values against a constant or list using operators: ``<, <=, >, >=, ==, !=, is_in``.
+.. automethod:: time_stream.TimeFrame.qc_check
+   :no-index:
 
-Use for value thresholds or lists of error codes.
+Quality control methods
+-----------------------
 
-**Example: Temperature greater than or equal to 50:**
+``comparison``
+^^^^^^^^^^^^^^
+:class:`time_stream.qc.ComparisonCheck`
 
-.. literalinclude:: ../../../src/time_stream/examples/examples_quality_control.py
-   :language: python
-   :start-after: [start_block_2]
-   :end-before: [end_block_2]
-   :dedent:
+    **What it does:** Compares values against a constant or list using a comparison operator
+    (``<``, ``<=``, ``>``, ``>=``, ``==``, ``!=``, ``is_in``).
 
-.. jupyter-execute::
-   :hide-code:
+    **When to use:** Use for value thresholds (e.g. negative rainfall) or matching against
+    lists of known error codes.
 
-   import examples_quality_control
-   examples_quality_control.comparison_qc_1()
+    **Additional args:**
+        ``compare_to``: The value (or list of values for ``is_in``) to compare against.
+        ``operator``: The comparison operator string.
+        ``flag_na``: If ``True``, also flag NaN/null values as failing the check (default: ``False``).
 
-**Example: Sensor codes within a list:**
+    **Example usage:**
 
-.. literalinclude:: ../../../src/time_stream/examples/examples_quality_control.py
-   :language: python
-   :start-after: [start_block_4]
-   :end-before: [end_block_4]
-   :dedent:
+    **Temperature greater than or equal to 50:**
 
-.. jupyter-execute::
-   :hide-code:
+    .. literalinclude:: ../../../src/time_stream/examples/examples_quality_control.py
+       :language: python
+       :start-after: [start_block_2]
+       :end-before: [end_block_2]
+       :dedent:
 
-   import examples_quality_control
-   examples_quality_control.comparison_qc_3()
+    .. jupyter-execute::
+       :hide-code:
 
-Range check
------------
+       import examples_quality_control
+       examples_quality_control.comparison_qc_1()
 
-Check if values lie inside or outside a min-max interval.
+    **Sensor codes within a list:**
 
-Use for physical plausibility bounds (e.g. temperature between -30 and 50 °C).
+    .. literalinclude:: ../../../src/time_stream/examples/examples_quality_control.py
+       :language: python
+       :start-after: [start_block_4]
+       :end-before: [end_block_4]
+       :dedent:
 
-**Example: Temperatures outside of the range -30 to 50:**
+    .. jupyter-execute::
+       :hide-code:
 
-.. literalinclude:: ../../../src/time_stream/examples/examples_quality_control.py
-   :language: python
-   :start-after: [start_block_5]
-   :end-before: [end_block_5]
-   :dedent:
+       import examples_quality_control
+       examples_quality_control.comparison_qc_3()
 
-.. jupyter-execute::
-   :hide-code:
+``range``
+^^^^^^^^^
+:class:`time_stream.qc.RangeCheck`
 
-   import examples_quality_control
-   examples_quality_control.range_qc_1()
+    **What it does:** Checks whether values fall inside or outside a min-max interval.
 
-Time range check
-----------------
+    **When to use:** Use for physical plausibility bounds, such as temperature between -30 and 50°C
 
-Flag data between specific time ranges.
+    **Additional args:**
+        ``min_value``: Minimum of the range.
+        ``max_value``: Maximum of the range.
+        ``closed``: Which sides of the interval are inclusive - ``"both"``, ``"left"``, ``"right"``, or ``"none"`` (default: ``"both"``).
+        ``within``: Whether to flag values within the range (``True``, default) or outside it (``False``).
 
-Use for known bad periods such as sensor outages or calibration times.
+    **Example usage:**
 
-**Example: Flag rainfall values between the hours of 01:00 and 03:00:**
+    **Temperatures outside of the range -30 to 50:**
 
-.. literalinclude:: ../../../src/time_stream/examples/examples_quality_control.py
-   :language: python
-   :start-after: [start_block_9]
-   :end-before: [end_block_9]
-   :dedent:
+    .. literalinclude:: ../../../src/time_stream/examples/examples_quality_control.py
+       :language: python
+       :start-after: [start_block_5]
+       :end-before: [end_block_5]
+       :dedent:
 
-.. jupyter-execute::
-   :hide-code:
+    .. jupyter-execute::
+       :hide-code:
 
-   import examples_quality_control
-   examples_quality_control.time_range_qc_1()
+       import examples_quality_control
+       examples_quality_control.range_qc_1()
 
-**Example: Flag temperature values between 03:30 and 09:30 on the 1st January:**
+``time_range``
+^^^^^^^^^^^^^^
+:class:`time_stream.qc.TimeRangeCheck`
 
-.. literalinclude:: ../../../src/time_stream/examples/examples_quality_control.py
-   :language: python
-   :start-after: [start_block_10]
-   :end-before: [end_block_10]
-   :dedent:
+    **What it does:** Flags rows where the primary time column falls within a given range. Accepts
+    ``datetime.time``, ``datetime.date``, or ``datetime.datetime`` bounds.
 
-.. jupyter-execute::
-   :hide-code:
+    **When to use:** Use for known bad periods such as sensor outages or automated calibration
+    times.
 
-   import examples_quality_control
-   examples_quality_control.time_range_qc_2()
+    **Additional args:**
+        ``min_value``: Start of the time range.
+        ``max_value``: End of the time range.
+        ``closed``: Which sides of the interval are inclusive - ``"both"``, ``"left"``, ``"right"``, or ``"none"`` (default: ``"both"``).
+        ``within``: Whether to flag values within the range (``True``, default) or outside it (``False``).
 
-Spike check
------------
+    **Example usage:**
 
-Detect sudden jumps using neighbour differences.
+    **Flag rainfall values between the hours of 01:00 and 03:00:**
 
-Use for unrealistic single-point spikes.
+    .. literalinclude:: ../../../src/time_stream/examples/examples_quality_control.py
+       :language: python
+       :start-after: [start_block_9]
+       :end-before: [end_block_9]
+       :dedent:
 
-**Example: Spike check on temperature data:**
+    .. jupyter-execute::
+       :hide-code:
 
-.. literalinclude:: ../../../src/time_stream/examples/examples_quality_control.py
-   :language: python
-   :start-after: [start_block_7]
-   :end-before: [end_block_7]
-   :dedent:
+       import examples_quality_control
+       examples_quality_control.time_range_qc_1()
 
-.. jupyter-execute::
-   :hide-code:
+    **Flag temperature values between 03:30 and 09:30 on the 1st January:**
 
-   import examples_quality_control
-   examples_quality_control.spike_qc_1()
+    .. literalinclude:: ../../../src/time_stream/examples/examples_quality_control.py
+       :language: python
+       :start-after: [start_block_10]
+       :end-before: [end_block_10]
+       :dedent:
 
-.. note::
-    The result doesn't flag the neighbouring high values of 50 and 52. The spike test detects a sudden
-    jump where one value sits between otherwise normal values.
+    .. jupyter-execute::
+       :hide-code:
 
-.. note::
-    The result returns ``null`` for the first and last values; the spike test relies on comparisons with
-    neighbouring values.
+       import examples_quality_control
+       examples_quality_control.time_range_qc_2()
 
-Flat line check
----------------
+``spike``
+^^^^^^^^^
+:class:`time_stream.qc.SpikeCheck`
 
-Detect consecutive repeated (or near-repeated) values.
+    **What it does:** Detects sudden jumps by assessing differences with neighbouring values.
+    A point is flagged when the combined neighbour difference (minus skew) exceeds twice the
+    threshold.
 
-Use when a sensor stuck at a fixed value should be flagged as suspect.
+    **When to use:** Use for detecting unrealistic single-point spikes - isolated values that
+    jump sharply compared to their neighbours.
 
-**Example: Flag temperature values stuck at the same reading for 3 or more consecutive timesteps:**
+    **Additional args:**
+        ``threshold``: The spike detection threshold.
 
-.. literalinclude:: ../../../src/time_stream/examples/examples_quality_control.py
-   :language: python
-   :start-after: [start_block_11]
-   :end-before: [end_block_11]
-   :dedent:
+    **Example usage:**
 
-.. jupyter-execute::
-   :hide-code:
+    **Spike check on temperature data:**
 
-   import examples_quality_control
-   examples_quality_control.flat_line_qc_1()
+    .. literalinclude:: ../../../src/time_stream/examples/examples_quality_control.py
+       :language: python
+       :start-after: [start_block_7]
+       :end-before: [end_block_7]
+       :dedent:
 
-**Example: Using** ``ignore_value`` **- suppress flagging when the repeated value is 0.0:**
+    .. jupyter-execute::
+       :hide-code:
 
-.. literalinclude:: ../../../src/time_stream/examples/examples_quality_control.py
-   :language: python
-   :start-after: [start_block_12]
-   :end-before: [end_block_12]
-   :dedent:
+       import examples_quality_control
+       examples_quality_control.spike_qc_1()
 
-.. jupyter-execute::
-   :hide-code:
+    .. note::
+        The result doesn't flag the neighbouring high values of 50 and 52. The spike test detects a sudden
+        jump where one value sits between otherwise normal values.
 
-   import examples_quality_control
-   examples_quality_control.flat_line_qc_2()
+    .. note::
+        The result returns ``null`` for the first and last values; the spike test relies on comparisons with
+        neighbouring values.
 
-.. note::
-    More than one ``ignore_value`` can be specified in a list, e.g. [0.0, 20.0]
+``flat_line``
+^^^^^^^^^^^^^
+:class:`time_stream.qc.FlatLineCheck`
 
-**Example: Using** ``tolerance`` **- flag values that barely change (within 0.01) for 3 or more consecutive readings:**
+    **What it does:** Detects consecutive repeated (or near-repeated) values in a column.
 
-The data below drifts slightly around 20 °C (varying by less than 0.01 between readings) before jumping
-to a different range. The ``tolerance`` parameter catches these near-flat runs that exact equality would miss.
+    **When to use:** Use when a sensor stuck at a fixed value should be flagged as suspect.
 
-.. literalinclude:: ../../../src/time_stream/examples/examples_quality_control.py
-   :language: python
-   :start-after: [start_block_13]
-   :end-before: [end_block_13]
-   :dedent:
+    **Additional args:**
+        ``min_count``: Minimum number of consecutive repeated values required for a flat line (must be at least 2).
+        ``tolerance``: Optional tolerance for near-equality comparison. When set, consecutive values differing by less than or equal to this amount are considered equal (default: ``None``, exact equality).
+        ``ignore_value``: Optional value or list of values that are allowed to repeat without being flagged.
 
-.. jupyter-execute::
-   :hide-code:
+    **Example usage:**
 
-   import examples_quality_control
-   examples_quality_control.flat_line_qc_3()
+    **Flag temperature values stuck at the same reading for 3 or more consecutive timesteps:**
 
-Additional parameters
-=====================
+    .. literalinclude:: ../../../src/time_stream/examples/examples_quality_control.py
+       :language: python
+       :start-after: [start_block_11]
+       :end-before: [end_block_11]
+       :dedent:
+
+    .. jupyter-execute::
+       :hide-code:
+
+       import examples_quality_control
+       examples_quality_control.flat_line_qc_1()
+
+    **Using** ``ignore_value`` **- suppress flagging when the repeated value is 0.0:**
+
+    .. literalinclude:: ../../../src/time_stream/examples/examples_quality_control.py
+       :language: python
+       :start-after: [start_block_12]
+       :end-before: [end_block_12]
+       :dedent:
+
+    .. jupyter-execute::
+       :hide-code:
+
+       import examples_quality_control
+       examples_quality_control.flat_line_qc_2()
+
+    .. note::
+        More than one ``ignore_value`` can be specified in a list, e.g. [0.0, 20.0]
+
+    **Using** ``tolerance`` **- flag values that barely change (within 0.01) for 3 or more consecutive readings:**
+
+    The data below drifts slightly around 20 °C (varying by less than 0.01 between readings) before jumping
+    to a different range. The ``tolerance`` parameter catches these near-flat runs that exact equality would miss.
+
+    .. literalinclude:: ../../../src/time_stream/examples/examples_quality_control.py
+       :language: python
+       :start-after: [start_block_13]
+       :end-before: [end_block_13]
+       :dedent:
+
+    .. jupyter-execute::
+       :hide-code:
+
+       import examples_quality_control
+       examples_quality_control.flat_line_qc_3()
 
 Observation interval
---------------------
+====================
 
 Specify an observation interval to restrict the QC check to a **specific time window**. This is useful when:
 
@@ -238,15 +290,32 @@ Specify an observation interval to restrict the QC check to a **specific time wi
 - You need to re-run checks on recent data without reprocessing the full archive.
 - You want to exclude known bad periods (e.g. sensor maintenance) from checks.
 
-Into
-----
+Flag Parameters
+===============
+The result of a QC check can be consumed in one of two ways, selected via the ``flag_params`` argument:
 
-The ``into`` argument controls what you get back:
+- **Boolean series** (default, ``flag_params`` omitted) - ``qc_check`` returns a Polars boolean
+  ``Series`` of the same length as the TimeFrame, with ``True`` marking the rows that failed the
+  check. Useful for chaining into custom expressions or feeding into
+  :meth:`~time_stream.TimeFrame.add_flag` manually.
+- **Flag column update** (``flag_params=(flag_column_name, flag_value)``) - ``qc_check`` adds the
+  given flag value to the named flag column on each failing row and returns a new TimeFrame. The
+  flag column must already exist (see :doc:`flagging`).
 
-- ``into=False`` → return a boolean Series (mask of failed rows).
-- ``into=True`` → add a new boolean column with an automatic name.
-- ``into="my_column"`` → add a new boolean column with a custom name.
+The examples below use the flag-column style. Each sets up a bitwise flag system with a single
+``FLAGGED`` flag and calls :meth:`~time_stream.TimeFrame.init_flag_column` before running the
+check:
 
-.. note::
+.. literalinclude:: ../../../src/time_stream/examples/examples_quality_control.py
+   :language: python
+   :start-after: [start_block_14]
+   :end-before: [end_block_14]
+   :dedent:
 
-   If a column name already exists, **Time-Stream** auto-suffixes it to avoid overwriting.
+API reference
+=============
+
+.. autosummary::
+
+    ~time_stream.qc
+    ~time_stream.TimeFrame.qc_check

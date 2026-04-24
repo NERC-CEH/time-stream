@@ -139,6 +139,11 @@ The :meth:`~time_stream.TimeFrame.aggregate` method is the entry point for perfo
 timeseries data in **Time-Stream**. It combines **Polars performance** with **TimeFrame semantics**
 (resolution, periodicity, anchor).
 
+Let's look at the method in more detail:
+
+.. automethod:: time_stream.TimeFrame.aggregate
+   :no-index:
+
 Aggregation period
 ------------------
 
@@ -162,7 +167,6 @@ Aggregation methods
 -------------------
 
 Choose how values inside each window are summarised. Pass a **string** corresponding to one of the built-in functions.
-
 
 ``sum``
 ^^^^^^^
@@ -410,3 +414,12 @@ All aggregation functions can also be applied as rolling (sliding window) operat
 rolling aggregation preserves the original resolution and timestamps.
 
 See :doc:`rolling_aggregation` for a full guide including alignment options and worked examples.
+
+API reference
+=============
+
+.. autosummary::
+
+    ~time_stream.aggregation
+    ~time_stream.TimeFrame.aggregate
+    ~time_stream.TimeFrame.rolling_aggregate
