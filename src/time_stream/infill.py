@@ -75,7 +75,7 @@ class InfillMethod(Operation, ABC):
             infill_column: The column to infill data within.
             periodicity: Periodicity of the time series
             observation_interval: Optional time interval to limit the infilling to.
-            max_gap_size: The maximum size of consecutive null gaps that should be filled. Any gap larger than this
+            max_gap_size: The maximum size of consecutive null gaps that should be filled. Any gap large_sider than this
                           will not be infilled and will remain as null.
         Returns:
             The infilled time series
@@ -362,17 +362,17 @@ class PchipInterpolation(ScipyInterpolation):
 
 
 @InfillMethod.register
-class AltData(InfillMethod):
-    """Infill from an alternative data source, with optional correction factor."""
+class AltDataStatic(InfillMethod):
+    """Infill from an alternative data source, with optional, static correction factor."""
 
-    name = "alt_data"
+    name = "alt_data_static"
 
     def __init__(self, alt_data_column: str, correction_factor: float = 1.0, alt_df: pl.DataFrame | None = None):
         """Initialize the alternative data infill method.
 
         Args:
             alt_data_column: The name of the column providing the alternative data.
-            correction_factor: An optional correction factor to apply to the alternative data.
+            correction_factor: An optional, static correction factor to apply to the alternative data.
             alt_df: The DataFrame containing the alternative data.
         """
         self.alt_data_column = alt_data_column
@@ -419,3 +419,245 @@ class AltData(InfillMethod):
             infilled = infilled.drop(alt_data_column_name)
 
         return infilled
+
+
+@InfillMethod.register
+class AltDataDynamic(InfillMethod):
+    """Infill from an alternative data source, with optional, dynamic correction factor."""
+
+    name = "alt_data_dynamic"
+
+    def __init__(self, alt_data_column: str, alt_df: pl.DataFrame | None = None, window_size: int = 7):
+        """Initialize the alternative data infill method.
+
+        Args:
+            alt_data_column: The name of the column providing the alternative data.
+            alt_df: The DataFrame containing the alternative data.
+        """
+        self.alt_data_column = alt_data_column
+        self.alt_df = alt_df
+        self.window_size = window_size
+
+    def _fill(self, df: pl.DataFrame, infill_column: str, ctx: InfillCtx) -> pl.DataFrame:
+        """Fill missing values using data from the alternative column.
+
+        Args:
+            df: The DataFrame to infill.
+            infill_column: The column to infill.
+            ctx: The infill context.
+
+        Returns:
+            pl.DataFrame with infilled values.
+        """
+        # Define time column name
+        time_column_name = ctx.time_name
+
+        # Join original and alternative dataframes if the latter exists
+        if self.alt_df is None:
+            check_columns_in_dataframe(df, [self.alt_data_column])
+            alt_data_column_name = self.alt_data_column
+        else:
+            check_columns_in_dataframe(self.alt_df, [time_column_name, self.alt_data_column])
+            alt_data_column_name = f"__ALT_DATA__{self.alt_data_column}"
+            alt_df = self.alt_df.select([time_column_name, self.alt_data_column]).rename(
+                {self.alt_data_column: alt_data_column_name}
+            )
+
+            df = df.join(
+                alt_df,
+                on=time_column_name,
+                how="left",
+                suffix="_alt",
+            )
+
+        # Identify gaps in original dataset
+        null_mask = pl.col(infill_column).is_null()
+        gap_id = (null_mask != null_mask.shift(1, fill_value=False)).cum_sum()  # df = gap_size_count(df, infill_column)
+        df = df.with_columns(gap_id.alias("gap_id"))
+
+        # Find start and end times of gaps
+        gap_bounds = (
+            df.filter(null_mask)
+            .group_by(gap_id)
+            .agg(
+                pl.min(time_column_name).alias("gap_start"),
+                pl.max(time_column_name).alias("gap_end"),
+            )
+        )
+
+        # Compute correction factors for each gap
+        factors = {}
+        for row in gap_bounds.iter_rows(named=True):
+            gid = row["gap_id"]
+            gap_start = row["gap_start"]
+            gap_end = row["gap_end"]
+
+            # Define window either side of gap
+            # Filter out any null data from either original or alt datasets within window.
+            window_df = df.filter(
+                (pl.col("gap_id") == gid)
+                & (pl.col(time_column_name) >= gap_start - pl.duration(days=7))
+                & (pl.col(time_column_name) <= gap_end + pl.duration(days=7))
+                & (~pl.col(infill_column).is_null())
+                & (~pl.col(alt_data_column_name).is_null())
+            )
+
+            cf = self._compute_correction_factor_for_gap(
+                window_df,
+                time_column_name=time_column_name,
+                infill_column=infill_column,
+                alt_data_column_name=alt_data_column_name,
+                gap_start=gap_start,
+                gap_end=gap_end,
+            )
+
+            if cf is not None:
+                factors[gid] = cf
+
+        # Attach correction factors
+        if factors:
+            cf_df = pl.DataFrame({"gap_id": list(factors.keys()), "correction_factor": list(factors.values())})
+            df = df.join(cf_df, on="gap_id", how="left")
+        else:
+            df = df.with_columns(pl.lit(None).alias("correction_factor"))
+
+        # Fill gaps
+        infilled = df.with_columns(
+            pl.when(pl.col(infill_column).is_null() & pl.col("correction_factor").is_not_null())
+            .then(pl.col(alt_data_column_name) * pl.col("correction_factor"))
+            .otherwise(pl.col(infill_column))
+            .alias(infill_column)
+        )
+
+        # Cleanup
+        if self.alt_df is not None:
+            infilled = infilled.drop(alt_data_column_name, "gap_id", "correction_factor")
+
+        return infilled
+
+    def _compute_correction_factor_for_gap(
+        self,
+        window_df: pl.DataFrame,
+        time_column_name: str,
+        infill_column: str,
+        alt_data_column_name: str,
+        gap_start: pl.Datetime,
+        gap_end: pl.Datetime,
+    ) -> float | None:
+        """Compute correction factor for a single gap using hierarchical rules.
+
+        Args:
+            gap_df: dataframe with only 7 days of data either side of the gap, with any further null data removed.
+            time_column_name: name of time column, from ctx.time_column_name
+            infill_column: name of column in original dataset with missing data to be infilled
+            alt_data_column_name: name of column in alternative dataset to use to infill missing data
+            gap_start: timestamp indicating the start of the gap in the original dataset
+            gap_end: timestamp indicating the end of the gap in the original dataset
+
+        Returns:
+            correction_factor or None if gap cannot be filled
+        """
+
+        if window_df.is_empty():
+            return None
+
+        gap_df = window_df.sort(time_column_name)
+
+        ############################################################
+        # Threshold 1: nearest consecutive 24 datapoints either side
+        ############################################################
+
+        # dt will be 1hour unless one of the datasets is missing data within the 7 day window around the gap
+        # dt==1 shows consecutive usable data
+        # dt>1 shows one or more data entries are missing within the window.
+        df = gap_df.with_columns((pl.col(time_column_name) - pl.col(time_column_name).shift()).alias("dt"))
+
+        # If there is missing data within the window, ie. dt>1, this breaks the consecutive run, and a new run starts.
+        run_id = (pl.col("dt") != pl.duration(hours=1)).fill_null(True).cum_sum()
+
+        # Filter for runs with 24 consecutive datapoints
+        runs = (
+            df.with_columns(run_id.alias("run_id"))
+            .group_by("run_id")
+            .agg(
+                pl.len().alias("n"),
+                pl.min(time_column_name).alias("start"),
+                pl.max(time_column_name).alias("end"),
+                pl.sum(infill_column).alias("orig_sum"),
+                pl.sum(alt_data_column_name).alias("alt_sum"),
+            )
+            .filter(pl.col("n") >= 24)
+        )
+
+        if runs.height > 0:
+            # choose run closest to the gap
+            runs = runs.with_columns(
+                (
+                    pl.min_horizontal(
+                        (pl.col("start") - pl.lit(gap_end)).abs(), (pl.col("end") - pl.lit(gap_start)).abs()
+                    )
+                ).alias("distance")
+            ).sort("distance")
+
+            row = runs.row(0, named=True)
+            if row["alt_sum"] != 0:
+                return row["orig_sum"] / row["alt_sum"]
+
+        ##############################################################################################################
+        # Threshold 2: at least 12 non‑consecutive datapoints, and up to 48 on either side of gap
+        # First preference: same number of datapoints either side of gap, with at least 6 datapoints and up to 24 each
+        # Second preference: can have different numbers of data points on either side of gap
+        # Third preference: all datapoints are on one side of gap only
+        ##############################################################################################################
+        before_gap_df = gap_df.filter(pl.col(time_column_name) < pl.lit(gap_start))
+        after_gap_df = gap_df.filter(pl.col(time_column_name) > pl.lit(gap_end))
+
+        # If less than 12 usable datapoints in total, return None, gap is not filled
+        if before_gap_df.height + after_gap_df.height < 12:
+            return None
+
+        # Same number of datapoints either side of gap
+        elif before_gap_df.height >= 6 and after_gap_df.height >= 6:
+            # Use at most 24 datapoints each side of the gap
+            datapoints_on_each_side = min(24, before_gap_df.height, after_gap_df.height)
+            alt_sum = (
+                before_gap_df.tail(datapoints_on_each_side)[alt_data_column_name].sum()
+                + after_gap_df.head(datapoints_on_each_side)[alt_data_column_name].sum()
+            )
+            if alt_sum != 0:
+                return (
+                    before_gap_df.tail(datapoints_on_each_side)[infill_column].sum()
+                    + after_gap_df.head(datapoints_on_each_side)[infill_column].sum()
+                ) / alt_sum
+
+        # Different number of datapoints either side of the gap
+        else:
+            # Identify which side is small_sideer
+            if before_gap_df.height < after_gap_df.height:
+                small_side = before_gap_df
+                large_side = after_gap_df
+                large_side_slice = large_side.head
+            else:
+                small_side = after_gap_df
+                large_side = before_gap_df
+                large_side_slice = large_side.tail
+
+            # Use at most 48 datapoints in total
+            remaining = 48 - small_side.height
+            take_from_large_side = min(remaining, large_side.height)
+
+            alt_sum = (
+                small_side[alt_data_column_name].sum()
+                + large_side_slice(take_from_large_side)[alt_data_column_name].sum()
+            )
+
+            if alt_sum != 0:
+                return (
+                    small_side[infill_column].sum() + large_side_slice(take_from_large_side)[infill_column].sum()
+                ) / alt_sum
+
+        ############################################
+        # Otherwise use different infill data/method
+        ############################################
+
+        return None
