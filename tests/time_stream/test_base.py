@@ -12,6 +12,7 @@ from time_stream.exceptions import (
     BitwiseFlagUnknownError,
     CategoricalFlagUnknownError,
     ColumnNotFoundError,
+    DuplicateColumnError,
     FlagSystemNotFoundError,
     MetadataError,
 )
@@ -1168,3 +1169,63 @@ class TestInfillWithFlagParams:
         tf.infill("linear", "value", flag_params=("flag_col", "FLAG_A"))
         expected = pl.Series("flag_col", [0, 0, 0, 0, 0], dtype=pl.Int64)
         assert_series_equal(tf.df["flag_col"], expected)
+
+
+class TestRenameTimeColumnName:
+    """Tests for TimeFrame.rename_time_column() with new_time_column name."""
+
+    @staticmethod
+    def setup_tf() -> TimeFrame:
+        """Set up a TimeFrame."""
+        df = pl.DataFrame(
+            {
+                "time": [datetime(2024, 1, i) for i in range(1, 6)],
+                "value": [1.0, 2.0, 3.0, 4.0, 5.0],
+            }
+        )
+        tf = TimeFrame(df, time_name="time")
+        return tf
+
+    def test_new_time_name(self) -> None:
+        """Replace original time_name with new_time_name with no other modifications to original TimeFrame"""
+        tf = self.setup_tf()
+        tf_new = tf.rename_time_column("new_time_name")
+        expected = pl.DataFrame(
+            {
+                "new_time_name": [datetime(2024, 1, i) for i in range(1, 6)],
+                "value": [1.0, 2.0, 3.0, 4.0, 5.0],
+            }
+        )
+        assert_frame_equal(tf_new.df, expected)
+        assert tf.time_name == "time"
+        assert "new_time_name" not in tf.df.columns
+
+    def test_new_time_name_same_as_original_time_name(self) -> None:
+        """Generate exact copy of original TimeFrame when new_time_name is the same as the original"""
+        tf = self.setup_tf()
+        tf_new = tf.rename_time_column("time")
+        expected = pl.DataFrame(
+            {
+                "time": [datetime(2024, 1, i) for i in range(1, 6)],
+                "value": [1.0, 2.0, 3.0, 4.0, 5.0],
+            }
+        )
+        assert_frame_equal(tf_new.df, expected)
+        assert tf_new.df is not tf.df
+        assert tf_new is not tf
+
+    def test_new_time_name_same_as_data_column(self) -> None:
+        """Raise DuplicateColumnError if new_time_name is the same as a data column name"""
+        tf = self.setup_tf()
+        with pytest.raises(DuplicateColumnError):
+            tf.rename_time_column("value")
+
+    def test_new_time_name_is_empty(self) -> None:
+        "Raise error if new_time_name is empty"
+        with pytest.raises(ValueError):
+            self.setup_tf().rename_time_column("")
+
+    def test_new_time_name_is_None(self) -> None:
+        "Raise error if new_time_name is None"
+        with pytest.raises(TypeError):
+            self.setup_tf().rename_time_column()  # type: ignore[arg-type]
