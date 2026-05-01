@@ -1199,7 +1199,7 @@ class TestRenameTimeColumnName:
         assert_frame_equal(tf_new.df, expected)
 
     def test_new_time_name_same_as_original_time_name(self) -> None:
-        "Generate exact copy of original TimeFrame when new_time_name is the same as the original"
+        """Generate exact copy of original TimeFrame when new_time_name is the same as the original"""
         tf = self.setup_tf()
         tf_new = tf.rename_time_column("time_name")
         expected = pl.DataFrame(
