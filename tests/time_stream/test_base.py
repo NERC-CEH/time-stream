@@ -1187,7 +1187,7 @@ class TestRenameTimeColumnName:
         return tf
 
     def test_new_time_name(self) -> None:
-        "Replace original time_name with new_time_name with no other modifications to original TimeFrame"
+        """Replace original time_name with new_time_name with no other modifications to original TimeFrame"""
         tf = self.setup_tf()
         tf_new = tf.rename_time_column("new_time_name")
         expected = pl.DataFrame(
@@ -1201,7 +1201,7 @@ class TestRenameTimeColumnName:
         assert "new_time_name" not in tf.df.columns
 
     def test_new_time_name_same_as_original_time_name(self) -> None:
-        "Generate exact copy of original TimeFrame when new_time_name is the same as the original"
+        """Generate exact copy of original TimeFrame when new_time_name is the same as the original"""
         tf = self.setup_tf()
         tf_new = tf.rename_time_column("time")
         expected = pl.DataFrame(
@@ -1215,7 +1215,7 @@ class TestRenameTimeColumnName:
         assert tf_new is not tf
 
     def test_new_time_name_same_as_data_column(self) -> None:
-        "Raise DuplicateColumnError if new_time_name is the same as a data column name"
+        """Raise DuplicateColumnError if new_time_name is the same as a data column name"""
         tf = self.setup_tf()
         with pytest.raises(DuplicateColumnError):
             tf.rename_time_column("value")
