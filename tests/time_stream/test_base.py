@@ -1197,19 +1197,22 @@ class TestRenameTimeColumnName:
             }
         )
         assert_frame_equal(tf_new.df, expected)
+        assert tf.time_name == "time"
+        assert "new_time_name" not in tf.df.columns
 
     def test_new_time_name_same_as_original_time_name(self) -> None:
         "Generate exact copy of original TimeFrame when new_time_name is the same as the original"
         tf = self.setup_tf()
-        tf_new = tf.rename_time_column("time_name")
+        tf_new = tf.rename_time_column("time")
         expected = pl.DataFrame(
             {
-                "time_name": [datetime(2024, 1, i) for i in range(1, 6)],
+                "time": [datetime(2024, 1, i) for i in range(1, 6)],
                 "value": [1.0, 2.0, 3.0, 4.0, 5.0],
             }
         )
         assert_frame_equal(tf_new.df, expected)
-        assert_frame_not_equal(tf_new.df, tf.df)
+        assert tf_new.df is not tf.df
+        assert tf_new is not tf
 
     def test_new_time_name_same_as_data_column(self) -> None:
         "Raise DuplicateColumnError if new_time_name is the same as a data column name"
@@ -1217,7 +1220,7 @@ class TestRenameTimeColumnName:
         with pytest.raises(DuplicateColumnError):
             tf.rename_time_column("value")
 
-    def test_new_time_name_is_not_none(self) -> None:
+    def test_new_time_name_is_empty(self) -> None:
         "Raise error if new_time_name is empty"
         with pytest.raises(ValueError):
             self.setup_tf().rename_time_column("")

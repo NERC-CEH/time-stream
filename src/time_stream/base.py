@@ -1031,7 +1031,7 @@ class TimeFrame:
         return tf
 
     def rename_time_column(self, new_time_name: str) -> TimeFrame:
-        """Update the TimeFrame time_name
+        """Return a new TimeFrame with the time column renamed
 
         Args:
             new_time_name (str): name of new time column
