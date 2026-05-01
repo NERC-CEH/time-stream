@@ -1034,7 +1034,7 @@ class TimeFrame:
         """Update the TimeFrame time_name
 
         Args:
-            new_time_name (str): name of new time column
+            new_time_name: name of new time column
 
         Returns:
             TimeFrame: A new copy of the TimeFrame instance with the time name updated to the new time name.
