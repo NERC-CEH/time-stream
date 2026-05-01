@@ -16,7 +16,8 @@ from time_stream.exceptions import (
 )
 from time_stream.infill import (
     AkimaInterpolation,
-    AltData,
+    AltDataDynamic,
+    AltDataStatic,
     BSplineInterpolation,
     CubicInterpolation,
     InfillCtx,
@@ -467,7 +468,7 @@ class TestApply:
         assert_frame_equal(result, expected.df, check_column_order=False)
 
 
-class TestAltData:
+class TestAltDataStatic:
     df = pl.DataFrame(
         {
             "timestamp": [
@@ -486,14 +487,14 @@ class TestAltData:
 
     def test_alt_data_infill(self) -> None:
         """Test basic infilling from an alternative column."""
-        infiller = AltData(alt_data_column="alt_values")
+        infiller = AltDataStatic(alt_data_column="alt_values")
         result_df = infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
         expected_df = self.df.with_columns(pl.Series("values", [1.0, 20.0, 3.0, 40.0, 5.0]))
         assert_frame_equal(result_df, expected_df, check_column_order=False)
 
     def test_alt_data_infill_with_correction(self) -> None:
         """Test infilling with a correction factor."""
-        infiller = AltData(alt_data_column="alt_values", correction_factor=0.1)
+        infiller = AltDataStatic(alt_data_column="alt_values", correction_factor=0.1)
         result_df = infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
         expected_df = self.df.with_columns(pl.Series("values", [1.0, 2.0, 3.0, 4.0, 5.0]))
         assert_frame_equal(result_df, expected_df, check_column_order=False)
@@ -502,26 +503,26 @@ class TestAltData:
         """Test that nothing happens when there is no missing data."""
         df_complete = self.df.with_columns(pl.Series("values", [1.0, 2.0, 3.0, 4.0, 5.0]))
         tf_complete = TimeFrame(df_complete, "timestamp", "P1D")
-        infiller = AltData(alt_data_column="alt_values")
+        infiller = AltDataStatic(alt_data_column="alt_values")
         result_df = infiller.apply(tf_complete.df, tf_complete.time_name, tf_complete.periodicity, "values")
         assert_frame_equal(result_df, tf_complete.df, check_column_order=False)
 
     def test_alt_data_infill_missing_alt_data(self) -> None:
         """Test that missing data in the alternative column is not used for infilling."""
-        infiller = AltData(alt_data_column="alt_with_missing")
+        infiller = AltDataStatic(alt_data_column="alt_with_missing")
         result_df = infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
         expected_df = self.df.with_columns(pl.Series("values", [1.0, None, 3.0, 40.0, 5.0]))
         assert_frame_equal(result_df, expected_df, check_column_order=False)
 
     def test_alt_data_infill_missing_alt_data_column_column(self) -> None:
         """Test that an error is raised if the alt_data_column column is missing."""
-        infiller = AltData(alt_data_column="non_existent_column")
+        infiller = AltDataStatic(alt_data_column="non_existent_column")
         with pytest.raises(ColumnNotFoundError):
             infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
 
     def test_alt_data_infill_restricting_date_range(self) -> None:
         """Test that only data in the observation_interval is infilled."""
-        infiller = AltData(alt_data_column="alt_values")
+        infiller = AltDataStatic(alt_data_column="alt_values")
         result_df = infiller.apply(
             self.tf.df,
             self.tf.time_name,
@@ -540,7 +541,7 @@ class TestAltData:
                 "alt_values_df": [11.0, 22.0, 33.0, 44.0, 55.0],
             }
         )
-        infiller = AltData(alt_data_column="alt_values_df", alt_df=alt_df)
+        infiller = AltDataStatic(alt_data_column="alt_values_df", alt_df=alt_df)
         result_df = infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
         expected_df = self.df.with_columns(pl.Series("values", [1.0, 22.0, 3.0, 44.0, 5.0]))
         assert_frame_equal(result_df, expected_df, check_column_order=False)
@@ -548,14 +549,14 @@ class TestAltData:
     def test_alt_data_infill_with_alt_data_missing_time_column(self) -> None:
         """Test error when provided alt_data is missing the time column."""
         alt_df = pl.DataFrame({"alt_values_df": [11.0, 22.0, 33.0, 44.0, 55.0]})
-        infiller = AltData(alt_data_column="alt_values", alt_df=alt_df)
+        infiller = AltDataStatic(alt_data_column="alt_values", alt_df=alt_df)
         with pytest.raises(ColumnNotFoundError):
             infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
 
     def test_alt_data_infill_with_alt_data_missing_data_column(self) -> None:
         """Test error when provided alt_data is missing the data column."""
         alt_df = pl.DataFrame({"time": self.df["timestamp"]})
-        infiller = AltData(alt_data_column="non_existent_column", alt_df=alt_df)
+        infiller = AltDataStatic(alt_data_column="non_existent_column", alt_df=alt_df)
         with pytest.raises(ColumnNotFoundError):
             infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
 
@@ -567,8 +568,33 @@ class TestAltData:
                 "values": [11.0, 22.0, 33.0, 44.0, 55.0],
             }
         )
-        infiller = AltData(alt_data_column="values", alt_df=alt_df)
+        infiller = AltDataStatic(alt_data_column="values", alt_df=alt_df)
 
         result_df = infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
         expected_df = self.df.with_columns(pl.Series("values", [1.0, 22.0, 3.0, 44.0, 5.0]))
+        assert_frame_equal(result_df, expected_df, check_column_order=False)
+
+
+class TestAltDataDynamic:
+    df = pl.DataFrame(
+        {
+            "timestamp": [
+                datetime(2025, 1, 1),
+                datetime(2025, 1, 2),
+                datetime(2025, 1, 3),
+                datetime(2025, 1, 4),
+                datetime(2025, 1, 5),
+            ],
+            "values": [1.0, None, 3.0, None, 5.0],
+            "alt_values": [10.0, 20.0, 30.0, 40.0, 50.0],
+            "alt_with_missing": [10.0, None, 30.0, 40.0, None],
+        }
+    )
+    tf = TimeFrame(df, "timestamp", "P1D")
+
+    def test_alt_data_infill(self) -> None:
+        """Test basic infilling from an alternative column."""
+        infiller = AltDataDynamic(alt_data_column="alt_values", window_size="P1D")
+        result_df = infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
+        expected_df = self.df.with_columns(pl.Series("values", [1.0, 10.0, 3.0, 10.0, 5.0]))
         assert_frame_equal(result_df, expected_df, check_column_order=False)

@@ -505,7 +505,7 @@ class AltDataDynamic(InfillMethod):
         # Find start and end times of gaps
         gap_bounds = (
             df.filter(null_mask)
-            .group_by(gap_id)
+            .group_by("gap_id")
             .agg(
                 pl.min(time_column_name).alias("gap_start"),
                 pl.max(time_column_name).alias("gap_end"),
