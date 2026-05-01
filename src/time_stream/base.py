@@ -50,6 +50,7 @@ from time_stream.enums import ClosedInterval, DuplicateOption, RollingAlignment,
 from time_stream.exceptions import (
     ColumnNotFoundError,
     ColumnTypeError,
+    DuplicateColumnError,
     MetadataError,
 )
 from time_stream.flags.flag_manager import (
@@ -1038,6 +1039,18 @@ class TimeFrame:
         Returns:
             TimeFrame: A new copy of the TimeFrame instance with the time name updated to the new time name.
         """
+        if new_time_name == "":
+            raise ValueError("new_time_name cannot be empty string")
+
+        if new_time_name == self.time_name:
+            return self.copy()
+
+        if new_time_name in self.data_columns:
+            raise DuplicateColumnError(
+                f"new_time_name {new_time_name} is already assigned to a data column name, "
+                "new_time_name must not be the same as any data column names."
+            )
+
         tf = self.copy()
         tf._df = tf._df.rename({self.time_name: new_time_name})
         tf._time_manager._time_name = new_time_name
