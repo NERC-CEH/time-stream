@@ -1029,6 +1029,22 @@ class TimeFrame:
 
         return tf
 
+    def rename_time_column(self, new_time_name: str) -> TimeFrame:
+        """Update the TimeFrame time_name
+
+        Args:
+            new_time_name (str): name of new time column
+
+        Returns:
+            TimeFrame: A new copy of the TimeFrame instance with the time name updated to the new time name.
+        """
+        tf = self.copy()
+        tf._df = tf._df.rename({self.time_name: new_time_name})
+        tf._time_manager._time_name = new_time_name
+        tf._column_metadata.sync()
+
+        return tf
+
     def __getitem__(self, key: str | list[str]) -> TimeFrame:
         """Access columns using indexing syntax.
 
