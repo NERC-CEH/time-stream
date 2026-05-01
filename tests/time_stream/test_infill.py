@@ -576,18 +576,40 @@ class TestAltDataStatic:
 
 
 class TestAltDataDynamic:
+    # Test different window sizes for different periodicities, including invalid combinations
+    # Try different missing combos
+    # Test with different combinations of min and max thresholds
+
     df = pl.DataFrame(
         {
-            "timestamp": [
-                datetime(2025, 1, 1),
-                datetime(2025, 1, 2),
-                datetime(2025, 1, 3),
-                datetime(2025, 1, 4),
-                datetime(2025, 1, 5),
+            "timestamp": [datetime(2025, 1, d) for d in range(1, 24, 1)],
+            "values": [
+                1.0,
+                2.0,
+                3.0,
+                None,
+                5.0,
+                6.0,
+                7.0,
+                8.0,
+                9.0,
+                10.0,
+                11.0,
+                12.0,
+                13.0,
+                14.0,
+                15.0,
+                16.0,
+                17.0,
+                18.0,
+                19.0,
+                20.0,
+                21.0,
+                22.0,
+                23.0,
             ],
-            "values": [1.0, None, 3.0, None, 5.0],
-            "alt_values": [10.0, 20.0, 30.0, 40.0, 50.0],
-            "alt_with_missing": [10.0, None, 30.0, 40.0, None],
+            "alt_values": np.arange(1, 24, 1.0),
+            # "alt_with_missing": [10.0, None, 30.0, 40.0, None],
         }
     )
     tf = TimeFrame(df, "timestamp", "P1D")
@@ -596,5 +618,5 @@ class TestAltDataDynamic:
         """Test basic infilling from an alternative column."""
         infiller = AltDataDynamic(alt_data_column="alt_values", window_size="P1D")
         result_df = infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
-        expected_df = self.df.with_columns(pl.Series("values", [1.0, 10.0, 3.0, 10.0, 5.0]))
+        expected_df = self.df.with_columns(pl.Series("values", np.arange(1, 24, 1.0))).drop("alt_values")
         assert_frame_equal(result_df, expected_df, check_column_order=False)

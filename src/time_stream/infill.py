@@ -522,8 +522,8 @@ class AltDataDynamic(InfillMethod):
             # Define window either side of gap
             # Filter out any null data from either original or alt datasets within window.
             window_df = df.filter(
-                (pl.col("gap_id") == gid)
-                & (pl.col(time_column_name) >= gap_start - window_duration)
+                # (pl.col("gap_id") == gid)
+                (pl.col(time_column_name) >= gap_start - window_duration)
                 & (pl.col(time_column_name) <= gap_end + window_duration)
                 & (~pl.col(infill_column).is_null())
                 & (~pl.col(alt_data_column_name).is_null())
@@ -553,12 +553,12 @@ class AltDataDynamic(InfillMethod):
             pl.when(pl.col(infill_column).is_null() & pl.col("correction_factor").is_not_null())
             .then(pl.col(alt_data_column_name) * pl.col("correction_factor"))
             .otherwise(pl.col(infill_column))
-            .alias(infill_column)
+            .alias(self._infilled_column_name(infill_column))
         )
 
         # Cleanup
-        if self.alt_df is not None:
-            infilled = infilled.drop(alt_data_column_name, "gap_id", "correction_factor")
+        # if self.alt_df is not None:
+        infilled = infilled.drop(alt_data_column_name, "gap_id", "correction_factor")
 
         return infilled
 
