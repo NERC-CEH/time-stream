@@ -1228,5 +1228,4 @@ class TestRenameTimeColumnName:
     def test_new_time_name_is_None(self) -> None:
         "Raise error if new_time_name is None"
         with pytest.raises(TypeError):
-            self.setup_tf().rename_time_column()
-            self.setup_tf().rename_time_column(None)
+            self.setup_tf().rename_time_column()  # type: ignore[arg-type]
