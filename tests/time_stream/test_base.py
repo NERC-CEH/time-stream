@@ -1187,7 +1187,7 @@ class TestRenameTimeColumnName:
         return tf
 
     def test_new_time_name(self) -> None:
-        "Replace original time_name with new_time_name with no other modifications to original TimeFrame"
+        """Replace original time_name with new_time_name with no other modifications to original TimeFrame"""
         tf = self.setup_tf()
         tf_new = tf.rename_time_column("new_time_name")
         expected = pl.DataFrame(
