@@ -1224,3 +1224,9 @@ class TestRenameTimeColumnName:
         "Raise error if new_time_name is empty"
         with pytest.raises(ValueError):
             self.setup_tf().rename_time_column("")
+
+    def test_new_time_name_is_None(self) -> None:
+        "Raise error if new_time_name is None"
+        with pytest.raises(TypeError):
+            self.setup_tf().rename_time_column()
+            self.setup_tf().rename_time_column(None)
