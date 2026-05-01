@@ -1212,7 +1212,7 @@ class TestRenameTimeColumnName:
         assert_frame_not_equal(tf_new.df, tf.df)
 
     def test_new_time_name_same_as_data_column(self) -> None:
-        "Raise DuplicateColumnError if new_time_name is the same as a data column name"
+        """Raise DuplicateColumnError if new_time_name is the same as a data column name"""
         tf = self.setup_tf()
         with pytest.raises(DuplicateColumnError):
             tf.rename_time_column("value")
