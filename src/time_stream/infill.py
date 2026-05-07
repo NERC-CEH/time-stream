@@ -76,7 +76,7 @@ class InfillMethod(Operation, ABC):
             infill_column: The column to infill data within.
             periodicity: Periodicity of the time series
             observation_interval: Optional time interval to limit the infilling to.
-            max_gap_size: The maximum size of consecutive null gaps that should be filled. Any gap large_sider than this
+            max_gap_size: The maximum size of consecutive null gaps that should be filled. Any gap larger than this
                           will not be infilled and will remain as null.
         Returns:
             The infilled time series
@@ -365,7 +365,7 @@ class PchipInterpolation(ScipyInterpolation):
 @InfillMethod.register
 class AltDataStatic(InfillMethod):
     """
-    Infills missing values using an alternative data source and static correction factor.
+    Infills missing values using an alternative data source and optional correction factor.
     The alternative data corresponding to the missing interval is scaled by the correction
     factor to produce the infilled values.
     """
@@ -377,7 +377,7 @@ class AltDataStatic(InfillMethod):
 
         Args:
             alt_data_column: The name of the column providing the alternative data.
-            correction_factor: static correction factor to apply to the alternative data.
+            correction_factor: An optional correction factor to apply to the alternative data.
             alt_df: The DataFrame containing the alternative data.
         """
         self.alt_data_column = alt_data_column
@@ -437,6 +437,9 @@ class AltDataDynamic(InfillMethod):
     the original data to the sum of the alternative data within this window.
     The alternative data corresponding to the missing interval is scaled by the
     correction factor to produce the infilled values.
+
+    If both left_only and right_only are set to True, the method defaults to using
+    data on both sides of the gap.
     """
 
     name = "alt_data_dynamic"
@@ -458,8 +461,8 @@ class AltDataDynamic(InfillMethod):
             alt_df: The DataFrame containing the alternative data.
             window_size: period around the missing data to be used to calculate the correction factor,
                          as an iso string or Period type.
-            min_threshold: maximum number of datapoints to use to calculate the correction factor.
-            max_threshold: minimum number of datapoints to use to calculate the correction factor.
+            min_threshold: minimum number of datapoints to use to calculate the correction factor.
+            max_threshold: maximum number of datapoints to use to calculate the correction factor.
             left_only: optional bool. If True, only data to left of missing data is used to infill.
             right_only: optional bool. If True, only data to right of missing data is used to infill.
         """
@@ -475,8 +478,9 @@ class AltDataDynamic(InfillMethod):
         self.right_only = right_only
         self.left_only = left_only
 
-        # If both left and right filters are true, then gap_end < time < gap_start, leaving window_df is empty.
-        # Normalise left_only and right_only so that if both are True, windows on both sides of the gap are used.
+        # If both left_only and right_only are True, the constraints would be mutually exclusive
+        # (time < gap_start AND time > gap_end), resulting in an empty window.
+        # Normalize the flags so that this case defaults to using data on both sides of the gap.
         if right_only and left_only:
             self.right_only = False
             self.left_only = False
@@ -499,6 +503,9 @@ class AltDataDynamic(InfillMethod):
         """
         # Define time column name
         time_column_name = ctx.time_name
+
+        # Def window_duration
+        window_duration = self._window_duration(ctx)
 
         # Join original and alternative dataframes if the latter exists
         if self.alt_df is None:
@@ -542,18 +549,16 @@ class AltDataDynamic(InfillMethod):
 
             # define filter if left_only and/or right_only are True
             side_filter = pl.lit(True)
-
             if self.left_only:
                 side_filter &= pl.col(time_column_name) < pl.lit(gap_start)
-
             if self.right_only:
                 side_filter &= pl.col(time_column_name) > pl.lit(gap_end)
 
             # Define window either side of gap
             # Filter out any null data from either original or alt datasets within window.
             window_df = df.filter(
-                (pl.col(time_column_name) >= gap_start - self._window_duration(ctx))
-                & (pl.col(time_column_name) <= gap_end + self._window_duration(ctx))
+                (pl.col(time_column_name) >= gap_start - window_duration)
+                & (pl.col(time_column_name) <= gap_end + window_duration)
                 & (~pl.col(infill_column).is_null())
                 & (~pl.col(alt_data_column_name).is_null())
                 & side_filter
@@ -587,12 +592,11 @@ class AltDataDynamic(InfillMethod):
         )
 
         # Cleanup
-        # if self.alt_df is not None:
         infilled = infilled.drop(alt_data_column_name, "gap_id", "correction_factor")
 
         return infilled
 
-    def _window_duration(self, ctx: InfillCtx) -> timedelta | None:
+    def _window_duration(self, ctx: InfillCtx) -> timedelta:
         """Calculate the window duration from the window size and ensure it is valid."""
         periodicity = ctx.periodicity
         if isinstance(self.window_size, str):
@@ -626,8 +630,8 @@ class AltDataDynamic(InfillMethod):
         """Compute correction factor for a single gap using hierarchical rules.
         Default: Use all data within window. If none available, return None.
         If min_threshold is provided, and not enough data is available, return None.
-        If max_threshold is provided, and is less than the datapoints in the window, use all data available,
-        up to the max_threshold with the hierarchy:
+        If max_threshold is provided, and is less than the datapoints in the window,
+        use up to the max_threshold number of datapoints, with the hierarchy:
         1. Same number of datapoints either side of gap, up to max_threshold/2 each.
         2. Different numbers of data points on either side of gap, up to max_threshold total datapoints.
         3. All datapoints are on one side of gap only, up to max_threshold total datapoints.
