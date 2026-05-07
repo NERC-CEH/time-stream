@@ -16,7 +16,8 @@ Infilling methods
     :nosignatures:
     :toctree: _api/
 
-    ~AltData
+    ~AltDataStatic
+    ~AltDataDynamic
     ~AkimaInterpolation
     ~BSplineInterpolation
     ~CubicInterpolation
