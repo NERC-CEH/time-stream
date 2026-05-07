@@ -710,9 +710,10 @@ class TestAltDataDynamic:
         result_left_and_right_df = infiller_left_and_right.apply(
             self.tf.df, self.tf.time_name, self.tf.periodicity, "values"
         )
-        expected_left_and_right_df = self.df.with_columns(
-            pl.Series("values", [7.6, 82.2, 89.6, 51.7, 91.9, 82.6, 90.0, 26.1, 48.4, 19.6, 46.4, None])
-        ).drop("alt_values")
+
+        # left_only and right_only not specified (default = False)
+        infiller_none = AltDataDynamic(alt_data_column="alt_values", window_size="P3D")
+        result_none_df = infiller_none.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
 
         assert_frame_equal(
             result_left_df.with_columns(pl.col("values").round(1)), expected_left_df, check_column_order=False
@@ -720,8 +721,4 @@ class TestAltDataDynamic:
         assert_frame_equal(
             result_right_df.with_columns(pl.col("values").round(1)), expected_right_df, check_column_order=False
         )
-        assert_frame_equal(
-            result_left_and_right_df.with_columns(pl.col("values").round(1)),
-            expected_left_and_right_df,
-            check_column_order=False,
-        )
+        assert_frame_equal(result_left_and_right_df, result_none_df, check_column_order=False)
