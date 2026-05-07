@@ -16,7 +16,7 @@ The infill pipeline handles:
 import math
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 import numpy as np
@@ -435,6 +435,8 @@ class AltDataDynamic(InfillMethod):
         alt_df: pl.DataFrame | None = None,
         min_threshold: int = 0,
         max_threshold: int | None = None,
+        right_only: bool | None = None,
+        left_only: bool | None = None,
     ):
         """Initialize the alternative data infill method.
 
@@ -442,11 +444,17 @@ class AltDataDynamic(InfillMethod):
             alt_data_column: The name of the column providing the alternative data.
             alt_df: The DataFrame containing the alternative data.
         """
+        if min_threshold is not None and max_threshold is not None:
+            if min_threshold > max_threshold:
+                raise ValueError("max_threshold must be greater than min_threshold")
+
         self.alt_data_column = alt_data_column
         self.alt_df = alt_df
         self.window_size = window_size
         self.min_threshold = min_threshold
         self.max_threshold = max_threshold
+        self.right_only = right_only
+        self.left_only = left_only
 
     def _fill(
         self,
@@ -466,18 +474,6 @@ class AltDataDynamic(InfillMethod):
         """
         # Define time column name
         time_column_name = ctx.time_name
-
-        # Ensure window_size is a valid Period
-        periodicity = ctx.periodicity
-        if isinstance(self.window_size, str):
-            self.window_size = Period.of_iso_duration(self.window_size)
-        if self.window_size < periodicity:
-            raise ValueError("Window size must be greater than periodicity")
-        window_duration = self.window_size.timedelta
-        if window_duration is None:
-            raise ValueError(
-                "Window size must be given in days, hours, seconds...Cannot resolve month or year to timedelta"
-            )
 
         # Join original and alternative dataframes if the latter exists
         if self.alt_df is None:
@@ -519,14 +515,19 @@ class AltDataDynamic(InfillMethod):
             gap_start = row["gap_start"]
             gap_end = row["gap_end"]
 
+            # define filter if left_only and/or right_only are True
+            side_filter = (~pl.lit(self.left_only) | (pl.col(time_column_name) < pl.lit(gap_start))) & (
+                ~pl.lit(self.right_only) | (pl.col(time_column_name) > pl.lit(gap_end))
+            )
+
             # Define window either side of gap
             # Filter out any null data from either original or alt datasets within window.
             window_df = df.filter(
-                # (pl.col("gap_id") == gid)
-                (pl.col(time_column_name) >= gap_start - window_duration)
-                & (pl.col(time_column_name) <= gap_end + window_duration)
+                (pl.col(time_column_name) >= gap_start - self._window_duration(ctx))
+                & (pl.col(time_column_name) <= gap_end + self._window_duration(ctx))
                 & (~pl.col(infill_column).is_null())
                 & (~pl.col(alt_data_column_name).is_null())
+                & side_filter
             ).sort(time_column_name)
 
             cf = self._compute_correction_factor_for_gap(
@@ -551,7 +552,7 @@ class AltDataDynamic(InfillMethod):
         # Fill gaps
         infilled = df.with_columns(
             pl.when(pl.col(infill_column).is_null() & pl.col("correction_factor").is_not_null())
-            .then(pl.col(alt_data_column_name) * pl.col("correction_factor"))
+            .then(pl.col(alt_data_column_name) * pl.col("correction_factor"))  # null if alt_data is null
             .otherwise(pl.col(infill_column))
             .alias(self._infilled_column_name(infill_column))
         )
@@ -562,14 +563,36 @@ class AltDataDynamic(InfillMethod):
 
         return infilled
 
+    def _window_duration(self, ctx: InfillCtx) -> timedelta | None:
+        """Calculate the window duration from the window size and ensure window_size is a valid Period"""
+        periodicity = ctx.periodicity
+        if isinstance(self.window_size, str):
+            self.window_size = Period.of_iso_duration(self.window_size)
+        if self.window_size < periodicity:
+            raise ValueError("Window size must be greater than periodicity")
+
+        window_duration = self.window_size.timedelta
+
+        if window_duration is None:
+            raise ValueError(
+                "Window size must be given in days, hours, seconds...Cannot resolve month or year to timedelta"
+            )
+        if periodicity.timedelta is not None:
+            if window_duration * 2 < periodicity.timedelta * self.min_threshold:
+                raise ValueError(
+                    f"Windows must contain at least min_threshold {self.min_threshold} of data points."
+                    "Reduce the min_threshold or increase the window size."
+                )
+        return window_duration
+
     def _compute_correction_factor_for_gap(
         self,
         window_df: pl.DataFrame,
         time_column_name: str,
         infill_column: str,
         alt_data_column_name: str,
-        gap_start: pl.Datetime,
-        gap_end: pl.Datetime,
+        gap_start: datetime,
+        gap_end: datetime,
     ) -> float | None:
         """Compute correction factor for a single gap using hierarchical rules.
         Default: Use all data within window. If none available, return None.
@@ -596,13 +619,13 @@ class AltDataDynamic(InfillMethod):
         if window_df.is_empty() or (window_df.height < self.min_threshold):
             return None
 
-        # If max_threshold is None, use all available data in the window
-        if self.max_threshold is None:
+        # If max_threshold is None, or is larger than the window itself, use all available data in the window
+        if self.max_threshold is None or self.max_threshold > window_df.height:
             alt_sum = window_df[alt_data_column_name].sum()
             if alt_sum != 0:
                 return window_df[infill_column].sum() / alt_sum
 
-        # If max_threshold is not None, use up to max_threshold total number of datapoints within window
+        # If max_threshold is not None, use up to max_threshold total number of datapoints within window.
         # First preference: same number of datapoints either side of gap, up to max_threshold/2 each.
         # Second preference: different numbers of data points on either side of gap,
         #                    up to max_threshold total datapoints.
@@ -655,8 +678,5 @@ class AltDataDynamic(InfillMethod):
                         small_side[infill_column].sum() + large_side_slice(take_from_large_side)[infill_column].sum()
                     ) / alt_sum
 
-        ############################################
         # Otherwise use different infill data/method
-        ############################################
-
         return None

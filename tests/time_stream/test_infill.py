@@ -576,47 +576,112 @@ class TestAltDataStatic:
 
 
 class TestAltDataDynamic:
-    # Test different window sizes for different periodicities, including invalid combinations
-    # Try different missing combos
-    # Test with different combinations of min and max thresholds
-
+    # When test data is structured, eg. increasing or decreasing, the correction_factor can have the same value
+    # regardless of the position of the missing data in the values/alt_values.
+    # Therefore we must use random data to test that all or only some data has been used.
     df = pl.DataFrame(
         {
-            "timestamp": [datetime(2025, 1, d) for d in range(1, 24, 1)],
-            "values": [
-                1.0,
-                2.0,
-                3.0,
-                None,
-                5.0,
-                6.0,
-                7.0,
-                8.0,
-                9.0,
-                10.0,
-                11.0,
-                12.0,
-                13.0,
-                14.0,
-                15.0,
-                16.0,
-                17.0,
-                18.0,
-                19.0,
-                20.0,
-                21.0,
-                22.0,
-                23.0,
-            ],
-            "alt_values": np.arange(1, 24, 1.0),
-            # "alt_with_missing": [10.0, None, 30.0, 40.0, None],
+            "timestamp": [datetime(2025, 1, d) for d in range(1, 13, 1)],
+            "values": [7.6, 82.2, 89.6, None, 91.9, 82.6, 90.0, None, 48.4, None, 46.4, None],
+            "alt_values": [20.2, 57.5, 96.3, 43.0, 78.4, 61.8, 55.1, 21.8, 100.2, 16.9, 4.2, 17.2],
+            "alt_values_some_missing": [20.2, 57.5, 96.3, None, 78.4, None, 55.1, 21.8, 100.2, 16.9, 4.2, 17.2],
+            "alt_values_all_missing": [None for _ in range(12)],
         }
     )
     tf = TimeFrame(df, "timestamp", "P1D")
 
-    def test_alt_data_infill(self) -> None:
-        """Test basic infilling from an alternative column."""
-        infiller = AltDataDynamic(alt_data_column="alt_values", window_size="P1D")
+    def test_basic_infill(self) -> None:
+        """Test basic infilling from an alternative column, with max and min threshold unspecified.
+
+        Test cases where original dataset has gaps such that, when using alt_values:
+        Gap 1: The window around a gap has no missing data.
+        Gap 2 and 3: The window around a gap has some missing data.
+        Gap 4: A gap is at the edge of the dataset and data remains null.
+        """
+        infiller = AltDataDynamic(alt_data_column="alt_values", window_size="P3D")
         result_df = infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
-        expected_df = self.df.with_columns(pl.Series("values", np.arange(1, 24, 1.0))).drop("alt_values")
+        result_df = result_df.with_columns(pl.col("values").round(1))
+        expected_df = self.df.with_columns(
+            pl.Series("values", [7.6, 82.2, 89.6, 51.7, 91.9, 82.6, 90.0, 26.1, 48.4, 19.6, 46.4, None])
+        ).drop("alt_values")
+        assert_frame_equal(result_df, expected_df, check_column_order=False)
+
+    def test_basic_infill_alt_data_missing(self) -> None:
+        """Test basic infilling from an alternative column, with max and min threshold unspecified.
+
+        Test cases where original dataset has gaps such that, when using alt_values_some_missing:
+        1. alt_values_some_missing has data missing inside the window around a gap.
+        2. alt_values_some_missing has a value missing in the gap.
+        """
+        infiller = AltDataDynamic(alt_data_column="alt_values_some_missing", window_size="P3D")
+        result_df = infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
+        result_df = result_df.with_columns(pl.col("values").round(1))
+        expected_df = self.df.with_columns(
+            pl.Series("values", [7.6, 82.2, 89.6, None, 91.9, 82.6, 90.0, 25.4, 48.4, 19.6, 46.4, None])
+        ).drop("alt_values_some_missing")
+        assert_frame_equal(result_df, expected_df, check_column_order=False)
+
+    def test_valid_window_size(self) -> None:
+        """Test window size smaller than periodicity raises an error."""
+        infiller = AltDataDynamic(alt_data_column="alt_values", window_size="PT1H")
+        with pytest.raises(ValueError):
+            infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
+
+    def test_window_duration_parser(self) -> None:
+        """Test different inputs for window are parsed correctly as a duration,
+        and that a window can be entered as either an iso or Period type."""
+        infiller_iso_hours = AltDataDynamic(alt_data_column="alt_values", window_size="PT1H")
+        infiller_period_hours = AltDataDynamic(alt_data_column="alt_values", window_size=Period.of_hours(1))
+        infiller_iso_days = AltDataDynamic(alt_data_column="alt_values", window_size="P1D")
+        infiller_period_days = AltDataDynamic(alt_data_column="alt_values", window_size=Period.of_days(1))
+
+        window_duration_iso_hours = infiller_iso_hours._window_duration(
+            InfillCtx(self.tf.df, self.tf.time_name, Period.of_hours(1))
+        )
+        window_duration_period_hours = infiller_period_hours._window_duration(
+            InfillCtx(self.tf.df, self.tf.time_name, Period.of_hours(1))
+        )
+        window_duration_iso_days = infiller_iso_days._window_duration(
+            InfillCtx(self.tf.df, self.tf.time_name, Period.of_hours(1))
+        )
+        window_duration_period_days = infiller_period_days._window_duration(
+            InfillCtx(self.tf.df, self.tf.time_name, Period.of_hours(1))
+        )
+
+        assert window_duration_iso_hours == Period.of_hours(1).timedelta
+        assert window_duration_period_hours == Period.of_hours(1).timedelta
+        assert window_duration_iso_days == Period.of_days(1).timedelta
+        assert window_duration_period_days == Period.of_days(1).timedelta
+
+    def test_window_is_empty(self) -> None:
+        """Test that nothing happens if there is no data that can be used within the window around the gap."""
+        infiller = AltDataDynamic(alt_data_column="alt_values_all_missing", window_size="P3D")
+        result_df = infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
+        expected_df = self.df.with_columns(pl.Series("values", self.df["values"])).drop("alt_values_all_missing")
+        assert_frame_equal(result_df, expected_df, check_column_order=False)
+
+    def test_valid_window_and_min_threshold(self) -> None:
+        """Test window size smaller than min_threshold raises and error."""
+        infiller = AltDataDynamic(alt_data_column="alt_values", window_size="P3D", min_threshold=10)
+        with pytest.raises(ValueError):
+            infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
+
+    def test_infill_with_min_threshold(self) -> None:
+        """Test infilling from an alternative column, with min_threshold specified, and max_threshold is None."""
+        infiller = AltDataDynamic(alt_data_column="alt_values", window_size="P3D", min_threshold=4)
+        result_df = infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
+        result_df = result_df.with_columns(pl.col("values").round(1))
+        expected_df = self.df.with_columns(
+            pl.Series("values", [7.6, 82.2, 89.6, 51.7, 91.9, 82.6, 90.0, 26.1, 48.4, None, 46.4, None])
+        ).drop("alt_values")
+        assert_frame_equal(result_df, expected_df, check_column_order=False)
+
+    def test_infill_with_max_threshold(self) -> None:
+        """Test infilling from an alternative column, with max_threshold specified."""
+        infiller = AltDataDynamic(alt_data_column="alt_values", window_size="P3D", max_threshold=4)
+        result_df = infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
+        result_df = result_df.with_columns(pl.col("values").round(1))
+        expected_df = self.df.with_columns(
+            pl.Series("values", [7.6, 82.2, 89.6, 50.6, 91.9, 82.6, 90.0, 26.3, 48.4, 19.6, 46.4, None])
+        ).drop("alt_values")
         assert_frame_equal(result_df, expected_df, check_column_order=False)
