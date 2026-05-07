@@ -84,7 +84,7 @@ def alt_data_infill() -> None:
     tf = ts.TimeFrame(df, "time", resolution="PT15M", periodicity="PT15M")
 
     # [start_block_2]
-    tf_infill = tf.infill("alt_data", "flow", alt_df=alt_df, correction_factor=0.75, alt_data_column="alt_flow")
+    tf_infill = tf.infill("alt_data_static", "flow", alt_df=alt_df, correction_factor=0.75, alt_data_column="alt_flow")
     # [end_block_2]
     print(tf_infill.df)
 
