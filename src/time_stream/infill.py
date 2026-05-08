@@ -363,14 +363,14 @@ class PchipInterpolation(ScipyInterpolation):
 
 
 @InfillMethod.register
-class AltDataStatic(InfillMethod):
+class AltData(InfillMethod):
     """
     Infills missing values using an alternative data source and optional correction factor.
     The alternative data corresponding to the missing interval is scaled by the correction
     factor to produce the infilled values.
     """
 
-    name = "alt_data_static"
+    name = "alt_data"
 
     def __init__(self, alt_data_column: str, correction_factor: float = 1.0, alt_df: pl.DataFrame | None = None):
         """Initialize the alternative data infill method.
