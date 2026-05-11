@@ -687,29 +687,25 @@ class TestAltDataDynamic:
         assert_frame_equal(result_df, expected_df, check_column_order=False)
 
     def test_one_sided_window(self) -> None:
-        """Test infilling from an alternative column, with one or both of left_only and right_only set to True."""
+        """Test infilling from an alternative column, with window_side = "left", "right", "both" and None."""
 
         # left_only = True, right_only = False (default)
-        infiller_left = AltDataDynamic(alt_data_column="alt_values", window_size="P3D", left_only=True)
+        infiller_left = AltDataDynamic(alt_data_column="alt_values", window_size="P3D", window_side="left")
         result_left_df = infiller_left.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
         expected_left_df = self.df.with_columns(
             pl.Series("values", [7.6, 82.2, 89.6, 44.3, 91.9, 82.6, 90.0, 29.5, 48.4, 15.1, 46.4, None])
         ).drop("alt_values")
 
         # right_only = True, left_only = False (default)
-        infiller_right = AltDataDynamic(alt_data_column="alt_values", window_size="P3D", right_only=True)
+        infiller_right = AltDataDynamic(alt_data_column="alt_values", window_size="P3D", window_side="right")
         result_right_df = infiller_right.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
         expected_right_df = self.df.with_columns(
             pl.Series("values", [7.6, 82.2, 89.6, 58.2, 91.9, 82.6, 90.0, 19.8, 48.4, 186.7, 46.4, None])
         ).drop("alt_values")
 
         # left_only = True, right_only = True
-        infiller_left_and_right = AltDataDynamic(
-            alt_data_column="alt_values", window_size="P3D", left_only=True, right_only=True
-        )
-        result_left_and_right_df = infiller_left_and_right.apply(
-            self.tf.df, self.tf.time_name, self.tf.periodicity, "values"
-        )
+        infiller_both = AltDataDynamic(alt_data_column="alt_values", window_size="P3D", window_side="both")
+        result_both_df = infiller_both.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
 
         # left_only and right_only not specified (default = False)
         infiller_none = AltDataDynamic(alt_data_column="alt_values", window_size="P3D")
@@ -721,4 +717,4 @@ class TestAltDataDynamic:
         assert_frame_equal(
             result_right_df.with_columns(pl.col("values").round(1)), expected_right_df, check_column_order=False
         )
-        assert_frame_equal(result_left_and_right_df, result_none_df, check_column_order=False)
+        assert_frame_equal(result_both_df, result_none_df, check_column_order=False)

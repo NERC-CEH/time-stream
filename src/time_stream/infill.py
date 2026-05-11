@@ -17,7 +17,7 @@ import math
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Any
+from typing import Any, Literal
 
 import numpy as np
 import polars as pl
@@ -438,8 +438,8 @@ class AltDataDynamic(InfillMethod):
     The alternative data corresponding to the missing interval is scaled by the
     correction factor to produce the infilled values.
 
-    If both left_only and right_only are set to True, the method defaults to using
-    data on both sides of the gap.
+    The method defaults to using data on both sides of the gap.
+    if window_side is specified as "left" or "right", then only data left or right of the gap will be used.
     """
 
     name = "alt_data_dynamic"
@@ -451,8 +451,7 @@ class AltDataDynamic(InfillMethod):
         alt_df: pl.DataFrame | None = None,
         min_threshold: int = 0,
         max_threshold: int | None = None,
-        right_only: bool = False,
-        left_only: bool = False,
+        window_side: Literal["left", "right", "both"] = "both",
     ):
         """Initialize the alternative data infill method.
 
@@ -463,8 +462,9 @@ class AltDataDynamic(InfillMethod):
                          as an iso string or Period type.
             min_threshold: minimum number of datapoints to use to calculate the correction factor.
             max_threshold: maximum number of datapoints to use to calculate the correction factor.
-            left_only: optional bool. If True, only data to left of missing data is used to infill.
-            right_only: optional bool. If True, only data to right of missing data is used to infill.
+            window_side: optional. By default, windows on both sides of the missing data are used to infill.
+                         If "left", only data to left of missing data is used to infill.
+                         If "right", only data to right of missing data is used to infill.
         """
         if min_threshold is not None and max_threshold is not None:
             if min_threshold > max_threshold:
@@ -475,15 +475,7 @@ class AltDataDynamic(InfillMethod):
         self.window_size = window_size
         self.min_threshold = min_threshold
         self.max_threshold = max_threshold
-        self.right_only = right_only
-        self.left_only = left_only
-
-        # If both left_only and right_only are True, the constraints would be mutually exclusive
-        # (time < gap_start AND time > gap_end), resulting in an empty window.
-        # Normalize the flags so that this case defaults to using data on both sides of the gap.
-        if right_only and left_only:
-            self.right_only = False
-            self.left_only = False
+        self.window_side = window_side
 
     def _fill(
         self,
@@ -501,10 +493,7 @@ class AltDataDynamic(InfillMethod):
         Returns:
             pl.DataFrame with infilled values.
         """
-        # Define time column name
         time_column_name = ctx.time_name
-
-        # Def window_duration
         window_duration = self._window_duration(ctx)
 
         # Join original and alternative dataframes if the latter exists
@@ -528,12 +517,13 @@ class AltDataDynamic(InfillMethod):
         # Identify gaps in original dataset
         null_mask = pl.col(infill_column).is_null()
         gap_id = (null_mask != null_mask.shift(1, fill_value=False)).cum_sum()
-        df = df.with_columns(gap_id.alias("gap_id"))
+        gap_id_column_name = f"__GAP_ID_{infill_column}"
+        df = df.with_columns(gap_id.alias(gap_id_column_name))
 
         # Find start and end times of gaps
         gap_bounds = (
             df.filter(null_mask)
-            .group_by("gap_id")
+            .group_by(gap_id_column_name)
             .agg(
                 pl.min(time_column_name).alias("gap_start"),
                 pl.max(time_column_name).alias("gap_end"),
@@ -543,18 +533,16 @@ class AltDataDynamic(InfillMethod):
         # Compute correction factors for each gap
         factors = {}
         for row in gap_bounds.iter_rows(named=True):
-            gid = row["gap_id"]
+            gid = row[gap_id_column_name]
             gap_start = row["gap_start"]
             gap_end = row["gap_end"]
 
-            # define filter if left_only and/or right_only are True
             side_filter = pl.lit(True)
-            if self.left_only:
+            if self.window_side == "left":
                 side_filter &= pl.col(time_column_name) < pl.lit(gap_start)
-            if self.right_only:
+            elif self.window_side == "right":
                 side_filter &= pl.col(time_column_name) > pl.lit(gap_end)
 
-            # Define window either side of gap
             # Filter out any null data from either original or alt datasets within window.
             window_df = df.filter(
                 (pl.col(time_column_name) >= gap_start - window_duration)
@@ -577,22 +565,23 @@ class AltDataDynamic(InfillMethod):
                 factors[gid] = cf
 
         # Attach correction factors
+        cf_column_name = f"__CF__{infill_column}"
         if factors:
-            cf_df = pl.DataFrame({"gap_id": list(factors.keys()), "correction_factor": list(factors.values())})
-            df = df.join(cf_df, on="gap_id", how="left")
+            cf_df = pl.DataFrame({gap_id_column_name: list(factors.keys()), cf_column_name: list(factors.values())})
+            df = df.join(cf_df, on=gap_id_column_name, how="left")
         else:
-            df = df.with_columns(pl.lit(None).alias("correction_factor"))
+            df = df.with_columns(pl.lit(None).alias(cf_column_name))
 
         # Fill gaps
         infilled = df.with_columns(
-            pl.when(pl.col(infill_column).is_null() & pl.col("correction_factor").is_not_null())
-            .then(pl.col(alt_data_column_name) * pl.col("correction_factor"))  # null if alt_data is null
+            pl.when(pl.col(infill_column).is_null() & pl.col(cf_column_name).is_not_null())
+            .then(pl.col(alt_data_column_name) * pl.col(cf_column_name))  # null if alt_data is null
             .otherwise(pl.col(infill_column))
             .alias(self._infilled_column_name(infill_column))
         )
 
         # Cleanup
-        infilled = infilled.drop(alt_data_column_name, "gap_id", "correction_factor")
+        infilled = infilled.drop(alt_data_column_name, gap_id_column_name, cf_column_name)
 
         return infilled
 
@@ -611,7 +600,8 @@ class AltDataDynamic(InfillMethod):
                 "Window size must be given in days, hours or seconds. Cannot resolve month or year to timedelta."
             )
         if periodicity.timedelta is not None:
-            if window_duration * 2 < periodicity.timedelta * self.min_threshold:
+            factor = 1 if self.window_side in ["left", "right"] else 2
+            if window_duration * factor < periodicity.timedelta * self.min_threshold:
                 raise ValueError(
                     f"Windows must contain at least min_threshold {self.min_threshold} of data points."
                     "Reduce the min_threshold or increase the window size."
@@ -635,7 +625,7 @@ class AltDataDynamic(InfillMethod):
         1. Same number of datapoints either side of gap, up to max_threshold/2 each.
         2. Different numbers of data points on either side of gap, up to max_threshold total datapoints.
         3. All datapoints are on one side of gap only, up to max_threshold total datapoints.
-        If left/right_only is set to True, use data only to left/right of gap.
+        If window_side is set to "left"/"right", use data only to left/right of gap.
 
         Args:
             window_df: a segment of the combined original df and alt_data.
@@ -661,7 +651,7 @@ class AltDataDynamic(InfillMethod):
             if alt_sum != 0:
                 return window_df[infill_column].sum() / alt_sum
 
-        elif self.max_threshold is not None:
+        else:
             before_gap_df = window_df.filter(pl.col(time_column_name) < pl.lit(gap_start))
             after_gap_df = window_df.filter(pl.col(time_column_name) > pl.lit(gap_end))
 
