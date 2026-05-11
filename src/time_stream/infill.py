@@ -13,6 +13,7 @@ The infill pipeline handles:
 - Delegating to a specific infill method to fill missing values
 """
 
+import logging
 import math
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -27,6 +28,8 @@ from time_stream import Period
 from time_stream.exceptions import InfillError, InfillInsufficientValuesError
 from time_stream.operation import Operation
 from time_stream.utils import check_columns_in_dataframe, gap_size_count, get_date_filter, pad_time
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -581,7 +584,9 @@ class AltDataDynamic(InfillMethod):
         )
 
         # Cleanup
-        infilled = infilled.drop(alt_data_column_name, gap_id_column_name, cf_column_name)
+        if self.alt_df is not None:
+            infilled = infilled.drop(alt_data_column_name)
+        infilled = infilled.drop([gap_id_column_name, cf_column_name])
 
         return infilled
 
@@ -650,14 +655,18 @@ class AltDataDynamic(InfillMethod):
             alt_sum = window_df[alt_data_column_name].sum()
             if alt_sum != 0:
                 return window_df[infill_column].sum() / alt_sum
+            logger.warning("alt_sum is zero for gap %s to %s — gap will not be infilled.", gap_start, gap_end)
 
         else:
             before_gap_df = window_df.filter(pl.col(time_column_name) < pl.lit(gap_start))
             after_gap_df = window_df.filter(pl.col(time_column_name) > pl.lit(gap_end))
 
             # Same number of datapoints either side of gap
-            if before_gap_df.height >= math.ceil(self.min_threshold / 2) and after_gap_df.height >= math.ceil(
-                self.min_threshold / 2
+            if (
+                before_gap_df.height > 0
+                and after_gap_df.height > 0
+                and before_gap_df.height >= math.ceil(self.min_threshold / 2)
+                and after_gap_df.height >= math.ceil(self.min_threshold / 2)
             ):
                 # Use at most round(max_threshold/2) datapoints each side of the gap
                 datapoints_on_each_side = min(
@@ -674,6 +683,7 @@ class AltDataDynamic(InfillMethod):
                         before_gap_df.tail(datapoints_on_each_side)[infill_column].sum()
                         + after_gap_df.head(datapoints_on_each_side)[infill_column].sum()
                     ) / alt_sum
+                logger.warning("alt_sum is zero for gap %s to %s — gap will not be infilled.", gap_start, gap_end)
 
             # Different number of datapoints either side of the gap
             else:
@@ -698,6 +708,7 @@ class AltDataDynamic(InfillMethod):
                     return (
                         small_side[infill_column].sum() + large_side_slice(take_from_large_side)[infill_column].sum()
                     ) / alt_sum
+                logger.warning("alt_sum is zero for gap %s to %s — gap will not be infilled.", gap_start, gap_end)
 
         # Otherwise use different infill data/method
         return None

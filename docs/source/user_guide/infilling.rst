@@ -112,6 +112,49 @@ Simple infilling techniques
 
     **Example usage:** ``tf_filled = tf.infill("alt_data", "flow", alt_data_column="flow_model", alt_df=model_df)``
 
+``alt_data_dynamic``
+^^^^^^^^^^^^^^^^^^^^
+:class:`time_stream.infill.AltDataDynamic`
+
+    **What it does:** Infills using data from an alternative source - either another column in your
+    TimeFrame, or data from a different DataFrame entirely. 
+
+    For each contiguous gap in the original dataset, a time window is defined
+    around the gap. A correction factor is computed as the ratio of the sum of
+    the original data to the sum of the alternative data within this window.
+    The alternative data corresponding to the missing interval is scaled by the
+    correction factor to produce the infilled values.
+
+    **When to use:** When you have a secondary data source that can stand in for missing values,
+    such as a nearby gauge or a modelled estimate.
+
+    **Additional args:**
+        ``alt_data_column``: The name of the column providing the alternative data.
+        ``alt_df``: A separate Polars DataFrame containing the alternative data.
+        If omitted, the column is taken from the current TimeFrame.
+        ``window_size``: A period around the missing data to be used to calculate the correction factor,
+        either an iso string or Period type.
+        ``window_side``: Optional. By default, windows on both sides of the missing data are used to infill.
+        If "left", only data to left of missing data is used to infill. If "right", only data to right of 
+        missing data is used to infill.
+        ``min_threshold``: Minimum number of datapoints to use to calculate the correction factor.
+        ``max_threshold``: Maximum number of datapoints to use to calculate the correction factor.
+
+    **Example usage:**
+
+    .. code-block:: python
+
+        tf_filled = tf.infill(
+            "alt_data_dynamic",
+            "flow",
+            alt_data_column="flow_model",
+            alt_df=model_df,
+            window_size="P3D",
+            min_threshold=2,
+            max_threshold=4,
+            window_side="left",
+        )
+
 Polynomial interpolation
 ~~~~~~~~~~~~~~~~~~~~~~~~
 

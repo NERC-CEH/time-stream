@@ -89,6 +89,66 @@ def alt_data_infill() -> None:
     print(tf_infill.df)
 
 
+def alt_data_dynamic_infill() -> None:
+    with suppress_output():
+        df = alt_data_main()
+        alt_df = alt_data_alt()
+
+    tf = ts.TimeFrame(df, "time", resolution="PT15M", periodicity="PT15M")
+
+    # [start_block_4]
+    tf_infill = tf.infill(
+        "alt_data_dynamic",
+        "flow",
+        alt_df=alt_df,
+        alt_data_column="alt_flow",
+        window_size="PT1H",
+    )
+    # [end_block_4]
+    print(tf_infill.df)
+
+
+def alt_data_dynamic_infill_with_thresholds() -> None:
+    with suppress_output():
+        df = alt_data_main()
+        alt_df = alt_data_alt()
+
+    tf = ts.TimeFrame(df, "time", resolution="PT15M", periodicity="PT15M")
+
+    # [start_block_5]
+    tf_infill = tf.infill(
+        "alt_data_dynamic",
+        "flow",
+        alt_df=alt_df,
+        alt_data_column="alt_flow",
+        window_size="PT2H",
+        min_threshold=2,
+        max_threshold=4,
+    )
+    # [end_block_5]
+    print(tf_infill.df)
+
+
+def alt_data_dynamic_infill_one_sided() -> None:
+    with suppress_output():
+        df = alt_data_main()
+        alt_df = alt_data_alt()
+
+    tf = ts.TimeFrame(df, "time", resolution="PT15M", periodicity="PT15M")
+
+    # [start_block_6]
+    tf_infill = tf.infill(
+        "alt_data_dynamic",
+        "flow",
+        alt_df=alt_df,
+        alt_data_column="alt_flow",
+        window_size="PT1H",
+        window_side="left",
+    )
+    # [end_block_6]
+    print(tf_infill.df)
+
+
 def flagged_infill() -> None:
     with suppress_output():
         df = get_example_df(library="polars")
