@@ -2240,7 +2240,7 @@ class TestRollingAggregation:
         ).execute()
 
         assert_frame_equal(
-            result, expected_df, check_dtypes=False, check_column_order=False, check_exact=False, atol=0.00001
+            result, expected_df, check_dtypes=False, check_column_order=False, check_exact=False, abs_tol=0.00001
         )
 
     def test_rolling_angular_mean(self) -> None:
@@ -2320,7 +2320,7 @@ class TestRollingAggregation:
         ).execute()
 
         assert_frame_equal(
-            result, expected_df, check_dtypes=False, check_column_order=False, check_exact=False, atol=0.00001
+            result, expected_df, check_dtypes=False, check_column_order=False, check_exact=False, abs_tol=0.00001
         )
 
     def test_rolling_aggregation_over_day_threshold(self) -> None:
