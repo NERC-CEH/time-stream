@@ -4,7 +4,7 @@ from typing import Any
 
 import polars as pl
 import pytest
-from polars.testing import assert_series_equal
+from polars.testing import assert_frame_equal, assert_series_equal
 
 from time_stream import Period
 from time_stream.enums import ClosedInterval, TimeAnchor
@@ -705,7 +705,7 @@ class TestPadTime:
         )
 
         result = pad_time(df_to_pad, "time", periodicity)
-        pl.testing.assert_frame_equal(result, df)
+        assert_frame_equal(result, df)
 
     @pytest.mark.parametrize(**simple_test_cases)
     def test_no_missing_simple_cases(self, time_stamps: list, periodicity: Period) -> None:
@@ -715,7 +715,7 @@ class TestPadTime:
         df = pl.DataFrame({"time": time_stamps})
 
         result = pad_time(df, "time", periodicity)
-        pl.testing.assert_frame_equal(result, df)
+        assert_frame_equal(result, df)
 
     complex_test_cases = {
         "argnames": "time_stamps,expected,periodicity",
@@ -787,7 +787,7 @@ class TestPadTime:
         df_expected = pl.DataFrame({"time": expected})
 
         result = pad_time(df, "time", periodicity)
-        pl.testing.assert_frame_equal(result, df_expected)
+        assert_frame_equal(result, df_expected)
 
     @pytest.mark.parametrize(**complex_test_cases)
     def test_no_missing_complex_cases(self, time_stamps: list, expected: list, periodicity: Period) -> None:
@@ -796,7 +796,7 @@ class TestPadTime:
         """
         df = pl.DataFrame({"time": expected})
         result = pad_time(df, "time", periodicity)
-        pl.testing.assert_frame_equal(result, df)
+        assert_frame_equal(result, df)
 
     @pytest.mark.parametrize(
         "start_date,end_date",
@@ -880,7 +880,7 @@ class TestPadTime:
         )
 
         result = pad_time(df, "time", periodicity, start=start_date, end=end_date)
-        pl.testing.assert_frame_equal(expected, result)
+        assert_frame_equal(expected, result)
 
     @pytest.mark.parametrize(
         "start_date,end_date,expected_start_date,expected_end_date",
@@ -938,7 +938,7 @@ class TestPadTime:
         expected_df = pl.concat([expected, pl.DataFrame({"time": sorted(missing_times)})]).sort(by="time")
 
         result = pad_time(df_to_pad, "time", periodicity, start=start_date, end=end_date)
-        pl.testing.assert_frame_equal(expected_df, result)
+        assert_frame_equal(expected_df, result)
 
 
 class TestCheckAlignment:
