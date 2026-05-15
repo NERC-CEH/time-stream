@@ -11,7 +11,6 @@ from datetime import date, datetime, time, timedelta
 import polars as pl
 
 from time_stream import Period
-from time_stream.enums import ClosedInterval, DuplicateOption, TimeAnchor
 from time_stream.exceptions import (
     ColumnNotFoundError,
     DuplicateValueError,
@@ -19,6 +18,7 @@ from time_stream.exceptions import (
     TimeWindowError,
     UnhandledEnumError,
 )
+from time_stream.types import ClosedInterval, DuplicateOption, TimeAnchor
 
 
 @dataclass(frozen=True)
@@ -38,7 +38,7 @@ class TimeWindow:
 
     start: time
     end: time
-    closed: ClosedInterval | None = ClosedInterval.BOTH
+    closed: ClosedInterval | None = "both"
 
     def __post_init__(self) -> None:
         """Validate the time window on construction."""
@@ -48,7 +48,7 @@ class TimeWindow:
             raise TimeWindowError(f"'start' ({self.start}) must be strictly before 'end' ({self.end}).")
 
     @classmethod
-    def from_tuple(cls, t: tuple[time, time] | tuple[time, time, str | ClosedInterval]) -> "TimeWindow":
+    def from_tuple(cls, t: tuple[time, time] | tuple[time, time, ClosedInterval]) -> "TimeWindow":
         """Construct a ``TimeWindow`` from a 2- or 3-element tuple.
 
         Args:
@@ -70,7 +70,7 @@ class TimeWindow:
             return cls(start=start, end=end)
         if len(t) == 3:
             start, end, closed = t
-            return cls(start=start, end=end, closed=ClosedInterval(closed))
+            return cls(start=start, end=end, closed=closed)
         raise TimeWindowError(f"Unexpected number of arguments passed as a time_window tuple: {t}")
 
     @property
@@ -97,7 +97,7 @@ class TimeWindow:
             time_col.is_between(
                 self.start,
                 self.end,
-                closed=self.closed.value,  # type: ignore - linter complains string isn't a Literal
+                closed=self.closed,  # type: ignore[arg-type] - Polars Literal is a string
             )
         )
 
@@ -119,9 +119,9 @@ class TimeWindow:
         if td is None:
             raise ValueError("Cannot compute expected count for a month-based period (no fixed timedelta).")
         count = self.duration // td
-        if self.closed == ClosedInterval.BOTH:
+        if self.closed == "both":
             count += 1
-        elif self.closed == ClosedInterval.NONE:
+        elif self.closed == "none":
             count = max(0, count - 1)
         return count
 
@@ -180,7 +180,7 @@ def truncate_to_period(date_times: pl.Series, period: Period, time_anchor: TimeA
     # 2. Truncate the (non-offset) time series to the given resolution interval
     #    Here we need to determine where the anchor points are, and if we need to nudge the datetimes towards
     #    the anchor.
-    if time_anchor == TimeAnchor.END:
+    if time_anchor == "end":
         # In this case, the anchor point is at the END of the period.
         #   - Subtract a micro-second (to handle datetimes on 'boundary' points that are within their own period),
         #   - Truncate to the start of the period,
@@ -203,7 +203,7 @@ def pad_time(
     df: pl.DataFrame,
     time_name: str,
     periodicity: Period,
-    time_anchor: TimeAnchor = TimeAnchor.START,
+    time_anchor: TimeAnchor = "start",
     start: datetime | None = None,
     end: datetime | None = None,
 ) -> pl.DataFrame:
@@ -401,20 +401,20 @@ def handle_duplicates(
         # Nothing to do!
         return df
 
-    if on_duplicates == DuplicateOption.ERROR:
+    if on_duplicates == "error":
         raise DuplicateValueError()
 
-    elif on_duplicates == DuplicateOption.KEEP_FIRST:
+    elif on_duplicates == "keep_first":
         new_df = df.unique(subset=column, keep="first")
 
-    elif on_duplicates == DuplicateOption.KEEP_LAST:
+    elif on_duplicates == "keep_last":
         new_df = df.unique(subset=column, keep="last")
 
-    elif on_duplicates == DuplicateOption.MERGE:
+    elif on_duplicates == "merge":
         merge_cols = [c for c in df.columns if c != column]
         new_df = df.group_by(column).agg([pl.col(col).drop_nulls().first().alias(col) for col in merge_cols])
 
-    elif on_duplicates == DuplicateOption.DROP:
+    elif on_duplicates == "drop":
         new_df = df.filter(~duplicate_mask)
 
     else:

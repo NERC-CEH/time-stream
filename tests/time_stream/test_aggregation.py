@@ -24,7 +24,6 @@ from time_stream.aggregation import (
     Sum,
 )
 from time_stream.base import TimeFrame
-from time_stream.enums import ClosedInterval, RollingAlignment, TimeAnchor
 from time_stream.exceptions import (
     AggregationError,
     AggregationPeriodError,
@@ -155,7 +154,7 @@ class TestStandardAggregationPipeline:
     def setup_agg_context() -> Mock:
         ctx = Mock(spec=AggregationCtx)
         ctx.time_name = "time"
-        ctx.time_anchor = TimeAnchor.START
+        ctx.time_anchor = "start"
 
         return ctx
 
@@ -1513,12 +1512,12 @@ class TestEndAnchorAggregations:
             AggregationCtx(
                 df=input_tf.df,
                 time_name=input_tf.time_name,
-                time_anchor=TimeAnchor.END,
+                time_anchor="end",
                 periodicity=input_tf.periodicity,
             ),
             target_period,
             column,
-            aggregation_time_anchor=TimeAnchor.END,
+            aggregation_time_anchor="end",
         ).execute()
         assert_frame_equal(result, expected_df, check_dtypes=False, check_column_order=False)
 
@@ -1574,12 +1573,12 @@ class TestEndAnchorAggregations:
             AggregationCtx(
                 df=input_tf.df,
                 time_name=input_tf.time_name,
-                time_anchor=TimeAnchor.END,
+                time_anchor="end",
                 periodicity=input_tf.periodicity,
             ),
             target_period,
             column,
-            aggregation_time_anchor=TimeAnchor.START,
+            aggregation_time_anchor="start",
         ).execute()
         assert_frame_equal(result, expected_df, check_dtypes=False, check_column_order=False)
 
@@ -2050,7 +2049,7 @@ class TestTimeWindowAggregation:
                 Mean,
                 "P1D",
                 "value",
-                TimeWindow(start=time(10, 30), end=time(14, 0), closed=ClosedInterval.LEFT),
+                TimeWindow(start=time(10, 30), end=time(14, 0), closed="left"),
                 [datetime(2025, 1, 1)],
                 [7],
                 [7],
@@ -2061,7 +2060,7 @@ class TestTimeWindowAggregation:
                 Mean,
                 "P1D",
                 "value",
-                TimeWindow(start=time(10, 30), end=time(14, 0), closed=ClosedInterval.RIGHT),
+                TimeWindow(start=time(10, 30), end=time(14, 0), closed="right"),
                 [datetime(2025, 1, 1)],
                 [7],
                 [7],
@@ -2072,7 +2071,7 @@ class TestTimeWindowAggregation:
                 Mean,
                 "P1D",
                 "value",
-                TimeWindow(start=time(10, 30), end=time(14, 0), closed=ClosedInterval.NONE),
+                TimeWindow(start=time(10, 30), end=time(14, 0), closed="none"),
                 [datetime(2025, 1, 1)],
                 [6],
                 [6],
@@ -2237,7 +2236,7 @@ class TestRollingAggregation:
             ),
             target_period,
             column,
-            alignment=RollingAlignment.LEADING,
+            alignment="leading",
         ).execute()
 
         assert_frame_equal(
@@ -2317,7 +2316,7 @@ class TestRollingAggregation:
             ),
             aggregation_period,
             column_name,
-            alignment=RollingAlignment.LEADING,
+            alignment="leading",
         ).execute()
 
         assert_frame_equal(
@@ -2372,7 +2371,7 @@ class TestRollingAggregation:
             ),
             aggregation_period,
             column_name,
-            alignment=RollingAlignment.LEADING,
+            alignment="leading",
         ).execute()
 
         assert_frame_equal(result, expected_df, check_dtypes=False, check_column_order=False)
@@ -2407,7 +2406,7 @@ class TestRollingAggregation:
             ),
             target_period,
             column,
-            alignment=RollingAlignment.TRAILING,
+            alignment="trailing",
         ).execute()
 
         assert_frame_equal(result, expected_df, check_dtypes=False, check_column_order=False, check_exact=False)
@@ -2442,7 +2441,7 @@ class TestRollingAggregation:
             ),
             target_period,
             column,
-            alignment=RollingAlignment.CENTER,
+            alignment="center",
         ).execute()
 
         assert_frame_equal(result, expected_df, check_dtypes=False, check_column_order=False, check_exact=False)
@@ -2479,7 +2478,7 @@ class TestRollingAggregation:
             ),
             target_period,
             column,
-            alignment=RollingAlignment.TRAILING,
+            alignment="trailing",
         ).execute()
 
         assert_frame_equal(result, expected_df, check_dtypes=False, check_column_order=False, check_exact=False)
@@ -2497,9 +2496,7 @@ class TestRollingAggregation:
             periodicity=input_tf.periodicity,
         )
         result_default = RollingAggregationPipeline(Mean(), ctx, target_period, column).execute()
-        result_trailing = RollingAggregationPipeline(
-            Mean(), ctx, target_period, column, alignment=RollingAlignment.TRAILING
-        ).execute()
+        result_trailing = RollingAggregationPipeline(Mean(), ctx, target_period, column, alignment="trailing").execute()
 
         assert_frame_equal(result_default, result_trailing)
 
@@ -2533,7 +2530,7 @@ class TestRollingAggregation:
                 ),
                 Period.of_months(3),
                 "value",
-                alignment=RollingAlignment.CENTER,
+                alignment="center",
             ).execute()
 
 
@@ -2566,7 +2563,7 @@ class TestRollingAggregateMethod:
     def test_alignment_as_string(self) -> None:
         """Check that the alignment parameter accepts string values."""
         input_tf = TS_PT1H_HALF_DAY
-        result_enum = input_tf.rolling_aggregate("PT3H", "mean", "value", alignment=RollingAlignment.LEADING)
+        result_enum = input_tf.rolling_aggregate("PT3H", "mean", "value", alignment="leading")
         result_str = input_tf.rolling_aggregate("PT3H", "mean", "value", alignment="leading")
 
         assert_frame_equal(result_enum.df, result_str.df)
@@ -2575,7 +2572,7 @@ class TestRollingAggregateMethod:
         """Check that the default alignment for rolling_aggregate is TRAILING."""
         input_tf = TS_PT1H_HALF_DAY
         result_default = input_tf.rolling_aggregate("PT3H", "mean", "value")
-        result_trailing = input_tf.rolling_aggregate("PT3H", "mean", "value", alignment=RollingAlignment.TRAILING)
+        result_trailing = input_tf.rolling_aggregate("PT3H", "mean", "value", alignment="trailing")
 
         assert_frame_equal(result_default.df, result_trailing.df)
 
@@ -2624,7 +2621,7 @@ class TestRollingAggregateMethod:
         input_tf = TS_PT1H_HALF_DAY
         timestamps = input_tf.df["timestamp"].to_list()
 
-        result = input_tf.rolling_aggregate("PT3H", "mean", "value", alignment=RollingAlignment.LEADING)
+        result = input_tf.rolling_aggregate("PT3H", "mean", "value", alignment="leading")
 
         expected_df = generate_expected_df(
             timestamps=timestamps,
@@ -2641,7 +2638,7 @@ class TestRollingAggregateMethod:
         input_tf = TS_PT1H_HALF_DAY
         timestamps = input_tf.df["timestamp"].to_list()
 
-        result = input_tf.rolling_aggregate("PT3H", "mean", "value", alignment=RollingAlignment.CENTER)
+        result = input_tf.rolling_aggregate("PT3H", "mean", "value", alignment="center")
 
         expected_df = generate_expected_df(
             timestamps=timestamps,
@@ -2682,4 +2679,4 @@ class TestRollingAggregateMethod:
         """Check that rolling_aggregate raises when CENTER alignment is used with a calendar-based window."""
         input_tf = TS_P1M_2YEARS
         with pytest.raises(AggregationError):
-            input_tf.rolling_aggregate("P3M", "mean", "value", alignment=RollingAlignment.CENTER)
+            input_tf.rolling_aggregate("P3M", "mean", "value", alignment="center")
