@@ -19,9 +19,9 @@ from datetime import date, datetime, time
 
 import polars as pl
 
-from time_stream.enums import ClosedInterval
 from time_stream.exceptions import QcError, QcUnknownOperatorError
 from time_stream.operation import Operation
+from time_stream.types import ClosedInterval
 from time_stream.utils import check_columns_in_dataframe, get_date_filter
 
 
@@ -159,7 +159,7 @@ class RangeCheck(QCCheck):
         self,
         min_value: float | time | date | datetime,
         max_value: float | time | date | datetime,
-        closed: str | ClosedInterval = "both",
+        closed: ClosedInterval = "both",
         within: bool = True,
     ) -> None:
         """Initialise range check.
@@ -173,7 +173,7 @@ class RangeCheck(QCCheck):
         """
         self.min_value = min_value
         self.max_value = max_value
-        self.closed = ClosedInterval(closed)
+        self.closed = closed
         self.within = within
 
     def expr(self, ctx: QcCtx, column: str) -> pl.Expr:
@@ -197,10 +197,10 @@ class RangeCheck(QCCheck):
 
                 # We also need to swap the close parameter (if "both" or "none")
                 # Don't have to change "left" or "right" as it shakes out the same even when reversing the min/max
-                if self.closed == ClosedInterval.BOTH:
-                    self.closed = ClosedInterval.NONE
-                elif self.closed == ClosedInterval.NONE:
-                    self.closed = ClosedInterval.BOTH
+                if self.closed == "both":
+                    self.closed = "none"
+                elif self.closed == "none":
+                    self.closed = "both"
 
         elif check_type is date:
             # For datetime.date objects (NOT datetime.datetime!), we want to consider the whole date part of the column
@@ -213,7 +213,7 @@ class RangeCheck(QCCheck):
         in_range = col_expr.is_between(
             self.min_value,
             self.max_value,
-            closed=self.closed.value,  # type: ignore[arg-type] ignore Literal typing as the enum constrains the values
+            closed=self.closed,
         )
         return in_range if self.within else ~in_range
 

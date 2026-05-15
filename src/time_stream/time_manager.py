@@ -15,7 +15,6 @@ import logging
 import polars as pl
 
 from time_stream import Period
-from time_stream.enums import DuplicateOption, TimeAnchor, ValidationErrorOptions
 from time_stream.exceptions import (
     ColumnNotFoundError,
     ColumnTypeError,
@@ -26,6 +25,7 @@ from time_stream.exceptions import (
     ResolutionError,
     TimeMutatedError,
 )
+from time_stream.types import DuplicateOption, TimeAnchor, ValidationErrorOptions
 from time_stream.utils import check_alignment, check_periodicity, epoch_check, handle_duplicates, truncate_to_period
 
 logger = logging.getLogger(__name__)
@@ -40,9 +40,9 @@ class TimeManager:
         resolution: str | Period | None = None,
         offset: str | None = None,
         periodicity: str | Period | None = None,
-        on_duplicates: str | DuplicateOption = DuplicateOption.ERROR,
-        on_misaligned_rows: str | ValidationErrorOptions = ValidationErrorOptions.ERROR,
-        time_anchor: str | TimeAnchor = TimeAnchor.START,
+        on_duplicates: DuplicateOption = "error",
+        on_misaligned_rows: ValidationErrorOptions = "error",
+        time_anchor: TimeAnchor = "start",
     ):
         """Initialise the time manager.
 
@@ -62,9 +62,9 @@ class TimeManager:
         self._offset = self._configure_offset_property(offset)
         self._alignment = self._configure_alignment_property(self._resolution, self._offset)
         self._periodicity = self._configure_periodicity_property(periodicity, self._alignment)
-        self._on_duplicates = DuplicateOption(on_duplicates)
-        self._on_misaligned_rows = ValidationErrorOptions(on_misaligned_rows)
-        self._time_anchor = TimeAnchor(time_anchor)
+        self._on_duplicates = on_duplicates
+        self._on_misaligned_rows = on_misaligned_rows
+        self._time_anchor = time_anchor
 
     @property
     def time_name(self) -> str:
@@ -272,7 +272,7 @@ class TimeManager:
             DuplicateTimeError: If there are duplicate timestamps and the "error" strategy is being used.
         """
         try:
-            new_df = handle_duplicates(df, self._time_name, DuplicateOption(self._on_duplicates))
+            new_df = handle_duplicates(df, self._time_name, self._on_duplicates)
         except DuplicateValueError:
             raise DuplicateTimeError()
 
@@ -293,9 +293,9 @@ class TimeManager:
             DataFrame with any misaligned rows removed.
 
         """
-        if self._on_misaligned_rows == ValidationErrorOptions.ERROR:
+        if self._on_misaligned_rows == "error":
             self._validate_alignment(df[self.time_name])
-        elif self._on_misaligned_rows == ValidationErrorOptions.RESOLVE:
+        elif self._on_misaligned_rows == "resolve":
             # No need to run _validate_alignment as the row removal logic will cover the same checks and any
             # invalid rows will be logged before being removed
             df = self._remove_misaligned_rows(df)

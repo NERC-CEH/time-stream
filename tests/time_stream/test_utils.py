@@ -7,8 +7,8 @@ import pytest
 from polars.testing import assert_series_equal
 
 from time_stream import Period
-from time_stream.enums import ClosedInterval, TimeAnchor
 from time_stream.exceptions import ColumnNotFoundError, TimeWindowError
+from time_stream.types import ClosedInterval, TimeAnchor
 from time_stream.utils import (
     TimeWindow,
     check_alignment,
@@ -100,7 +100,7 @@ class TestTruncateToPeriod:
         [
             (
                 Period.of_years(1),
-                TimeAnchor.START,
+                "start",
                 pl.Series(
                     [
                         datetime(2020, 1, 1),
@@ -113,7 +113,7 @@ class TestTruncateToPeriod:
             ),
             (
                 Period.of_years(1).with_month_offset(2),
-                TimeAnchor.START,
+                "start",
                 pl.Series(
                     [
                         datetime(2020, 3, 1),
@@ -126,7 +126,7 @@ class TestTruncateToPeriod:
             ),
             (
                 Period.of_years(1),
-                TimeAnchor.END,
+                "end",
                 pl.Series(
                     [
                         datetime(2021, 1, 1),
@@ -139,7 +139,7 @@ class TestTruncateToPeriod:
             ),
             (
                 Period.of_years(1).with_month_offset(2),
-                TimeAnchor.END,
+                "end",
                 pl.Series(
                     [
                         datetime(2021, 3, 1),
@@ -168,7 +168,7 @@ class TestTruncateToPeriod:
         [
             (
                 Period.of_months(1),
-                TimeAnchor.START,
+                "start",
                 pl.Series(
                     [
                         datetime(2020, 6, 1),
@@ -181,7 +181,7 @@ class TestTruncateToPeriod:
             ),
             (
                 Period.of_months(3),
-                TimeAnchor.START,
+                "start",
                 pl.Series(
                     [
                         datetime(2020, 4, 1),
@@ -194,7 +194,7 @@ class TestTruncateToPeriod:
             ),
             (
                 Period.of_months(1).with_hour_offset(9),
-                TimeAnchor.START,
+                "start",
                 pl.Series(
                     [
                         datetime(2020, 5, 1, 9),
@@ -207,7 +207,7 @@ class TestTruncateToPeriod:
             ),
             (
                 Period.of_months(1),
-                TimeAnchor.END,
+                "end",
                 pl.Series(
                     [
                         datetime(2020, 7, 1),
@@ -220,7 +220,7 @@ class TestTruncateToPeriod:
             ),
             (
                 Period.of_months(3),
-                TimeAnchor.END,
+                "end",
                 pl.Series(
                     [
                         datetime(2020, 7, 1),
@@ -233,7 +233,7 @@ class TestTruncateToPeriod:
             ),
             (
                 Period.of_months(1).with_hour_offset(9),
-                TimeAnchor.END,
+                "end",
                 pl.Series(
                     [
                         datetime(2020, 6, 1, 9),
@@ -264,7 +264,7 @@ class TestTruncateToPeriod:
         [
             (
                 Period.of_days(1),
-                TimeAnchor.START,
+                "start",
                 pl.Series(
                     [
                         datetime(2020, 6, 1),
@@ -277,7 +277,7 @@ class TestTruncateToPeriod:
             ),
             (
                 Period.of_days(1).with_hour_offset(9),
-                TimeAnchor.START,
+                "start",
                 pl.Series(
                     [
                         datetime(2020, 5, 31, 9),
@@ -290,7 +290,7 @@ class TestTruncateToPeriod:
             ),
             (
                 Period.of_days(1),
-                TimeAnchor.END,
+                "end",
                 pl.Series(
                     [
                         datetime(2020, 6, 2),
@@ -303,7 +303,7 @@ class TestTruncateToPeriod:
             ),
             (
                 Period.of_days(1).with_hour_offset(9),
-                TimeAnchor.END,
+                "end",
                 pl.Series(
                     [
                         datetime(2020, 6, 1, 9),
@@ -332,7 +332,7 @@ class TestTruncateToPeriod:
         [
             (
                 Period.of_hours(1),
-                TimeAnchor.START,
+                "start",
                 pl.Series(
                     [
                         datetime(2020, 6, 1, 8),
@@ -345,7 +345,7 @@ class TestTruncateToPeriod:
             ),
             (
                 Period.of_hours(12),
-                TimeAnchor.START,
+                "start",
                 pl.Series(
                     [
                         datetime(2020, 6, 1),
@@ -358,7 +358,7 @@ class TestTruncateToPeriod:
             ),
             (
                 Period.of_hours(1).with_minute_offset(30),
-                TimeAnchor.START,
+                "start",
                 pl.Series(
                     [
                         datetime(2020, 6, 1, 7, 30),
@@ -371,7 +371,7 @@ class TestTruncateToPeriod:
             ),
             (
                 Period.of_hours(1),
-                TimeAnchor.END,
+                "end",
                 pl.Series(
                     [
                         datetime(2020, 6, 1, 9),
@@ -384,7 +384,7 @@ class TestTruncateToPeriod:
             ),
             (
                 Period.of_hours(12),
-                TimeAnchor.END,
+                "end",
                 pl.Series(
                     [
                         datetime(2020, 6, 1, 12),
@@ -397,7 +397,7 @@ class TestTruncateToPeriod:
             ),
             (
                 Period.of_hours(1).with_minute_offset(30),
-                TimeAnchor.END,
+                "end",
                 pl.Series(
                     [
                         datetime(2020, 6, 1, 8, 30),
@@ -428,7 +428,7 @@ class TestTruncateToPeriod:
         [
             (
                 Period.of_minutes(1),
-                TimeAnchor.START,
+                "start",
                 pl.Series(
                     [
                         datetime(2020, 6, 1, 8, 10),
@@ -441,7 +441,7 @@ class TestTruncateToPeriod:
             ),
             (
                 Period.of_minutes(15),
-                TimeAnchor.START,
+                "start",
                 pl.Series(
                     [
                         datetime(2020, 6, 1, 8),
@@ -454,7 +454,7 @@ class TestTruncateToPeriod:
             ),
             (
                 Period.of_minutes(1).with_second_offset(45),
-                TimeAnchor.START,
+                "start",
                 pl.Series(
                     [
                         datetime(2020, 6, 1, 8, 9, 45),
@@ -467,7 +467,7 @@ class TestTruncateToPeriod:
             ),
             (
                 Period.of_minutes(1),
-                TimeAnchor.END,
+                "end",
                 pl.Series(
                     [
                         datetime(2020, 6, 1, 8, 11),
@@ -480,7 +480,7 @@ class TestTruncateToPeriod:
             ),
             (
                 Period.of_minutes(15),
-                TimeAnchor.END,
+                "end",
                 pl.Series(
                     [
                         datetime(2020, 6, 1, 8, 15),
@@ -493,7 +493,7 @@ class TestTruncateToPeriod:
             ),
             (
                 Period.of_minutes(1).with_second_offset(45),
-                TimeAnchor.END,
+                "end",
                 pl.Series(
                     [
                         datetime(2020, 6, 1, 8, 10, 45),
@@ -524,7 +524,7 @@ class TestTruncateToPeriod:
         [
             (
                 Period.of_seconds(1),
-                TimeAnchor.START,
+                "start",
                 pl.Series(
                     [
                         datetime(2020, 6, 1, 8, 10, 5),
@@ -537,7 +537,7 @@ class TestTruncateToPeriod:
             ),
             (
                 Period.of_seconds(3),
-                TimeAnchor.START,
+                "start",
                 pl.Series(
                     [
                         datetime(2020, 6, 1, 8, 10, 3),
@@ -550,7 +550,7 @@ class TestTruncateToPeriod:
             ),
             (
                 Period.of_seconds(1).with_microsecond_offset(5000),
-                TimeAnchor.START,
+                "start",
                 pl.Series(
                     [
                         datetime(2020, 6, 1, 8, 10, 4, 5000),
@@ -563,7 +563,7 @@ class TestTruncateToPeriod:
             ),
             (
                 Period.of_seconds(1),
-                TimeAnchor.END,
+                "end",
                 pl.Series(
                     [
                         datetime(2020, 6, 1, 8, 10, 6),
@@ -576,7 +576,7 @@ class TestTruncateToPeriod:
             ),
             (
                 Period.of_seconds(3),
-                TimeAnchor.END,
+                "end",
                 pl.Series(
                     [
                         datetime(2020, 6, 1, 8, 10, 6),
@@ -589,7 +589,7 @@ class TestTruncateToPeriod:
             ),
             (
                 Period.of_seconds(1).with_microsecond_offset(5000),
-                TimeAnchor.END,
+                "end",
                 pl.Series(
                     [
                         datetime(2020, 6, 1, 8, 10, 5, 5000),
@@ -620,7 +620,7 @@ class TestTruncateToPeriod:
         [
             (
                 Period.of_microseconds(250),
-                TimeAnchor.START,
+                "start",
                 pl.Series(
                     [
                         datetime(2020, 6, 1, 8, 10, 5, 2000),
@@ -633,7 +633,7 @@ class TestTruncateToPeriod:
             ),
             (
                 Period.of_microseconds(250),
-                TimeAnchor.END,
+                "end",
                 pl.Series(
                     [
                         datetime(2020, 6, 1, 8, 10, 5, 2250),
@@ -957,25 +957,25 @@ class TestCheckAlignment:
                 "simple yearly",
                 [datetime(2020, 1, 1), datetime(2021, 1, 1), datetime(2022, 1, 1)],
                 Period.of_years(1),
-                TimeAnchor.START,
+                "start",
             ),
             (
                 "yearly with gaps",
                 [datetime(1950, 1, 1), datetime(2021, 1, 1), datetime(2022, 1, 1)],
                 Period.of_years(1),
-                TimeAnchor.START,
+                "start",
             ),
             (
                 "long term yearly",
                 [datetime(500, 1, 1), datetime(1789, 1, 1), datetime(2099, 1, 1)],
                 Period.of_years(1),
-                TimeAnchor.START,
+                "start",
             ),
             (
                 "water years",
                 [datetime(2006, 10, 1, 9), datetime(2007, 10, 1, 9), datetime(2008, 10, 1, 9)],
                 Period.of_years(1).with_month_offset(9).with_hour_offset(9),
-                TimeAnchor.START,
+                "start",
             ),
         ],
     )
@@ -992,13 +992,13 @@ class TestCheckAlignment:
                 "simple yearly error",
                 [datetime(2020, 1, 1), datetime(2021, 6, 1), datetime(2022, 1, 1)],
                 Period.of_years(1),
-                TimeAnchor.START,
+                "start",
             ),
             (
                 "water years error",
                 [datetime(2006, 10, 1, 10), datetime(2007, 10, 1, 9), datetime(2008, 10, 1, 9)],
                 Period.of_years(1).with_month_offset(9).with_hour_offset(9),
-                TimeAnchor.START,
+                "start",
             ),
         ],
     )
@@ -1015,25 +1015,25 @@ class TestCheckAlignment:
                 "simple monthly",
                 [datetime(2024, 1, 1), datetime(2024, 2, 1), datetime(2024, 3, 1)],
                 Period.of_months(1),
-                TimeAnchor.START,
+                "start",
             ),
             (
                 "monthly with gaps",
                 [datetime(2023, 1, 1), datetime(2023, 2, 1), datetime(2024, 1, 1)],
                 Period.of_months(1),
-                TimeAnchor.START,
+                "start",
             ),
             (
                 "long term monthly",
                 [datetime(1200, 1, 1), datetime(2023, 1, 1), datetime(2024, 1, 1)],
                 Period.of_months(1),
-                TimeAnchor.START,
+                "start",
             ),
             (
                 "6 monthly",
                 [datetime(2024, 1, 1), datetime(2024, 7, 1), datetime(2025, 1, 1)],
                 Period.of_months(6),
-                TimeAnchor.START,
+                "start",
             ),
             (
                 "3 monthly (quarterly)",
@@ -1045,19 +1045,19 @@ class TestCheckAlignment:
                     datetime(2024, 1, 1),
                 ],
                 Period.of_months(3),
-                TimeAnchor.START,
+                "start",
             ),
             (
                 "monthly with mid-month offset",
                 [datetime(2024, 1, 15), datetime(2024, 3, 15), datetime(2024, 3, 15)],
                 Period.of_months(1).with_day_offset(14),
-                TimeAnchor.START,
+                "start",
             ),
             (
                 "water months",
                 [datetime(2024, 1, 1, 9), datetime(2024, 2, 1, 9), datetime(2024, 3, 1, 9)],
                 Period.of_months(1).with_hour_offset(9),
-                TimeAnchor.START,
+                "start",
             ),
         ],
     )
@@ -1074,13 +1074,13 @@ class TestCheckAlignment:
                 "simple monthly",
                 [datetime(2024, 1, 1), datetime(2024, 2, 15), datetime(2024, 3, 1)],
                 Period.of_months(1),
-                TimeAnchor.START,
+                "start",
             ),
             (
                 "water months error",
                 [datetime(2024, 1, 1, 9, 20), datetime(2024, 2, 1, 9), datetime(2024, 3, 1, 9)],
                 Period.of_months(1).with_hour_offset(9),
-                TimeAnchor.START,
+                "start",
             ),
         ],
     )
@@ -1097,31 +1097,31 @@ class TestCheckAlignment:
                 "simple daily",
                 [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)],
                 Period.of_days(1),
-                TimeAnchor.START,
+                "start",
             ),
             (
                 "daily with gaps",
                 [datetime(2023, 1, 1), datetime(2023, 1, 2), datetime(2024, 1, 10)],
                 Period.of_days(1),
-                TimeAnchor.START,
+                "start",
             ),
             (
                 "long term daily",
                 [datetime(1800, 1, 1), datetime(2023, 1, 2), datetime(2024, 1, 10)],
                 Period.of_days(1),
-                TimeAnchor.START,
+                "start",
             ),
             (
                 "water days",
                 [datetime(2024, 1, 1, 9), datetime(2024, 1, 2, 9), datetime(2024, 1, 3, 9)],
                 Period.of_days(1).with_hour_offset(9),
-                TimeAnchor.START,
+                "start",
             ),
             (
                 "daily across leap year feb",
                 [datetime(2024, 2, 28), datetime(2024, 2, 29), datetime(2024, 3, 1)],
                 Period.of_days(1),
-                TimeAnchor.START,
+                "start",
             ),
         ],
     )
@@ -1138,13 +1138,13 @@ class TestCheckAlignment:
                 "simple daily error",
                 [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3, 0, 0, 0, 1)],
                 Period.of_days(1),
-                TimeAnchor.START,
+                "start",
             ),
             (
                 "water days error",
                 [datetime(2024, 1, 1, 9), datetime(2024, 1, 2, 9), datetime(2024, 1, 3, 19)],
                 Period.of_days(1).with_hour_offset(9),
-                TimeAnchor.START,
+                "start",
             ),
         ],
     )
@@ -1161,43 +1161,43 @@ class TestCheckAlignment:
                 "simple hourly",
                 [datetime(2024, 1, 1, 1), datetime(2024, 1, 1, 2), datetime(2024, 1, 1, 3)],
                 Period.of_hours(1),
-                TimeAnchor.START,
+                "start",
             ),
             (
                 "hourly with gaps",
                 [datetime(2023, 1, 1, 6), datetime(2023, 6, 8, 19), datetime(2024, 3, 10, 4)],
                 Period.of_hours(1),
-                TimeAnchor.START,
+                "start",
             ),
             (
                 "every 12 hours",
                 [datetime(2024, 1, 1), datetime(2024, 1, 1, 12), datetime(2024, 1, 2), datetime(2024, 1, 2, 12)],
                 Period.of_hours(12),
-                TimeAnchor.START,
+                "start",
             ),
             (
                 "every 12 hours starting at non-midnight",
                 [datetime(2024, 1, 1, 5), datetime(2024, 1, 1, 17), datetime(2024, 1, 2, 5), datetime(2024, 1, 2, 17)],
                 Period.of_hours(12).with_hour_offset(5),
-                TimeAnchor.START,
+                "start",
             ),
             (
                 "long term hourly",
                 [datetime(1800, 1, 1, 15), datetime(2023, 1, 2, 18), datetime(2024, 1, 10, 23)],
                 Period.of_hours(1),
-                TimeAnchor.START,
+                "start",
             ),
             (
                 "hourly with minute offset",
                 [datetime(2024, 1, 1, 1, 30), datetime(2024, 1, 1, 2, 30), datetime(2024, 1, 1, 3, 30)],
                 Period.of_hours(1).with_minute_offset(30),
-                TimeAnchor.START,
+                "start",
             ),
             (
                 "hourly across leap year feb",
                 [datetime(2024, 2, 29, 23), datetime(2024, 3, 1), datetime(2024, 3, 1, 1)],
                 Period.of_hours(1),
-                TimeAnchor.START,
+                "start",
             ),
         ],
     )
@@ -1214,13 +1214,13 @@ class TestCheckAlignment:
                 "simple hourly",
                 [datetime(2024, 1, 1, 1), datetime(2024, 1, 1, 2, 15), datetime(2024, 1, 1, 3)],
                 Period.of_hours(1),
-                TimeAnchor.START,
+                "start",
             ),
             (
                 "hourly with minute offset",
                 [datetime(2024, 1, 1, 1, 30), datetime(2024, 1, 1, 2, 30), datetime(2024, 1, 1, 3, 31)],
                 Period.of_hours(1).with_minute_offset(30),
-                TimeAnchor.START,
+                "start",
             ),
         ],
     )
@@ -1237,13 +1237,13 @@ class TestCheckAlignment:
                 "simple minute",
                 [datetime(2024, 1, 1, 1, 1), datetime(2024, 1, 1, 1, 2), datetime(2024, 1, 1, 1, 3)],
                 Period.of_minutes(1),
-                TimeAnchor.START,
+                "start",
             ),
             (
                 "minutes with gaps",
                 [datetime(2023, 1, 1, 1, 1), datetime(2023, 12, 1, 19, 5), datetime(2024, 2, 25, 12, 52)],
                 Period.of_minutes(1),
-                TimeAnchor.START,
+                "start",
             ),
             (
                 "every 15 minutes",
@@ -1254,25 +1254,25 @@ class TestCheckAlignment:
                     datetime(2024, 1, 1, 2),
                 ],
                 Period.of_minutes(15),
-                TimeAnchor.START,
+                "start",
             ),
             (
                 "every 60 minutes",
                 [datetime(2024, 1, 1, 1), datetime(2024, 1, 1, 2), datetime(2024, 1, 1, 3)],
                 Period.of_minutes(15),
-                TimeAnchor.START,
+                "start",
             ),
             (
                 "long term minutes",
                 [datetime(1800, 1, 1, 15, 1), datetime(2023, 1, 2, 18, 18), datetime(2024, 1, 10, 23, 55)],
                 Period.of_minutes(1),
-                TimeAnchor.START,
+                "start",
             ),
             (
                 "5 minutes with second offset",
                 [datetime(2024, 1, 1, 1, 30, 30), datetime(2024, 1, 1, 1, 35, 30), datetime(2024, 1, 1, 1, 40, 30)],
                 Period.of_minutes(5).with_second_offset(30),
-                TimeAnchor.START,
+                "start",
             ),
         ],
     )
@@ -1289,13 +1289,13 @@ class TestCheckAlignment:
                 "simple minute",
                 [datetime(2024, 1, 1, 1, 1), datetime(2024, 1, 1, 1, 2), datetime(2024, 1, 1, 1, 3, 59)],
                 Period.of_minutes(1),
-                TimeAnchor.START,
+                "start",
             ),
             (
                 "5 minutes with second offset",
                 [datetime(2024, 1, 1, 1, 31, 30), datetime(2024, 1, 1, 1, 35, 30), datetime(2024, 1, 1, 1, 40, 30)],
                 Period.of_minutes(5).with_second_offset(30),
-                TimeAnchor.START,
+                "start",
             ),
         ],
     )
@@ -1312,31 +1312,31 @@ class TestCheckAlignment:
                 "simple seconds",
                 [datetime(2024, 1, 1, 1, 1, 1), datetime(2024, 1, 1, 1, 1, 2), datetime(2024, 1, 1, 1, 1, 3)],
                 Period.of_seconds(1),
-                TimeAnchor.START,
+                "start",
             ),
             (
                 "seconds with gaps",
                 [datetime(1823, 1, 1, 1, 1, 1), datetime(2023, 7, 11, 12, 19, 59), datetime(2024, 1, 1, 1, 1, 13)],
                 Period.of_seconds(1),
-                TimeAnchor.START,
+                "start",
             ),
             (
                 "every 5 seconds",
                 [datetime(2024, 1, 1, 1, 1, 0), datetime(2024, 1, 1, 1, 1, 5), datetime(2024, 1, 1, 1, 1, 10)],
                 Period.of_seconds(5),
-                TimeAnchor.START,
+                "start",
             ),
             (
                 "every 86400 seconds",
                 [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)],
                 Period.of_seconds(86400),
-                TimeAnchor.START,
+                "start",
             ),
             (
                 "long term seconds",
                 [datetime(1800, 1, 1, 15, 1, 0), datetime(2023, 1, 2, 18, 18, 42), datetime(2024, 1, 10, 23, 55, 5)],
                 Period.of_seconds(1),
-                TimeAnchor.START,
+                "start",
             ),
             (
                 "30 seconds with microsecond offset",
@@ -1346,7 +1346,7 @@ class TestCheckAlignment:
                     datetime(2024, 1, 1, 1, 2, 30, 40),
                 ],
                 Period.of_seconds(30).with_microsecond_offset(40),
-                TimeAnchor.START,
+                "start",
             ),
         ],
     )
@@ -1363,7 +1363,7 @@ class TestCheckAlignment:
                 "simple seconds",
                 [datetime(2024, 1, 1, 1, 1, 1), datetime(2024, 1, 1, 1, 1, 2, 9000), datetime(2024, 1, 1, 1, 1, 3)],
                 Period.of_seconds(1),
-                TimeAnchor.START,
+                "start",
             ),
             (
                 "30 seconds with microsecond offset",
@@ -1373,7 +1373,7 @@ class TestCheckAlignment:
                     datetime(2024, 1, 1, 1, 2, 30, 40),
                 ],
                 Period.of_seconds(30).with_microsecond_offset(40),
-                TimeAnchor.START,
+                "start",
             ),
         ],
     )
@@ -1394,7 +1394,7 @@ class TestCheckAlignment:
                     datetime(2024, 1, 1, 1, 1, 1, 1002),
                 ],
                 Period.of_microseconds(1),
-                TimeAnchor.START,
+                "start",
             ),
             (
                 "microseconds with gaps",
@@ -1404,7 +1404,7 @@ class TestCheckAlignment:
                     datetime(2024, 1, 1, 1, 1, 13, 9595),
                 ],
                 Period.of_microseconds(5),
-                TimeAnchor.START,
+                "start",
             ),
             (
                 "40Hz",
@@ -1414,7 +1414,7 @@ class TestCheckAlignment:
                     datetime(2024, 1, 1, 1, 1, 1, 50_000),
                 ],
                 Period.of_microseconds(25_000),
-                TimeAnchor.START,
+                "start",
             ),
             (
                 "long term microseconds",
@@ -1424,13 +1424,13 @@ class TestCheckAlignment:
                     datetime(2024, 1, 10, 23, 55, 5, 10),
                 ],
                 Period.of_microseconds(1),
-                TimeAnchor.START,
+                "start",
             ),
             (
                 "every 1 second",
                 [datetime(2024, 1, 1, 1, 1, 0), datetime(2024, 1, 1, 1, 1, 1), datetime(2024, 1, 1, 1, 1, 2)],
                 Period.of_microseconds(1_000_000),
-                TimeAnchor.START,
+                "start",
             ),
         ],
     )
@@ -1451,7 +1451,7 @@ class TestCheckAlignment:
                     datetime(2024, 1, 1, 1, 1, 1, 55_000),
                 ],
                 Period.of_microseconds(25_000),
-                TimeAnchor.START,
+                "start",
             ),
         ],
     )
@@ -1478,43 +1478,43 @@ class TestCheckPeriodicity:
                 "simple yearly",
                 [datetime(2020, 1, 1), datetime(2021, 1, 1), datetime(2022, 1, 1)],
                 Period.of_years(1),
-                TimeAnchor.START,
+                "start",
             ),
             (
                 "simple yearly end anchor",
                 [datetime(2020, 1, 1), datetime(2021, 1, 1), datetime(2022, 1, 1)],
                 Period.of_years(1),
-                TimeAnchor.END,
+                "end",
             ),
             (
                 "days within yearly",
                 [datetime(2021, 1, 1), datetime(2022, 10, 5), datetime(2023, 2, 17)],
                 Period.of_years(1),
-                TimeAnchor.START,
+                "start",
             ),
             (
                 "long term yearly",
                 [datetime(500, 1, 1), datetime(1789, 1, 1), datetime(2099, 1, 1)],
                 Period.of_years(1),
-                TimeAnchor.START,
+                "start",
             ),
             (
                 "simple water year",
                 [datetime(2005, 1, 1), datetime(2006, 5, 1), datetime(2006, 12, 1), datetime(2007, 10, 10)],
                 Period.of_years(1).with_month_offset(9).with_hour_offset(9),
-                TimeAnchor.START,
+                "start",
             ),
             (
                 "water year before/after Oct 1 9am",
                 [datetime(2006, 10, 1, 8, 59), datetime(2006, 10, 1, 9)],
                 Period.of_years(1).with_month_offset(9).with_hour_offset(9),
-                TimeAnchor.START,
+                "start",
             ),
             (
                 "yearly end anchor",
                 [datetime(2020, 1, 1), datetime(2020, 1, 2), datetime(2022, 1, 1)],
                 Period.of_years(1),
-                TimeAnchor.END,
+                "end",
             ),
         ],
     )
@@ -1531,25 +1531,25 @@ class TestCheckPeriodicity:
                 "simple yearly",
                 [datetime(2020, 1, 1), datetime(2020, 1, 2), datetime(2022, 1, 1)],
                 Period.of_years(1),
-                TimeAnchor.START,
+                "start",
             ),
             (
                 "simple water year",
                 [datetime(2005, 1, 1), datetime(2005, 5, 1), datetime(2006, 12, 1), datetime(2007, 10, 10)],
                 Period.of_years(1).with_month_offset(9).with_hour_offset(9),
-                TimeAnchor.START,
+                "start",
             ),
             (
                 "water year end anchor",
                 [datetime(2006, 10, 1, 8, 59), datetime(2006, 10, 1, 9)],
                 Period.of_years(1).with_month_offset(9).with_hour_offset(9),
-                TimeAnchor.END,
+                "end",
             ),
             (
                 "yearly end anchor",
                 [datetime(2020, 1, 1), datetime(2020, 1, 2), datetime(2021, 1, 1)],
                 Period.of_years(1),
-                TimeAnchor.END,
+                "end",
             ),
         ],
     )
@@ -1566,49 +1566,49 @@ class TestCheckPeriodicity:
                 "simple monthly",
                 [datetime(2024, 1, 1), datetime(2024, 2, 15), datetime(2024, 3, 31)],
                 Period.of_months(1),
-                TimeAnchor.START,
+                "start",
             ),
             (
                 "long term monthly",
                 [datetime(1200, 1, 1), datetime(2023, 1, 1), datetime(2024, 1, 1)],
                 Period.of_months(1),
-                TimeAnchor.START,
+                "start",
             ),
             (
                 "6 monthly",
                 [datetime(2024, 4, 16), datetime(2024, 7, 1), datetime(2025, 2, 25)],
                 Period.of_months(6),
-                TimeAnchor.START,
+                "start",
             ),
             (
                 "3 monthly (quarterly)",
                 [datetime(2024, 1, 1), datetime(2024, 4, 9), datetime(2024, 9, 2), datetime(2024, 12, 31)],
                 Period.of_months(3),
-                TimeAnchor.START,
+                "start",
             ),
             (
                 "simple water months",
                 [datetime(2024, 1, 1, 10), datetime(2024, 2, 5), datetime(2024, 5, 1, 10, 15)],
                 Period.of_months(1).with_hour_offset(9),
-                TimeAnchor.START,
+                "start",
             ),
             (
                 "water months before/after 9am",
                 [datetime(2024, 1, 1, 8, 59), datetime(2024, 1, 1, 9)],
                 Period.of_months(1).with_hour_offset(9),
-                TimeAnchor.START,
+                "start",
             ),
             (
                 "monthly end anchor",
                 [datetime(2024, 1, 1), datetime(2024, 1, 15), datetime(2024, 3, 25)],
                 Period.of_months(1),
-                TimeAnchor.END,
+                "end",
             ),
             (
                 "water months end anchor",
                 [datetime(2024, 1, 1, 8), datetime(2024, 1, 1, 10), datetime(2024, 2, 1, 10, 15)],
                 Period.of_months(1).with_hour_offset(9),
-                TimeAnchor.END,
+                "end",
             ),
         ],
     )
@@ -1625,25 +1625,25 @@ class TestCheckPeriodicity:
                 "simple monthly",
                 [datetime(2024, 1, 1), datetime(2024, 1, 31), datetime(2024, 2, 1)],
                 Period.of_months(1),
-                TimeAnchor.START,
+                "start",
             ),
             (
                 "simple monthly end anchor",
                 [datetime(2024, 1, 2), datetime(2024, 2, 1), datetime(2024, 3, 1)],
                 Period.of_months(1),
-                TimeAnchor.END,
+                "end",
             ),
             (
                 "simple water months",
                 [datetime(2024, 1, 1, 10), datetime(2024, 2, 1, 8, 59), datetime(2024, 5, 1, 10, 15)],
                 Period.of_months(1).with_hour_offset(9),
-                TimeAnchor.START,
+                "start",
             ),
             (
                 "water months end anchor",
                 [datetime(2024, 1, 1, 8, 59), datetime(2024, 1, 1, 9)],
                 Period.of_months(1).with_hour_offset(9),
-                TimeAnchor.END,
+                "end",
             ),
         ],
     )
@@ -1660,43 +1660,43 @@ class TestCheckPeriodicity:
                 "simple daily",
                 [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)],
                 Period.of_days(1),
-                TimeAnchor.START,
+                "start",
             ),
             (
                 "long term daily",
                 [datetime(1800, 1, 1, 15), datetime(2023, 1, 2, 19), datetime(2024, 1, 10, 1)],
                 Period.of_days(1),
-                TimeAnchor.START,
+                "start",
             ),
             (
                 "simple water days",
                 [datetime(2024, 1, 1, 9), datetime(2024, 1, 2, 9), datetime(2024, 1, 3, 9)],
                 Period.of_days(1).with_hour_offset(9),
-                TimeAnchor.START,
+                "start",
             ),
             (
                 "water days before/after 9am",
                 [datetime(2024, 1, 1, 8, 59), datetime(2024, 1, 1, 9)],
                 Period.of_days(1).with_hour_offset(9),
-                TimeAnchor.START,
+                "start",
             ),
             (
                 "daily across leap year feb",
                 [datetime(2024, 2, 28, 15), datetime(2024, 2, 29, 23, 59), datetime(2024, 3, 1)],
                 Period.of_days(1),
-                TimeAnchor.START,
+                "start",
             ),
             (
                 "simple daily end anchor",
                 [datetime(2024, 1, 1), datetime(2024, 1, 1, 0, 1), datetime(2024, 1, 3)],
                 Period.of_days(1),
-                TimeAnchor.END,
+                "end",
             ),
             (
                 "water days end anchor",
                 [datetime(2024, 1, 1, 9), datetime(2024, 1, 1, 9, 1)],
                 Period.of_days(1).with_hour_offset(9),
-                TimeAnchor.END,
+                "end",
             ),
         ],
     )
@@ -1713,25 +1713,25 @@ class TestCheckPeriodicity:
                 "simple daily",
                 [datetime(2024, 1, 1), datetime(2024, 1, 1, 23, 59), datetime(2024, 1, 3)],
                 Period.of_days(1),
-                TimeAnchor.START,
+                "start",
             ),
             (
                 "simple daily end anchor",
                 [datetime(2024, 1, 1), datetime(2024, 1, 1, 23, 59), datetime(2024, 1, 2)],
                 Period.of_days(1),
-                TimeAnchor.END,
+                "end",
             ),
             (
                 "simple water days",
                 [datetime(2024, 1, 1, 9), datetime(2024, 1, 2, 8, 59, 59), datetime(2024, 1, 3, 9)],
                 Period.of_days(1).with_hour_offset(9),
-                TimeAnchor.START,
+                "start",
             ),
             (
                 "water days end anchor",
                 [datetime(2024, 1, 1, 8, 59), datetime(2024, 1, 1, 9)],
                 Period.of_days(1).with_hour_offset(9),
-                TimeAnchor.END,
+                "end",
             ),
         ],
     )
@@ -1748,13 +1748,13 @@ class TestCheckPeriodicity:
                 "simple hourly",
                 [datetime(2024, 1, 1, 1, 15), datetime(2024, 1, 1, 2, 59), datetime(2024, 1, 1, 3, 1)],
                 Period.of_hours(1),
-                TimeAnchor.START,
+                "start",
             ),
             (
                 "simple hourly end anchor",
                 [datetime(2024, 1, 1, 1, 0), datetime(2024, 1, 1, 1, 1), datetime(2024, 1, 1, 2, 15)],
                 Period.of_hours(1),
-                TimeAnchor.END,
+                "end",
             ),
             (
                 "every 12 hours",
@@ -1765,19 +1765,19 @@ class TestCheckPeriodicity:
                     datetime(2024, 1, 2, 23, 59),
                 ],
                 Period.of_hours(12),
-                TimeAnchor.START,
+                "start",
             ),
             (
                 "long term hourly",
                 [datetime(1800, 1, 1, 15), datetime(2023, 1, 2, 18), datetime(2024, 1, 10, 23)],
                 Period.of_hours(1),
-                TimeAnchor.START,
+                "start",
             ),
             (
                 "hourly across leap year feb",
                 [datetime(2024, 2, 29, 23, 59), datetime(2024, 3, 1), datetime(2024, 3, 1, 1)],
                 Period.of_hours(1),
-                TimeAnchor.START,
+                "start",
             ),
         ],
     )
@@ -1794,7 +1794,7 @@ class TestCheckPeriodicity:
                 "simple hourly",
                 [datetime(2024, 1, 1, 1, 15), datetime(2024, 1, 1, 1, 16), datetime(2024, 1, 1, 3, 1)],
                 Period.of_hours(1),
-                TimeAnchor.START,
+                "start",
             ),
             (
                 "simple hourly end anchor",
@@ -1805,7 +1805,7 @@ class TestCheckPeriodicity:
                     datetime(2024, 1, 1, 13),
                 ],
                 Period.of_hours(1),
-                TimeAnchor.END,
+                "end",
             ),
         ],
     )
@@ -1822,31 +1822,31 @@ class TestCheckPeriodicity:
                 "simple minute",
                 [datetime(2024, 1, 1, 1, 1), datetime(2024, 1, 1, 1, 2), datetime(2024, 1, 1, 1, 3)],
                 Period.of_minutes(1),
-                TimeAnchor.START,
+                "start",
             ),
             (
                 "simple minute end anchor",
                 [datetime(2024, 1, 1, 1, 1), datetime(2024, 1, 1, 1, 1, 10), datetime(2024, 1, 1, 1, 3)],
                 Period.of_minutes(1),
-                TimeAnchor.END,
+                "end",
             ),
             (
                 "every 15 minutes",
                 [datetime(2024, 1, 1, 1, 15), datetime(2024, 1, 1, 1, 35), datetime(2024, 1, 1, 1, 59)],
                 Period.of_minutes(15),
-                TimeAnchor.START,
+                "start",
             ),
             (
                 "long term minutes",
                 [datetime(1800, 1, 1, 15, 1), datetime(2023, 1, 2, 18, 18), datetime(2024, 1, 10, 23, 55)],
                 Period.of_minutes(1),
-                TimeAnchor.START,
+                "start",
             ),
             (
                 "5 minutes with second offset",
                 [datetime(2024, 1, 1, 1, 30, 29), datetime(2024, 1, 1, 1, 30, 31), datetime(2024, 1, 1, 1, 35, 30)],
                 Period.of_minutes(5).with_second_offset(30),
-                TimeAnchor.START,
+                "start",
             ),
         ],
     )
@@ -1863,13 +1863,13 @@ class TestCheckPeriodicity:
                 "simple minute",
                 [datetime(2024, 1, 1, 1, 1), datetime(2024, 1, 1, 1, 2), datetime(2024, 1, 1, 1, 2, 1)],
                 Period.of_minutes(1),
-                TimeAnchor.START,
+                "start",
             ),
             (
                 "simple minute end anchor",
                 [datetime(2024, 1, 1, 0, 59, 59), datetime(2024, 1, 1, 1)],
                 Period.of_minutes(1),
-                TimeAnchor.END,
+                "end",
             ),
         ],
     )
@@ -1890,25 +1890,25 @@ class TestCheckPeriodicity:
                     datetime(2024, 1, 1, 1, 1, 3, 40000),
                 ],
                 Period.of_seconds(1),
-                TimeAnchor.START,
+                "start",
             ),
             (
                 "simple seconds end anchor",
                 [datetime(2024, 1, 1, 1, 1, 1), datetime(2024, 1, 1, 1, 1, 1, 1500)],
                 Period.of_seconds(1),
-                TimeAnchor.END,
+                "end",
             ),
             (
                 "every 5 seconds",
                 [datetime(2024, 1, 1, 1, 1, 0), datetime(2024, 1, 1, 1, 1, 7), datetime(2024, 1, 1, 1, 1, 14)],
                 Period.of_seconds(5),
-                TimeAnchor.START,
+                "start",
             ),
             (
                 "long term seconds",
                 [datetime(1800, 1, 1, 15, 1, 0), datetime(2023, 1, 2, 18, 18, 42), datetime(2024, 1, 10, 23, 55, 5)],
                 Period.of_seconds(1),
-                TimeAnchor.START,
+                "start",
             ),
             (
                 "30 seconds with microsecond offset",
@@ -1918,7 +1918,7 @@ class TestCheckPeriodicity:
                     datetime(2024, 1, 1, 1, 1, 30, 100000),
                 ],
                 Period.of_seconds(30).with_microsecond_offset(40),
-                TimeAnchor.START,
+                "start",
             ),
         ],
     )
@@ -1939,13 +1939,13 @@ class TestCheckPeriodicity:
                     datetime(2024, 1, 1, 1, 1, 3),
                 ],
                 Period.of_seconds(1),
-                TimeAnchor.START,
+                "start",
             ),
             (
                 "simple seconds end anchor",
                 [datetime(2024, 1, 1, 1, 1, 1, 1500), datetime(2024, 1, 1, 1, 1, 2)],
                 Period.of_seconds(1),
-                TimeAnchor.END,
+                "end",
             ),
         ],
     )
@@ -1966,7 +1966,7 @@ class TestCheckPeriodicity:
                     datetime(2024, 1, 1, 1, 1, 1, 1002),
                 ],
                 Period.of_microseconds(1),
-                TimeAnchor.START,
+                "start",
             ),
             (
                 "40Hz",
@@ -1976,7 +1976,7 @@ class TestCheckPeriodicity:
                     datetime(2024, 1, 1, 1, 1, 1, 50_000),
                 ],
                 Period.of_microseconds(25_000),
-                TimeAnchor.START,
+                "start",
             ),
             (
                 "long term microseconds",
@@ -1986,7 +1986,7 @@ class TestCheckPeriodicity:
                     datetime(2024, 1, 10, 23, 55, 5, 10),
                 ],
                 Period.of_microseconds(1),
-                TimeAnchor.START,
+                "start",
             ),
         ],
     )
@@ -2007,7 +2007,7 @@ class TestCheckPeriodicity:
                     datetime(2024, 1, 1, 1, 1, 1, 50_000),
                 ],
                 Period.of_microseconds(25_000),
-                TimeAnchor.START,
+                "start",
             ),
         ],
     )
@@ -2079,17 +2079,17 @@ class TestEpochCheck:
 
 class TestTimeWindow:
     def test_default_closed_is_both(self) -> None:
-        """Omitting closed defaults to ClosedInterval.BOTH."""
+        """Omitting closed defaults to "both"."""
         tw = TimeWindow(start=time(10, 30), end=time(14, 0))
-        assert tw.closed == ClosedInterval.BOTH
+        assert tw.closed == "both"
 
     @pytest.mark.parametrize(
         "start,end,closed",
         [
-            (time(10, 30), time(14, 0), ClosedInterval.BOTH),
-            (time(10, 30), time(14, 0), ClosedInterval.LEFT),
-            (time(10, 30), time(14, 0), ClosedInterval.RIGHT),
-            (time(10, 30), time(14, 0), ClosedInterval.NONE),
+            (time(10, 30), time(14, 0), "both"),
+            (time(10, 30), time(14, 0), "left"),
+            (time(10, 30), time(14, 0), "right"),
+            (time(10, 30), time(14, 0), "none"),
         ],
         ids=["both closed", "left closed", "right closed", "none closed"],
     )
@@ -2132,12 +2132,12 @@ class TestTimeWindow:
     @pytest.mark.parametrize(
         "start,end,closed,periodicity,expected",
         [
-            (time(10, 30), time(14, 0), ClosedInterval.BOTH, Period.of_minutes(30), 8),
-            (time(10, 30), time(14, 0), ClosedInterval.LEFT, Period.of_minutes(30), 7),
-            (time(10, 30), time(14, 0), ClosedInterval.RIGHT, Period.of_minutes(30), 7),
-            (time(10, 30), time(14, 0), ClosedInterval.NONE, Period.of_minutes(30), 6),
-            (time(10, 0), time(10, 15), ClosedInterval.NONE, Period.of_minutes(30), 0),
-            (time(10, 0), time(14, 0), ClosedInterval.BOTH, Period.of_hours(1), 5),
+            (time(10, 30), time(14, 0), "both", Period.of_minutes(30), 8),
+            (time(10, 30), time(14, 0), "left", Period.of_minutes(30), 7),
+            (time(10, 30), time(14, 0), "right", Period.of_minutes(30), 7),
+            (time(10, 30), time(14, 0), "none", Period.of_minutes(30), 6),
+            (time(10, 0), time(10, 15), "none", Period.of_minutes(30), 0),
+            (time(10, 0), time(14, 0), "both", Period.of_hours(1), 5),
         ],
         ids=[
             "both closed, 30-min",
@@ -2176,10 +2176,10 @@ class TestTimeWindow:
     @pytest.mark.parametrize(
         "closed,expected_values",
         [
-            (ClosedInterval.BOTH, [2, 3, 4]),
-            (ClosedInterval.LEFT, [2, 3]),
-            (ClosedInterval.RIGHT, [3, 4]),
-            (ClosedInterval.NONE, [3]),
+            ("both", [2, 3, 4]),
+            ("left", [2, 3]),
+            ("right", [3, 4]),
+            ("none", [3]),
         ],
         ids=["both closed", "left closed", "right closed", "none closed"],
     )

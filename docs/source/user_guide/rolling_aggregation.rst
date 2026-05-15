@@ -104,13 +104,13 @@ The ``alignment`` parameter controls where the rolling window is positioned rela
    * - Alignment
      - Window
      - Edge effects
-   * - ``TRAILING`` (default)
+   * - ``trailing`` (default)
      - ``(t - window_size, t]``
      - At the **start** of the series (first rows see partial windows)
-   * - ``LEADING``
+   * - ``leading``
      - ``[t, t + window_size)``
      - At the **end** of the series (last rows see partial windows)
-   * - ``CENTER``
+   * - ``center``
      - ``[t - window_size/2, t + window_size/2]``
      - At **both ends** of the series
 
@@ -157,7 +157,7 @@ contains partial data) appear at both the start and end of the series.
 
 .. note::
 
-   ``CENTER`` alignment is not supported for calendar-based window sizes (months, years) because
+   ``center`` alignment is not supported for calendar-based window sizes (months, years) because
    they have variable length and cannot be halved to a fixed offset.
 
 .. _data-completeness:
