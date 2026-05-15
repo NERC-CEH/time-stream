@@ -62,9 +62,9 @@ class TimeManager:
         self._offset = self._configure_offset_property(offset)
         self._alignment = self._configure_alignment_property(self._resolution, self._offset)
         self._periodicity = self._configure_periodicity_property(periodicity, self._alignment)
-        self._on_duplicates = on_duplicates
+        self._on_duplicates: DuplicateOption = on_duplicates
         self._on_misaligned_rows = on_misaligned_rows
-        self._time_anchor = time_anchor
+        self._time_anchor: TimeAnchor = time_anchor
 
     @property
     def time_name(self) -> str:

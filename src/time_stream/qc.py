@@ -213,7 +213,7 @@ class RangeCheck(QCCheck):
         in_range = col_expr.is_between(
             self.min_value,
             self.max_value,
-            closed=self.closed,
+            closed=self.closed,  # type: ignore[arg-type] ignore Literal typing as the enum constrains the values
         )
         return in_range if self.within else ~in_range
 
