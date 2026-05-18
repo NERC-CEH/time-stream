@@ -741,9 +741,9 @@ class AltDataDynamic(InfillMethod):
         if window_df is None:
             return None
 
-        alt_sum = window_df[alt_data_column_name].sum()
+        alt_sum = float(window_df[alt_data_column_name].sum())
         if alt_sum != 0:
-            return window_df[infill_column].sum() / alt_sum
+            return float(window_df[infill_column].sum()) / alt_sum
         logger.warning("alt_sum is zero for gap %s to %s — gap will not be infilled.", gap_start, gap_end)
 
         # Otherwise use different infill data/method
