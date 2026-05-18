@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 from unittest.mock import Mock, patch
 
@@ -631,29 +631,21 @@ class TestAltDataDynamic:
 
     def test_window_duration_parser(self) -> None:
         """Test different inputs for window are parsed correctly as a duration,
-        and that a window can be entered as either an iso or Period type."""
+        and that a window can be entered as an iso string, Period, or timedelta."""
         infiller_iso_hours = AltDataDynamic(alt_data_column="alt_values", window_size="PT1H")
         infiller_period_hours = AltDataDynamic(alt_data_column="alt_values", window_size=Period.of_hours(1))
+        infiller_timedelta_hours = AltDataDynamic(alt_data_column="alt_values", window_size=timedelta(hours=1))
         infiller_iso_days = AltDataDynamic(alt_data_column="alt_values", window_size="P1D")
         infiller_period_days = AltDataDynamic(alt_data_column="alt_values", window_size=Period.of_days(1))
+        infiller_timedelta_days = AltDataDynamic(alt_data_column="alt_values", window_size=timedelta(days=1))
 
-        window_duration_iso_hours = infiller_iso_hours._window_duration(
-            InfillCtx(self.tf.df, self.tf.time_name, Period.of_hours(1))
-        )
-        window_duration_period_hours = infiller_period_hours._window_duration(
-            InfillCtx(self.tf.df, self.tf.time_name, Period.of_hours(1))
-        )
-        window_duration_iso_days = infiller_iso_days._window_duration(
-            InfillCtx(self.tf.df, self.tf.time_name, Period.of_hours(1))
-        )
-        window_duration_period_days = infiller_period_days._window_duration(
-            InfillCtx(self.tf.df, self.tf.time_name, Period.of_hours(1))
-        )
-
-        assert window_duration_iso_hours == Period.of_hours(1).timedelta
-        assert window_duration_period_hours == Period.of_hours(1).timedelta
-        assert window_duration_iso_days == Period.of_days(1).timedelta
-        assert window_duration_period_days == Period.of_days(1).timedelta
+        ctx = InfillCtx(self.tf.df, self.tf.time_name, Period.of_hours(1))
+        assert infiller_iso_hours._window_duration(ctx) == Period.of_hours(1).timedelta
+        assert infiller_period_hours._window_duration(ctx) == Period.of_hours(1).timedelta
+        assert infiller_timedelta_hours._window_duration(ctx) == timedelta(hours=1)
+        assert infiller_iso_days._window_duration(ctx) == Period.of_days(1).timedelta
+        assert infiller_period_days._window_duration(ctx) == Period.of_days(1).timedelta
+        assert infiller_timedelta_days._window_duration(ctx) == timedelta(days=1)
 
     def test_window_is_empty(self) -> None:
         """Test that nothing happens if there is no data that can be used within the window around the gap."""
