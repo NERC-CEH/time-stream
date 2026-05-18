@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -106,6 +106,47 @@ def alt_data_dynamic_infill() -> None:
     )
     # [end_block_4]
     print(tf_infill.df)
+
+
+def alt_data_dynamic_window_size_formats() -> None:
+    with suppress_output():
+        df = alt_data_main()
+        alt_df = alt_data_alt()
+
+    tf = ts.TimeFrame(df, "time", resolution="PT15M", periodicity="PT15M")
+
+    # [start_block_7]
+    # window_size can be specified as an ISO 8601 duration string:
+    tf_infill_str = tf.infill(
+        "alt_data_dynamic",
+        "flow",
+        alt_df=alt_df,
+        alt_data_column="alt_flow",
+        window_size="PT1H",
+    )
+
+    # ...as a Period object:
+    tf_infill_period = tf.infill(
+        "alt_data_dynamic",
+        "flow",
+        alt_df=alt_df,
+        alt_data_column="alt_flow",
+        window_size=ts.Period.of_hours(1),
+    )
+
+    # ...or as a timedelta:
+    tf_infill_timedelta = tf.infill(
+        "alt_data_dynamic",
+        "flow",
+        alt_df=alt_df,
+        alt_data_column="alt_flow",
+        window_size=timedelta(hours=1),
+    )
+    # [end_block_7]
+
+    print(tf_infill_str.df)
+    print(tf_infill_period.df)
+    print(tf_infill_timedelta.df)
 
 
 def alt_data_dynamic_infill_with_thresholds() -> None:
