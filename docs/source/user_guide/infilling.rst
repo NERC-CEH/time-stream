@@ -112,6 +112,49 @@ Simple infilling techniques
 
     **Example usage:** ``tf_filled = tf.infill("alt_data", "flow", alt_data_column="flow_model", alt_df=model_df)``
 
+``alt_data_dynamic``
+^^^^^^^^^^^^^^^^^^^^
+:class:`time_stream.infill.AltDataDynamic`
+
+    **What it does:** Infills using data from an alternative source - either another column in your
+    TimeFrame, or data from a different DataFrame entirely. 
+
+    For each contiguous gap in the original dataset, a time window is defined
+    around the gap. A correction factor is computed as the ratio of the sum of
+    the original data to the sum of the alternative data within this window.
+    The alternative data corresponding to the missing interval is scaled by the
+    correction factor to produce the infilled values.
+
+    **When to use:** When you have a secondary data source that can stand in for missing values,
+    such as a nearby gauge or a modelled estimate.
+
+    **Additional args:**
+        ``alt_data_column``: The name of the column providing the alternative data.
+        ``alt_df``: A separate Polars DataFrame containing the alternative data.
+        If omitted, the column is taken from the current TimeFrame.
+        ``window_size``: A period around the missing data to be used to calculate the correction factor,
+        as an ISO 8601 duration string, a :class:`~time_stream.Period`, or a :class:`datetime.timedelta`.
+        ``window_side``: Optional. By default, windows on both sides of the missing data are used to infill.
+        If "left", only data to left of missing data is used to infill. If "right", only data to right of 
+        missing data is used to infill.
+        ``min_threshold``: Minimum number of datapoints to use to calculate the correction factor.
+        ``max_threshold``: Maximum number of datapoints to use to calculate the correction factor.
+
+    **Example usage:**
+
+    .. code-block:: python
+
+        tf_filled = tf.infill(
+            "alt_data_dynamic",
+            "flow",
+            alt_data_column="flow_model",
+            alt_df=model_df,
+            window_size="P3D",
+            min_threshold=2,
+            max_threshold=4,
+            window_side="left",
+        )
+
 Polynomial interpolation
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -348,8 +391,90 @@ can be used to infill these gaps.
     import examples_infilling
     ts = examples_infilling.alt_data_infill()
 
+Alternative data dynamic infilling
+-----------------------------------
+
+The ``"alt_data_dynamic"`` infill method computes a correction factor from data surrounding each gap,
+rather than applying a fixed correction factor upfront.
+
+Basic usage
+~~~~~~~~~~~
+
+**Code:**
+
+.. literalinclude:: ../../../src/time_stream/examples/examples_infilling.py
+    :language: python
+    :start-after: [start_block_4]
+    :end-before: [end_block_4]
+    :dedent:
+
+**Output:**
+
+.. jupyter-execute::
+    :hide-code:
+
+    import examples_infilling
+    examples_infilling.alt_data_dynamic_infill()
+
+Using thresholds
+~~~~~~~~~~~~~~~~
+
+Use ``min_threshold`` and ``max_threshold`` to control how many data points are used when computing
+the correction factor. ``min_threshold`` ensures enough data is available before infilling; ``max_threshold``
+caps the window so that only the data nearest the gap is used.
+
+**Code:**
+
+.. literalinclude:: ../../../src/time_stream/examples/examples_infilling.py
+    :language: python
+    :start-after: [start_block_5]
+    :end-before: [end_block_5]
+    :dedent:
+
+**Output:**
+
+.. jupyter-execute::
+    :hide-code:
+
+    import examples_infilling
+    examples_infilling.alt_data_dynamic_infill_with_thresholds()
+
+One-sided windows
+~~~~~~~~~~~~~~~~~
+
+By default the correction factor is computed from data on both sides of a gap. Use ``window_side``
+to restrict it to one side only — useful when data quality or availability differs on either side.
+
+**Code:**
+
+.. literalinclude:: ../../../src/time_stream/examples/examples_infilling.py
+    :language: python
+    :start-after: [start_block_6]
+    :end-before: [end_block_6]
+    :dedent:
+
+**Output:**
+
+.. jupyter-execute::
+    :hide-code:
+
+    import examples_infilling
+    examples_infilling.alt_data_dynamic_infill_one_sided()
+
+Specifying window size
+~~~~~~~~~~~~~~~~~~~~~~
+
+``window_size`` accepts an ISO 8601 duration string, a :class:`~time_stream.Period`, or a
+:class:`datetime.timedelta` — all three are equivalent:
+
+.. literalinclude:: ../../../src/time_stream/examples/examples_infilling.py
+    :language: python
+    :start-after: [start_block_7]
+    :end-before: [end_block_7]
+    :dedent:
+
 Visualisation of interpolation methods
-======================================
+=======================================
 
 A quick visualisation of the results from the different interpolation infill methods is sometimes useful. However,
 bear in mind that this is a very simplistic example and the correct method to use is dependent on your data.
