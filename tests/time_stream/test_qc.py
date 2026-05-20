@@ -9,6 +9,7 @@ from polars.testing import assert_series_equal
 from time_stream.base import TimeFrame
 from time_stream.exceptions import QcUnknownOperatorError, RegistryKeyTypeError, UnknownRegistryKeyError
 from time_stream.qc import ComparisonCheck, FlatLineCheck, QCCheck, QcCtx, RangeCheck, SpikeCheck
+from time_stream.types import ClosedInterval
 
 
 class MockQC(QCCheck):
@@ -232,7 +233,9 @@ class TestRangeCheck:
             "all_outside_flag_outside",
         ],
     )
-    def test_range_check(self, min_value: int, max_value: int, closed: str, within: bool, expected: list) -> None:
+    def test_range_check(
+        self, min_value: int, max_value: int, closed: ClosedInterval, within: bool, expected: list
+    ) -> None:
         """Test that the range-check returns expected results"""
         check = RangeCheck(min_value, max_value, closed, within)
         result = check.apply(self.tf.df, self.tf.time_name, "value_a")
@@ -262,7 +265,7 @@ class TestRangeCheck:
         ],
     )
     def test_range_check_at_values(
-        self, min_value: int, max_value: int, closed: str, within: bool, expected: list
+        self, min_value: int, max_value: int, closed: ClosedInterval, within: bool, expected: list
     ) -> None:
         """Test that the range-check returns expected results when the min and max values are exact values
         in the time series.  This is intended to test the "closed" parameter.
@@ -311,7 +314,7 @@ class TestRangeCheck:
         ],
     )
     def test_range_check_using_time(
-        self, min_value: time, max_value: time, closed: str, within: bool, expected: list
+        self, min_value: time, max_value: time, closed: ClosedInterval, within: bool, expected: list
     ) -> None:
         """Test that the range check accepts time values."""
         check = RangeCheck(min_value, max_value, closed, within)
@@ -406,7 +409,7 @@ class TestRangeCheck:
         ],
     )
     def test_time_range_check_across_midnight(
-        self, min_value: time, max_value: time, closed: str, within: bool, expected: list
+        self, min_value: time, max_value: time, closed: ClosedInterval, within: bool, expected: list
     ) -> None:
         """Test that the time range check works as expected when the range is across midnight"""
         check = RangeCheck(min_value, max_value, closed, within)
@@ -453,7 +456,7 @@ class TestRangeCheck:
         ],
     )
     def test_range_check_using_datetimes(
-        self, min_value: datetime, max_value: datetime, closed: str, within: bool, expected: list
+        self, min_value: datetime, max_value: datetime, closed: ClosedInterval, within: bool, expected: list
     ) -> None:
         """Test that the range check accepts datetime values."""
         check = RangeCheck(min_value, max_value, closed, within)
@@ -500,7 +503,7 @@ class TestRangeCheck:
         ],
     )
     def test_range_check_using_dates(
-        self, min_value: date, max_value: date, closed: str, within: bool, expected: list
+        self, min_value: date, max_value: date, closed: ClosedInterval, within: bool, expected: list
     ) -> None:
         """Test that the range check accepts date values."""
         check = RangeCheck(min_value, max_value, closed, within)

@@ -17,15 +17,15 @@ Both share a common abstract base class :class:`AggregationPipeline`.
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import timedelta
-from typing import Callable
+from typing import Callable, get_args
 
 import polars as pl
 from polars.dataframe.group_by import DynamicGroupBy, RollingGroupBy
 
 from time_stream import Period
-from time_stream.enums import MissingCriteria, RollingAlignment, TimeAnchor
 from time_stream.exceptions import AggregationError, AggregationPeriodError, MissingCriteriaError, TimeWindowError
 from time_stream.operation import Operation
+from time_stream.types import MissingCriteria, RollingAlignment, TimeAnchor
 from time_stream.utils import TimeWindow, check_columns_in_dataframe
 
 
@@ -245,20 +245,18 @@ class AggregationPipeline(ABC):
             List of `Polars` expressions that can be used to generate missing data validation columns
         """
         # Do some checks that the missing criteria is valid
-        try:
-            if self.missing_criteria is None:
-                criteria, threshold = MissingCriteria.NA, 0
-            else:
-                criteria, threshold = self.missing_criteria
+        if self.missing_criteria is None:
+            criteria, threshold = "na", 0
+        else:
+            criteria, threshold = self.missing_criteria
 
-            criteria = MissingCriteria(criteria)
-        except ValueError:
+        if criteria not in get_args(MissingCriteria):
             raise MissingCriteriaError(
                 f"Unknown missing criteria: {self.missing_criteria}. "
-                f"Available criteria: {[c.name for c in MissingCriteria]}"
+                f"Available criteria: {list(get_args(MissingCriteria))}"
             )
 
-        if criteria == MissingCriteria.PERCENT:
+        if criteria == "percent":
             if not 0 <= threshold <= 100:
                 raise MissingCriteriaError(f"Invalid percent threshold '{threshold}'. Must be between 0 and 100.")
         else:
@@ -268,13 +266,13 @@ class AggregationPipeline(ABC):
         # Build the expression based on the specified criteria
         expressions = []
         for col in self.columns:
-            if criteria == MissingCriteria.PERCENT:
+            if criteria == "percent":
                 expr = ((pl.col(f"count_{col}") / pl.col(f"expected_count_{self.ctx.time_name}")) * 100) > threshold
 
-            elif criteria == MissingCriteria.MISSING:
+            elif criteria == "missing":
                 expr = (pl.col(f"expected_count_{self.ctx.time_name}") - pl.col(f"count_{col}")) <= threshold
 
-            elif criteria == MissingCriteria.AVAILABLE:
+            elif criteria == "available":
                 expr = pl.col(f"count_{col}") >= threshold
 
             else:
@@ -360,8 +358,8 @@ class StandardAggregationPipeline(AggregationPipeline):
         Returns:
             Tuple of (label, closed) values to use in Polars ``group_by_dynamic``.
         """
-        label = "right" if self.aggregation_time_anchor == TimeAnchor.END else "left"
-        closed = "right" if self.ctx.time_anchor == TimeAnchor.END else "left"
+        label = "right" if self.aggregation_time_anchor == "end" else "left"
+        closed = "right" if self.ctx.time_anchor == "end" else "left"
         return label, closed
 
     def _get_grouper(self, df: pl.DataFrame) -> DynamicGroupBy:
@@ -429,7 +427,7 @@ class RollingAggregationPipeline(AggregationPipeline):
         aggregation_period: Period,
         columns: str | list[str],
         missing_criteria: tuple[str, float | int] | None = None,
-        alignment: RollingAlignment = RollingAlignment.TRAILING,
+        alignment: RollingAlignment = "trailing",
     ):
         super().__init__(agg_func, ctx, aggregation_period, columns, missing_criteria)
         self.alignment = alignment
@@ -451,7 +449,7 @@ class RollingAggregationPipeline(AggregationPipeline):
                 f"Rolling window size '{self.aggregation_period}' must be at least as large as the "
                 f"data periodicity '{self.ctx.periodicity}'."
             )
-        if self.alignment == RollingAlignment.CENTER and self.aggregation_period.timedelta is None:
+        if self.alignment == "center" and self.aggregation_period.timedelta is None:
             raise AggregationError(
                 "CENTER alignment is not supported for calendar-based window sizes (e.g., months or years), "
                 "because they have variable length and cannot be halved to a fixed offset."
@@ -464,9 +462,9 @@ class RollingAggregationPipeline(AggregationPipeline):
             A ``(closed, offset)`` tuple. ``offset`` is ``None`` for TRAILING, which lets Polars
             use its default backward-looking offset of ``-period``.
         """
-        if self.alignment == RollingAlignment.TRAILING:
+        if self.alignment == "trailing":
             return "right", None
-        elif self.alignment == RollingAlignment.LEADING:
+        elif self.alignment == "leading":
             return "left", "0us"
         else:
             td = self.aggregation_period.timedelta
@@ -496,11 +494,11 @@ class RollingAggregationPipeline(AggregationPipeline):
         Raises:
             AggregationError: If CENTER alignment is used (should have been caught in validation).
         """
-        if self.alignment == RollingAlignment.TRAILING:
+        if self.alignment == "trailing":
             start_expr = pl.col(self.ctx.time_name).dt.offset_by("-" + self.aggregation_period.pl_interval)
             end_expr = pl.col(self.ctx.time_name)
             closed = "right"
-        elif self.alignment == RollingAlignment.LEADING:
+        elif self.alignment == "leading":
             start_expr = pl.col(self.ctx.time_name)
             end_expr = pl.col(self.ctx.time_name).dt.offset_by(self.aggregation_period.pl_interval)
             closed = "left"
