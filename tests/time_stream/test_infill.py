@@ -640,11 +640,11 @@ class TestAltDataDynamic:
         infiller_timedelta_days = AltDataDynamic(alt_data_column="alt_values", window_size=timedelta(days=1))
 
         ctx = InfillCtx(self.tf.df, self.tf.time_name, Period.of_hours(1))
-        assert infiller_iso_hours._window_duration(ctx) == Period.of_hours(1).timedelta
-        assert infiller_period_hours._window_duration(ctx) == Period.of_hours(1).timedelta
+        assert infiller_iso_hours._window_duration(ctx) == timedelta(hours=1)
+        assert infiller_period_hours._window_duration(ctx) == timedelta(hours=1)
         assert infiller_timedelta_hours._window_duration(ctx) == timedelta(hours=1)
-        assert infiller_iso_days._window_duration(ctx) == Period.of_days(1).timedelta
-        assert infiller_period_days._window_duration(ctx) == Period.of_days(1).timedelta
+        assert infiller_iso_days._window_duration(ctx) == timedelta(days=1)
+        assert infiller_period_days._window_duration(ctx) == timedelta(days=1)
         assert infiller_timedelta_days._window_duration(ctx) == timedelta(days=1)
 
     def test_window_is_empty(self) -> None:
@@ -654,7 +654,7 @@ class TestAltDataDynamic:
         expected_df = self.df.with_columns(pl.Series("values", self.df["values"]))
         assert_frame_equal(result_df, expected_df, check_column_order=False)
 
-    def test_valid_window_and_min_threshold(self) -> None:
+    def test_valid_window_smaller_than_min_threshold(self) -> None:
         """Test window size smaller than min_threshold raises error."""
         infiller = AltDataDynamic(alt_data_column="alt_values", window_size="P3D", min_threshold=10)
         with pytest.raises(ValueError):
@@ -686,30 +686,66 @@ class TestAltDataDynamic:
         )
         assert_frame_equal(result_df, expected_df, check_column_order=False)
 
-    def test_one_sided_window(self) -> None:
+    def test_infill_with_max_threshold_symmetry_preference(self) -> None:
+        """
+        Test uses same number of datapoints on each side of the gap before using 'closest' data.
+        """
+        tf = TimeFrame(
+            pl.DataFrame(
+                {
+                    "timestamp": [datetime(2025, 1, d) for d in range(1, 11, 1)],
+                    "values": [1.0, 2.9, 3.8, 4.7, None, 6.5, 7.4, 8.3, 9.2, 10.1],
+                    "alt_values": [10.0, 9.1, 8.2, 7.3, 6.4, 5.5, None, None, 2.8, 1.9],
+                }
+            ),
+            "timestamp",
+            "P1D",
+        )
+
+        infiller_symmetric = AltDataDynamic(alt_data_column="alt_values", window_size="P4D", max_threshold=4)
+        result_symmetric_df = infiller_symmetric.apply(tf.df, tf.time_name, tf.periodicity, "values")
+        result_symmetric_df = result_symmetric_df.with_columns(pl.col("values").round(1))
+        expected_symmetric_df = tf.df.with_columns(  # Uses sum(3.8,4.7,6.5,9.2)/sum(8.2,7.3,5.5,2.8)
+            pl.Series("values", [1.0, 2.9, 3.8, 4.7, 6.5, 6.5, 7.4, 8.3, 9.2, 10.1])
+        )
+        assert_frame_equal(result_symmetric_df, expected_symmetric_df, check_column_order=False)
+
+        infiller_asymmetric = AltDataDynamic(alt_data_column="alt_values", window_size="P3D", max_threshold=4)
+        result_asymmetric_df = infiller_asymmetric.apply(tf.df, tf.time_name, tf.periodicity, "values")
+        result_asymmetric_df = result_asymmetric_df.with_columns(pl.col("values").round(1))
+        expected_asymmetric_df = tf.df.with_columns(  # Uses sum(2.93.8,4.7,6.5)/sum(9.1,8.2,7.3,5.5)
+            pl.Series("values", [1.0, 2.9, 3.8, 4.7, 3.8, 6.5, 7.4, 8.3, 9.2, 10.1])
+        )
+        assert_frame_equal(result_asymmetric_df, expected_asymmetric_df, check_column_order=False)
+
+    def test_window_side_parameter(self) -> None:
         """Test infilling from an alternative column, with window_side = "left", "right", "both" and None."""
 
-        # left_only = True, right_only = False (default)
+        # left only
         infiller_left = AltDataDynamic(alt_data_column="alt_values", window_size="P3D", window_side="left")
         result_left_df = infiller_left.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
         expected_left_df = self.df.with_columns(
             pl.Series("values", [7.6, 82.2, 89.6, 44.3, 91.9, 82.6, 90.0, 29.5, 48.4, 15.1, 46.4, None])
         )
 
-        # right_only = True, left_only = False (default)
+        # right only
         infiller_right = AltDataDynamic(alt_data_column="alt_values", window_size="P3D", window_side="right")
         result_right_df = infiller_right.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
         expected_right_df = self.df.with_columns(
             pl.Series("values", [7.6, 82.2, 89.6, 58.2, 91.9, 82.6, 90.0, 19.8, 48.4, 186.7, 46.4, None])
         )
 
-        # left_only = True, right_only = True
+        # Both sides
         infiller_both = AltDataDynamic(alt_data_column="alt_values", window_size="P3D", window_side="both")
         result_both_df = infiller_both.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
 
-        # left_only and right_only not specified (default = False)
+        # Default returns both sides when window side not specified
         infiller_none = AltDataDynamic(alt_data_column="alt_values", window_size="P3D")
         result_none_df = infiller_none.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
+
+        expected_both_df = self.df.with_columns(
+            pl.Series("values", [7.6, 82.2, 89.6, 51.7, 91.9, 82.6, 90.0, 26.1, 48.4, 19.6, 46.4, None])
+        )
 
         assert_frame_equal(
             result_left_df.with_columns(pl.col("values").round(1)), expected_left_df, check_column_order=False
@@ -717,7 +753,12 @@ class TestAltDataDynamic:
         assert_frame_equal(
             result_right_df.with_columns(pl.col("values").round(1)), expected_right_df, check_column_order=False
         )
-        assert_frame_equal(result_both_df, result_none_df, check_column_order=False)
+        assert_frame_equal(
+            result_both_df.with_columns(pl.col("values").round(1)), expected_both_df, check_column_order=False
+        )
+        assert_frame_equal(
+            result_none_df.with_columns(pl.col("values").round(1)), expected_both_df, check_column_order=False
+        )
 
     def test_alt_df_provided(self) -> None:
         """Test AltDataDynamic with alt_df provided as a separate DataFrame."""

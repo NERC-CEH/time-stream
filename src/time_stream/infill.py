@@ -462,7 +462,7 @@ class AltDataDynamic(InfillMethod):
             alt_data_column: The name of the column providing the alternative data.
             alt_df: The DataFrame containing the alternative data.
             window_size: period around the missing data to be used to calculate the correction factor,
-                         as an iso string or Period type.
+                         as an iso string, Period type, or timedelta. The former two get resolved to a timedelta.
             min_threshold: minimum number of datapoints to use to calculate the correction factor.
             max_threshold: maximum number of datapoints to use to calculate the correction factor.
             window_side: optional. By default, windows on both sides of the missing data are used to infill.
@@ -742,9 +742,8 @@ class AltDataDynamic(InfillMethod):
             return None
 
         alt_sum = float(window_df[alt_data_column_name].sum())
-        if alt_sum != 0:
-            return float(window_df[infill_column].sum()) / alt_sum
-        logger.warning("alt_sum is zero for gap %s to %s — gap will not be infilled.", gap_start, gap_end)
+        if alt_sum == 0:
+            logger.warning("alt_sum is zero for gap %s to %s — gap will not be infilled.", gap_start, gap_end)
+            return None
 
-        # Otherwise use different infill data/method
-        return None
+        return float(window_df[infill_column].sum()) / alt_sum
