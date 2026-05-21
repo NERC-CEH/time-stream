@@ -56,7 +56,7 @@ typecheck = [
 ]
 docs = [
     "sphinx",
-    "shibuya>=2026.1.9",
+    "shibuya>=2026.5.19",
     "sphinx-copybutton",
     "sphinx-design>=0.6.1",
     "sphinx-iconify>=0.3.0",
