@@ -442,7 +442,7 @@ class AltDataDynamic(InfillMethod):
     correction factor to produce the infilled values.
 
     The method defaults to using data on both sides of the gap.
-    if window_side is specified as "left" or "right", then only data left or right of the gap will be used.
+    If window_side is specified as "left" or "right", then only data left or right of the gap will be used.
     """
 
     name = "alt_data_dynamic"
@@ -459,19 +459,23 @@ class AltDataDynamic(InfillMethod):
         """Initialize the alternative data infill method.
 
         Args:
-            alt_data_column: The name of the column providing the alternative data.
-            alt_df: The DataFrame containing the alternative data.
-            window_size: period around the missing data to be used to calculate the correction factor,
-                         as an iso string, Period type, or timedelta. The former two get resolved to a timedelta.
-            min_threshold: minimum number of datapoints to use to calculate the correction factor.
-            max_threshold: maximum number of datapoints to use to calculate the correction factor.
-            window_side: optional. By default, windows on both sides of the missing data are used to infill.
-                         If "left", only data to left of missing data is used to infill.
-                         If "right", only data to right of missing data is used to infill.
+            alt_data_column: Name of the column providing the alternative data.
+            window_size: Time window around each gap used to calculate the correction factor.
+                Accepts an ISO duration string, Period, or timedelta.
+            alt_df: Optional separate DataFrame containing the alternative data. If None,
+                alt_data_column must exist in the DataFrame passed to the infill method.
+            min_threshold: Minimum number of data points required in the window to calculate
+                a correction factor. Gaps with windows that have fewer points than the min_threshold are not infilled.
+            max_threshold: Maximum number of data points to use per window. Points closest
+                to the gap are used first.
+            window_side: Which side of each gap to use for the window. Defaults to "both".
+                "left" uses only data before the gap; "right" uses only data after.
         """
-        if min_threshold is not None and max_threshold is not None:
+        if max_threshold is not None:
             if min_threshold > max_threshold:
-                raise ValueError("max_threshold must be greater than min_threshold")
+                raise ValueError(f"max_threshold must be greater than min_threshold ({min_threshold}).")
+            if max_threshold == 0:
+                raise ValueError("max_threshold must be greater than zero.")
 
         self.alt_data_column = alt_data_column
         self.alt_df = alt_df
@@ -490,11 +494,11 @@ class AltDataDynamic(InfillMethod):
 
         Args:
             df: The DataFrame to infill.
-            infill_column: The column to infill.
+            infill_column: Name of the column to infill.
             ctx: The infill context.
 
         Returns:
-            pl.DataFrame with infilled values.
+            DataFrame with an additional infilled column containing the corrected values.
         """
         time_column_name = ctx.time_name
         window_duration = self._window_duration(ctx)
@@ -520,7 +524,7 @@ class AltDataDynamic(InfillMethod):
         # Identify gaps in original dataset
         null_mask = pl.col(infill_column).is_null()
         gap_id = (null_mask != null_mask.shift(1, fill_value=False)).cum_sum()
-        gap_id_column_name = f"__GAP_ID_{infill_column}"
+        gap_id_column_name = f"__GAP_ID__{infill_column}"
         df = df.with_columns(gap_id.alias(gap_id_column_name))
 
         # Find start and end times of gaps
@@ -528,43 +532,38 @@ class AltDataDynamic(InfillMethod):
             df.filter(null_mask)
             .group_by(gap_id_column_name)
             .agg(
-                pl.min(time_column_name).alias("gap_start"),
-                pl.max(time_column_name).alias("gap_end"),
+                pl.min(time_column_name).alias("__GAP_START__"),
+                pl.max(time_column_name).alias("__GAP_END__"),
             )
         )
 
-        # Compute correction factors for each gap
-        factors = {}
-        for row in gap_bounds.iter_rows(named=True):
-            gid = row[gap_id_column_name]
-            gap_start = row["gap_start"]
-            gap_end = row["gap_end"]
+        # Build windowed source data - must not overwrite df
+        windowed_df = df.drop(gap_id_column_name).join_where(
+            gap_bounds,
+            pl.col(time_column_name) >= pl.col("__GAP_START__") - window_duration,
+            pl.col(time_column_name) <= pl.col("__GAP_END__") + window_duration,
+        )
 
-            window_df = self._filter_window(
-                window_duration,
-                df,
-                time_column_name,
-                infill_column,
-                alt_data_column_name,
-                gap_start,
-                gap_end,
-            )
-
-            cf = self._compute_correction_factor_for_gap(
-                window_df,
-                infill_column=infill_column,
-                alt_data_column_name=alt_data_column_name,
-                gap_start=gap_start,
-                gap_end=gap_end,
-            )
-
-            if cf is not None:
-                factors[gid] = cf
+        # Define windows either side of each gap
+        windowed_df = self._build_windowed_data(
+            windowed_df,
+            time_column_name,
+            infill_column,
+            alt_data_column_name,
+            gap_id_column_name,
+        )
 
         # Attach correction factors
         cf_column_name = f"__CF__{infill_column}"
-        if factors:
-            cf_df = pl.DataFrame({gap_id_column_name: list(factors.keys()), cf_column_name: list(factors.values())})
+        cf_df = self._build_correction_factors(
+            windowed_df,
+            gap_id_column_name,
+            infill_column,
+            alt_data_column_name,
+            cf_column_name,
+        )
+
+        if cf_df is not None:
             df = df.join(cf_df, on=gap_id_column_name, how="left")
         else:
             df = df.with_columns(pl.lit(None).alias(cf_column_name))
@@ -585,13 +584,28 @@ class AltDataDynamic(InfillMethod):
         return infilled
 
     def _window_duration(self, ctx: InfillCtx) -> timedelta:
-        """Calculate the window duration from the window size and ensure it is valid."""
+        """Resolve self.window_size to a timedelta and validate it against the data periodicity.
+
+        Args:
+            ctx: The infill context, used to obtain the data periodicity.
+
+        Returns:
+            The window duration as a timedelta.
+
+        Raises:
+            ValueError: If window_size cannot be resolved to a timedelta (e.g. a month or year
+                Period), if the window is smaller than the data periodicity, or if the window
+                is too small to satisfy min_threshold.
+        """
         window_size = self.window_size
+        # If window_size is a string, convert to Period type
         if isinstance(window_size, str):
             window_size = Period.of_iso_duration(window_size)
 
+        # Convert window_size to timedelta if not already
         window_duration = window_size.timedelta if isinstance(window_size, Period) else window_size
 
+        # Check window_size gives a valid timedelta
         if window_duration is None:
             raise ValueError(
                 "Window size must be given in days, hours or seconds. Cannot resolve month or year to timedelta."
@@ -601,9 +615,11 @@ class AltDataDynamic(InfillMethod):
         if periodicity.timedelta is None:
             return window_duration
 
+        # window_duration must be greater than or equal to the periodicity of the data.
         if window_duration < periodicity.timedelta:
             raise ValueError("Window size must be greater than periodicity")
 
+        # Check the window duration contains min_threshold number of datapoints
         factor = 1 if self.window_side in ["left", "right"] else 2
         if window_duration * factor < periodicity.timedelta * self.min_threshold:
             raise ValueError(
@@ -613,137 +629,278 @@ class AltDataDynamic(InfillMethod):
 
         return window_duration
 
-    def _filter_window(
+    def _build_windowed_data(
         self,
-        window_duration: timedelta,
-        window_df: pl.DataFrame,
+        df: pl.DataFrame,
         time_column_name: str,
         infill_column: str,
         alt_data_column_name: str,
-        gap_start: datetime,
-        gap_end: datetime,
+        gap_id_column_name: str,
     ) -> pl.DataFrame | None:
-        """
-        Filters the window of data surrounding the missing interval.
-        Null values are removed, and the window is resized based on the following rules:
-        Default: Use all data within window. If none available, return None.
-        If min_threshold is provided, and not enough data is available, return None.
-        If max_threshold is provided, and is less than the datapoints in the window,
-        use up to the max_threshold number of datapoints, with the hierarchy:
-        1. Same number of datapoints either side of gap, up to max_threshold/2 each.
-        2. Different numbers of data points on either side of gap, up to max_threshold total datapoints.
-        3. All datapoints are on one side of gap only, up to max_threshold total datapoints.
-        If window_side is set to "left"/"right", use data only to left/right of gap.
+        """Builds a filtered DataFrame containing only the window data around each gap.
+
+        Removes null rows, optionally restricts to one side of each gap, and applies
+        max and min threshold filtering.
 
         Args:
-            window_df: a segment of the combined original df and alt_data.
-                       the segment contains a window of data either side of the gap, with any null data removed.
-            time_column_name: name of time column, from ctx.time_column_name.
-            infill_column: name of column in original dataset with missing data to be infilled.
-            alt_data_column_name: name of column in alternative dataset to use to infill missing data.
-            gap_start: timestamp indicating the start of the gap in the original dataset.
-            gap_end: timestamp indicating the end of the gap in the original dataset.
+            df: DataFrame with gap IDs and gap bounds already joined.
+            time_column_name: Name of the time column.
+            infill_column: Name of the column to be infilled.
+            alt_data_column_name: Name of the alternative data column.
+            gap_id_column_name: Name of the gap ID column.
 
         Returns:
-            correction_factor (float) or None if gap cannot be filled.
+            Filtered DataFrame with window data for each gap, or None if no data remains
+            after filtering.
         """
-        if self.window_side == "left":
-            side_filter = pl.col(time_column_name) < pl.lit(gap_start)
-        elif self.window_side == "right":
-            side_filter = pl.col(time_column_name) > pl.lit(gap_end)
-        else:
-            # Do not filter if window_side == "both"
-            side_filter = pl.lit(True)
+        # Filter out all null values from both the original and alternative dataset.
+        windowed_df = self._filter_nulls(df, infill_column, alt_data_column_name)
 
-        # Define window around gap.
-        window_df = window_df.filter(
-            (pl.col(time_column_name) >= gap_start - window_duration)
-            & (pl.col(time_column_name) <= gap_end + window_duration)
-            & side_filter
-        ).sort(time_column_name)
+        # Use left or right window only, if window_side is specified.
+        windowed_df = self._filter_side(windowed_df, time_column_name)
 
-        # Filter out any null data from either original or alt datasets within window.
-        window_df = window_df.filter((~pl.col(infill_column).is_null()) & (~pl.col(alt_data_column_name).is_null()))
-
-        # If there is a max_threshold -> trim window.
-        if self.max_threshold is not None and self.max_threshold < window_df.height:
-            # This will automatically be one sided if the side filter has been applied to a single side.
-            before_gap_df = window_df.filter(pl.col(time_column_name) < pl.lit(gap_start))
-            after_gap_df = window_df.filter(pl.col(time_column_name) > pl.lit(gap_end))
-
-            # Same number of datapoints either side of gap
-            if (
-                before_gap_df.height > 0
-                and after_gap_df.height > 0
-                and before_gap_df.height >= math.ceil(self.min_threshold / 2)
-                and after_gap_df.height >= math.ceil(self.min_threshold / 2)
-            ):
-                # Use at most round(max_threshold/2) datapoints each side of the gap
-                datapoints_on_each_side = min(
-                    math.ceil(self.max_threshold / 2), before_gap_df.height, after_gap_df.height
-                )
-                window_df = before_gap_df.tail(datapoints_on_each_side).extend(
-                    after_gap_df.head(datapoints_on_each_side)
-                )
-
-            # Different number of datapoints either side of the gap
-            else:
-                # Identify which side is smaller/larger
-                if before_gap_df.height < after_gap_df.height:
-                    small_side = before_gap_df
-                    large_side = after_gap_df
-                    large_side_slice = large_side.head
-                else:
-                    small_side = after_gap_df
-                    large_side = before_gap_df
-                    large_side_slice = large_side.tail
-
-                # Use at most self.max_threshold datapoints in total
-                remaining = self.max_threshold - small_side.height
-                take_from_large_side = min(remaining, large_side.height)
-                window_df = small_side.extend(large_side_slice(take_from_large_side))
-
-        # Check enough data in window
-        if window_df.is_empty():
-            logger.warning("Window is empty, missing data cannot be infilled.")
-            return None
-        if window_df.height < self.min_threshold:
-            logger.warning(
-                f"Window size: {window_df.height}, is smaller than min_threshold: {self.min_threshold}."
-                "Missing data cannot be infilled."
+        # Trim data if a max_threshold is specified.
+        if self.max_threshold is not None:
+            windowed_df = self._apply_max_threshold(
+                self.max_threshold,
+                windowed_df,
+                gap_id_column_name,
+                time_column_name,
             )
+
+        # Check there is enough data to meet the min_threshold if specified.
+        if self.min_threshold > 0:
+            windowed_df = self._apply_min_threshold(windowed_df, gap_id_column_name)
+
+        # If no data is left after filtering, no windows can be defined.
+        if windowed_df.is_empty():
+            logger.warning("Windows around each gap are empty. No gaps will be infilled.")
             return None
+        else:
+            return windowed_df
 
-        return window_df
-
-    def _compute_correction_factor_for_gap(
+    def _filter_nulls(
         self,
-        window_df: pl.DataFrame | None,
+        df: pl.DataFrame,
         infill_column: str,
         alt_data_column_name: str,
-        gap_start: datetime,
-        gap_end: datetime,
-    ) -> float | None:
-        """
-        Compute correction factor for a single interval of missing data,
-        using a filtered window of data surrounding the missing data.
+    ) -> pl.DataFrame:
+        """Remove rows where either the infill or alternative data column is null.
 
-        Args: window_df: a segment of the combined original df and alt_data.
-                       the segment contains a window of data either side of the gap, with any null data removed.
-                       window_df is guaranteed to have at least the min_threshold of data points, and not be empty.
-            infill_column: name of column in original dataset with missing data to be infilled.
-            alt_data_column_name: name of column in alternative dataset to use to infill missing data.
-            gap_start: timestamp indicating the start of the gap in the original dataset.
-            gap_end: timestamp indicating the end of the gap in the original dataset.
+        Args:
+            df: Input DataFrame.
+            infill_column: Name of the column to be infilled.
+            alt_data_column_name: Name of the alternative data column.
 
-        Returns: The correction factor, a float, or None
+        Returns:
+            DataFrame with rows containing nulls in either value column removed.
         """
-        if window_df is None:
+        return df.filter(pl.col(infill_column).is_not_null() & pl.col(alt_data_column_name).is_not_null())
+
+    def _filter_side(
+        self,
+        windowed_df: pl.DataFrame,
+        time_column_name: str,
+    ) -> pl.DataFrame:
+        """Restrict the window to one side of each gap based on self.window_side.
+
+        Args:
+            windowed_df: Window DataFrame.
+            time_column_name: Name of the time column.
+
+        Returns:
+            DataFrame with rows from the excluded side of each gap removed.
+            Unchanged if self.window_side is "both".
+        """
+        if self.window_side == "left":
+            windowed_df = windowed_df.filter(pl.col(time_column_name) < pl.col("__GAP_START__"))
+        elif self.window_side == "right":
+            windowed_df = windowed_df.filter(pl.col(time_column_name) > pl.col("__GAP_END__"))
+        return windowed_df
+
+    def _apply_max_threshold(
+        self,
+        max_threshold: int,
+        windowed_df: pl.DataFrame,
+        gap_id_column_name: str,
+        time_column_name: str,
+    ) -> pl.DataFrame:
+        """Trim each gap's window to at most max_threshold rows, keeping the closest rows to the gap.
+
+        When both sides of a gap have sufficient data, trims symmetrically so each side
+        contributes at most floor(max_threshold / 2) rows. When one side is smaller,
+        keeps all rows from that side and fills the remainder from the other side.
+
+        Args:
+            max_threshold: Maximum number of data points to use per window.
+            windowed_df: Window DataFrame with gap ID and time columns.
+            gap_id_column_name: Name of the gap ID column.
+            time_column_name: Name of the time column.
+
+        Returns:
+            DataFrame with each gap's window trimmed to at most max_threshold rows.
+        """
+        # Label which rows occur before each gap
+        windowed_df = windowed_df.with_columns(
+            (pl.col(time_column_name) < pl.col("__GAP_START__")).alias("__IS_BEFORE__")
+        )
+        # Count rows in window on each side of each gap
+        windowed_df = windowed_df.with_columns(
+            pl.len().over([gap_id_column_name, "__IS_BEFORE__"]).alias("__SIDE_COUNT__")
+        )
+
+        # Count total rows before, after, and total in window around each gap
+        windowed_df = windowed_df.with_columns(
+            [
+                pl.when(pl.col("__IS_BEFORE__"))
+                .then(pl.col("__SIDE_COUNT__"))
+                .otherwise(0)
+                .max()
+                .over(gap_id_column_name)
+                .alias("__BEFORE_COUNT__"),
+                pl.when(~pl.col("__IS_BEFORE__"))
+                .then(pl.col("__SIDE_COUNT__"))
+                .otherwise(0)
+                .max()
+                .over(gap_id_column_name)
+                .alias("__AFTER_COUNT__"),
+                pl.len().over(gap_id_column_name).alias("__TOTAL_COUNT__"),
+            ]
+        )
+
+        # Rank closest
+        windowed_df = windowed_df.with_columns(
+            pl.when(pl.col("__IS_BEFORE__"))
+            .then(pl.col(time_column_name).rank("ordinal", descending=True).over([gap_id_column_name, "__IS_BEFORE__"]))
+            .otherwise(
+                pl.col(time_column_name).rank("ordinal", descending=False).over([gap_id_column_name, "__IS_BEFORE__"])
+            )
+            .alias("__RANK__")
+        )
+
+        # Track which windows around each gap are symmetric/asymmetric
+        windowed_df = windowed_df.with_columns(
+            [
+                # Track which side is largest/smallest
+                # In a tie, before count wins
+                (pl.col("__BEFORE_COUNT__") > pl.col("__AFTER_COUNT__")).alias("__AFTER_IS_SMALLER__"),
+                # If both sides have at least half the min threshold,
+                # then use same number of datapoints on either side of gap
+                (
+                    (pl.col("__BEFORE_COUNT__") >= math.ceil(self.min_threshold / 2))
+                    & (pl.col("__AFTER_COUNT__") >= math.ceil(self.min_threshold / 2))
+                    & (max_threshold >= 2)
+                ).alias("__SYMMETRIC__"),
+            ]
+        )
+
+        # Trim rows such that only the closest datapoints to each gap,
+        # up to the max_threshold number of datapoints in a window around each gap are used.
+        windowed_df = windowed_df.with_columns(
+            # No trimming needed
+            pl.when(pl.col("__TOTAL_COUNT__") <= max_threshold)
+            .then(pl.col("__SIDE_COUNT__"))
+            # Symmetric: only use up to half of max_threshold number of datapoints on each side of gap
+            .when(pl.col("__SYMMETRIC__"))
+            .then(pl.lit(math.floor(max_threshold / 2)))  # Never zero, symmetric filter ensures max_threshold >=2
+            # If not enough data on each side of gap for windows to be same size,
+            # keep all data in smaller window and trim larger window such that
+            # the total number of datapoints across windows is up to the max_threshold.
+            .when((pl.col("__IS_BEFORE__") != pl.col("__AFTER_IS_SMALLER__")))
+            .then(pl.min_horizontal(pl.col("__SIDE_COUNT__"), max_threshold))
+            .otherwise(pl.lit(max_threshold) - pl.min_horizontal("__BEFORE_COUNT__", "__AFTER_COUNT__", max_threshold))
+            .alias("__FINAL_COUNT__")
+        )
+
+        windowed_df = windowed_df.filter(pl.col("__RANK__") <= pl.col("__FINAL_COUNT__"))
+
+        return windowed_df.drop(
+            [
+                "__IS_BEFORE__",
+                "__SIDE_COUNT__",
+                "__BEFORE_COUNT__",
+                "__AFTER_COUNT__",
+                "__TOTAL_COUNT__",
+                "__SYMMETRIC__",
+                "__RANK__",
+                "__AFTER_IS_SMALLER__",
+                "__FINAL_COUNT__",
+            ]
+        )
+
+    def _apply_min_threshold(
+        self,
+        windowed_df: pl.DataFrame,
+        gap_id_column_name: str,
+    ) -> pl.DataFrame:
+        """Remove gaps whose window contains fewer than self.min_threshold rows.
+
+        Logs a warning listing the gap IDs that are dropped.
+
+        Args:
+            windowed_df: Window DataFrame with gap ID column.
+            gap_id_column_name: Name of the gap ID column.
+
+        Returns:
+            DataFrame with gaps removed whose windows contain below the minimum threshold datapoints.
+        """
+        window_sizes = windowed_df.group_by(gap_id_column_name).agg(pl.len().alias("__COUNT__"))
+        gaps_with_window_below_threshold = window_sizes.filter(pl.col("__COUNT__") < self.min_threshold)[
+            gap_id_column_name
+        ].to_list()
+        if len(gaps_with_window_below_threshold) > 0:
+            logger.warning(
+                f"gap(s): {gaps_with_window_below_threshold} cannot be filled, "
+                f"window size is below min threshold ({self.min_threshold}).",
+            )
+        valid_ids = window_sizes.filter(pl.col("__COUNT__") >= self.min_threshold)[gap_id_column_name]
+        return windowed_df.filter(pl.col(gap_id_column_name).is_in(valid_ids))
+
+    def _build_correction_factors(
+        self,
+        windowed_df: pl.DataFrame | None,
+        gap_id_column_name: str,
+        infill_column: str,
+        alt_data_column_name: str,
+        cf_column_name: str,
+    ) -> pl.DataFrame | None:
+        """Compute a correction factor per gap as sum(infill) / sum(alt_data) over the window.
+
+        Logs a warning for any gap where the alternative data sums to zero, as no
+        correction factor can be computed for those gaps.
+
+        Args:
+            windowed_df: Window DataFrame per gap, or None if no window data is available.
+            gap_id_column_name: Name of the gap ID column.
+            infill_column: Name of the infill column.
+            alt_data_column_name: Name of the alternative data column.
+            cf_column_name: Name to give the correction factor column in the output.
+
+        Returns:
+            DataFrame with one row per gap containing the correction factor, or None if
+            windowed_df is None or no correction factors could be computed.
+        """
+        if windowed_df is None:
             return None
 
-        alt_sum = float(window_df[alt_data_column_name].sum())
-        if alt_sum == 0:
-            logger.warning("alt_sum is zero for gap %s to %s — gap will not be infilled.", gap_start, gap_end)
-            return None
+        infill_sum_column_name = f"__SUM__{infill_column}"
+        alt_sum_column_name = f"__ALT_SUM__{alt_data_column_name}"
 
-        return float(window_df[infill_column].sum()) / alt_sum
+        cf_df = windowed_df.group_by(gap_id_column_name).agg(
+            pl.col(infill_column).sum().alias(infill_sum_column_name),
+            pl.col(alt_data_column_name).sum().alias(alt_sum_column_name),
+        )
+
+        # list gaps where the alt_data sum is zero.
+        zero_alt_sum_gaps = cf_df.filter(pl.col(alt_sum_column_name) == 0)[gap_id_column_name].to_list()
+        if len(zero_alt_sum_gaps) > 0:
+            logger.warning("alt_sum is zero for gap(s) %s and will not be infilled.", zero_alt_sum_gaps)
+
+        cf_df = cf_df.with_columns(
+            pl.when(pl.col(alt_sum_column_name) != 0)
+            .then(pl.col(infill_sum_column_name) / pl.col(alt_sum_column_name))
+            .otherwise(None)
+            .alias(cf_column_name)
+        ).drop([infill_sum_column_name, alt_sum_column_name])
+
+        return cf_df if not cf_df.is_empty() else None

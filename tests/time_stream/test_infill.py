@@ -647,6 +647,15 @@ class TestAltDataDynamic:
         assert infiller_period_days._window_duration(ctx) == timedelta(days=1)
         assert infiller_timedelta_days._window_duration(ctx) == timedelta(days=1)
 
+        # Month/year window size cannot be converted to a fixed timedelta
+        infiller_month = AltDataDynamic(alt_data_column="alt_values", window_size="P1M")
+        with pytest.raises(ValueError, match="Cannot resolve month or year"):
+            infiller_month._window_duration(ctx)
+
+        # When periodicity has no fixed timedelta (e.g. monthly data), skip size validation and return early
+        ctx_monthly = InfillCtx(self.tf.df, self.tf.time_name, Period.of_iso_duration("P1M"))
+        assert infiller_iso_days._window_duration(ctx_monthly) == timedelta(days=1)
+
     def test_window_is_empty(self) -> None:
         """Test that nothing happens if there is no data that can be used within the window around the gap."""
         infiller = AltDataDynamic(alt_data_column="alt_values_all_missing", window_size="P3D")
@@ -775,10 +784,14 @@ class TestAltDataDynamic:
         expected_df = infiller_inline.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
         assert_frame_equal(result_df, expected_df, check_column_order=False)
 
-    def test_min_threshold_greater_than_max_threshold_raises(self) -> None:
-        """Test that min_threshold > max_threshold raises ValueError at construction."""
+    def test_valid_thresholds(self) -> None:
+        """Test that min_threshold > max_threshold raises ValueError at construction.
+        and that max_threshold > 0."""
         with pytest.raises(ValueError):
             AltDataDynamic(alt_data_column="alt_values", window_size="P3D", min_threshold=5, max_threshold=3)
+
+        with pytest.raises(ValueError):
+            AltDataDynamic(alt_data_column="alt_values", window_size="P3D", max_threshold=0)
 
     def test_no_missing_data(self) -> None:
         """Test that nothing happens when there is no missing data."""
@@ -823,4 +836,76 @@ class TestAltDataDynamic:
         expected_df = self.df.with_columns(
             pl.Series("values", [7.6, 82.2, 89.6, None, 91.9, 82.6, 90.0, 25.4, 48.4, 19.6, 46.4, None])
         )
+        assert_frame_equal(result_df, expected_df, check_column_order=False)
+
+    def test_infill_with_max_threshold_one(self) -> None:
+        """Test max_threshold=1 uses exactly one data point per gap.
+
+        max_threshold=1 bypasses the symmetric filter (which requires max_threshold >= 2)
+        and enters the asymmetric branch. Both sides have 2 rows each within the window,
+        so the small-side cap (min(side_count, max_threshold)) ensures only 1 row is kept
+        rather than both before-gap rows. In a tie (equal counts each side), the before-gap
+        row is preferred.
+        """
+        tf = TimeFrame(
+            pl.DataFrame(
+                {
+                    "timestamp": [datetime(2025, 1, d) for d in range(1, 6)],
+                    "values": [10.0, 30.0, None, 80.0, 50.0],
+                    "alt_values": [1.0, 2.0, 5.0, 4.0, 8.0],
+                }
+            ),
+            "timestamp",
+            "P1D",
+        )
+        infiller = AltDataDynamic(alt_data_column="alt_values", window_size="P2D", max_threshold=1)
+        result_df = infiller.apply(tf.df, tf.time_name, tf.periodicity, "values")
+        result_df = result_df.with_columns(pl.col("values").round(1))
+        # Only day 2 is used
+        # CF = 30.0 / 2.0 = 15.0, infilled = 15.0 * 5.0 = 75.0
+        expected_df = tf.df.with_columns(pl.Series("values", [10.0, 30.0, 75.0, 80.0, 50.0]))
+        assert_frame_equal(result_df, expected_df, check_column_order=False)
+
+    def test_infill_gap_not_filled_when_alt_sum_is_zero(self) -> None:
+        """Test that a gap is not infilled when alt_data sums to zero in its window, while a
+        neighboring gap with a non-zero alt_sum is still infilled correctly.
+        """
+        tf = TimeFrame(
+            pl.DataFrame(
+                {
+                    "timestamp": [datetime(2025, 1, d) for d in range(1, 8)],
+                    "values": [1.0, None, 3.0, 4.0, None, 6.0, 7.0],
+                    "alt_values": [2.0, 0.0, -2.0, 4.0, 5.0, 6.0, 7.0],
+                }
+            ),
+            "timestamp",
+            "P1D",
+        )
+        infiller = AltDataDynamic(alt_data_column="alt_values", window_size="P1D")
+        result_df = infiller.apply(tf.df, tf.time_name, tf.periodicity, "values")
+        expected_df = tf.df.with_columns(pl.Series("values", [1.0, None, 3.0, 4.0, 5.0, 6.0, 7.0]))
+        assert_frame_equal(result_df, expected_df, check_column_order=False)
+
+    def test_infill_with_max_threshold_and_one_sided_window(self) -> None:
+        """Test that max_threshold limits data points correctly when combined with window_side."""
+        tf = TimeFrame(
+            pl.DataFrame(
+                {
+                    "timestamp": [datetime(2025, 1, d) for d in range(1, 7)],
+                    "values": [10.0, 20.0, None, 40.0, 50.0, 60.0],
+                    "alt_values": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
+                }
+            ),
+            "timestamp",
+            "P1D",
+        )
+        infiller = AltDataDynamic(
+            alt_data_column="alt_values",
+            window_size="P3D",
+            max_threshold=2,
+            min_threshold=2,
+            window_side="right",
+        )
+        result_df = infiller.apply(tf.df, tf.time_name, tf.periodicity, "values")
+        expected_df = tf.df.with_columns(pl.Series("values", [10.0, 20.0, 30.0, 40.0, 50.0, 60.0]))
         assert_frame_equal(result_df, expected_df, check_column_order=False)
