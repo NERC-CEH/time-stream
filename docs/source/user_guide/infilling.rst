@@ -91,53 +91,67 @@ Infill methods
 The ``infill_method`` parameter lets you choose how missing values are estimated by passing a method name as a string.
 Each method has its strengths, depending on your data. The currently available methods are:
 
-Simple infilling techniques
-~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Alternative data methods
+~~~~~~~~~~~~~~~~~~~~~~~~
 
 ``alt_data``
 ^^^^^^^^^^^^
 :class:`time_stream.infill.AltData`
 
-    **What it does:** Infills using data from an alternative source - either another column in your
-    TimeFrame, or data from a different DataFrame entirely.
+    **What it does:** Infills from an alternative source - either another column in your TimeFrame
+    or a separate DataFrame - applying a single fixed correction factor across the entire column.
 
-    **When to use:** When you have a secondary data source that can stand in for missing values,
-    such as a nearby gauge or a modelled estimate.
+    **When to use:**
+        - When you have a secondary data source that can stand in for missing values, such as a nearby gauge or a
+          modelled estimate
+        - When the relationship between your primary and secondary data is stable and you know (or can estimate) the
+          scaling - for example, a nearby gauge that consistently reads 10% higher.
 
     **Additional args:**
         ``alt_data_column``: The name of the column providing the alternative data.
+
         ``correction_factor``: An optional multiplier to apply to the alternative data (default: 1.0).
+
         ``alt_df``: A separate Polars DataFrame containing the alternative data. If omitted, the
         column is taken from the current TimeFrame.
 
-    **Example usage:** ``tf_filled = tf.infill("alt_data", "flow", alt_data_column="flow_model", alt_df=model_df)``
+    **Example usage:**
+
+        ``tf_filled = tf.infill("alt_data", "flow", alt_data_column="flow_model", alt_df=model_df)``
+
+    See :ref:`alt_data_examples` for a worked example.
 
 ``alt_data_dynamic``
 ^^^^^^^^^^^^^^^^^^^^
 :class:`time_stream.infill.AltDataDynamic`
 
-    **What it does:** Infills using data from an alternative source - either another column in your
-    TimeFrame, or data from a different DataFrame entirely. 
+    **What it does:** Like ``alt_data``, but instead of a fixed correction factor it *calculates*
+    one per gap from the data surrounding it. For each contiguous gap, a time window is defined
+    around the gap and the correction factor is computed as the ratio of the primary data to the
+    alternative data within that window. The alternative data for the missing interval is then
+    scaled by this local factor.
 
-    For each contiguous gap in the original dataset, a time window is defined
-    around the gap. A correction factor is computed as the ratio of the sum of
-    the original data to the sum of the alternative data within this window.
-    The alternative data corresponding to the missing interval is scaled by the
-    correction factor to produce the infilled values.
-
-    **When to use:** When you have a secondary data source that can stand in for missing values,
-    such as a nearby gauge or a modelled estimate.
+    **When to use:**
+        - When you have a secondary data source that can stand in for missing values, such as a nearby gauge or a
+          modelled estimate
+        - When the relationship between the primary and secondary data varies over time and you want the correction to
+          adapt to each gap's local context rather than applying a single global value.
 
     **Additional args:**
         ``alt_data_column``: The name of the column providing the alternative data.
-        ``alt_df``: A separate Polars DataFrame containing the alternative data.
-        If omitted, the column is taken from the current TimeFrame.
+
+        ``alt_df``: A separate Polars DataFrame containing the alternative data. If omitted, the column is taken
+        from the current TimeFrame.
+
         ``window_size``: A period around the missing data to be used to calculate the correction factor,
         as an ISO 8601 duration string, a :class:`~time_stream.Period`, or a :class:`datetime.timedelta`.
+
         ``window_side``: Optional. By default, windows on both sides of the missing data are used to infill.
-        If "left", only data to left of missing data is used to infill. If "right", only data to right of 
+        If "left", only data to left of missing data is used to infill. If "right", only data to right of
         missing data is used to infill.
+
         ``min_threshold``: Minimum number of datapoints to use to calculate the correction factor.
+
         ``max_threshold``: Maximum number of datapoints to use to calculate the correction factor.
 
     **Example usage:**
@@ -154,6 +168,9 @@ Simple infilling techniques
             max_threshold=4,
             window_side="left",
         )
+
+    See :ref:`alt_data_dynamic_examples` for worked examples covering thresholds, one-sided windows,
+    and window size formats.
 
 Polynomial interpolation
 ~~~~~~~~~~~~~~~~~~~~~~~~
@@ -334,6 +351,8 @@ or that remain null because the gap exceeded ``max_gap_size``, are left untouche
 Examples
 ========
 
+.. _alt_data_examples:
+
 Alternative data infilling
 --------------------------
 
@@ -391,6 +410,8 @@ can be used to infill these gaps.
     import examples_infilling
     ts = examples_infilling.alt_data_infill()
 
+.. _alt_data_dynamic_examples:
+
 Alternative data dynamic infilling
 -----------------------------------
 
@@ -443,7 +464,7 @@ One-sided windows
 ~~~~~~~~~~~~~~~~~
 
 By default the correction factor is computed from data on both sides of a gap. Use ``window_side``
-to restrict it to one side only — useful when data quality or availability differs on either side.
+to restrict it to one side only - useful when data quality or availability differs on either side.
 
 **Code:**
 
@@ -465,7 +486,7 @@ Specifying window size
 ~~~~~~~~~~~~~~~~~~~~~~
 
 ``window_size`` accepts an ISO 8601 duration string, a :class:`~time_stream.Period`, or a
-:class:`datetime.timedelta` — all three are equivalent:
+:class:`datetime.timedelta` - all three are equivalent:
 
 .. literalinclude:: ../../../src/time_stream/examples/examples_infilling.py
     :language: python
