@@ -538,10 +538,10 @@ class AltDataDynamic(InfillMethod):
         )
 
         # Filter out all null values from both the original and alternative dataset.
-        windowed_df = df.filter(pl.col(infill_column).is_not_null() & pl.col(alt_data_column_name).is_not_null())
+        filtered_df = df.filter(pl.col(infill_column).is_not_null() & pl.col(alt_data_column_name).is_not_null())
 
         # Build windowed source data - must not overwrite df
-        windowed_df = df.drop(gap_id_column_name).join_where(
+        windowed_df = filtered_df.drop(gap_id_column_name).join_where(
             gap_bounds,
             pl.col(time_column_name) >= pl.col("__GAP_START__") - window_duration,
             pl.col(time_column_name) <= pl.col("__GAP_END__") + window_duration,
