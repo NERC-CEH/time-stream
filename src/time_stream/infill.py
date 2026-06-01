@@ -544,12 +544,13 @@ class AltDataDynamic(InfillMethod):
             pl.col(time_column_name) <= pl.col("__GAP_END__") + window_duration,
         )
 
+        # Filter out all null values from both the original and alternative dataset.
+        windowed_df = df.filter(pl.col(infill_column).is_not_null() & pl.col(alt_data_column_name).is_not_null())
+
         # Define windows either side of each gap
-        windowed_df = self._build_windowed_data(
+        windowed_df = self._build_windowed_df(
             windowed_df,
             time_column_name,
-            infill_column,
-            alt_data_column_name,
             gap_id_column_name,
         )
 
@@ -629,17 +630,15 @@ class AltDataDynamic(InfillMethod):
 
         return window_duration
 
-    def _build_windowed_data(
+    def _build_windowed_df(
         self,
-        df: pl.DataFrame,
+        windowed_df: pl.DataFrame,
         time_column_name: str,
-        infill_column: str,
-        alt_data_column_name: str,
         gap_id_column_name: str,
     ) -> pl.DataFrame | None:
         """Builds a filtered DataFrame containing only the window data around each gap.
 
-        Removes null rows, optionally restricts to one side of each gap, and applies
+        Optionally restricts to one side of each gap, and applies
         max and min threshold filtering.
 
         Args:
@@ -653,9 +652,6 @@ class AltDataDynamic(InfillMethod):
             Filtered DataFrame with window data for each gap, or None if no data remains
             after filtering.
         """
-        # Filter out all null values from both the original and alternative dataset.
-        windowed_df = self._filter_nulls(df, infill_column, alt_data_column_name)
-
         # Use left or right window only, if window_side is specified.
         windowed_df = self._filter_side(windowed_df, time_column_name)
 
@@ -678,24 +674,6 @@ class AltDataDynamic(InfillMethod):
             return None
         else:
             return windowed_df
-
-    def _filter_nulls(
-        self,
-        df: pl.DataFrame,
-        infill_column: str,
-        alt_data_column_name: str,
-    ) -> pl.DataFrame:
-        """Remove rows where either the infill or alternative data column is null.
-
-        Args:
-            df: Input DataFrame.
-            infill_column: Name of the column to be infilled.
-            alt_data_column_name: Name of the alternative data column.
-
-        Returns:
-            DataFrame with rows containing nulls in either value column removed.
-        """
-        return df.filter(pl.col(infill_column).is_not_null() & pl.col(alt_data_column_name).is_not_null())
 
     def _filter_side(
         self,
