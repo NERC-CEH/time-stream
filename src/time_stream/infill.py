@@ -537,15 +537,15 @@ class AltDataDynamic(InfillMethod):
             )
         )
 
+        # Filter out all null values from both the original and alternative dataset.
+        windowed_df = df.filter(pl.col(infill_column).is_not_null() & pl.col(alt_data_column_name).is_not_null())
+
         # Build windowed source data - must not overwrite df
         windowed_df = df.drop(gap_id_column_name).join_where(
             gap_bounds,
             pl.col(time_column_name) >= pl.col("__GAP_START__") - window_duration,
             pl.col(time_column_name) <= pl.col("__GAP_END__") + window_duration,
         )
-
-        # Filter out all null values from both the original and alternative dataset.
-        windowed_df = df.filter(pl.col(infill_column).is_not_null() & pl.col(alt_data_column_name).is_not_null())
 
         # Define windows either side of each gap
         windowed_df = self._build_windowed_df(
@@ -644,8 +644,6 @@ class AltDataDynamic(InfillMethod):
         Args:
             df: DataFrame with gap IDs and gap bounds already joined.
             time_column_name: Name of the time column.
-            infill_column: Name of the column to be infilled.
-            alt_data_column_name: Name of the alternative data column.
             gap_id_column_name: Name of the gap ID column.
 
         Returns:
