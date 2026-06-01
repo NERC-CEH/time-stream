@@ -656,7 +656,6 @@ class AltDataDynamic(InfillMethod):
         # Trim data if a max_threshold is specified.
         if self.max_threshold is not None:
             windowed_df = self._apply_max_threshold(
-                self.max_threshold,
                 windowed_df,
                 gap_id_column_name,
                 time_column_name,
