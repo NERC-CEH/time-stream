@@ -32,7 +32,7 @@ dependencies = [
     "matplotlib>=3.10.9",
     "altair>=6.1.0",
     "pandas>=3.0.3",
-    "sphinx-autodoc-typehints>=3.2.0",
+    "sphinx-autodoc-typehints>=3.10.0",
 ]
 requires-python = ">= 3.12"
 

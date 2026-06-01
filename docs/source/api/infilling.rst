@@ -17,6 +17,7 @@ Infilling methods
     :toctree: _api/
 
     ~AltData
+    ~AltDataDynamic
     ~AkimaInterpolation
     ~BSplineInterpolation
     ~CubicInterpolation
