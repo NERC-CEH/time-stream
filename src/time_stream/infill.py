@@ -541,7 +541,7 @@ class AltDataDynamic(InfillMethod):
         filtered_df = df.filter(pl.col(infill_column).is_not_null() & pl.col(alt_data_column_name).is_not_null())
 
         # Build windowed source data - must not overwrite df
-        windowed_df = filtered_df.drop(gap_id_column_name).join_where(
+        filtered_df = filtered_df.drop(gap_id_column_name).join_where(
             gap_bounds,
             pl.col(time_column_name) >= pl.col("__GAP_START__") - window_duration,
             pl.col(time_column_name) <= pl.col("__GAP_END__") + window_duration,
@@ -549,7 +549,7 @@ class AltDataDynamic(InfillMethod):
 
         # Define windows either side of each gap
         windowed_df = self._build_windowed_df(
-            windowed_df,
+            filtered_df,
             time_column_name,
             gap_id_column_name,
         )
@@ -632,7 +632,7 @@ class AltDataDynamic(InfillMethod):
 
     def _build_windowed_df(
         self,
-        windowed_df: pl.DataFrame,
+        df: pl.DataFrame,
         time_column_name: str,
         gap_id_column_name: str,
     ) -> pl.DataFrame | None:
@@ -651,7 +651,7 @@ class AltDataDynamic(InfillMethod):
             after filtering.
         """
         # Use left or right window only, if window_side is specified.
-        windowed_df = self._filter_side(windowed_df, time_column_name)
+        windowed_df = self._filter_side(df, time_column_name)
 
         # Trim data if a max_threshold is specified.
         if self.max_threshold is not None:
@@ -696,7 +696,6 @@ class AltDataDynamic(InfillMethod):
 
     def _apply_max_threshold(
         self,
-        max_threshold: int,
         windowed_df: pl.DataFrame,
         gap_id_column_name: str,
         time_column_name: str,
@@ -708,7 +707,6 @@ class AltDataDynamic(InfillMethod):
         keeps all rows from that side and fills the remainder from the other side.
 
         Args:
-            max_threshold: Maximum number of data points to use per window.
             windowed_df: Window DataFrame with gap ID and time columns.
             gap_id_column_name: Name of the gap ID column.
             time_column_name: Name of the time column.
@@ -716,6 +714,10 @@ class AltDataDynamic(InfillMethod):
         Returns:
             DataFrame with each gap's window trimmed to at most max_threshold rows.
         """
+        # Return early if max_threshold is not specified
+        if self.max_threshold is None:
+            return windowed_df
+
         # Label which rows occur before each gap
         windowed_df = windowed_df.with_columns(
             (pl.col(time_column_name) < pl.col("__GAP_START__")).alias("__IS_BEFORE__")
@@ -765,7 +767,7 @@ class AltDataDynamic(InfillMethod):
                 (
                     (pl.col("__BEFORE_COUNT__") >= math.ceil(self.min_threshold / 2))
                     & (pl.col("__AFTER_COUNT__") >= math.ceil(self.min_threshold / 2))
-                    & (max_threshold >= 2)
+                    & (self.max_threshold >= 2)
                 ).alias("__SYMMETRIC__"),
             ]
         )
@@ -774,17 +776,20 @@ class AltDataDynamic(InfillMethod):
         # up to the max_threshold number of datapoints in a window around each gap are used.
         windowed_df = windowed_df.with_columns(
             # No trimming needed
-            pl.when(pl.col("__TOTAL_COUNT__") <= max_threshold)
+            pl.when(pl.col("__TOTAL_COUNT__") <= self.max_threshold)
             .then(pl.col("__SIDE_COUNT__"))
             # Symmetric: only use up to half of max_threshold number of datapoints on each side of gap
             .when(pl.col("__SYMMETRIC__"))
-            .then(pl.lit(math.floor(max_threshold / 2)))  # Never zero, symmetric filter ensures max_threshold >=2
+            .then(pl.lit(math.floor(self.max_threshold / 2)))  # Never zero, symmetric filter ensures max_threshold >=2
             # If not enough data on each side of gap for windows to be same size,
             # keep all data in smaller window and trim larger window such that
             # the total number of datapoints across windows is up to the max_threshold.
             .when((pl.col("__IS_BEFORE__") != pl.col("__AFTER_IS_SMALLER__")))
-            .then(pl.min_horizontal(pl.col("__SIDE_COUNT__"), max_threshold))
-            .otherwise(pl.lit(max_threshold) - pl.min_horizontal("__BEFORE_COUNT__", "__AFTER_COUNT__", max_threshold))
+            .then(pl.min_horizontal(pl.col("__SIDE_COUNT__"), self.max_threshold))
+            .otherwise(
+                pl.lit(self.max_threshold)
+                - pl.min_horizontal("__BEFORE_COUNT__", "__AFTER_COUNT__", self.max_threshold)
+            )
             .alias("__FINAL_COUNT__")
         )
 
