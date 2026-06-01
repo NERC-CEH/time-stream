@@ -23,7 +23,7 @@ classifiers = [
 license = { file = "LICENSE" }
 dependencies = [
     "config>=0.5.1",
-    "polars>=1.40.1",
+    "polars>=1.41.1",
     "pyarrow>=24.0.0",
     "pydantic>=2.13.4",
     "isodate",
