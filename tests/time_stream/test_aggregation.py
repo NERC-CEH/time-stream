@@ -33,6 +33,7 @@ from time_stream.exceptions import (
     UnknownRegistryKeyError,
 )
 from time_stream.period import Period
+from time_stream.types import MissingCriteria
 from time_stream.utils import TimeWindow
 
 
@@ -168,7 +169,7 @@ class TestStandardAggregationPipeline:
             ("na", 0),
         ],
     )
-    def test_missing_data_expr_validation_pass(self, criteria: str, threshold: int) -> None:
+    def test_missing_data_expr_validation_pass(self, criteria: MissingCriteria, threshold: int) -> None:
         """Test missing data expression validation that should pass."""
         ctx = self.setup_agg_context()
         columns = ["values"]
@@ -198,7 +199,7 @@ class TestStandardAggregationPipeline:
             ("available", 10.5),
         ],
     )
-    def test_missing_data_expr_validation_fail(self, criteria: str, threshold: int) -> None:
+    def test_missing_data_expr_validation_fail(self, criteria: MissingCriteria, threshold: int) -> None:
         """Test missing data expression validations that should fail."""
         ctx = self.setup_agg_context()
         columns = ["values"]
@@ -1657,7 +1658,7 @@ class TestMissingCriteriaAggregations:
             "available 23",
         ],
     )
-    def test_missing_criteria(self, valid: dict, criteria: tuple[str, float | int] | None) -> None:
+    def test_missing_criteria(self, valid: dict, criteria: tuple[MissingCriteria, float | int] | None) -> None:
         """Test aggregation of time series that has missing data with a various missing criteria"""
         expected_df = generate_expected_df(
             self.timestamps,
