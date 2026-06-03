@@ -7,7 +7,6 @@ import pytest
 from polars.testing import assert_frame_equal
 
 from time_stream import Period
-from time_stream.enums import DuplicateOption, TimeAnchor, ValidationErrorOptions
 from time_stream.exceptions import (
     ColumnNotFoundError,
     ColumnTypeError,
@@ -28,7 +27,7 @@ def tm() -> TimeManager:
     tm._resolution = None  # type: ignore[assignment]
     tm._offset = None
     tm._periodicity = None  # type: ignore[assignment]
-    tm._time_anchor = TimeAnchor.START
+    tm._time_anchor = "start"
     tm._time_name = "time"
 
     return tm
@@ -190,12 +189,12 @@ class TestHandleTimeDuplicates:
     def test_error(self, tm: TimeManager) -> None:
         """Test that the error strategy works as expected"""
         with pytest.raises(DuplicateTimeError):
-            tm._on_duplicates = DuplicateOption.ERROR
+            tm._on_duplicates = "error"
             tm._handle_time_duplicates(self.df)
 
     def test_keep_first(self, tm: TimeManager) -> None:
         """Test that the keep first strategy works as expected"""
-        tm._on_duplicates = DuplicateOption.KEEP_FIRST
+        tm._on_duplicates = "keep_first"
         result = tm._handle_time_duplicates(self.df)
 
         expected = pl.DataFrame(
@@ -222,7 +221,7 @@ class TestHandleTimeDuplicates:
 
     def test_keep_last(self, tm: TimeManager) -> None:
         """Test that the keep last strategy works as expected"""
-        tm._on_duplicates = DuplicateOption.KEEP_LAST
+        tm._on_duplicates = "keep_last"
         result = tm._handle_time_duplicates(self.df)
 
         expected = pl.DataFrame(
@@ -249,7 +248,7 @@ class TestHandleTimeDuplicates:
 
     def test_drop(self, tm: TimeManager) -> None:
         """Test that the drop strategy works as expected"""
-        tm._on_duplicates = DuplicateOption.DROP
+        tm._on_duplicates = "drop"
         result = tm._handle_time_duplicates(self.df)
 
         expected = pl.DataFrame(
@@ -274,7 +273,7 @@ class TestHandleTimeDuplicates:
 
     def test_merge(self, tm: TimeManager) -> None:
         """Test that the merge strategy works as expected"""
-        tm._on_duplicates = DuplicateOption.MERGE
+        tm._on_duplicates = "merge"
         result = tm._handle_time_duplicates(self.df)
 
         expected = pl.DataFrame(
@@ -629,7 +628,7 @@ class TestHandleMisalignedRows:
             resolution=period,
             offset=None,
             periodicity=period,
-            on_misaligned_rows=ValidationErrorOptions.ERROR,
+            on_misaligned_rows="error",
         )
 
         try:
@@ -647,7 +646,7 @@ class TestHandleMisalignedRows:
             resolution=period,
             offset=None,
             periodicity=period,
-            on_misaligned_rows=ValidationErrorOptions.ERROR,
+            on_misaligned_rows="error",
         )
 
         expected_error = f"Time values are not aligned to resolution[+offset]: {period.iso_duration}"
@@ -665,7 +664,7 @@ class TestHandleMisalignedRows:
             resolution=period,
             offset=None,
             periodicity=period,
-            on_misaligned_rows=ValidationErrorOptions.RESOLVE,
+            on_misaligned_rows="resolve",
         )
 
         expected_log_message = (
@@ -703,7 +702,7 @@ class TestHandleMisalignedRows:
             resolution=None,
             offset=None,
             periodicity=None,
-            on_misaligned_rows=ValidationErrorOptions.ERROR,
+            on_misaligned_rows="error",
         )
         try:
             time_manager._remove_misaligned_rows(df)
@@ -735,7 +734,7 @@ class TestHandleMisalignedRows:
             resolution=None,
             offset=None,
             periodicity=None,
-            on_misaligned_rows=ValidationErrorOptions.ERROR,
+            on_misaligned_rows="error",
         )
         try:
             time_manager._handle_misaligned_rows(df)
@@ -772,7 +771,7 @@ class TestHandleMisalignedRows:
             resolution=period,
             offset="+T9H",
             periodicity=period,
-            on_misaligned_rows=ValidationErrorOptions.RESOLVE,
+            on_misaligned_rows="resolve",
         )
 
         expected_log_message = (

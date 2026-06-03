@@ -1,6 +1,7 @@
 from collections.abc import Iterable
+from typing import get_args
 
-from time_stream.enums import DuplicateOption
+from time_stream.types import DuplicateOption
 
 
 class TimeStreamError(Exception):
@@ -34,7 +35,7 @@ class DuplicateTimeError(DuplicateValueError):
         if not msg:
             msg = (
                 f"Duplicate time values found. A TimeFrame must have unique time values. "
-                f"Options for dealing with duplicate rows include: {[o.name for o in DuplicateOption]}."
+                f"Options for dealing with duplicate rows include: {list(get_args(DuplicateOption))}."
             )
         self.duplicates = duplicates
         super().__init__(msg)

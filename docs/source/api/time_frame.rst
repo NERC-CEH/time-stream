@@ -57,6 +57,7 @@ General
     ~TimeFrame.sort_time
     ~TimeFrame.pad
     ~TimeFrame.select
+    ~TimeFrame.rename_time_column
 
 Operations
 ----------

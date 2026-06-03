@@ -46,10 +46,10 @@ from time_stream.aggregation import (
     StandardAggregationPipeline,
 )
 from time_stream.calculations import calculate_min_max_envelope
-from time_stream.enums import ClosedInterval, DuplicateOption, RollingAlignment, TimeAnchor, ValidationErrorOptions
 from time_stream.exceptions import (
     ColumnNotFoundError,
     ColumnTypeError,
+    DuplicateColumnError,
     MetadataError,
 )
 from time_stream.flags.flag_manager import (
@@ -65,6 +65,7 @@ from time_stream.metadata import ColumnMetadataDict
 from time_stream.period import Period
 from time_stream.qc import QCCheck
 from time_stream.time_manager import TimeManager
+from time_stream.types import ClosedInterval, DuplicateOption, RollingAlignment, TimeAnchor, ValidationErrorOptions
 from time_stream.utils import TimeWindow, check_columns_in_dataframe, configure_period_object, pad_time
 
 
@@ -172,9 +173,9 @@ class TimeFrame:
         resolution: Period | str | None = None,
         offset: str | None = None,
         periodicity: Period | str | None = None,
-        time_anchor: TimeAnchor | str = TimeAnchor.START,
-        on_duplicates: DuplicateOption | str = DuplicateOption.ERROR,
-        on_misaligned_rows: ValidationErrorOptions | str = ValidationErrorOptions.ERROR,
+        time_anchor: TimeAnchor = "start",
+        on_duplicates: DuplicateOption = "error",
+        on_misaligned_rows: ValidationErrorOptions = "error",
     ) -> None:
         self._time_manager = TimeManager(
             time_name=time_name,
@@ -701,7 +702,7 @@ class TimeFrame:
         columns: str | list[str] | None = None,
         missing_criteria: tuple[str, float | int] | None = None,
         aggregation_time_anchor: TimeAnchor | None = None,
-        time_window: tuple[time, time] | tuple[time, time, str | ClosedInterval] | TimeWindow | None = None,
+        time_window: tuple[time, time] | tuple[time, time, ClosedInterval] | TimeWindow | None = None,
         **kwargs,
     ) -> TimeFrame:
         """Apply an aggregation function to a column in this TimeFrame, check the aggregation satisfies user
@@ -733,7 +734,7 @@ class TimeFrame:
 
         agg_func = AggregationFunction.get(aggregation_function, **kwargs)
         aggregation_period = configure_period_object(aggregation_period)
-        aggregation_time_anchor = TimeAnchor(aggregation_time_anchor) if aggregation_time_anchor else self.time_anchor
+        aggregation_time_anchor = aggregation_time_anchor if aggregation_time_anchor is not None else self.time_anchor
 
         if not columns:
             columns = self.data_columns
@@ -776,7 +777,7 @@ class TimeFrame:
         aggregation_function: str | Type[AggregationFunction] | AggregationFunction,
         columns: str | list[str] | None = None,
         missing_criteria: tuple[str, float | int] | None = None,
-        alignment: RollingAlignment | str = RollingAlignment.TRAILING,
+        alignment: RollingAlignment = "trailing",
         **kwargs,
     ) -> TimeFrame:
         """Apply a rolling aggregation function to this TimeFrame and return a new TimeFrame with the same
@@ -801,8 +802,7 @@ class TimeFrame:
                 - ``CENTER``: window is centered - ``[t - window_size/2, t + window_size/2]``.
                   Edge effects appear at both ends. Not supported for calendar-based window sizes.
 
-                Accepts a :class:`~time_stream.enums.RollingAlignment` instance or a string
-                (``'trailing'``, ``'leading'``, ``'center'``).
+                Accepts ``'trailing'``, ``'leading'``, or ``'center'``.
             **kwargs: Parameters specific to the aggregation function.
 
         Returns:
@@ -811,7 +811,6 @@ class TimeFrame:
         """
         agg_func = AggregationFunction.get(aggregation_function, **kwargs)
         window_size = configure_period_object(window_size)
-        alignment = RollingAlignment(alignment) if isinstance(alignment, str) else alignment
 
         if not columns:
             columns = self.data_columns
@@ -1026,6 +1025,34 @@ class TimeFrame:
         """
         df_with_min_max = calculate_min_max_envelope(tf=self, columns=columns)
         tf = self.with_df(df_with_min_max)
+
+        return tf
+
+    def rename_time_column(self, new_time_name: str) -> TimeFrame:
+        """Return a new TimeFrame with the time column renamed
+
+        Args:
+            new_time_name: name of new time column
+
+        Returns:
+            TimeFrame: A new copy of the TimeFrame instance with the time name updated to the new time name.
+        """
+        if new_time_name == "":
+            raise ValueError("new_time_name cannot be empty string")
+
+        if new_time_name == self.time_name:
+            return self.copy()
+
+        if new_time_name in self.data_columns:
+            raise DuplicateColumnError(
+                f"new_time_name {new_time_name} is already assigned to a data column name, "
+                "new_time_name must not be the same as any data column names."
+            )
+
+        tf = self.copy()
+        tf._df = tf._df.rename({self.time_name: new_time_name})
+        tf._time_manager._time_name = new_time_name
+        tf._column_metadata.sync()
 
         return tf
 
