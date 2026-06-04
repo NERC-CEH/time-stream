@@ -76,7 +76,7 @@ class AggregationPipeline(ABC):
         ctx: AggregationCtx,
         aggregation_period: Period,
         columns: str | list[str],
-        missing_criteria: tuple[str, float | int] | None = None,
+        missing_criteria: tuple[MissingCriteria, float | int] | None = None,
     ):
         self.agg_func = agg_func
         self.ctx = ctx
@@ -307,7 +307,7 @@ class StandardAggregationPipeline(AggregationPipeline):
         ctx: AggregationCtx,
         aggregation_period: Period,
         columns: str | list[str],
-        missing_criteria: tuple[str, float | int] | None = None,
+        missing_criteria: tuple[MissingCriteria, float | int] | None = None,
         aggregation_time_anchor: TimeAnchor | None = None,
         time_window: TimeWindow | None = None,
     ):
@@ -426,7 +426,7 @@ class RollingAggregationPipeline(AggregationPipeline):
         ctx: AggregationCtx,
         aggregation_period: Period,
         columns: str | list[str],
-        missing_criteria: tuple[str, float | int] | None = None,
+        missing_criteria: tuple[MissingCriteria, float | int] | None = None,
         alignment: RollingAlignment = "trailing",
     ):
         super().__init__(agg_func, ctx, aggregation_period, columns, missing_criteria)
