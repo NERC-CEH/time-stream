@@ -603,7 +603,53 @@ class TestAltDataDynamic:
         result_df = infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
         result_df = result_df.with_columns(pl.col("values").round(1))
         expected_df = self.df.with_columns(
-            pl.Series("values", [7.6, 82.2, 89.6, 51.7, 91.9, 82.6, 90.0, 26.1, 48.4, 19.6, 46.4, None])
+            pl.Series("values", [7.6, 82.2, 89.6, 51.7, 91.9, 82.6, 90.0, 26.1, 48.4, 19.6, 46.4, None]),
+            pl.Series(
+                "__INFILL_META__",
+                [
+                    None,
+                    None,
+                    None,
+                    {
+                        "alt_data_name": "alt_values",
+                        "timestamps": [
+                            datetime(2025, 1, 1, 0, 0),
+                            datetime(2025, 1, 2, 0, 0),
+                            datetime(2025, 1, 3, 0, 0),
+                            datetime(2025, 1, 5, 0, 0),
+                            datetime(2025, 1, 6, 0, 0),
+                            datetime(2025, 1, 7, 0, 0),
+                        ],
+                        "correction_factor": 1.2020037909558623,
+                    },
+                    None,
+                    None,
+                    None,
+                    {
+                        "alt_data_name": "alt_values",
+                        "timestamps": [
+                            datetime(2025, 1, 5, 0, 0),
+                            datetime(2025, 1, 6, 0, 0),
+                            datetime(2025, 1, 7, 0, 0),
+                            datetime(2025, 1, 9, 0, 0),
+                            datetime(2025, 1, 11, 0, 0),
+                        ],
+                        "correction_factor": 1.1988655321988657,
+                    },
+                    None,
+                    {
+                        "alt_data_name": "alt_values",
+                        "timestamps": [
+                            datetime(2025, 1, 7, 0, 0),
+                            datetime(2025, 1, 9, 0, 0),
+                            datetime(2025, 1, 11, 0, 0),
+                        ],
+                        "correction_factor": 1.1586206896551725,
+                    },
+                    None,
+                    None,
+                ],
+            ),
         )
         assert_frame_equal(result_df, expected_df, check_column_order=False)
 
@@ -619,7 +665,41 @@ class TestAltDataDynamic:
         result_df = infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
         result_df = result_df.with_columns(pl.col("values").round(1))
         expected_df = self.df.with_columns(
-            pl.Series("values", [7.6, 82.2, 89.6, None, 91.9, 82.6, 90.0, 25.4, 48.4, 19.6, 46.4, None])
+            pl.Series("values", [7.6, 82.2, 89.6, None, 91.9, 82.6, 90.0, 25.4, 48.4, 19.6, 46.4, None]),
+            pl.Series(
+                "__INFILL_META__",
+                [
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    {
+                        "alt_data_name": "alt_values_some_missing",
+                        "timestamps": [
+                            datetime(2025, 1, 5, 0, 0),
+                            datetime(2025, 1, 7, 0, 0),
+                            datetime(2025, 1, 9, 0, 0),
+                            datetime(2025, 1, 11, 0, 0),
+                        ],
+                        "correction_factor": 1.1630937368642287,
+                    },
+                    None,
+                    {
+                        "alt_data_name": "alt_values_some_missing",
+                        "timestamps": [
+                            datetime(2025, 1, 7, 0, 0),
+                            datetime(2025, 1, 9, 0, 0),
+                            datetime(2025, 1, 11, 0, 0),
+                        ],
+                        "correction_factor": 1.1586206896551725,
+                    },
+                    None,
+                    None,
+                ],
+            ),
         )
         assert_frame_equal(result_df, expected_df, check_column_order=False)
 
@@ -660,7 +740,9 @@ class TestAltDataDynamic:
         """Test that nothing happens if there is no data that can be used within the window around the gap."""
         infiller = AltDataDynamic(alt_data_column="alt_values_all_missing", window_size="P3D")
         result_df = infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
-        expected_df = self.df.with_columns(pl.Series("values", self.df["values"]))
+        expected_df = self.df.with_columns(
+            [pl.Series("values", self.df["values"]), pl.Series("__INFILL_META__", [None for i in range(12)])]
+        )
         assert_frame_equal(result_df, expected_df, check_column_order=False)
 
     def test_valid_window_smaller_than_min_threshold(self) -> None:
@@ -675,7 +757,47 @@ class TestAltDataDynamic:
         result_df = infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
         result_df = result_df.with_columns(pl.col("values").round(1))
         expected_df = self.df.with_columns(
-            pl.Series("values", [7.6, 82.2, 89.6, 51.7, 91.9, 82.6, 90.0, 26.1, 48.4, None, 46.4, None])
+            [
+                pl.Series("values", [7.6, 82.2, 89.6, 51.7, 91.9, 82.6, 90.0, 26.1, 48.4, None, 46.4, None]),
+                pl.Series(
+                    "__INFILL_META__",
+                    [
+                        None,
+                        None,
+                        None,
+                        {
+                            "alt_data_name": "alt_values",
+                            "timestamps": [
+                                datetime(2025, 1, 1, 0, 0),
+                                datetime(2025, 1, 2, 0, 0),
+                                datetime(2025, 1, 3, 0, 0),
+                                datetime(2025, 1, 5, 0, 0),
+                                datetime(2025, 1, 6, 0, 0),
+                                datetime(2025, 1, 7, 0, 0),
+                            ],
+                            "correction_factor": 1.2020037909558623,
+                        },
+                        None,
+                        None,
+                        None,
+                        {
+                            "alt_data_name": "alt_values",
+                            "timestamps": [
+                                datetime(2025, 1, 5, 0, 0),
+                                datetime(2025, 1, 6, 0, 0),
+                                datetime(2025, 1, 7, 0, 0),
+                                datetime(2025, 1, 9, 0, 0),
+                                datetime(2025, 1, 11, 0, 0),
+                            ],
+                            "correction_factor": 1.1988655321988655,
+                        },
+                        None,
+                        None,
+                        None,
+                        None,
+                    ],
+                ),
+            ]
         )
         assert_frame_equal(result_df, expected_df, check_column_order=False)
 
@@ -691,7 +813,52 @@ class TestAltDataDynamic:
         result_df = infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
         result_df = result_df.with_columns(pl.col("values").round(1))
         expected_df = self.df.with_columns(
-            pl.Series("values", [7.6, 82.2, 89.6, 50.6, 91.9, 82.6, 90.0, 26.3, 48.4, 19.6, 46.4, None])
+            [
+                pl.Series("values", [7.6, 82.2, 89.6, 50.6, 91.9, 82.6, 90.0, 26.3, 48.4, 19.6, 46.4, None]),
+                pl.Series(
+                    "__INFILL_META__",
+                    [
+                        None,
+                        None,
+                        None,
+                        {
+                            "alt_data_name": "alt_values",
+                            "timestamps": [
+                                datetime(2025, 1, 2, 0, 0),
+                                datetime(2025, 1, 3, 0, 0),
+                                datetime(2025, 1, 5, 0, 0),
+                                datetime(2025, 1, 6, 0, 0),
+                            ],
+                            "correction_factor": 1.1778911564625851,
+                        },
+                        None,
+                        None,
+                        None,
+                        {
+                            "alt_data_name": "alt_values",
+                            "timestamps": [
+                                datetime(2025, 1, 6, 0, 0),
+                                datetime(2025, 1, 7, 0, 0),
+                                datetime(2025, 1, 9, 0, 0),
+                                datetime(2025, 1, 11, 0, 0),
+                            ],
+                            "correction_factor": 1.2083145051965658,
+                        },
+                        None,
+                        {
+                            "alt_data_name": "alt_values",
+                            "timestamps": [
+                                datetime(2025, 1, 7, 0, 0),
+                                datetime(2025, 1, 9, 0, 0),
+                                datetime(2025, 1, 11, 0, 0),
+                            ],
+                            "correction_factor": 1.1586206896551725,
+                        },
+                        None,
+                        None,
+                    ],
+                ),
+            ]
         )
         assert_frame_equal(result_df, expected_df, check_column_order=False)
 
@@ -714,16 +881,68 @@ class TestAltDataDynamic:
         infiller_symmetric = AltDataDynamic(alt_data_column="alt_values", window_size="P4D", max_threshold=4)
         result_symmetric_df = infiller_symmetric.apply(tf.df, tf.time_name, tf.periodicity, "values")
         result_symmetric_df = result_symmetric_df.with_columns(pl.col("values").round(1))
-        expected_symmetric_df = tf.df.with_columns(  # Uses sum(3.8,4.7,6.5,9.2)/sum(8.2,7.3,5.5,2.8)
-            pl.Series("values", [1.0, 2.9, 3.8, 4.7, 6.5, 6.5, 7.4, 8.3, 9.2, 10.1])
+        expected_symmetric_df = tf.df.with_columns(
+            [  # Uses sum(3.8,4.7,6.5,9.2)/sum(8.2,7.3,5.5,2.8)
+                pl.Series("values", [1.0, 2.9, 3.8, 4.7, 6.5, 6.5, 7.4, 8.3, 9.2, 10.1]),
+                pl.Series(
+                    "__INFILL_META__",
+                    [
+                        None,
+                        None,
+                        None,
+                        None,
+                        {
+                            "alt_data_name": "alt_values",
+                            "timestamps": [
+                                datetime(2025, 1, 3, 0, 0),
+                                datetime(2025, 1, 4, 0, 0),
+                                datetime(2025, 1, 6, 0, 0),
+                                datetime(2025, 1, 9, 0, 0),
+                            ],
+                            "correction_factor": 1.0168067226890756,
+                        },
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                    ],
+                ),
+            ]
         )
         assert_frame_equal(result_symmetric_df, expected_symmetric_df, check_column_order=False)
 
         infiller_asymmetric = AltDataDynamic(alt_data_column="alt_values", window_size="P3D", max_threshold=4)
         result_asymmetric_df = infiller_asymmetric.apply(tf.df, tf.time_name, tf.periodicity, "values")
         result_asymmetric_df = result_asymmetric_df.with_columns(pl.col("values").round(1))
-        expected_asymmetric_df = tf.df.with_columns(  # Uses sum(2.93.8,4.7,6.5)/sum(9.1,8.2,7.3,5.5)
-            pl.Series("values", [1.0, 2.9, 3.8, 4.7, 3.8, 6.5, 7.4, 8.3, 9.2, 10.1])
+        expected_asymmetric_df = tf.df.with_columns(
+            [  # Uses sum(2.93.8,4.7,6.5)/sum(9.1,8.2,7.3,5.5)
+                pl.Series("values", [1.0, 2.9, 3.8, 4.7, 3.8, 6.5, 7.4, 8.3, 9.2, 10.1]),
+                pl.Series(
+                    "__INFILL_META__",
+                    [
+                        None,
+                        None,
+                        None,
+                        None,
+                        {
+                            "alt_data_name": "alt_values",
+                            "timestamps": [
+                                datetime(2025, 1, 2, 0, 0),
+                                datetime(2025, 1, 3, 0, 0),
+                                datetime(2025, 1, 4, 0, 0),
+                                datetime(2025, 1, 6, 0, 0),
+                            ],
+                            "correction_factor": 0.5946843853820597,
+                        },
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                    ],
+                ),
+            ]
         )
         assert_frame_equal(result_asymmetric_df, expected_asymmetric_df, check_column_order=False)
 
@@ -734,14 +953,96 @@ class TestAltDataDynamic:
         infiller_left = AltDataDynamic(alt_data_column="alt_values", window_size="P3D", window_side="left")
         result_left_df = infiller_left.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
         expected_left_df = self.df.with_columns(
-            pl.Series("values", [7.6, 82.2, 89.6, 44.3, 91.9, 82.6, 90.0, 29.5, 48.4, 15.1, 46.4, None])
+            [
+                pl.Series("values", [7.6, 82.2, 89.6, 44.3, 91.9, 82.6, 90.0, 29.5, 48.4, 15.1, 46.4, None]),
+                pl.Series(
+                    "__INFILL_META__",
+                    [
+                        None,
+                        None,
+                        None,
+                        {
+                            "alt_data_name": "alt_values",
+                            "timestamps": [
+                                datetime(2025, 1, 1, 0, 0),
+                                datetime(2025, 1, 2, 0, 0),
+                                datetime(2025, 1, 3, 0, 0),
+                            ],
+                            "correction_factor": 1.0310344827586206,
+                        },
+                        None,
+                        None,
+                        None,
+                        {
+                            "alt_data_name": "alt_values",
+                            "timestamps": [
+                                datetime(2025, 1, 5, 0, 0),
+                                datetime(2025, 1, 6, 0, 0),
+                                datetime(2025, 1, 7, 0, 0),
+                            ],
+                            "correction_factor": 1.354326676907322,
+                        },
+                        None,
+                        {
+                            "alt_data_name": "alt_values",
+                            "timestamps": [
+                                datetime(2025, 1, 7, 0, 0),
+                                datetime(2025, 1, 9, 0, 0),
+                            ],
+                            "correction_factor": 0.8911783644558918,
+                        },
+                        None,
+                        None,
+                    ],
+                ),
+            ]
         )
 
         # right only
         infiller_right = AltDataDynamic(alt_data_column="alt_values", window_size="P3D", window_side="right")
         result_right_df = infiller_right.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
         expected_right_df = self.df.with_columns(
-            pl.Series("values", [7.6, 82.2, 89.6, 58.2, 91.9, 82.6, 90.0, 19.8, 48.4, 186.7, 46.4, None])
+            [
+                pl.Series("values", [7.6, 82.2, 89.6, 58.2, 91.9, 82.6, 90.0, 19.8, 48.4, 186.7, 46.4, None]),
+                pl.Series(
+                    "__INFILL_META__",
+                    [
+                        None,
+                        None,
+                        None,
+                        {
+                            "alt_data_name": "alt_values",
+                            "timestamps": [
+                                datetime(2025, 1, 5, 0, 0),
+                                datetime(2025, 1, 6, 0, 0),
+                                datetime(2025, 1, 7, 0, 0),
+                            ],
+                            "correction_factor": 1.354326676907322,
+                        },
+                        None,
+                        None,
+                        None,
+                        {
+                            "alt_data_name": "alt_values",
+                            "timestamps": [
+                                datetime(2025, 1, 9, 0, 0),
+                                datetime(2025, 1, 11, 0, 0),
+                            ],
+                            "correction_factor": 0.9080459770114941,
+                        },
+                        None,
+                        {
+                            "alt_data_name": "alt_values",
+                            "timestamps": [
+                                datetime(2025, 1, 11, 0, 0),
+                            ],
+                            "correction_factor": 11.047619047619047,
+                        },
+                        None,
+                        None,
+                    ],
+                ),
+            ]
         )
 
         # Both sides
@@ -753,7 +1054,55 @@ class TestAltDataDynamic:
         result_none_df = infiller_none.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
 
         expected_both_df = self.df.with_columns(
-            pl.Series("values", [7.6, 82.2, 89.6, 51.7, 91.9, 82.6, 90.0, 26.1, 48.4, 19.6, 46.4, None])
+            [
+                pl.Series("values", [7.6, 82.2, 89.6, 51.7, 91.9, 82.6, 90.0, 26.1, 48.4, 19.6, 46.4, None]),
+                pl.Series(
+                    "__INFILL_META__",
+                    [
+                        None,
+                        None,
+                        None,
+                        {
+                            "alt_data_name": "alt_values",
+                            "timestamps": [
+                                datetime(2025, 1, 1, 0, 0),
+                                datetime(2025, 1, 2, 0, 0),
+                                datetime(2025, 1, 3, 0, 0),
+                                datetime(2025, 1, 5, 0, 0),
+                                datetime(2025, 1, 6, 0, 0),
+                                datetime(2025, 1, 7, 0, 0),
+                            ],
+                            "correction_factor": 1.2020037909558623,
+                        },
+                        None,
+                        None,
+                        None,
+                        {
+                            "alt_data_name": "alt_values",
+                            "timestamps": [
+                                datetime(2025, 1, 5, 0, 0),
+                                datetime(2025, 1, 6, 0, 0),
+                                datetime(2025, 1, 7, 0, 0),
+                                datetime(2025, 1, 9, 0, 0),
+                                datetime(2025, 1, 11, 0, 0),
+                            ],
+                            "correction_factor": 1.1988655321988655,
+                        },
+                        None,
+                        {
+                            "alt_data_name": "alt_values",
+                            "timestamps": [
+                                datetime(2025, 1, 7, 0, 0),
+                                datetime(2025, 1, 9, 0, 0),
+                                datetime(2025, 1, 11, 0, 0),
+                            ],
+                            "correction_factor": 1.1586206896551725,
+                        },
+                        None,
+                        None,
+                    ],
+                ),
+            ]
         )
 
         assert_frame_equal(
@@ -782,7 +1131,9 @@ class TestAltDataDynamic:
         # Should produce same result as using an inline column
         infiller_inline = AltDataDynamic(alt_data_column="alt_values", window_size="P3D")
         expected_df = infiller_inline.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
-        assert_frame_equal(result_df, expected_df, check_column_order=False)
+        assert_frame_equal(
+            result_df.drop("__INFILL_META__"), expected_df.drop("__INFILL_META__"), check_column_order=False
+        )
 
     def test_valid_thresholds(self) -> None:
         """Test that min_threshold > max_threshold raises ValueError at construction.
@@ -834,7 +1185,39 @@ class TestAltDataDynamic:
         result_df = infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
         result_df = result_df.with_columns(pl.col("values").round(1))
         expected_df = self.df.with_columns(
-            pl.Series("values", [7.6, 82.2, 89.6, None, 91.9, 82.6, 90.0, 25.4, 48.4, 19.6, 46.4, None])
+            [
+                pl.Series("values", [7.6, 82.2, 89.6, None, 91.9, 82.6, 90.0, 25.4, 48.4, 19.6, 46.4, None]),
+                pl.Series(
+                    "__INFILL_META__",
+                    [
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        {
+                            "alt_data_name": "alt_values",
+                            "timestamps": [
+                                datetime(2025, 1, 5),
+                                datetime(2025, 1, 7),
+                                datetime(2025, 1, 9),
+                                datetime(2025, 1, 11),
+                            ],
+                            "correction_factor": 1.1630937368642287,
+                        },
+                        None,
+                        {
+                            "alt_data_name": "alt_values",
+                            "timestamps": [datetime(2025, 1, 7), datetime(2025, 1, 9), datetime(2025, 1, 11)],
+                            "correction_factor": 1.1586206896551725,
+                        },
+                        None,
+                        None,
+                    ],
+                ),
+            ]
         )
         assert_frame_equal(result_df, expected_df, check_column_order=False)
 
@@ -861,9 +1244,26 @@ class TestAltDataDynamic:
         infiller = AltDataDynamic(alt_data_column="alt_values", window_size="P2D", max_threshold=1)
         result_df = infiller.apply(tf.df, tf.time_name, tf.periodicity, "values")
         result_df = result_df.with_columns(pl.col("values").round(1))
-        # Only day 2 is used
-        # CF = 30.0 / 2.0 = 15.0, infilled = 15.0 * 5.0 = 75.0
-        expected_df = tf.df.with_columns(pl.Series("values", [10.0, 30.0, 75.0, 80.0, 50.0]))
+        # Only day 2 is used: CF = 30.0 / 2.0 = 15.0, infilled = 15.0 * 5.0 = 75.0
+        expected_df = tf.df.with_columns(
+            [
+                pl.Series("values", [10.0, 30.0, 75.0, 80.0, 50.0]),
+                pl.Series(
+                    "__INFILL_META__",
+                    [
+                        None,
+                        None,
+                        {
+                            "alt_data_name": "alt_values",
+                            "timestamps": [datetime(2025, 1, 2)],
+                            "correction_factor": 15.0,
+                        },
+                        None,
+                        None,
+                    ],
+                ),
+            ]
+        )
         assert_frame_equal(result_df, expected_df, check_column_order=False)
 
     def test_infill_gap_not_filled_when_alt_sum_is_zero(self) -> None:
@@ -883,7 +1283,32 @@ class TestAltDataDynamic:
         )
         infiller = AltDataDynamic(alt_data_column="alt_values", window_size="P1D")
         result_df = infiller.apply(tf.df, tf.time_name, tf.periodicity, "values")
-        expected_df = tf.df.with_columns(pl.Series("values", [1.0, None, 3.0, 4.0, 5.0, 6.0, 7.0]))
+        expected_df = tf.df.with_columns(
+            [
+                pl.Series("values", [1.0, None, 3.0, 4.0, 5.0, 6.0, 7.0]),
+                pl.Series(
+                    "__INFILL_META__",
+                    [
+                        None,
+                        # Gap 1: alt sums to zero (2.0 + -2.0 = 0), so CF is None
+                        {
+                            "alt_data_name": "alt_values",
+                            "timestamps": [datetime(2025, 1, 1), datetime(2025, 1, 3)],
+                            "correction_factor": None,
+                        },
+                        None,
+                        None,
+                        {
+                            "alt_data_name": "alt_values",
+                            "timestamps": [datetime(2025, 1, 4), datetime(2025, 1, 6)],
+                            "correction_factor": 1.0,
+                        },
+                        None,
+                        None,
+                    ],
+                ),
+            ]
+        )
         assert_frame_equal(result_df, expected_df, check_column_order=False)
 
     def test_infill_with_max_threshold_and_one_sided_window(self) -> None:
@@ -907,5 +1332,26 @@ class TestAltDataDynamic:
             window_side="right",
         )
         result_df = infiller.apply(tf.df, tf.time_name, tf.periodicity, "values")
-        expected_df = tf.df.with_columns(pl.Series("values", [10.0, 20.0, 30.0, 40.0, 50.0, 60.0]))
+        expected_df = tf.df.with_columns(
+            [
+                pl.Series("values", [10.0, 20.0, 30.0, 40.0, 50.0, 60.0]),
+                pl.Series(
+                    "__INFILL_META__",
+                    [
+                        None,
+                        None,
+                        # Right-side only, max_threshold=2: uses Jan 4 and Jan 5 (closest 2 after the gap)
+                        # CF = (40.0 + 50.0) / (4.0 + 5.0) = 10.0
+                        {
+                            "alt_data_name": "alt_values",
+                            "timestamps": [datetime(2025, 1, 4), datetime(2025, 1, 5)],
+                            "correction_factor": 10.0,
+                        },
+                        None,
+                        None,
+                        None,
+                    ],
+                ),
+            ]
+        )
         assert_frame_equal(result_df, expected_df, check_column_order=False)

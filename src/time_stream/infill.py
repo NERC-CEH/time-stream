@@ -126,6 +126,7 @@ class InfillMethodPipeline:
 
         # Apply the specific infill logic from the child class
         df_infilled = self.infill_method._fill(df, self.column, self.ctx)
+        df = df.filter(infill_mask)
         infilled_column = self.infill_method._infilled_column_name(self.column)
 
         # Limit the infilled data to where the infill mask is True
@@ -554,7 +555,7 @@ class AltDataDynamic(InfillMethod):
             gap_id_column_name,
         )
 
-        # Attach correction factors
+        # Calculate correction factors
         cf_column_name = f"__CF__{infill_column}"
         cf_df = self._build_correction_factors(
             windowed_df,
@@ -564,10 +565,45 @@ class AltDataDynamic(InfillMethod):
             cf_column_name,
         )
 
+        # Attach correction factors to original df
         if cf_df is not None:
             df = df.join(cf_df, on=gap_id_column_name, how="left")
         else:
             df = df.with_columns(pl.lit(None).alias(cf_column_name))
+
+        # Record infill metadata
+        if cf_df is not None and windowed_df is not None:
+            timestamps_df = windowed_df.group_by(gap_id_column_name).agg(
+                pl.col(time_column_name).sort().alias("__TIMESTAMPS__")
+            )
+            meta_df = (
+                cf_df.join(timestamps_df, on=gap_id_column_name, how="left")
+                .with_columns(
+                    pl.struct(
+                        pl.lit(self.alt_data_column).alias("alt_data_name"),
+                        pl.col("__TIMESTAMPS__").alias("timestamps"),
+                        pl.col(cf_column_name).alias("correction_factor"),
+                    ).alias("__INFILL_META__")
+                )
+                .select([gap_id_column_name, "__INFILL_META__"])
+            )
+            df = df.join(meta_df, on=gap_id_column_name, how="left")
+        else:
+            df = df.with_columns(pl.lit(None).alias("__INFILL_META__"))
+
+        # Attach infill metadata to original df, excluding leading/trailing gaps
+        not_null_mask = pl.col(infill_column).is_not_null()
+        row_idx = pl.arange(0, pl.len())
+        within_bounds = row_idx.is_between(
+            row_idx.filter(not_null_mask).min(),
+            row_idx.filter(not_null_mask).max(),
+        )
+        df = df.with_columns(
+            pl.when(pl.col(infill_column).is_null() & within_bounds & pl.col(alt_data_column_name).is_not_null())
+            .then(pl.col("__INFILL_META__"))
+            .otherwise(None)
+            .alias("__INFILL_META__")
+        )
 
         # Fill gaps
         infilled = df.with_columns(
