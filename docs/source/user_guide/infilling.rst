@@ -115,6 +115,9 @@ Alternative data methods
         ``alt_df``: A separate Polars DataFrame containing the alternative data. If omitted, the
         column is taken from the current TimeFrame.
 
+        ``alt_dataset_name``: A label for the alternative dataset, recorded in the ``__INFILL_META__``
+        output column (default: ``"dep_ts"``). See :ref:`infill_metadata`.
+
     **Example usage:**
 
         ``tf_filled = tf.infill("alt_data", "flow", alt_data_column="flow_model", alt_df=model_df)``
@@ -142,6 +145,9 @@ Alternative data methods
 
         ``alt_df``: A separate Polars DataFrame containing the alternative data. If omitted, the column is taken
         from the current TimeFrame.
+
+        ``alt_dataset_name``: A label for the alternative dataset, recorded in the ``__INFILL_META__``
+        output column (default: ``"dep_ts"``). See :ref:`infill_metadata`.
 
         ``window_size``: A period around the missing data to be used to calculate the correction factor,
         as an ISO 8601 duration string, a :class:`~time_stream.Period`, or a :class:`datetime.timedelta`.
@@ -348,7 +354,39 @@ the infill. The flag column must already exist - see :doc:`flagging` for how to 
 Only rows whose value changed from null to non-null are flagged; rows that were already populated,
 or that remain null because the gap exceeded ``max_gap_size``, are left untouched.
 
+.. _infill_metadata:
+
+Infill metadata
+---------------
+
+Every time an infill produces at least one filled value, a ``__INFILL_META__`` struct column is
+added to the output DataFrame. Each row that was actually filled carries a struct describing how
+it was infilled; all other rows carry ``null``.
+
+The fields present in the struct depend on the infill method:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 30 70
+
+   * - Infill method
+     - Struct fields
+   * - Interpolation methods (``linear``, ``quadratic``, ``cubic``, ``bspline``, ``pchip``, ``akima``)
+     - ``infill_method`` — method name (e.g. ``"linear"``)
+   * - ``alt_data``
+     - ``infill_method`` — ``"alt_data"``; ``alt_dataset_name`` — the value passed to the constructor
+       (default: ``"dep_ts"``)
+   * - ``alt_data_dynamic``
+     - ``infill_method`` — ``"alt_data_dynamic"``; ``alt_dataset_name`` — the value passed to the
+       constructor (default: ``"dep_ts"``); ``timestamps`` — list of timestamps used to compute the
+       correction factor; ``correction_factor`` — the computed ratio (``null`` if the alternative
+       data summed to zero)
+
+If there is nothing to infill (no gaps, or all gaps are excluded by ``max_gap_size`` /
+``observation_interval``), the ``__INFILL_META__`` column is **not** added to the output.
+
 Examples
+
 ========
 
 .. _alt_data_examples:

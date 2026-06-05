@@ -130,7 +130,6 @@ class InfillMethodPipeline:
 
         # Apply the specific infill logic from the child class
         df_infilled = self.infill_method._fill(df, self.column, self.ctx)
-        df = df.filter(infill_mask)
         infilled_column = self.infill_method._infilled_column_name(self.column)
 
         # Limit the infilled data to where the infill mask is True
