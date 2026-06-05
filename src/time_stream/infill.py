@@ -128,6 +128,10 @@ class InfillMethodPipeline:
             # If not, return the original data
             return self.ctx.df
 
+        # Drop any pre-existing __INFILL_META__ so _fill() doesn't see stale data from a
+        # prior chained infill call, and so the injection check below works correctly.
+        df = df.drop("__INFILL_META__", strict=False)
+
         # Apply the specific infill logic from the child class
         df_infilled = self.infill_method._fill(df, self.column, self.ctx)
         infilled_column = self.infill_method._infilled_column_name(self.column)

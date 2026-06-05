@@ -218,7 +218,9 @@ def all_infills() -> pl.DataFrame:
     for method in methods:
         tf_infilled = tf.infill(method, "original")
         tf_infilled = tf_infilled.with_df(tf_infilled.df.rename({"original": method}))
-        result = result.join(tf_infilled.df, on="time", how="full").drop("time_right")
+        result = result.join(tf_infilled.df.drop("__INFILL_META__", strict=False), on="time", how="full").drop(
+            "time_right"
+        )
 
     with pl.Config(tbl_rows=-1):
         print(result)
