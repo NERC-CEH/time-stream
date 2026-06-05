@@ -48,6 +48,10 @@ class InfillMethod(Operation, ABC):
         """Return the name of the infilled column."""
         return f"{infill_column}_{self.name}"
 
+    def _infill_meta(self) -> dict:
+        """Return metadata dict for this infill method, used to populate __INFILL_META__."""
+        return {"infill_method": self.name}
+
     @abstractmethod
     def _fill(self, df: pl.DataFrame, infill_column: str, ctx: InfillCtx) -> pl.DataFrame:
         """Return the Polars dataframe containing infilled data.
@@ -133,6 +137,17 @@ class InfillMethodPipeline:
         df_infilled = df_infilled.with_columns(
             pl.when(infill_mask).then(pl.col(infilled_column)).otherwise(pl.col(self.column)).alias(infilled_column)
         )
+
+        # Add __INFILL_META__ for methods that don't handle it themselves (e.g. AltDataDynamic)
+        if "__INFILL_META__" not in df_infilled.columns:
+            meta = self.infill_method._infill_meta()
+            meta_struct_expr = pl.struct([pl.lit(v).alias(k) for k, v in meta.items()])
+            df_infilled = df_infilled.with_columns(
+                pl.when(pl.col(self.column).is_null() & infill_mask & pl.col(infilled_column).is_not_null())
+                .then(meta_struct_expr)
+                .otherwise(None)
+                .alias("__INFILL_META__")
+            )
 
         # Do some tidying up of columns, leaving only the original column names
         df_infilled = df_infilled.with_columns(
@@ -376,17 +391,28 @@ class AltData(InfillMethod):
 
     name = "alt_data"
 
-    def __init__(self, alt_data_column: str, correction_factor: float = 1.0, alt_df: pl.DataFrame | None = None):
+    def __init__(
+        self,
+        alt_data_column: str,
+        correction_factor: float = 1.0,
+        alt_df: pl.DataFrame | None = None,
+        alt_dataset_name: str = "dep_ts",
+    ):
         """Initialize the alternative data infill method.
 
         Args:
             alt_data_column: The name of the column providing the alternative data.
             correction_factor: An optional correction factor to apply to the alternative data.
             alt_df: The DataFrame containing the alternative data.
+            alt_dataset_name: Name of the alternative dataset used for infilling. Default: "dep_ts".
         """
         self.alt_data_column = alt_data_column
         self.correction_factor = correction_factor
         self.alt_df = alt_df
+        self.alt_dataset_name = alt_dataset_name
+
+    def _infill_meta(self) -> dict:
+        return {"infill_method": self.name, "alt_dataset_name": self.alt_dataset_name}
 
     def _fill(self, df: pl.DataFrame, infill_column: str, ctx: InfillCtx) -> pl.DataFrame:
         """Fill missing values using data from the alternative column.
@@ -452,6 +478,7 @@ class AltDataDynamic(InfillMethod):
         self,
         alt_data_column: str,
         window_size: str | Period | timedelta,
+        alt_dataset_name: str = "dep_ts",
         alt_df: pl.DataFrame | None = None,
         min_threshold: int = 0,
         max_threshold: int | None = None,
@@ -463,6 +490,7 @@ class AltDataDynamic(InfillMethod):
             alt_data_column: Name of the column providing the alternative data.
             window_size: Time window around each gap used to calculate the correction factor.
                 Accepts an ISO duration string, Period, or timedelta.
+            alt_dataset_name: Name of alternative dataset used for infilling. Default: "dep_ts".
             alt_df: Optional separate DataFrame containing the alternative data. If None,
                 alt_data_column must exist in the DataFrame passed to the infill method.
             min_threshold: Minimum number of data points required in the window to calculate
@@ -478,6 +506,7 @@ class AltDataDynamic(InfillMethod):
             if max_threshold == 0:
                 raise ValueError("max_threshold must be greater than zero.")
 
+        self.alt_dataset_name = alt_dataset_name
         self.alt_data_column = alt_data_column
         self.alt_df = alt_df
         self.window_size = window_size
@@ -580,7 +609,8 @@ class AltDataDynamic(InfillMethod):
                 cf_df.join(timestamps_df, on=gap_id_column_name, how="left")
                 .with_columns(
                     pl.struct(
-                        pl.lit(self.alt_data_column).alias("alt_data_name"),
+                        pl.lit(self.name).alias("infill_method"),
+                        pl.lit(self.alt_dataset_name).alias("alt_dataset_name"),
                         pl.col("__TIMESTAMPS__").alias("timestamps"),
                         pl.col(cf_column_name).alias("correction_factor"),
                     ).alias("__INFILL_META__")

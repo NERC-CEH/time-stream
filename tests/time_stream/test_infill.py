@@ -401,8 +401,13 @@ class TestApply:
         """Test that the apply method works as expected with good data."""
         tf = self.create_tf(df)
         result = interpolator.apply(tf.df, tf.time_name, tf.periodicity, "values")
-        expected = self.create_tf(pl.DataFrame({"values": expected_values}))
-        assert_frame_equal(result, expected.df, check_column_order=False)
+        meta = {"infill_method": interpolator.name}
+        original_nulls = df["values"].is_null().to_list()
+        expected_meta = [meta if null else None for null in original_nulls]
+        expected_df = self.create_tf(pl.DataFrame({"values": expected_values})).df.with_columns(
+            pl.Series("__INFILL_META__", expected_meta)
+        )
+        assert_frame_equal(result, expected_df, check_column_order=False)
 
     @pytest.mark.parametrize(
         "df,max_gap_size,observation_interval",
@@ -464,8 +469,15 @@ class TestApply:
         result = LinearInterpolation().apply(
             tf.df, tf.time_name, tf.periodicity, "values", observation_interval, max_gap_size
         )
-        expected = self.create_tf(pl.DataFrame({"values": expected_values}))
-        assert_frame_equal(result, expected.df, check_column_order=False)
+        original_values = df["values"].to_list()
+        expected_meta = [
+            {"infill_method": "linear"} if orig is None and exp is not None else None
+            for orig, exp in zip(original_values, expected_values)
+        ]
+        expected_df = self.create_tf(pl.DataFrame({"values": expected_values})).df.with_columns(
+            pl.Series("__INFILL_META__", expected_meta)
+        )
+        assert_frame_equal(result, expected_df, check_column_order=False)
 
 
 class TestAltData:
@@ -484,19 +496,26 @@ class TestAltData:
         }
     )
     tf = TimeFrame(df, "timestamp", "P1D")
+    meta = {"infill_method": "alt_data", "alt_dataset_name": "dep_ts"}
 
     def test_alt_data_infill(self) -> None:
         """Test basic infilling from an alternative column."""
         infiller = AltData(alt_data_column="alt_values")
         result_df = infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
-        expected_df = self.df.with_columns(pl.Series("values", [1.0, 20.0, 3.0, 40.0, 5.0]))
+        expected_df = self.df.with_columns(
+            pl.Series("values", [1.0, 20.0, 3.0, 40.0, 5.0]),
+            pl.Series("__INFILL_META__", [None, self.meta, None, self.meta, None]),
+        )
         assert_frame_equal(result_df, expected_df, check_column_order=False)
 
     def test_alt_data_infill_with_correction(self) -> None:
         """Test infilling with a correction factor."""
         infiller = AltData(alt_data_column="alt_values", correction_factor=0.1)
         result_df = infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
-        expected_df = self.df.with_columns(pl.Series("values", [1.0, 2.0, 3.0, 4.0, 5.0]))
+        expected_df = self.df.with_columns(
+            pl.Series("values", [1.0, 2.0, 3.0, 4.0, 5.0]),
+            pl.Series("__INFILL_META__", [None, self.meta, None, self.meta, None]),
+        )
         assert_frame_equal(result_df, expected_df, check_column_order=False)
 
     def test_alt_data_infill_no_missing_data(self) -> None:
@@ -511,7 +530,10 @@ class TestAltData:
         """Test that missing data in the alternative column is not used for infilling."""
         infiller = AltData(alt_data_column="alt_with_missing")
         result_df = infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
-        expected_df = self.df.with_columns(pl.Series("values", [1.0, None, 3.0, 40.0, 5.0]))
+        expected_df = self.df.with_columns(
+            pl.Series("values", [1.0, None, 3.0, 40.0, 5.0]),
+            pl.Series("__INFILL_META__", [None, None, None, self.meta, None]),
+        )
         assert_frame_equal(result_df, expected_df, check_column_order=False)
 
     def test_alt_data_infill_missing_alt_data_column_column(self) -> None:
@@ -530,7 +552,10 @@ class TestAltData:
             "values",
             observation_interval=(datetime(2025, 1, 1), datetime(2025, 1, 2)),
         )
-        expected_df = self.df.with_columns(pl.Series("values", [1.0, 20.0, 3.0, None, 5.0]))
+        expected_df = self.df.with_columns(
+            pl.Series("values", [1.0, 20.0, 3.0, None, 5.0]),
+            pl.Series("__INFILL_META__", [None, self.meta, None, None, None]),
+        )
         assert_frame_equal(result_df, expected_df, check_column_order=False)
 
     def test_alt_data_infill_with_alt_data_provided(self) -> None:
@@ -543,7 +568,10 @@ class TestAltData:
         )
         infiller = AltData(alt_data_column="alt_values_df", alt_df=alt_df)
         result_df = infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
-        expected_df = self.df.with_columns(pl.Series("values", [1.0, 22.0, 3.0, 44.0, 5.0]))
+        expected_df = self.df.with_columns(
+            pl.Series("values", [1.0, 22.0, 3.0, 44.0, 5.0]),
+            pl.Series("__INFILL_META__", [None, self.meta, None, self.meta, None]),
+        )
         assert_frame_equal(result_df, expected_df, check_column_order=False)
 
     def test_alt_data_infill_with_alt_data_missing_time_column(self) -> None:
@@ -571,7 +599,10 @@ class TestAltData:
         infiller = AltData(alt_data_column="values", alt_df=alt_df)
 
         result_df = infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
-        expected_df = self.df.with_columns(pl.Series("values", [1.0, 22.0, 3.0, 44.0, 5.0]))
+        expected_df = self.df.with_columns(
+            pl.Series("values", [1.0, 22.0, 3.0, 44.0, 5.0]),
+            pl.Series("__INFILL_META__", [None, self.meta, None, self.meta, None]),
+        )
         assert_frame_equal(result_df, expected_df, check_column_order=False)
 
 
@@ -611,7 +642,8 @@ class TestAltDataDynamic:
                     None,
                     None,
                     {
-                        "alt_data_name": "alt_values",
+                        "infill_method": "alt_data_dynamic",
+                        "alt_dataset_name": "dep_ts",
                         "timestamps": [
                             datetime(2025, 1, 1, 0, 0),
                             datetime(2025, 1, 2, 0, 0),
@@ -626,7 +658,8 @@ class TestAltDataDynamic:
                     None,
                     None,
                     {
-                        "alt_data_name": "alt_values",
+                        "infill_method": "alt_data_dynamic",
+                        "alt_dataset_name": "dep_ts",
                         "timestamps": [
                             datetime(2025, 1, 5, 0, 0),
                             datetime(2025, 1, 6, 0, 0),
@@ -638,7 +671,8 @@ class TestAltDataDynamic:
                     },
                     None,
                     {
-                        "alt_data_name": "alt_values",
+                        "infill_method": "alt_data_dynamic",
+                        "alt_dataset_name": "dep_ts",
                         "timestamps": [
                             datetime(2025, 1, 7, 0, 0),
                             datetime(2025, 1, 9, 0, 0),
@@ -677,7 +711,8 @@ class TestAltDataDynamic:
                     None,
                     None,
                     {
-                        "alt_data_name": "alt_values_some_missing",
+                        "infill_method": "alt_data_dynamic",
+                        "alt_dataset_name": "dep_ts",
                         "timestamps": [
                             datetime(2025, 1, 5, 0, 0),
                             datetime(2025, 1, 7, 0, 0),
@@ -688,7 +723,8 @@ class TestAltDataDynamic:
                     },
                     None,
                     {
-                        "alt_data_name": "alt_values_some_missing",
+                        "infill_method": "alt_data_dynamic",
+                        "alt_dataset_name": "dep_ts",
                         "timestamps": [
                             datetime(2025, 1, 7, 0, 0),
                             datetime(2025, 1, 9, 0, 0),
@@ -766,7 +802,8 @@ class TestAltDataDynamic:
                         None,
                         None,
                         {
-                            "alt_data_name": "alt_values",
+                            "infill_method": "alt_data_dynamic",
+                            "alt_dataset_name": "dep_ts",
                             "timestamps": [
                                 datetime(2025, 1, 1, 0, 0),
                                 datetime(2025, 1, 2, 0, 0),
@@ -781,7 +818,8 @@ class TestAltDataDynamic:
                         None,
                         None,
                         {
-                            "alt_data_name": "alt_values",
+                            "infill_method": "alt_data_dynamic",
+                            "alt_dataset_name": "dep_ts",
                             "timestamps": [
                                 datetime(2025, 1, 5, 0, 0),
                                 datetime(2025, 1, 6, 0, 0),
@@ -822,7 +860,8 @@ class TestAltDataDynamic:
                         None,
                         None,
                         {
-                            "alt_data_name": "alt_values",
+                            "infill_method": "alt_data_dynamic",
+                            "alt_dataset_name": "dep_ts",
                             "timestamps": [
                                 datetime(2025, 1, 2, 0, 0),
                                 datetime(2025, 1, 3, 0, 0),
@@ -835,7 +874,8 @@ class TestAltDataDynamic:
                         None,
                         None,
                         {
-                            "alt_data_name": "alt_values",
+                            "infill_method": "alt_data_dynamic",
+                            "alt_dataset_name": "dep_ts",
                             "timestamps": [
                                 datetime(2025, 1, 6, 0, 0),
                                 datetime(2025, 1, 7, 0, 0),
@@ -846,7 +886,8 @@ class TestAltDataDynamic:
                         },
                         None,
                         {
-                            "alt_data_name": "alt_values",
+                            "infill_method": "alt_data_dynamic",
+                            "alt_dataset_name": "dep_ts",
                             "timestamps": [
                                 datetime(2025, 1, 7, 0, 0),
                                 datetime(2025, 1, 9, 0, 0),
@@ -892,7 +933,8 @@ class TestAltDataDynamic:
                         None,
                         None,
                         {
-                            "alt_data_name": "alt_values",
+                            "infill_method": "alt_data_dynamic",
+                            "alt_dataset_name": "dep_ts",
                             "timestamps": [
                                 datetime(2025, 1, 3, 0, 0),
                                 datetime(2025, 1, 4, 0, 0),
@@ -926,7 +968,8 @@ class TestAltDataDynamic:
                         None,
                         None,
                         {
-                            "alt_data_name": "alt_values",
+                            "infill_method": "alt_data_dynamic",
+                            "alt_dataset_name": "dep_ts",
                             "timestamps": [
                                 datetime(2025, 1, 2, 0, 0),
                                 datetime(2025, 1, 3, 0, 0),
@@ -962,7 +1005,8 @@ class TestAltDataDynamic:
                         None,
                         None,
                         {
-                            "alt_data_name": "alt_values",
+                            "infill_method": "alt_data_dynamic",
+                            "alt_dataset_name": "dep_ts",
                             "timestamps": [
                                 datetime(2025, 1, 1, 0, 0),
                                 datetime(2025, 1, 2, 0, 0),
@@ -974,7 +1018,8 @@ class TestAltDataDynamic:
                         None,
                         None,
                         {
-                            "alt_data_name": "alt_values",
+                            "infill_method": "alt_data_dynamic",
+                            "alt_dataset_name": "dep_ts",
                             "timestamps": [
                                 datetime(2025, 1, 5, 0, 0),
                                 datetime(2025, 1, 6, 0, 0),
@@ -984,7 +1029,8 @@ class TestAltDataDynamic:
                         },
                         None,
                         {
-                            "alt_data_name": "alt_values",
+                            "infill_method": "alt_data_dynamic",
+                            "alt_dataset_name": "dep_ts",
                             "timestamps": [
                                 datetime(2025, 1, 7, 0, 0),
                                 datetime(2025, 1, 9, 0, 0),
@@ -1011,7 +1057,8 @@ class TestAltDataDynamic:
                         None,
                         None,
                         {
-                            "alt_data_name": "alt_values",
+                            "infill_method": "alt_data_dynamic",
+                            "alt_dataset_name": "dep_ts",
                             "timestamps": [
                                 datetime(2025, 1, 5, 0, 0),
                                 datetime(2025, 1, 6, 0, 0),
@@ -1023,7 +1070,8 @@ class TestAltDataDynamic:
                         None,
                         None,
                         {
-                            "alt_data_name": "alt_values",
+                            "infill_method": "alt_data_dynamic",
+                            "alt_dataset_name": "dep_ts",
                             "timestamps": [
                                 datetime(2025, 1, 9, 0, 0),
                                 datetime(2025, 1, 11, 0, 0),
@@ -1032,7 +1080,8 @@ class TestAltDataDynamic:
                         },
                         None,
                         {
-                            "alt_data_name": "alt_values",
+                            "infill_method": "alt_data_dynamic",
+                            "alt_dataset_name": "dep_ts",
                             "timestamps": [
                                 datetime(2025, 1, 11, 0, 0),
                             ],
@@ -1063,7 +1112,8 @@ class TestAltDataDynamic:
                         None,
                         None,
                         {
-                            "alt_data_name": "alt_values",
+                            "infill_method": "alt_data_dynamic",
+                            "alt_dataset_name": "dep_ts",
                             "timestamps": [
                                 datetime(2025, 1, 1, 0, 0),
                                 datetime(2025, 1, 2, 0, 0),
@@ -1078,7 +1128,8 @@ class TestAltDataDynamic:
                         None,
                         None,
                         {
-                            "alt_data_name": "alt_values",
+                            "infill_method": "alt_data_dynamic",
+                            "alt_dataset_name": "dep_ts",
                             "timestamps": [
                                 datetime(2025, 1, 5, 0, 0),
                                 datetime(2025, 1, 6, 0, 0),
@@ -1090,7 +1141,8 @@ class TestAltDataDynamic:
                         },
                         None,
                         {
-                            "alt_data_name": "alt_values",
+                            "infill_method": "alt_data_dynamic",
+                            "alt_dataset_name": "dep_ts",
                             "timestamps": [
                                 datetime(2025, 1, 7, 0, 0),
                                 datetime(2025, 1, 9, 0, 0),
@@ -1198,7 +1250,8 @@ class TestAltDataDynamic:
                         None,
                         None,
                         {
-                            "alt_data_name": "alt_values",
+                            "infill_method": "alt_data_dynamic",
+                            "alt_dataset_name": "dep_ts",
                             "timestamps": [
                                 datetime(2025, 1, 5),
                                 datetime(2025, 1, 7),
@@ -1209,7 +1262,8 @@ class TestAltDataDynamic:
                         },
                         None,
                         {
-                            "alt_data_name": "alt_values",
+                            "infill_method": "alt_data_dynamic",
+                            "alt_dataset_name": "dep_ts",
                             "timestamps": [datetime(2025, 1, 7), datetime(2025, 1, 9), datetime(2025, 1, 11)],
                             "correction_factor": 1.1586206896551725,
                         },
@@ -1254,7 +1308,8 @@ class TestAltDataDynamic:
                         None,
                         None,
                         {
-                            "alt_data_name": "alt_values",
+                            "infill_method": "alt_data_dynamic",
+                            "alt_dataset_name": "dep_ts",
                             "timestamps": [datetime(2025, 1, 2)],
                             "correction_factor": 15.0,
                         },
@@ -1292,14 +1347,16 @@ class TestAltDataDynamic:
                         None,
                         # Gap 1: alt sums to zero (2.0 + -2.0 = 0), so CF is None
                         {
-                            "alt_data_name": "alt_values",
+                            "infill_method": "alt_data_dynamic",
+                            "alt_dataset_name": "dep_ts",
                             "timestamps": [datetime(2025, 1, 1), datetime(2025, 1, 3)],
                             "correction_factor": None,
                         },
                         None,
                         None,
                         {
-                            "alt_data_name": "alt_values",
+                            "infill_method": "alt_data_dynamic",
+                            "alt_dataset_name": "dep_ts",
                             "timestamps": [datetime(2025, 1, 4), datetime(2025, 1, 6)],
                             "correction_factor": 1.0,
                         },
@@ -1343,7 +1400,8 @@ class TestAltDataDynamic:
                         # Right-side only, max_threshold=2: uses Jan 4 and Jan 5 (closest 2 after the gap)
                         # CF = (40.0 + 50.0) / (4.0 + 5.0) = 10.0
                         {
-                            "alt_data_name": "alt_values",
+                            "infill_method": "alt_data_dynamic",
+                            "alt_dataset_name": "dep_ts",
                             "timestamps": [datetime(2025, 1, 4), datetime(2025, 1, 5)],
                             "correction_factor": 10.0,
                         },
