@@ -141,12 +141,18 @@ class InfillMethodPipeline:
             pl.when(infill_mask).then(pl.col(infilled_column)).otherwise(pl.col(self.column)).alias(infilled_column)
         )
 
-        # Add __INFILL_META__ for methods that don't handle it themselves (e.g. AltDataDynamic)
-        if "__INFILL_META__" not in df_infilled.columns:
+        # For methods that handle __INFILL_META__ themselves (e.g. AltDataDynamic),
+        # remove infill metadata where gap_size > max_gap_size
+        if "__INFILL_META__" in df_infilled.columns:
+            df_infilled = df_infilled.with_columns(
+                pl.when(infill_mask).then(pl.col("__INFILL_META__")).otherwise(None).alias("__INFILL_META__")
+            )
+        # Add __INFILL_META__ for methods that don't handle it themselves
+        else:
             meta = self.infill_method._infill_meta()
             meta_struct_expr = pl.struct([pl.lit(v).alias(k) for k, v in meta.items()])
             df_infilled = df_infilled.with_columns(
-                pl.when(pl.col(self.column).is_null() & infill_mask & pl.col(infilled_column).is_not_null())
+                pl.when(pl.col(self.column).is_null() & pl.col(infilled_column).is_not_null())
                 .then(meta_struct_expr)
                 .otherwise(None)
                 .alias("__INFILL_META__")

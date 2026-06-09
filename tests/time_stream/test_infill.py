@@ -1413,3 +1413,47 @@ class TestAltDataDynamic:
             ]
         )
         assert_frame_equal(result_df, expected_df, check_column_order=False)
+
+    def test_gap_greater_than_max_gap_size(self) -> None:
+        """Test that a gap whose size is greater than max_gap_size does not get infilled,
+        but gaps whose sizes are smaller than max_gap_size do get infilled.
+        """
+        tf = TimeFrame(
+            pl.DataFrame(
+                {
+                    "timestamp": [datetime(2025, 1, d) for d in range(1, 8)],
+                    "values": [10.0, None, None, None, 50.0, None, 70.0],
+                    "alt_values": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0],
+                }
+            ),
+            "timestamp",
+            "P1D",
+        )
+        infiller = AltDataDynamic(
+            alt_data_column="alt_values",
+            window_size="P3D",
+        )
+        result_df = infiller.apply(tf.df, tf.time_name, tf.periodicity, "values", max_gap_size=1)
+        expected_df = tf.df.with_columns(
+            [
+                pl.Series("values", [10.0, None, None, None, 50.0, 60.0, 70.0]),
+                pl.Series(
+                    "__INFILL_META__",
+                    [
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        {
+                            "infill_method": "alt_data_dynamic",
+                            "alt_dataset_name": "dep_ts",
+                            "timestamps": [datetime(2025, 1, 5), datetime(2025, 1, 7)],
+                            "correction_factor": 10.0,
+                        },
+                        None,
+                    ],
+                ),
+            ]
+        )
+        assert_frame_equal(result_df, expected_df, check_column_order=False)
