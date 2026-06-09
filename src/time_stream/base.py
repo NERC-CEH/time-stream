@@ -65,7 +65,14 @@ from time_stream.metadata import ColumnMetadataDict
 from time_stream.period import Period
 from time_stream.qc import QCCheck
 from time_stream.time_manager import TimeManager
-from time_stream.types import ClosedInterval, DuplicateOption, RollingAlignment, TimeAnchor, ValidationErrorOptions
+from time_stream.types import (
+    ClosedInterval,
+    DuplicateOption,
+    MissingCriteria,
+    RollingAlignment,
+    TimeAnchor,
+    ValidationErrorOptions,
+)
 from time_stream.utils import TimeWindow, check_columns_in_dataframe, configure_period_object, pad_time
 
 
@@ -700,7 +707,7 @@ class TimeFrame:
         aggregation_period: Period | str,
         aggregation_function: str | Type[AggregationFunction] | AggregationFunction,
         columns: str | list[str] | None = None,
-        missing_criteria: tuple[str, float | int] | None = None,
+        missing_criteria: tuple[MissingCriteria, float | int] | None = None,
         aggregation_time_anchor: TimeAnchor | None = None,
         time_window: tuple[time, time] | tuple[time, time, ClosedInterval] | TimeWindow | None = None,
         **kwargs,
@@ -776,7 +783,7 @@ class TimeFrame:
         window_size: Period | str,
         aggregation_function: str | Type[AggregationFunction] | AggregationFunction,
         columns: str | list[str] | None = None,
-        missing_criteria: tuple[str, float | int] | None = None,
+        missing_criteria: tuple[MissingCriteria, float | int] | None = None,
         alignment: RollingAlignment = "trailing",
         **kwargs,
     ) -> TimeFrame:

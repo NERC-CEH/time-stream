@@ -4,17 +4,28 @@ build-backend = "hatchling.build"
 
 [project]
 name = "time-stream"
-version = "1.0.0"
+version = "1.1.1"
 description = "Time-Stream: Time Series Toolkit for Rapid Environmental Analysis and Monitoring"
 readme = "README.md"
 authors = [
-    { name = "Dom Ginger", email = "domgin@ceh.ac.uk" },
-    { name = "Nathan Shaw", email = "natsha@ceh.ac.uk" },
+    { name = "Oladimeji Awe", email = "olaawe@ceh.ac.uk" },
     { name = "Lewis Chambers", email = "lewcha@ceh.ac.uk" },
-    { name = "Rod Scott", email = "rjsc@ceh.ac.uk" },
-    { name = "Simon Stanley", email = "simsta@ceh.ac.uk" },
+    { name = "Leanne Durkan", email = "leadur@ceh.ac.uk" },
+    { name = "Dom Ginger", email = "domgin@ceh.ac.uk" },
+    { name = "Samantha Hewkin", email = "samhew@ceh.ac.uk" },
+    { name = "Josh Holland", email = "joshol@ceh.ac.uk" },
+    { name = "Nathan Shaw", email = "natsha@ceh.ac.uk" },
     { name = "Richard Smith", email = "ricsmi@ceh.ac.uk" },
-    { name = "Jonathan Cooper", email = "jcoop@ceh.ac.uk" },
+    { name = "Simon Stanley", email = "simsta@ceh.ac.uk" },
+    { name = "Oliver Swain", email = "os@ceh.ac.uk" },
+]
+maintainers = [
+    { name = "Leanne Durkan", email = "leadur@ceh.ac.uk" },
+    { name = "Dom Ginger", email = "domgin@ceh.ac.uk" },
+    { name = "Samantha Hewkin", email = "samhew@ceh.ac.uk" },
+    { name = "Nathan Shaw", email = "natsha@ceh.ac.uk" },
+    { name = "Richard Smith", email = "ricsmi@ceh.ac.uk" },
+    { name = "Simon Stanley", email = "simsta@ceh.ac.uk" },
 ]
 classifiers = [
 "License :: OSI Approved :: MIT License",
@@ -23,7 +34,7 @@ classifiers = [
 license = { file = "LICENSE" }
 dependencies = [
     "config>=0.5.1",
-    "polars>=1.41.1",
+    "polars>=1.41.2",
     "pyarrow>=24.0.0",
     "pydantic>=2.13.4",
     "isodate",
@@ -153,4 +164,3 @@ markers = ["slow: Marks slow tests"]
 [tool.uv]
 package = true
 default-groups = ["dev"]
-

@@ -39,3 +39,69 @@ jobs:
     with:
       pages_artifact_name: pages-artifact
 
+  release-ready:
+    if: github.event_name == 'pull_request' && github.base_ref == 'main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Check version bump and changelog
+        run: |
+          BASE_VER=$(git show origin/main:pyproject.toml | grep '^version' | sed 's/.*"\(.*\)"/\1/')
+          NEW_VER=$(grep '^version' pyproject.toml | sed 's/.*"\(.*\)"/\1/')
+
+          if [ "$BASE_VER" = "$NEW_VER" ]; then
+            echo "ERROR: merges to main require a version bump (current: $NEW_VER)"
+            exit 1
+          fi
+
+          echo "Version bumped: $BASE_VER -> $NEW_VER"
+
+          CHANGELOG="CHANGELOG/${NEW_VER}.md"
+
+          if [ ! -f "$CHANGELOG" ]; then
+            echo "ERROR: $CHANGELOG not found"
+            exit 1
+          fi
+
+          if grep -q "<!-- Add release notes here -->" "$CHANGELOG"; then
+            echo "ERROR: $CHANGELOG still contains the stub placeholder"
+            exit 1
+          fi
+
+          LINES=$(tail -n +2 "$CHANGELOG" | grep -vc '^$')
+          if [ "$LINES" -eq 0 ]; then
+            echo "ERROR: $CHANGELOG has no content beyond the heading"
+            exit 1
+          fi
+
+          echo "Changelog looks good"
+
+  release:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [test-python]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6.0.2
+
+      - uses: astral-sh/setup-uv@v8.1.0
+
+      - name: Configure git identity
+        run: |
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+
+      - name: Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION=$(grep '^version' pyproject.toml | sed 's/.*"\(.*\)"/\1/')
+          if git ls-remote --tags origin | grep -q "refs/tags/v$VERSION$"; then
+            echo "Tag v$VERSION already exists — skipping release"
+            exit 0
+          fi
+          make release
