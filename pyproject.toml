@@ -41,7 +41,7 @@ dependencies = [
     "numpy",
     "scipy>=1.17.1",
     "matplotlib>=3.10.9",
-    "altair>=6.1.0",
+    "altair>=6.2.1",
     "pandas>=3.0.3",
     "sphinx-autodoc-typehints>=3.10.0",
 ]
