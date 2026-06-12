@@ -1152,8 +1152,9 @@ class TestMultipleInfillMethods:
         assert meta[3] == {"infill_method": "alt_data", "alt_dataset_name": "alt_dataset_name"}
         assert meta[4] == {"infill_method": "alt_data", "alt_dataset_name": "alt_dataset_name"}
         # Gap C filled by alt_data_dynamic — has extra keys
-        assert meta[6]["infill_method"] == "alt_data_dynamic"
-        assert meta[7]["infill_method"] == "alt_data_dynamic"
-        assert meta[8]["infill_method"] == "alt_data_dynamic"
+        for i in (6, 7, 8):
+            gap_meta = meta[i]
+            assert isinstance(gap_meta, dict)
+            assert gap_meta["infill_method"] == "alt_data_dynamic"
         # Non-gap rows have no metadata
         assert all(meta[i] is None for i in [0, 2, 5, 9])
