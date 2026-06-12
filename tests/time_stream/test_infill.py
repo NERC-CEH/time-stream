@@ -1,3 +1,5 @@
+import json
+import logging
 from datetime import datetime, timedelta
 from typing import Any
 from unittest.mock import Mock, patch
@@ -31,6 +33,32 @@ from time_stream.utils import gap_size_count
 
 TIME_COLUMN = "timestamp"
 PERIODICITY = Period.of_days(1)
+
+
+def _meta_series(name: str, values: list) -> pl.Series:
+    """Build an infill metadata Series of JSON strings from a list of dicts/None.
+
+    Datetime values within dicts or lists are serialized to ISO strings so that
+    the result matches what the infill pipeline stores in __INFILL_META__.
+    """
+
+    def _prepare(v: object) -> object:
+        if v is None:
+            return None
+        if isinstance(v, datetime):
+            return v.isoformat()
+        if isinstance(v, dict):
+            return {k: _prepare(val) for k, val in v.items()}
+        if isinstance(v, list):
+            return [_prepare(item) for item in v]
+        return v
+
+    return pl.Series(
+        name,
+        [json.dumps(_prepare(v)) if v is not None else None for v in values],
+        dtype=pl.String,
+    )
+
 
 # Data used through the tests
 LINEAR = pl.DataFrame({"values": [1.0, None, 3.0, None, 5.0]})  # Linear progression
@@ -401,12 +429,7 @@ class TestApply:
         """Test that the apply method works as expected with good data."""
         tf = self.create_tf(df)
         result = interpolator.apply(tf.df, tf.time_name, tf.periodicity, "values")
-        meta = {"infill_method": interpolator.name}
-        original_nulls = df["values"].is_null().to_list()
-        expected_meta = [meta if null else None for null in original_nulls]
-        expected_df = self.create_tf(pl.DataFrame({"values": expected_values})).df.with_columns(
-            pl.Series("__INFILL_META__", expected_meta)
-        )
+        expected_df = self.create_tf(pl.DataFrame({"values": expected_values})).df
         assert_frame_equal(result, expected_df, check_column_order=False)
 
     @pytest.mark.parametrize(
@@ -469,15 +492,20 @@ class TestApply:
         result = LinearInterpolation().apply(
             tf.df, tf.time_name, tf.periodicity, "values", observation_interval, max_gap_size
         )
-        original_values = df["values"].to_list()
-        expected_meta = [
-            {"infill_method": "linear"} if orig is None and exp is not None else None
-            for orig, exp in zip(original_values, expected_values)
-        ]
-        expected_df = self.create_tf(pl.DataFrame({"values": expected_values})).df.with_columns(
-            pl.Series("__INFILL_META__", expected_meta)
-        )
+        expected_df = self.create_tf(pl.DataFrame({"values": expected_values})).df
         assert_frame_equal(result, expected_df, check_column_order=False)
+
+    def test_metadata(self) -> None:
+        """Test that __INFILL_META__ is added with correct content when add_metadata=True."""
+        tf = self.create_tf(LINEAR)
+        result = LinearInterpolation(add_metadata=True).apply(tf.df, tf.time_name, tf.periodicity, "values")
+        assert "__INFILL_META__" in result.columns
+        assert result["__INFILL_META__"].dtype == pl.String
+        expected_meta = _meta_series(
+            "__INFILL_META__",
+            [None, {"infill_method": "linear"}, None, {"infill_method": "linear"}, None],
+        )
+        assert_series_equal(result["__INFILL_META__"], expected_meta)
 
 
 class TestAltData:
@@ -500,51 +528,42 @@ class TestAltData:
 
     def test_alt_data_infill(self) -> None:
         """Test basic infilling from an alternative column."""
-        infiller = AltData(alt_data_column="alt_values")
+        infiller = AltData(alt_data_column="alt_values", alt_dataset_name="dep_ts")
         result_df = infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
-        expected_df = self.df.with_columns(
-            pl.Series("values", [1.0, 20.0, 3.0, 40.0, 5.0]),
-            pl.Series("__INFILL_META__", [None, self.meta, None, self.meta, None]),
-        )
+        expected_df = self.df.with_columns(pl.Series("values", [1.0, 20.0, 3.0, 40.0, 5.0]))
         assert_frame_equal(result_df, expected_df, check_column_order=False)
 
     def test_alt_data_infill_with_correction(self) -> None:
         """Test infilling with a correction factor."""
-        infiller = AltData(alt_data_column="alt_values", correction_factor=0.1)
+        infiller = AltData(alt_data_column="alt_values", correction_factor=0.1, alt_dataset_name="dep_ts")
         result_df = infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
-        expected_df = self.df.with_columns(
-            pl.Series("values", [1.0, 2.0, 3.0, 4.0, 5.0]),
-            pl.Series("__INFILL_META__", [None, self.meta, None, self.meta, None]),
-        )
+        expected_df = self.df.with_columns(pl.Series("values", [1.0, 2.0, 3.0, 4.0, 5.0]))
         assert_frame_equal(result_df, expected_df, check_column_order=False)
 
     def test_alt_data_infill_no_missing_data(self) -> None:
         """Test that nothing happens when there is no missing data."""
         df_complete = self.df.with_columns(pl.Series("values", [1.0, 2.0, 3.0, 4.0, 5.0]))
         tf_complete = TimeFrame(df_complete, "timestamp", "P1D")
-        infiller = AltData(alt_data_column="alt_values")
+        infiller = AltData(alt_data_column="alt_values", alt_dataset_name="dep_ts")
         result_df = infiller.apply(tf_complete.df, tf_complete.time_name, tf_complete.periodicity, "values")
         assert_frame_equal(result_df, tf_complete.df, check_column_order=False)
 
     def test_alt_data_infill_missing_alt_data(self) -> None:
         """Test that missing data in the alternative column is not used for infilling."""
-        infiller = AltData(alt_data_column="alt_with_missing")
+        infiller = AltData(alt_data_column="alt_with_missing", alt_dataset_name="dep_ts")
         result_df = infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
-        expected_df = self.df.with_columns(
-            pl.Series("values", [1.0, None, 3.0, 40.0, 5.0]),
-            pl.Series("__INFILL_META__", [None, None, None, self.meta, None]),
-        )
+        expected_df = self.df.with_columns(pl.Series("values", [1.0, None, 3.0, 40.0, 5.0]))
         assert_frame_equal(result_df, expected_df, check_column_order=False)
 
     def test_alt_data_infill_missing_alt_data_column_column(self) -> None:
         """Test that an error is raised if the alt_data_column column is missing."""
-        infiller = AltData(alt_data_column="non_existent_column")
+        infiller = AltData(alt_data_column="non_existent_column", alt_dataset_name="dep_ts")
         with pytest.raises(ColumnNotFoundError):
             infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
 
     def test_alt_data_infill_restricting_date_range(self) -> None:
         """Test that only data in the observation_interval is infilled."""
-        infiller = AltData(alt_data_column="alt_values")
+        infiller = AltData(alt_data_column="alt_values", alt_dataset_name="dep_ts")
         result_df = infiller.apply(
             self.tf.df,
             self.tf.time_name,
@@ -552,10 +571,7 @@ class TestAltData:
             "values",
             observation_interval=(datetime(2025, 1, 1), datetime(2025, 1, 2)),
         )
-        expected_df = self.df.with_columns(
-            pl.Series("values", [1.0, 20.0, 3.0, None, 5.0]),
-            pl.Series("__INFILL_META__", [None, self.meta, None, None, None]),
-        )
+        expected_df = self.df.with_columns(pl.Series("values", [1.0, 20.0, 3.0, None, 5.0]))
         assert_frame_equal(result_df, expected_df, check_column_order=False)
 
     def test_alt_data_infill_with_alt_data_provided(self) -> None:
@@ -566,25 +582,22 @@ class TestAltData:
                 "alt_values_df": [11.0, 22.0, 33.0, 44.0, 55.0],
             }
         )
-        infiller = AltData(alt_data_column="alt_values_df", alt_df=alt_df)
+        infiller = AltData(alt_data_column="alt_values_df", alt_df=alt_df, alt_dataset_name="dep_ts")
         result_df = infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
-        expected_df = self.df.with_columns(
-            pl.Series("values", [1.0, 22.0, 3.0, 44.0, 5.0]),
-            pl.Series("__INFILL_META__", [None, self.meta, None, self.meta, None]),
-        )
+        expected_df = self.df.with_columns(pl.Series("values", [1.0, 22.0, 3.0, 44.0, 5.0]))
         assert_frame_equal(result_df, expected_df, check_column_order=False)
 
     def test_alt_data_infill_with_alt_data_missing_time_column(self) -> None:
         """Test error when provided alt_data is missing the time column."""
         alt_df = pl.DataFrame({"alt_values_df": [11.0, 22.0, 33.0, 44.0, 55.0]})
-        infiller = AltData(alt_data_column="alt_values", alt_df=alt_df)
+        infiller = AltData(alt_data_column="alt_values", alt_df=alt_df, alt_dataset_name="dep_ts")
         with pytest.raises(ColumnNotFoundError):
             infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
 
     def test_alt_data_infill_with_alt_data_missing_data_column(self) -> None:
         """Test error when provided alt_data is missing the data column."""
         alt_df = pl.DataFrame({"time": self.df["timestamp"]})
-        infiller = AltData(alt_data_column="non_existent_column", alt_df=alt_df)
+        infiller = AltData(alt_data_column="non_existent_column", alt_df=alt_df, alt_dataset_name="dep_ts")
         with pytest.raises(ColumnNotFoundError):
             infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
 
@@ -596,14 +609,23 @@ class TestAltData:
                 "values": [11.0, 22.0, 33.0, 44.0, 55.0],
             }
         )
-        infiller = AltData(alt_data_column="values", alt_df=alt_df)
+        infiller = AltData(alt_data_column="values", alt_df=alt_df, alt_dataset_name="dep_ts")
 
         result_df = infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
-        expected_df = self.df.with_columns(
-            pl.Series("values", [1.0, 22.0, 3.0, 44.0, 5.0]),
-            pl.Series("__INFILL_META__", [None, self.meta, None, self.meta, None]),
-        )
+        expected_df = self.df.with_columns(pl.Series("values", [1.0, 22.0, 3.0, 44.0, 5.0]))
         assert_frame_equal(result_df, expected_df, check_column_order=False)
+
+    def test_metadata(self) -> None:
+        """Test that __INFILL_META__ is added with correct content when add_metadata=True."""
+        infiller = AltData(alt_data_column="alt_values", alt_dataset_name="dep_ts", add_metadata=True)
+        result_df = infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
+        assert "__INFILL_META__" in result_df.columns
+        assert result_df["__INFILL_META__"].dtype == pl.String
+        expected_meta = _meta_series(
+            "__INFILL_META__",
+            [None, self.meta, None, self.meta, None],
+        )
+        assert_series_equal(result_df["__INFILL_META__"], expected_meta)
 
 
 class TestAltDataDynamic:
@@ -630,60 +652,11 @@ class TestAltDataDynamic:
         Gap 2 and 3: The window around a gap has some missing data.
         Gap 4: A gap is at the edge of the dataset and data remains null.
         """
-        infiller = AltDataDynamic(alt_data_column="alt_values", window_size="P3D")
+        infiller = AltDataDynamic(alt_data_column="alt_values", window_size="P3D", alt_dataset_name="dep_ts")
         result_df = infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
         result_df = result_df.with_columns(pl.col("values").round(1))
         expected_df = self.df.with_columns(
-            pl.Series("values", [7.6, 82.2, 89.6, 51.7, 91.9, 82.6, 90.0, 26.1, 48.4, 19.6, 46.4, None]),
-            pl.Series(
-                "__INFILL_META__",
-                [
-                    None,
-                    None,
-                    None,
-                    {
-                        "infill_method": "alt_data_dynamic",
-                        "alt_dataset_name": "dep_ts",
-                        "timestamps": [
-                            datetime(2025, 1, 1, 0, 0),
-                            datetime(2025, 1, 2, 0, 0),
-                            datetime(2025, 1, 3, 0, 0),
-                            datetime(2025, 1, 5, 0, 0),
-                            datetime(2025, 1, 6, 0, 0),
-                            datetime(2025, 1, 7, 0, 0),
-                        ],
-                        "correction_factor": 1.2020037909558623,
-                    },
-                    None,
-                    None,
-                    None,
-                    {
-                        "infill_method": "alt_data_dynamic",
-                        "alt_dataset_name": "dep_ts",
-                        "timestamps": [
-                            datetime(2025, 1, 5, 0, 0),
-                            datetime(2025, 1, 6, 0, 0),
-                            datetime(2025, 1, 7, 0, 0),
-                            datetime(2025, 1, 9, 0, 0),
-                            datetime(2025, 1, 11, 0, 0),
-                        ],
-                        "correction_factor": 1.1988655321988657,
-                    },
-                    None,
-                    {
-                        "infill_method": "alt_data_dynamic",
-                        "alt_dataset_name": "dep_ts",
-                        "timestamps": [
-                            datetime(2025, 1, 7, 0, 0),
-                            datetime(2025, 1, 9, 0, 0),
-                            datetime(2025, 1, 11, 0, 0),
-                        ],
-                        "correction_factor": 1.1586206896551725,
-                    },
-                    None,
-                    None,
-                ],
-            ),
+            pl.Series("values", [7.6, 82.2, 89.6, 51.7, 91.9, 82.6, 90.0, 26.1, 48.4, 19.6, 46.4, None])
         )
         assert_frame_equal(result_df, expected_df, check_column_order=False)
 
@@ -695,65 +668,57 @@ class TestAltDataDynamic:
         1. alt_values_some_missing has data missing inside the window around a gap.
         2. alt_values_some_missing has a value missing in the gap.
         """
-        infiller = AltDataDynamic(alt_data_column="alt_values_some_missing", window_size="P3D")
+        infiller = AltDataDynamic(
+            alt_data_column="alt_values_some_missing",
+            window_size="P3D",
+            alt_dataset_name="dep_ts",
+        )
         result_df = infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
         result_df = result_df.with_columns(pl.col("values").round(1))
         expected_df = self.df.with_columns(
-            pl.Series("values", [7.6, 82.2, 89.6, None, 91.9, 82.6, 90.0, 25.4, 48.4, 19.6, 46.4, None]),
-            pl.Series(
-                "__INFILL_META__",
-                [
-                    None,
-                    None,
-                    None,
-                    None,
-                    None,
-                    None,
-                    None,
-                    {
-                        "infill_method": "alt_data_dynamic",
-                        "alt_dataset_name": "dep_ts",
-                        "timestamps": [
-                            datetime(2025, 1, 5, 0, 0),
-                            datetime(2025, 1, 7, 0, 0),
-                            datetime(2025, 1, 9, 0, 0),
-                            datetime(2025, 1, 11, 0, 0),
-                        ],
-                        "correction_factor": 1.1630937368642287,
-                    },
-                    None,
-                    {
-                        "infill_method": "alt_data_dynamic",
-                        "alt_dataset_name": "dep_ts",
-                        "timestamps": [
-                            datetime(2025, 1, 7, 0, 0),
-                            datetime(2025, 1, 9, 0, 0),
-                            datetime(2025, 1, 11, 0, 0),
-                        ],
-                        "correction_factor": 1.1586206896551725,
-                    },
-                    None,
-                    None,
-                ],
-            ),
+            pl.Series("values", [7.6, 82.2, 89.6, None, 91.9, 82.6, 90.0, 25.4, 48.4, 19.6, 46.4, None])
         )
         assert_frame_equal(result_df, expected_df, check_column_order=False)
 
     def test_valid_window_size(self) -> None:
         """Test window size smaller than periodicity raises an error."""
-        infiller = AltDataDynamic(alt_data_column="alt_values", window_size="PT1H")
+        infiller = AltDataDynamic(alt_data_column="alt_values", window_size="PT1H", alt_dataset_name="dep_ts")
         with pytest.raises(ValueError):
             infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
 
     def test_window_duration_parser(self) -> None:
         """Test different inputs for window are parsed correctly as a duration,
         and that a window can be entered as an iso string, Period, or timedelta."""
-        infiller_iso_hours = AltDataDynamic(alt_data_column="alt_values", window_size="PT1H")
-        infiller_period_hours = AltDataDynamic(alt_data_column="alt_values", window_size=Period.of_hours(1))
-        infiller_timedelta_hours = AltDataDynamic(alt_data_column="alt_values", window_size=timedelta(hours=1))
-        infiller_iso_days = AltDataDynamic(alt_data_column="alt_values", window_size="P1D")
-        infiller_period_days = AltDataDynamic(alt_data_column="alt_values", window_size=Period.of_days(1))
-        infiller_timedelta_days = AltDataDynamic(alt_data_column="alt_values", window_size=timedelta(days=1))
+        infiller_iso_hours = AltDataDynamic(
+            alt_data_column="alt_values",
+            window_size="PT1H",
+            alt_dataset_name="dep_ts",
+        )
+        infiller_period_hours = AltDataDynamic(
+            alt_data_column="alt_values",
+            window_size=Period.of_hours(1),
+            alt_dataset_name="dep_ts",
+        )
+        infiller_timedelta_hours = AltDataDynamic(
+            alt_data_column="alt_values",
+            window_size=timedelta(hours=1),
+            alt_dataset_name="dep_ts",
+        )
+        infiller_iso_days = AltDataDynamic(
+            alt_data_column="alt_values",
+            window_size="P1D",
+            alt_dataset_name="dep_ts",
+        )
+        infiller_period_days = AltDataDynamic(
+            alt_data_column="alt_values",
+            window_size=Period.of_days(1),
+            alt_dataset_name="dep_ts",
+        )
+        infiller_timedelta_days = AltDataDynamic(
+            alt_data_column="alt_values",
+            window_size=timedelta(days=1),
+            alt_dataset_name="dep_ts",
+        )
 
         ctx = InfillCtx(self.tf.df, self.tf.time_name, Period.of_hours(1))
         assert infiller_iso_hours._window_duration(ctx) == timedelta(hours=1)
@@ -764,7 +729,7 @@ class TestAltDataDynamic:
         assert infiller_timedelta_days._window_duration(ctx) == timedelta(days=1)
 
         # Month/year window size cannot be converted to a fixed timedelta
-        infiller_month = AltDataDynamic(alt_data_column="alt_values", window_size="P1M")
+        infiller_month = AltDataDynamic(alt_data_column="alt_values", window_size="P1M", alt_dataset_name="dep_ts")
         with pytest.raises(ValueError, match="Cannot resolve month or year"):
             infiller_month._window_duration(ctx)
 
@@ -774,68 +739,37 @@ class TestAltDataDynamic:
 
     def test_window_is_empty(self) -> None:
         """Test that nothing happens if there is no data that can be used within the window around the gap."""
-        infiller = AltDataDynamic(alt_data_column="alt_values_all_missing", window_size="P3D")
-        result_df = infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
-        expected_df = self.df.with_columns(
-            [pl.Series("values", self.df["values"]), pl.Series("__INFILL_META__", [None for i in range(12)])]
+        infiller = AltDataDynamic(
+            alt_data_column="alt_values_all_missing",
+            window_size="P3D",
+            alt_dataset_name="dep_ts",
         )
-        assert_frame_equal(result_df, expected_df, check_column_order=False)
+        result_df = infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
+        assert_frame_equal(result_df, self.df, check_column_order=False)
 
     def test_valid_window_smaller_than_min_threshold(self) -> None:
         """Test window size smaller than min_threshold raises error."""
-        infiller = AltDataDynamic(alt_data_column="alt_values", window_size="P3D", min_threshold=10)
+        infiller = AltDataDynamic(
+            alt_data_column="alt_values",
+            window_size="P3D",
+            min_threshold=10,
+            alt_dataset_name="dep_ts",
+        )
         with pytest.raises(ValueError):
             infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
 
     def test_infill_with_min_threshold(self) -> None:
         """Test infilling from an alternative column, with min_threshold specified, and max_threshold is None."""
-        infiller = AltDataDynamic(alt_data_column="alt_values", window_size="P3D", min_threshold=4)
+        infiller = AltDataDynamic(
+            alt_data_column="alt_values",
+            window_size="P3D",
+            min_threshold=4,
+            alt_dataset_name="dep_ts",
+        )
         result_df = infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
         result_df = result_df.with_columns(pl.col("values").round(1))
         expected_df = self.df.with_columns(
-            [
-                pl.Series("values", [7.6, 82.2, 89.6, 51.7, 91.9, 82.6, 90.0, 26.1, 48.4, None, 46.4, None]),
-                pl.Series(
-                    "__INFILL_META__",
-                    [
-                        None,
-                        None,
-                        None,
-                        {
-                            "infill_method": "alt_data_dynamic",
-                            "alt_dataset_name": "dep_ts",
-                            "timestamps": [
-                                datetime(2025, 1, 1, 0, 0),
-                                datetime(2025, 1, 2, 0, 0),
-                                datetime(2025, 1, 3, 0, 0),
-                                datetime(2025, 1, 5, 0, 0),
-                                datetime(2025, 1, 6, 0, 0),
-                                datetime(2025, 1, 7, 0, 0),
-                            ],
-                            "correction_factor": 1.2020037909558623,
-                        },
-                        None,
-                        None,
-                        None,
-                        {
-                            "infill_method": "alt_data_dynamic",
-                            "alt_dataset_name": "dep_ts",
-                            "timestamps": [
-                                datetime(2025, 1, 5, 0, 0),
-                                datetime(2025, 1, 6, 0, 0),
-                                datetime(2025, 1, 7, 0, 0),
-                                datetime(2025, 1, 9, 0, 0),
-                                datetime(2025, 1, 11, 0, 0),
-                            ],
-                            "correction_factor": 1.1988655321988655,
-                        },
-                        None,
-                        None,
-                        None,
-                        None,
-                    ],
-                ),
-            ]
+            pl.Series("values", [7.6, 82.2, 89.6, 51.7, 91.9, 82.6, 90.0, 26.1, 48.4, None, 46.4, None])
         )
         assert_frame_equal(result_df, expected_df, check_column_order=False)
 
@@ -847,59 +781,16 @@ class TestAltDataDynamic:
         Gap3: tests max_threshold > window_df.height.
         Gap4: Remains None as _infill_mask ensures edges are not infilled.
         """
-        infiller = AltDataDynamic(alt_data_column="alt_values", window_size="P3D", max_threshold=4)
+        infiller = AltDataDynamic(
+            alt_data_column="alt_values",
+            window_size="P3D",
+            max_threshold=4,
+            alt_dataset_name="dep_ts",
+        )
         result_df = infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
         result_df = result_df.with_columns(pl.col("values").round(1))
         expected_df = self.df.with_columns(
-            [
-                pl.Series("values", [7.6, 82.2, 89.6, 50.6, 91.9, 82.6, 90.0, 26.3, 48.4, 19.6, 46.4, None]),
-                pl.Series(
-                    "__INFILL_META__",
-                    [
-                        None,
-                        None,
-                        None,
-                        {
-                            "infill_method": "alt_data_dynamic",
-                            "alt_dataset_name": "dep_ts",
-                            "timestamps": [
-                                datetime(2025, 1, 2, 0, 0),
-                                datetime(2025, 1, 3, 0, 0),
-                                datetime(2025, 1, 5, 0, 0),
-                                datetime(2025, 1, 6, 0, 0),
-                            ],
-                            "correction_factor": 1.1778911564625851,
-                        },
-                        None,
-                        None,
-                        None,
-                        {
-                            "infill_method": "alt_data_dynamic",
-                            "alt_dataset_name": "dep_ts",
-                            "timestamps": [
-                                datetime(2025, 1, 6, 0, 0),
-                                datetime(2025, 1, 7, 0, 0),
-                                datetime(2025, 1, 9, 0, 0),
-                                datetime(2025, 1, 11, 0, 0),
-                            ],
-                            "correction_factor": 1.2083145051965658,
-                        },
-                        None,
-                        {
-                            "infill_method": "alt_data_dynamic",
-                            "alt_dataset_name": "dep_ts",
-                            "timestamps": [
-                                datetime(2025, 1, 7, 0, 0),
-                                datetime(2025, 1, 9, 0, 0),
-                                datetime(2025, 1, 11, 0, 0),
-                            ],
-                            "correction_factor": 1.1586206896551725,
-                        },
-                        None,
-                        None,
-                    ],
-                ),
-            ]
+            pl.Series("values", [7.6, 82.2, 89.6, 50.6, 91.9, 82.6, 90.0, 26.3, 48.4, 19.6, 46.4, None])
         )
         assert_frame_equal(result_df, expected_df, check_column_order=False)
 
@@ -919,73 +810,31 @@ class TestAltDataDynamic:
             "P1D",
         )
 
-        infiller_symmetric = AltDataDynamic(alt_data_column="alt_values", window_size="P4D", max_threshold=4)
+        infiller_symmetric = AltDataDynamic(
+            alt_data_column="alt_values",
+            window_size="P4D",
+            max_threshold=4,
+            alt_dataset_name="dep_ts",
+        )
         result_symmetric_df = infiller_symmetric.apply(tf.df, tf.time_name, tf.periodicity, "values")
         result_symmetric_df = result_symmetric_df.with_columns(pl.col("values").round(1))
         expected_symmetric_df = tf.df.with_columns(
-            [  # Uses sum(3.8,4.7,6.5,9.2)/sum(8.2,7.3,5.5,2.8)
-                pl.Series("values", [1.0, 2.9, 3.8, 4.7, 6.5, 6.5, 7.4, 8.3, 9.2, 10.1]),
-                pl.Series(
-                    "__INFILL_META__",
-                    [
-                        None,
-                        None,
-                        None,
-                        None,
-                        {
-                            "infill_method": "alt_data_dynamic",
-                            "alt_dataset_name": "dep_ts",
-                            "timestamps": [
-                                datetime(2025, 1, 3, 0, 0),
-                                datetime(2025, 1, 4, 0, 0),
-                                datetime(2025, 1, 6, 0, 0),
-                                datetime(2025, 1, 9, 0, 0),
-                            ],
-                            "correction_factor": 1.0168067226890756,
-                        },
-                        None,
-                        None,
-                        None,
-                        None,
-                        None,
-                    ],
-                ),
-            ]
+            # Uses sum(3.8,4.7,6.5,9.2)/sum(8.2,7.3,5.5,2.8)
+            pl.Series("values", [1.0, 2.9, 3.8, 4.7, 6.5, 6.5, 7.4, 8.3, 9.2, 10.1])
         )
         assert_frame_equal(result_symmetric_df, expected_symmetric_df, check_column_order=False)
 
-        infiller_asymmetric = AltDataDynamic(alt_data_column="alt_values", window_size="P3D", max_threshold=4)
+        infiller_asymmetric = AltDataDynamic(
+            alt_data_column="alt_values",
+            window_size="P3D",
+            max_threshold=4,
+            alt_dataset_name="dep_ts",
+        )
         result_asymmetric_df = infiller_asymmetric.apply(tf.df, tf.time_name, tf.periodicity, "values")
         result_asymmetric_df = result_asymmetric_df.with_columns(pl.col("values").round(1))
         expected_asymmetric_df = tf.df.with_columns(
-            [  # Uses sum(2.93.8,4.7,6.5)/sum(9.1,8.2,7.3,5.5)
-                pl.Series("values", [1.0, 2.9, 3.8, 4.7, 3.8, 6.5, 7.4, 8.3, 9.2, 10.1]),
-                pl.Series(
-                    "__INFILL_META__",
-                    [
-                        None,
-                        None,
-                        None,
-                        None,
-                        {
-                            "infill_method": "alt_data_dynamic",
-                            "alt_dataset_name": "dep_ts",
-                            "timestamps": [
-                                datetime(2025, 1, 2, 0, 0),
-                                datetime(2025, 1, 3, 0, 0),
-                                datetime(2025, 1, 4, 0, 0),
-                                datetime(2025, 1, 6, 0, 0),
-                            ],
-                            "correction_factor": 0.5946843853820597,
-                        },
-                        None,
-                        None,
-                        None,
-                        None,
-                        None,
-                    ],
-                ),
-            ]
+            # Uses sum(2.93.8,4.7,6.5)/sum(9.1,8.2,7.3,5.5)
+            pl.Series("values", [1.0, 2.9, 3.8, 4.7, 3.8, 6.5, 7.4, 8.3, 9.2, 10.1])
         )
         assert_frame_equal(result_asymmetric_df, expected_asymmetric_df, check_column_order=False)
 
@@ -993,168 +842,48 @@ class TestAltDataDynamic:
         """Test infilling from an alternative column, with window_side = "left", "right", "both" and None."""
 
         # left only
-        infiller_left = AltDataDynamic(alt_data_column="alt_values", window_size="P3D", window_side="left")
+        infiller_left = AltDataDynamic(
+            alt_data_column="alt_values",
+            window_size="P3D",
+            window_side="left",
+            alt_dataset_name="dep_ts",
+        )
         result_left_df = infiller_left.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
         expected_left_df = self.df.with_columns(
-            [
-                pl.Series("values", [7.6, 82.2, 89.6, 44.3, 91.9, 82.6, 90.0, 29.5, 48.4, 15.1, 46.4, None]),
-                pl.Series(
-                    "__INFILL_META__",
-                    [
-                        None,
-                        None,
-                        None,
-                        {
-                            "infill_method": "alt_data_dynamic",
-                            "alt_dataset_name": "dep_ts",
-                            "timestamps": [
-                                datetime(2025, 1, 1, 0, 0),
-                                datetime(2025, 1, 2, 0, 0),
-                                datetime(2025, 1, 3, 0, 0),
-                            ],
-                            "correction_factor": 1.0310344827586206,
-                        },
-                        None,
-                        None,
-                        None,
-                        {
-                            "infill_method": "alt_data_dynamic",
-                            "alt_dataset_name": "dep_ts",
-                            "timestamps": [
-                                datetime(2025, 1, 5, 0, 0),
-                                datetime(2025, 1, 6, 0, 0),
-                                datetime(2025, 1, 7, 0, 0),
-                            ],
-                            "correction_factor": 1.354326676907322,
-                        },
-                        None,
-                        {
-                            "infill_method": "alt_data_dynamic",
-                            "alt_dataset_name": "dep_ts",
-                            "timestamps": [
-                                datetime(2025, 1, 7, 0, 0),
-                                datetime(2025, 1, 9, 0, 0),
-                            ],
-                            "correction_factor": 0.8911783644558918,
-                        },
-                        None,
-                        None,
-                    ],
-                ),
-            ]
+            pl.Series("values", [7.6, 82.2, 89.6, 44.3, 91.9, 82.6, 90.0, 29.5, 48.4, 15.1, 46.4, None])
         )
 
         # right only
-        infiller_right = AltDataDynamic(alt_data_column="alt_values", window_size="P3D", window_side="right")
+        infiller_right = AltDataDynamic(
+            alt_data_column="alt_values",
+            window_size="P3D",
+            window_side="right",
+            alt_dataset_name="dep_ts",
+        )
         result_right_df = infiller_right.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
         expected_right_df = self.df.with_columns(
-            [
-                pl.Series("values", [7.6, 82.2, 89.6, 58.2, 91.9, 82.6, 90.0, 19.8, 48.4, 186.7, 46.4, None]),
-                pl.Series(
-                    "__INFILL_META__",
-                    [
-                        None,
-                        None,
-                        None,
-                        {
-                            "infill_method": "alt_data_dynamic",
-                            "alt_dataset_name": "dep_ts",
-                            "timestamps": [
-                                datetime(2025, 1, 5, 0, 0),
-                                datetime(2025, 1, 6, 0, 0),
-                                datetime(2025, 1, 7, 0, 0),
-                            ],
-                            "correction_factor": 1.354326676907322,
-                        },
-                        None,
-                        None,
-                        None,
-                        {
-                            "infill_method": "alt_data_dynamic",
-                            "alt_dataset_name": "dep_ts",
-                            "timestamps": [
-                                datetime(2025, 1, 9, 0, 0),
-                                datetime(2025, 1, 11, 0, 0),
-                            ],
-                            "correction_factor": 0.9080459770114941,
-                        },
-                        None,
-                        {
-                            "infill_method": "alt_data_dynamic",
-                            "alt_dataset_name": "dep_ts",
-                            "timestamps": [
-                                datetime(2025, 1, 11, 0, 0),
-                            ],
-                            "correction_factor": 11.047619047619047,
-                        },
-                        None,
-                        None,
-                    ],
-                ),
-            ]
+            pl.Series("values", [7.6, 82.2, 89.6, 58.2, 91.9, 82.6, 90.0, 19.8, 48.4, 186.7, 46.4, None])
         )
 
         # Both sides
-        infiller_both = AltDataDynamic(alt_data_column="alt_values", window_size="P3D", window_side="both")
+        infiller_both = AltDataDynamic(
+            alt_data_column="alt_values",
+            window_size="P3D",
+            window_side="both",
+            alt_dataset_name="dep_ts",
+        )
         result_both_df = infiller_both.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
 
         # Default returns both sides when window side not specified
-        infiller_none = AltDataDynamic(alt_data_column="alt_values", window_size="P3D")
+        infiller_none = AltDataDynamic(
+            alt_data_column="alt_values",
+            window_size="P3D",
+            alt_dataset_name="dep_ts",
+        )
         result_none_df = infiller_none.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
 
         expected_both_df = self.df.with_columns(
-            [
-                pl.Series("values", [7.6, 82.2, 89.6, 51.7, 91.9, 82.6, 90.0, 26.1, 48.4, 19.6, 46.4, None]),
-                pl.Series(
-                    "__INFILL_META__",
-                    [
-                        None,
-                        None,
-                        None,
-                        {
-                            "infill_method": "alt_data_dynamic",
-                            "alt_dataset_name": "dep_ts",
-                            "timestamps": [
-                                datetime(2025, 1, 1, 0, 0),
-                                datetime(2025, 1, 2, 0, 0),
-                                datetime(2025, 1, 3, 0, 0),
-                                datetime(2025, 1, 5, 0, 0),
-                                datetime(2025, 1, 6, 0, 0),
-                                datetime(2025, 1, 7, 0, 0),
-                            ],
-                            "correction_factor": 1.2020037909558623,
-                        },
-                        None,
-                        None,
-                        None,
-                        {
-                            "infill_method": "alt_data_dynamic",
-                            "alt_dataset_name": "dep_ts",
-                            "timestamps": [
-                                datetime(2025, 1, 5, 0, 0),
-                                datetime(2025, 1, 6, 0, 0),
-                                datetime(2025, 1, 7, 0, 0),
-                                datetime(2025, 1, 9, 0, 0),
-                                datetime(2025, 1, 11, 0, 0),
-                            ],
-                            "correction_factor": 1.1988655321988655,
-                        },
-                        None,
-                        {
-                            "infill_method": "alt_data_dynamic",
-                            "alt_dataset_name": "dep_ts",
-                            "timestamps": [
-                                datetime(2025, 1, 7, 0, 0),
-                                datetime(2025, 1, 9, 0, 0),
-                                datetime(2025, 1, 11, 0, 0),
-                            ],
-                            "correction_factor": 1.1586206896551725,
-                        },
-                        None,
-                        None,
-                    ],
-                ),
-            ]
+            pl.Series("values", [7.6, 82.2, 89.6, 51.7, 91.9, 82.6, 90.0, 26.1, 48.4, 19.6, 46.4, None])
         )
 
         assert_frame_equal(
@@ -1178,49 +907,78 @@ class TestAltDataDynamic:
                 "external_alt": self.df["alt_values"],
             }
         )
-        infiller = AltDataDynamic(alt_data_column="external_alt", window_size="P3D", alt_df=alt_df)
+        infiller = AltDataDynamic(
+            alt_data_column="external_alt",
+            window_size="P3D",
+            alt_df=alt_df,
+            alt_dataset_name="dep_ts",
+        )
+
         result_df = infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
         # Should produce same result as using an inline column
-        infiller_inline = AltDataDynamic(alt_data_column="alt_values", window_size="P3D")
-        expected_df = infiller_inline.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
-        assert_frame_equal(
-            result_df.drop("__INFILL_META__"), expected_df.drop("__INFILL_META__"), check_column_order=False
+        infiller_inline = AltDataDynamic(
+            alt_data_column="alt_values",
+            window_size="P3D",
+            alt_dataset_name="dep_ts",
         )
+        expected_df = infiller_inline.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
+        assert_frame_equal(result_df, expected_df, check_column_order=False)
 
     def test_valid_thresholds(self) -> None:
         """Test that min_threshold > max_threshold raises ValueError at construction.
         and that max_threshold > 0."""
         with pytest.raises(ValueError):
-            AltDataDynamic(alt_data_column="alt_values", window_size="P3D", min_threshold=5, max_threshold=3)
+            AltDataDynamic(
+                alt_data_column="alt_values",
+                window_size="P3D",
+                min_threshold=5,
+                max_threshold=3,
+                alt_dataset_name="dep_ts",
+            )
 
         with pytest.raises(ValueError):
-            AltDataDynamic(alt_data_column="alt_values", window_size="P3D", max_threshold=0)
+            AltDataDynamic(
+                alt_data_column="alt_values",
+                window_size="P3D",
+                max_threshold=0,
+                alt_dataset_name="dep_ts",
+            )
 
     def test_no_missing_data(self) -> None:
         """Test that nothing happens when there is no missing data."""
         df_complete = self.df.with_columns(pl.Series("values", [i * 1.0 for i in range(12)]))
         tf_complete = TimeFrame(df_complete, "timestamp", "P1D")
-        infiller = AltDataDynamic(alt_data_column="alt_values", window_size="P1D")
+        infiller = AltDataDynamic(alt_data_column="alt_values", window_size="P1D", alt_dataset_name="dep_ts")
         result_df = infiller.apply(tf_complete.df, tf_complete.time_name, tf_complete.periodicity, "values")
         assert_frame_equal(result_df, tf_complete.df, check_column_order=False)
 
     def test_missing_alt_data_column_column(self) -> None:
         """Test that an error is raised if the alt_data_column column is missing."""
-        infiller = AltDataDynamic(alt_data_column="non_existent_column", window_size="P3D")
+        infiller = AltDataDynamic(alt_data_column="non_existent_column", window_size="P3D", alt_dataset_name="dep_ts")
         with pytest.raises(ColumnNotFoundError):
             infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
 
     def test_alt_data_missing_time_column(self) -> None:
         """Test error when provided alt_data is missing the time column."""
         alt_df = pl.DataFrame({"alt_values_df": [i * 1.0 for i in range(12)]})
-        infiller = AltDataDynamic(alt_data_column="alt_values", alt_df=alt_df, window_size="P3D")
+        infiller = AltDataDynamic(
+            alt_data_column="alt_values",
+            alt_df=alt_df,
+            window_size="P3D",
+            alt_dataset_name="dep_ts",
+        )
         with pytest.raises(ColumnNotFoundError):
             infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
 
     def test_alt_data_missing_data_column(self) -> None:
         """Test error when provided alt_data is missing the data column."""
         alt_df = pl.DataFrame({"time": self.df["timestamp"]})
-        infiller = AltDataDynamic(alt_data_column="non_existent_column", alt_df=alt_df, window_size="P3D")
+        infiller = AltDataDynamic(
+            alt_data_column="non_existent_column",
+            alt_df=alt_df,
+            window_size="P3D",
+            alt_dataset_name="dep_ts",
+        )
         with pytest.raises(ColumnNotFoundError):
             infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
 
@@ -1232,46 +990,17 @@ class TestAltDataDynamic:
                 "alt_values": self.df["alt_values_some_missing"],
             }
         )
-        infiller = AltDataDynamic(alt_data_column="alt_values", alt_df=alt_df, window_size="P3D")
+        infiller = AltDataDynamic(
+            alt_data_column="alt_values",
+            alt_df=alt_df,
+            window_size="P3D",
+            alt_dataset_name="dep_ts",
+        )
 
         result_df = infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
         result_df = result_df.with_columns(pl.col("values").round(1))
         expected_df = self.df.with_columns(
-            [
-                pl.Series("values", [7.6, 82.2, 89.6, None, 91.9, 82.6, 90.0, 25.4, 48.4, 19.6, 46.4, None]),
-                pl.Series(
-                    "__INFILL_META__",
-                    [
-                        None,
-                        None,
-                        None,
-                        None,
-                        None,
-                        None,
-                        None,
-                        {
-                            "infill_method": "alt_data_dynamic",
-                            "alt_dataset_name": "dep_ts",
-                            "timestamps": [
-                                datetime(2025, 1, 5),
-                                datetime(2025, 1, 7),
-                                datetime(2025, 1, 9),
-                                datetime(2025, 1, 11),
-                            ],
-                            "correction_factor": 1.1630937368642287,
-                        },
-                        None,
-                        {
-                            "infill_method": "alt_data_dynamic",
-                            "alt_dataset_name": "dep_ts",
-                            "timestamps": [datetime(2025, 1, 7), datetime(2025, 1, 9), datetime(2025, 1, 11)],
-                            "correction_factor": 1.1586206896551725,
-                        },
-                        None,
-                        None,
-                    ],
-                ),
-            ]
+            pl.Series("values", [7.6, 82.2, 89.6, None, 91.9, 82.6, 90.0, 25.4, 48.4, 19.6, 46.4, None])
         )
         assert_frame_equal(result_df, expected_df, check_column_order=False)
 
@@ -1295,35 +1024,22 @@ class TestAltDataDynamic:
             "timestamp",
             "P1D",
         )
-        infiller = AltDataDynamic(alt_data_column="alt_values", window_size="P2D", max_threshold=1)
+        infiller = AltDataDynamic(
+            alt_data_column="alt_values",
+            window_size="P2D",
+            max_threshold=1,
+            alt_dataset_name="dep_ts",
+        )
         result_df = infiller.apply(tf.df, tf.time_name, tf.periodicity, "values")
         result_df = result_df.with_columns(pl.col("values").round(1))
         # Only day 2 is used: CF = 30.0 / 2.0 = 15.0, infilled = 15.0 * 5.0 = 75.0
-        expected_df = tf.df.with_columns(
-            [
-                pl.Series("values", [10.0, 30.0, 75.0, 80.0, 50.0]),
-                pl.Series(
-                    "__INFILL_META__",
-                    [
-                        None,
-                        None,
-                        {
-                            "infill_method": "alt_data_dynamic",
-                            "alt_dataset_name": "dep_ts",
-                            "timestamps": [datetime(2025, 1, 2)],
-                            "correction_factor": 15.0,
-                        },
-                        None,
-                        None,
-                    ],
-                ),
-            ]
-        )
+        expected_df = tf.df.with_columns(pl.Series("values", [10.0, 30.0, 75.0, 80.0, 50.0]))
         assert_frame_equal(result_df, expected_df, check_column_order=False)
 
-    def test_infill_gap_not_filled_when_alt_sum_is_zero(self) -> None:
+    def test_infill_gap_not_filled_when_alt_sum_is_zero(self, caplog: pytest.LogCaptureFixture) -> None:
         """Test that a gap is not infilled when alt_data sums to zero in its window, while a
         neighboring gap with a non-zero alt_sum is still infilled correctly.
+        Test also that the logger message is fired.
         """
         tf = TimeFrame(
             pl.DataFrame(
@@ -1336,37 +1052,11 @@ class TestAltDataDynamic:
             "timestamp",
             "P1D",
         )
-        infiller = AltDataDynamic(alt_data_column="alt_values", window_size="P1D")
+        infiller = AltDataDynamic(alt_data_column="alt_values", window_size="P1D", alt_dataset_name="dep_ts")
         result_df = infiller.apply(tf.df, tf.time_name, tf.periodicity, "values")
-        expected_df = tf.df.with_columns(
-            [
-                pl.Series("values", [1.0, None, 3.0, 4.0, 5.0, 6.0, 7.0]),
-                pl.Series(
-                    "__INFILL_META__",
-                    [
-                        None,
-                        # Gap 1: alt sums to zero (2.0 + -2.0 = 0), so CF is None
-                        {
-                            "infill_method": "alt_data_dynamic",
-                            "alt_dataset_name": "dep_ts",
-                            "timestamps": [datetime(2025, 1, 1), datetime(2025, 1, 3)],
-                            "correction_factor": None,
-                        },
-                        None,
-                        None,
-                        {
-                            "infill_method": "alt_data_dynamic",
-                            "alt_dataset_name": "dep_ts",
-                            "timestamps": [datetime(2025, 1, 4), datetime(2025, 1, 6)],
-                            "correction_factor": 1.0,
-                        },
-                        None,
-                        None,
-                    ],
-                ),
-            ]
-        )
+        expected_df = tf.df.with_columns(pl.Series("values", [1.0, None, 3.0, 4.0, 5.0, 6.0, 7.0]))
         assert_frame_equal(result_df, expected_df, check_column_order=False)
+        assert any(r.levelno == logging.WARNING and "alt_sum is zero" in r.message for r in caplog.records)
 
     def test_infill_with_max_threshold_and_one_sided_window(self) -> None:
         """Test that max_threshold limits data points correctly when combined with window_side."""
@@ -1387,31 +1077,12 @@ class TestAltDataDynamic:
             max_threshold=2,
             min_threshold=2,
             window_side="right",
+            alt_dataset_name="dep_ts",
         )
         result_df = infiller.apply(tf.df, tf.time_name, tf.periodicity, "values")
-        expected_df = tf.df.with_columns(
-            [
-                pl.Series("values", [10.0, 20.0, 30.0, 40.0, 50.0, 60.0]),
-                pl.Series(
-                    "__INFILL_META__",
-                    [
-                        None,
-                        None,
-                        # Right-side only, max_threshold=2: uses Jan 4 and Jan 5 (closest 2 after the gap)
-                        # CF = (40.0 + 50.0) / (4.0 + 5.0) = 10.0
-                        {
-                            "infill_method": "alt_data_dynamic",
-                            "alt_dataset_name": "dep_ts",
-                            "timestamps": [datetime(2025, 1, 4), datetime(2025, 1, 5)],
-                            "correction_factor": 10.0,
-                        },
-                        None,
-                        None,
-                        None,
-                    ],
-                ),
-            ]
-        )
+        # Right-side only, max_threshold=2: uses Jan 4 and Jan 5 (closest 2 after the gap)
+        # CF = (40.0 + 50.0) / (4.0 + 5.0) = 10.0
+        expected_df = tf.df.with_columns(pl.Series("values", [10.0, 20.0, 30.0, 40.0, 50.0, 60.0]))
         assert_frame_equal(result_df, expected_df, check_column_order=False)
 
     def test_gap_greater_than_max_gap_size(self) -> None:
@@ -1432,28 +1103,74 @@ class TestAltDataDynamic:
         infiller = AltDataDynamic(
             alt_data_column="alt_values",
             window_size="P3D",
+            alt_dataset_name="dep_ts",
         )
         result_df = infiller.apply(tf.df, tf.time_name, tf.periodicity, "values", max_gap_size=1)
-        expected_df = tf.df.with_columns(
-            [
-                pl.Series("values", [10.0, None, None, None, 50.0, 60.0, 70.0]),
-                pl.Series(
-                    "__INFILL_META__",
-                    [
-                        None,
-                        None,
-                        None,
-                        None,
-                        None,
-                        {
-                            "infill_method": "alt_data_dynamic",
-                            "alt_dataset_name": "dep_ts",
-                            "timestamps": [datetime(2025, 1, 5), datetime(2025, 1, 7)],
-                            "correction_factor": 10.0,
-                        },
-                        None,
-                    ],
-                ),
-            ]
-        )
+        expected_df = tf.df.with_columns(pl.Series("values", [10.0, None, None, None, 50.0, 60.0, 70.0]))
         assert_frame_equal(result_df, expected_df, check_column_order=False)
+
+    def test_metadata(self) -> None:
+        """Test that __INFILL_META__ is added with JSON strings and correct keys when add_metadata=True."""
+        infiller = AltDataDynamic(
+            alt_data_column="alt_values",
+            window_size="P3D",
+            alt_dataset_name="dep_ts",
+            add_metadata=True,
+        )
+        result_df = infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
+        assert "__INFILL_META__" in result_df.columns
+        assert result_df["__INFILL_META__"].dtype == pl.String
+        # Spot-check one filled row: gap at index 3 uses a 3-day window on both sides
+        filled_meta = json.loads(result_df["__INFILL_META__"][3])
+        assert filled_meta["infill_method"] == "alt_data_dynamic"
+        assert filled_meta["alt_dataset_name"] == "dep_ts"
+        assert "timestamps" in filled_meta
+        assert "correction_factor" in filled_meta
+        # Edge gap at index 11 remains null (not infilled)
+        assert result_df["__INFILL_META__"][11] is None
+
+
+class TestMultipleInfillMethods:
+    """Test that chaining multiple infill methods accumulates different metadata shapes in one column."""
+
+    def test_multi_method_metadata_coexistence(self) -> None:
+        """Apply linear, alt_data, and alt_data_dynamic in sequence; each filled row should carry
+        a JSON string whose shape matches the method that filled it."""
+        df = pl.DataFrame(
+            {
+                "timestamp": [datetime(2025, 1, d) for d in range(1, 11)],
+                # Gap A (index 1, size 1) → linear
+                # Gap B (indices 3-4, size 2) → alt_data
+                # Gap C (indices 6-8, size 3) → alt_data_dynamic
+                "values": [1.0, None, 3.0, None, None, 6.0, None, None, None, 10.0],
+                "alt_values": [1.0, 2.0, 3.0, 40.0, 50.0, 6.0, 7.0, 8.0, 9.0, 10.0],
+            }
+        )
+        tf = TimeFrame(df, "timestamp", "P1D")
+
+        step1 = LinearInterpolation(add_metadata=True).apply(
+            tf.df, tf.time_name, tf.periodicity, "values", max_gap_size=1
+        )
+        step2 = AltData(alt_data_column="alt_values", alt_dataset_name="dep_ts", add_metadata=True).apply(
+            step1, tf.time_name, tf.periodicity, "values", max_gap_size=2
+        )
+        step3 = AltDataDynamic(
+            alt_data_column="alt_values", window_size="P2D", alt_dataset_name="dep_ts", add_metadata=True
+        ).apply(step2, tf.time_name, tf.periodicity, "values")
+
+        assert "__INFILL_META__" in step3.columns
+        assert step3["__INFILL_META__"].dtype == pl.String
+
+        meta = [json.loads(v) if v is not None else None for v in step3["__INFILL_META__"].to_list()]
+
+        # Gap A filled by linear
+        assert meta[1] == {"infill_method": "linear"}
+        # Gap B filled by alt_data
+        assert meta[3] == {"infill_method": "alt_data", "alt_dataset_name": "dep_ts"}
+        assert meta[4] == {"infill_method": "alt_data", "alt_dataset_name": "dep_ts"}
+        # Gap C filled by alt_data_dynamic — has extra keys
+        assert meta[6]["infill_method"] == "alt_data_dynamic"
+        assert meta[7]["infill_method"] == "alt_data_dynamic"
+        assert meta[8]["infill_method"] == "alt_data_dynamic"
+        # Non-gap rows have no metadata
+        assert all(meta[i] is None for i in [0, 2, 5, 9])

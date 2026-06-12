@@ -190,6 +190,24 @@ def alt_data_dynamic_infill_one_sided() -> None:
     print(tf_infill.df)
 
 
+def metadata_example() -> None:
+    with suppress_output():
+        df = get_example_df(library="polars")
+
+    tf = ts.TimeFrame(df, "time", resolution="PT15M", periodicity="PT15M")
+
+    # [start_block_8]
+    import json
+
+    tf_infill = tf.infill("linear", "flow", max_gap_size=3, add_metadata=True)
+
+    for row in tf_infill.df.iter_rows(named=True):
+        if row["__INFILL_META__"] is not None:
+            meta = json.loads(row["__INFILL_META__"])
+            print(meta)
+    # [end_block_8]
+
+
 def flagged_infill() -> None:
     with suppress_output():
         df = get_example_df(library="polars")

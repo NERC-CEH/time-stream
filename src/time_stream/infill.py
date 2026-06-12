@@ -13,6 +13,7 @@ The infill pipeline handles:
 - Delegating to a specific infill method to fill missing values
 """
 
+import json
 import logging
 import math
 from abc import ABC, abstractmethod
@@ -42,7 +43,14 @@ class InfillCtx:
 
 
 class InfillMethod(Operation, ABC):
-    """Base class for infill methods."""
+    """Base class for infill methods.
+
+    Set ``add_metadata=True`` on an instance to make :meth:`apply` attach a
+    ``__INFILL_META__`` JSON string column recording provenance for each filled row.
+    Metadata generation is opt-in and off by default.
+    """
+
+    add_metadata: bool = False
 
     def _infilled_column_name(self, infill_column: str) -> str:
         """Return the name of the infilled column."""
@@ -89,7 +97,7 @@ class InfillMethod(Operation, ABC):
             The infilled time series
         """
         ctx = InfillCtx(df, time_name, periodicity)
-        pipeline = InfillMethodPipeline(self, ctx, infill_column, observation_interval, max_gap_size)
+        pipeline = InfillMethodPipeline(self, ctx, infill_column, observation_interval, max_gap_size, self.add_metadata)
         return pipeline.execute()
 
 
@@ -103,12 +111,14 @@ class InfillMethodPipeline:
         column: str,
         observation_interval: datetime | tuple[datetime, datetime | None] | None = None,
         max_gap_size: int | None = None,
+        add_metadata: bool = False,
     ):
         self.infill_method = infill_method
         self.ctx = ctx
         self.column = column
         self.observation_interval = observation_interval
         self.max_gap_size = max_gap_size
+        self.add_metadata = add_metadata
 
     def execute(self) -> pl.DataFrame:
         """Execute the infill pipeline"""
@@ -128,10 +138,6 @@ class InfillMethodPipeline:
             # If not, return the original data
             return self.ctx.df
 
-        # Drop any pre-existing __INFILL_META__ so _fill() doesn't see stale data from a
-        # prior chained infill call, and so the injection check below works correctly.
-        df = df.drop("__INFILL_META__", strict=False)
-
         # Apply the specific infill logic from the child class
         df_infilled = self.infill_method._fill(df, self.column, self.ctx)
         infilled_column = self.infill_method._infilled_column_name(self.column)
@@ -141,28 +147,35 @@ class InfillMethodPipeline:
             pl.when(infill_mask).then(pl.col(infilled_column)).otherwise(pl.col(self.column)).alias(infilled_column)
         )
 
-        # For methods that handle __INFILL_META__ themselves (e.g. AltDataDynamic),
-        # remove infill metadata where gap_size > max_gap_size
-        if "__INFILL_META__" in df_infilled.columns:
-            df_infilled = df_infilled.with_columns(
-                pl.when(infill_mask).then(pl.col("__INFILL_META__")).otherwise(None).alias("__INFILL_META__")
-            )
-        # Add __INFILL_META__ for methods that don't handle it themselves
-        else:
-            meta = self.infill_method._infill_meta()
-            meta_struct_expr = pl.struct([pl.lit(v).alias(k) for k, v in meta.items()])
-            df_infilled = df_infilled.with_columns(
-                pl.when(pl.col(self.column).is_null() & pl.col(infilled_column).is_not_null())
-                .then(meta_struct_expr)
-                .otherwise(None)
-                .alias("__INFILL_META__")
-            )
+        # Staging column name used by methods that pre-build their own metadata (e.g. AltDataDynamic)
+        meta_column_name = f"__INFILL_META_{self.infill_method.name}__"
+
+        if self.add_metadata:
+            # Build infill metadata
+            if meta_column_name in df_infilled.columns:
+                # For methods that pre-build their own infill metadata column:
+                meta_source = pl.col(meta_column_name)
+            else:
+                # All other methods: build meta JSON string from _infill_meta() dict
+                meta = self.infill_method._infill_meta()
+                meta_source = pl.lit(json.dumps(meta))
+
+            # If alt data is used, and alt data or infilled_column is null, metadata should not be populated.
+            infill_meta = pl.when(infill_mask & pl.col(infilled_column).is_not_null()).then(meta_source).otherwise(None)
+
+            # Merge metadata into shared column in dataframe
+            infill_meta_column_name = "__INFILL_META__"
+            if infill_meta_column_name in df_infilled.columns:
+                df_infilled = df_infilled.with_columns(
+                    pl.coalesce([infill_meta, pl.col(infill_meta_column_name)]).alias(infill_meta_column_name)
+                )
+            else:
+                df_infilled = df_infilled.with_columns(infill_meta.alias(infill_meta_column_name))
 
         # Do some tidying up of columns, leaving only the original column names
         df_infilled = df_infilled.with_columns(
             pl.col(infilled_column).alias(self.column)  # Rename the infilled column back to the original name
-        ).drop([infilled_column, "gap_size"], strict=False)  # Drop the temporary processing columns
-
+        ).drop([infilled_column, "gap_size", meta_column_name], strict=False)
         return df_infilled
 
     def _validate(self) -> None:
@@ -213,8 +226,10 @@ class ScipyInterpolation(InfillMethod, ABC):
         """Initialize a scipy interpolation method.
 
         Args:
+            add_metadata: If True, attach a ``__INFILL_META__`` JSON string column when applying.
             **kwargs: Additional parameters passed to scipy interpolator method.
         """
+        self.add_metadata = kwargs.pop("add_metadata", False)
         self.scipy_kwargs = kwargs
 
     @abstractmethod
@@ -403,9 +418,10 @@ class AltData(InfillMethod):
     def __init__(
         self,
         alt_data_column: str,
+        alt_dataset_name: str,
         correction_factor: float = 1.0,
         alt_df: pl.DataFrame | None = None,
-        alt_dataset_name: str = "dep_ts",
+        add_metadata: bool = False,
     ):
         """Initialize the alternative data infill method.
 
@@ -413,14 +429,16 @@ class AltData(InfillMethod):
             alt_data_column: The name of the column providing the alternative data.
             correction_factor: An optional correction factor to apply to the alternative data.
             alt_df: The DataFrame containing the alternative data.
-            alt_dataset_name: Name of the alternative dataset used for infilling. Default: "dep_ts".
+            alt_dataset_name: Name of the alternative dataset used for infilling.
+            add_metadata: If True, attach a ``__INFILL_META__`` JSON string column when applying.
         """
         self.alt_data_column = alt_data_column
         self.correction_factor = correction_factor
         self.alt_df = alt_df
         self.alt_dataset_name = alt_dataset_name
+        self.add_metadata = add_metadata
 
-    def _infill_meta(self) -> dict:
+    def _infill_meta(self, **kwargs) -> dict:
         return {"infill_method": self.name, "alt_dataset_name": self.alt_dataset_name}
 
     def _fill(self, df: pl.DataFrame, infill_column: str, ctx: InfillCtx) -> pl.DataFrame:
@@ -486,12 +504,13 @@ class AltDataDynamic(InfillMethod):
     def __init__(
         self,
         alt_data_column: str,
+        alt_dataset_name: str,
         window_size: str | Period | timedelta,
-        alt_dataset_name: str = "dep_ts",
         alt_df: pl.DataFrame | None = None,
         min_threshold: int = 0,
         max_threshold: int | None = None,
         window_side: Literal["left", "right", "both"] = "both",
+        add_metadata: bool = False,
     ):
         """Initialize the alternative data infill method.
 
@@ -499,7 +518,7 @@ class AltDataDynamic(InfillMethod):
             alt_data_column: Name of the column providing the alternative data.
             window_size: Time window around each gap used to calculate the correction factor.
                 Accepts an ISO duration string, Period, or timedelta.
-            alt_dataset_name: Name of alternative dataset used for infilling. Default: "dep_ts".
+            alt_dataset_name: Name of alternative dataset used for infilling.
             alt_df: Optional separate DataFrame containing the alternative data. If None,
                 alt_data_column must exist in the DataFrame passed to the infill method.
             min_threshold: Minimum number of data points required in the window to calculate
@@ -508,6 +527,7 @@ class AltDataDynamic(InfillMethod):
                 to the gap are used first.
             window_side: Which side of each gap to use for the window. Defaults to "both".
                 "left" uses only data before the gap; "right" uses only data after.
+            add_metadata: If True, attach a ``__INFILL_META__`` JSON string column when applying.
         """
         if max_threshold is not None:
             if min_threshold > max_threshold:
@@ -522,6 +542,7 @@ class AltDataDynamic(InfillMethod):
         self.min_threshold = min_threshold
         self.max_threshold = max_threshold
         self.window_side = window_side
+        self.add_metadata = add_metadata
 
     def _fill(
         self,
@@ -610,39 +631,21 @@ class AltDataDynamic(InfillMethod):
             df = df.with_columns(pl.lit(None).alias(cf_column_name))
 
         # Record infill metadata
-        if cf_df is not None and windowed_df is not None:
-            timestamps_df = windowed_df.group_by(gap_id_column_name).agg(
-                pl.col(time_column_name).sort().alias("__TIMESTAMPS__")
-            )
-            meta_df = (
-                cf_df.join(timestamps_df, on=gap_id_column_name, how="left")
-                .with_columns(
-                    pl.struct(
-                        pl.lit(self.name).alias("infill_method"),
-                        pl.lit(self.alt_dataset_name).alias("alt_dataset_name"),
-                        pl.col("__TIMESTAMPS__").alias("timestamps"),
-                        pl.col(cf_column_name).alias("correction_factor"),
-                    ).alias("__INFILL_META__")
-                )
-                .select([gap_id_column_name, "__INFILL_META__"])
-            )
+        meta_column_name = f"__INFILL_META_{self.name}__"
+        meta_df = self._build_infill_meta(
+            cf_df,
+            cf_column_name,
+            windowed_df,
+            time_column_name,
+            gap_id_column_name,
+            meta_column_name,
+            alt_data_column_name,
+        )
+
+        if meta_df is not None:
             df = df.join(meta_df, on=gap_id_column_name, how="left")
         else:
-            df = df.with_columns(pl.lit(None).alias("__INFILL_META__"))
-
-        # Attach infill metadata to original df, excluding leading/trailing gaps
-        not_null_mask = pl.col(infill_column).is_not_null()
-        row_idx = pl.arange(0, pl.len())
-        within_bounds = row_idx.is_between(
-            row_idx.filter(not_null_mask).min(),
-            row_idx.filter(not_null_mask).max(),
-        )
-        df = df.with_columns(
-            pl.when(pl.col(infill_column).is_null() & within_bounds & pl.col(alt_data_column_name).is_not_null())
-            .then(pl.col("__INFILL_META__"))
-            .otherwise(None)
-            .alias("__INFILL_META__")
-        )
+            df = df.with_columns(pl.lit(None).alias(meta_column_name))
 
         # Fill gaps
         infilled = df.with_columns(
@@ -655,8 +658,9 @@ class AltDataDynamic(InfillMethod):
         # Cleanup
         if self.alt_df is not None:
             infilled = infilled.drop(alt_data_column_name)
-        infilled = infilled.drop([gap_id_column_name, cf_column_name])
-
+        infilled = infilled.drop(
+            [gap_id_column_name, cf_column_name, f"__ALT_SUM__{alt_data_column_name}"], strict=False
+        )
         return infilled
 
     def _window_duration(self, ctx: InfillCtx) -> timedelta:
@@ -956,6 +960,49 @@ class AltDataDynamic(InfillMethod):
             .then(pl.col(infill_sum_column_name) / pl.col(alt_sum_column_name))
             .otherwise(None)
             .alias(cf_column_name)
-        ).drop([infill_sum_column_name, alt_sum_column_name])
+        ).drop([infill_sum_column_name])
 
         return cf_df if not cf_df.is_empty() else None
+
+    def _build_infill_meta(
+        self,
+        cf_df: pl.DataFrame | None,
+        cf_column_name: str,
+        windowed_df: pl.DataFrame | None,
+        time_column_name: str,
+        gap_id_column_name: str,
+        meta_column_name: str,
+        alt_data_column_name: str,
+    ) -> pl.DataFrame | None:
+
+        if cf_df is not None and windowed_df is not None:
+            timestamps_df = windowed_df.group_by(gap_id_column_name).agg(
+                pl.col(time_column_name).sort().alias("__TIMESTAMPS__")
+            )
+            meta_df = (
+                cf_df.join(timestamps_df, on=gap_id_column_name, how="left")
+                .with_columns(
+                    pl.struct(
+                        pl.col("__TIMESTAMPS__").alias("timestamps"),
+                        pl.col(cf_column_name).alias("correction_factor"),
+                    )
+                    .map_elements(
+                        lambda row: (
+                            json.dumps(
+                                {
+                                    "infill_method": self.name,
+                                    "alt_dataset_name": self.alt_dataset_name,
+                                    "timestamps": [ts.isoformat() for ts in row["timestamps"]],
+                                    "correction_factor": row["correction_factor"],
+                                }
+                            )
+                            if row["correction_factor"] is not None
+                            else None
+                        ),
+                        return_dtype=pl.String,
+                    )
+                    .alias(meta_column_name)
+                )
+                .select([gap_id_column_name, meta_column_name])
+            )
+            return meta_df

@@ -359,18 +359,38 @@ or that remain null because the gap exceeded ``max_gap_size``, are left untouche
 Infill metadata
 ---------------
 
-Every time an infill produces at least one filled value, a ``__INFILL_META__`` struct column is
-added to the output DataFrame. Each row that was actually filled carries a struct describing how
-it was infilled; all other rows carry ``null``.
+Metadata recording is **opt-in** and off by default. Pass ``add_metadata=True`` to attach a
+``__INFILL_META__`` JSON string column (``pl.String``) to the output DataFrame. Each row that
+was actually filled carries a JSON string describing how it was infilled; all other rows carry
+``null``.
 
-The fields present in the struct depend on the infill method:
+**Code:**
+
+.. literalinclude:: ../../../src/time_stream/examples/examples_infilling.py
+    :language: python
+    :start-after: [start_block_8]
+    :end-before: [end_block_8]
+    :dedent:
+
+**Output:**
+
+.. jupyter-execute::
+    :hide-code:
+
+    import examples_infilling
+    examples_infilling.metadata_example()
+
+Using a JSON string column (rather than a struct) means that different infill methods can
+produce differently-shaped metadata in the same column, which is useful when chaining methods.
+
+The JSON keys present depend on the infill method:
 
 .. list-table::
    :header-rows: 1
    :widths: 30 70
 
    * - Infill method
-     - Struct fields
+     - JSON keys
    * - Interpolation methods (``linear``, ``quadratic``, ``cubic``, ``bspline``, ``pchip``, ``akima``)
      - ``infill_method`` — method name (e.g. ``"linear"``)
    * - ``alt_data``
@@ -382,11 +402,11 @@ The fields present in the struct depend on the infill method:
        correction factor; ``correction_factor`` — the computed ratio (``null`` if the alternative
        data summed to zero)
 
-If there is nothing to infill (no gaps, or all gaps are excluded by ``max_gap_size`` /
-``observation_interval``), the ``__INFILL_META__`` column is **not** added to the output.
+When ``add_metadata=False`` (the default), the ``__INFILL_META__`` column is never added.
+When ``add_metadata=True`` but there is nothing to infill (no gaps, or all gaps are excluded
+by ``max_gap_size`` / ``observation_interval``), the column is added but contains only nulls.
 
 Examples
-
 ========
 
 .. _alt_data_examples:
