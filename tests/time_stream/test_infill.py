@@ -524,18 +524,18 @@ class TestAltData:
         }
     )
     tf = TimeFrame(df, "timestamp", "P1D")
-    meta = {"infill_method": "alt_data", "alt_dataset_name": "dep_ts"}
+    meta = {"infill_method": "alt_data", "alt_dataset_name": "alt_dataset_name"}
 
     def test_alt_data_infill(self) -> None:
         """Test basic infilling from an alternative column."""
-        infiller = AltData(alt_data_column="alt_values", alt_dataset_name="dep_ts")
+        infiller = AltData(alt_data_column="alt_values")
         result_df = infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
         expected_df = self.df.with_columns(pl.Series("values", [1.0, 20.0, 3.0, 40.0, 5.0]))
         assert_frame_equal(result_df, expected_df, check_column_order=False)
 
     def test_alt_data_infill_with_correction(self) -> None:
         """Test infilling with a correction factor."""
-        infiller = AltData(alt_data_column="alt_values", correction_factor=0.1, alt_dataset_name="dep_ts")
+        infiller = AltData(alt_data_column="alt_values", correction_factor=0.1)
         result_df = infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
         expected_df = self.df.with_columns(pl.Series("values", [1.0, 2.0, 3.0, 4.0, 5.0]))
         assert_frame_equal(result_df, expected_df, check_column_order=False)
@@ -544,26 +544,26 @@ class TestAltData:
         """Test that nothing happens when there is no missing data."""
         df_complete = self.df.with_columns(pl.Series("values", [1.0, 2.0, 3.0, 4.0, 5.0]))
         tf_complete = TimeFrame(df_complete, "timestamp", "P1D")
-        infiller = AltData(alt_data_column="alt_values", alt_dataset_name="dep_ts")
+        infiller = AltData(alt_data_column="alt_values")
         result_df = infiller.apply(tf_complete.df, tf_complete.time_name, tf_complete.periodicity, "values")
         assert_frame_equal(result_df, tf_complete.df, check_column_order=False)
 
     def test_alt_data_infill_missing_alt_data(self) -> None:
         """Test that missing data in the alternative column is not used for infilling."""
-        infiller = AltData(alt_data_column="alt_with_missing", alt_dataset_name="dep_ts")
+        infiller = AltData(alt_data_column="alt_with_missing")
         result_df = infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
         expected_df = self.df.with_columns(pl.Series("values", [1.0, None, 3.0, 40.0, 5.0]))
         assert_frame_equal(result_df, expected_df, check_column_order=False)
 
     def test_alt_data_infill_missing_alt_data_column_column(self) -> None:
         """Test that an error is raised if the alt_data_column column is missing."""
-        infiller = AltData(alt_data_column="non_existent_column", alt_dataset_name="dep_ts")
+        infiller = AltData(alt_data_column="non_existent_column")
         with pytest.raises(ColumnNotFoundError):
             infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
 
     def test_alt_data_infill_restricting_date_range(self) -> None:
         """Test that only data in the observation_interval is infilled."""
-        infiller = AltData(alt_data_column="alt_values", alt_dataset_name="dep_ts")
+        infiller = AltData(alt_data_column="alt_values")
         result_df = infiller.apply(
             self.tf.df,
             self.tf.time_name,
@@ -582,7 +582,7 @@ class TestAltData:
                 "alt_values_df": [11.0, 22.0, 33.0, 44.0, 55.0],
             }
         )
-        infiller = AltData(alt_data_column="alt_values_df", alt_df=alt_df, alt_dataset_name="dep_ts")
+        infiller = AltData(alt_data_column="alt_values_df", alt_df=alt_df)
         result_df = infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
         expected_df = self.df.with_columns(pl.Series("values", [1.0, 22.0, 3.0, 44.0, 5.0]))
         assert_frame_equal(result_df, expected_df, check_column_order=False)
@@ -590,14 +590,14 @@ class TestAltData:
     def test_alt_data_infill_with_alt_data_missing_time_column(self) -> None:
         """Test error when provided alt_data is missing the time column."""
         alt_df = pl.DataFrame({"alt_values_df": [11.0, 22.0, 33.0, 44.0, 55.0]})
-        infiller = AltData(alt_data_column="alt_values", alt_df=alt_df, alt_dataset_name="dep_ts")
+        infiller = AltData(alt_data_column="alt_values", alt_df=alt_df)
         with pytest.raises(ColumnNotFoundError):
             infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
 
     def test_alt_data_infill_with_alt_data_missing_data_column(self) -> None:
         """Test error when provided alt_data is missing the data column."""
         alt_df = pl.DataFrame({"time": self.df["timestamp"]})
-        infiller = AltData(alt_data_column="non_existent_column", alt_df=alt_df, alt_dataset_name="dep_ts")
+        infiller = AltData(alt_data_column="non_existent_column", alt_df=alt_df)
         with pytest.raises(ColumnNotFoundError):
             infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
 
@@ -609,15 +609,20 @@ class TestAltData:
                 "values": [11.0, 22.0, 33.0, 44.0, 55.0],
             }
         )
-        infiller = AltData(alt_data_column="values", alt_df=alt_df, alt_dataset_name="dep_ts")
+        infiller = AltData(alt_data_column="values", alt_df=alt_df)
 
         result_df = infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
         expected_df = self.df.with_columns(pl.Series("values", [1.0, 22.0, 3.0, 44.0, 5.0]))
         assert_frame_equal(result_df, expected_df, check_column_order=False)
 
+    def test_add_metadata_without_dataset_name_raises(self) -> None:
+        """Test that ValueError is raised when add_metadata=True but alt_dataset_name is not provided."""
+        with pytest.raises(ValueError, match="alt_dataset_name must be provided when add_metadata=True"):
+            AltData(alt_data_column="alt_values", add_metadata=True)
+
     def test_metadata(self) -> None:
         """Test that __INFILL_META__ is added with correct content when add_metadata=True."""
-        infiller = AltData(alt_data_column="alt_values", alt_dataset_name="dep_ts", add_metadata=True)
+        infiller = AltData(alt_data_column="alt_values", add_metadata=True, alt_dataset_name="alt_dataset_name")
         result_df = infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
         assert "__INFILL_META__" in result_df.columns
         assert result_df["__INFILL_META__"].dtype == pl.String
@@ -652,7 +657,7 @@ class TestAltDataDynamic:
         Gap 2 and 3: The window around a gap has some missing data.
         Gap 4: A gap is at the edge of the dataset and data remains null.
         """
-        infiller = AltDataDynamic(alt_data_column="alt_values", window_size="P3D", alt_dataset_name="dep_ts")
+        infiller = AltDataDynamic(alt_data_column="alt_values", window_size="P3D")
         result_df = infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
         result_df = result_df.with_columns(pl.col("values").round(1))
         expected_df = self.df.with_columns(
@@ -671,7 +676,6 @@ class TestAltDataDynamic:
         infiller = AltDataDynamic(
             alt_data_column="alt_values_some_missing",
             window_size="P3D",
-            alt_dataset_name="dep_ts",
         )
         result_df = infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
         result_df = result_df.with_columns(pl.col("values").round(1))
@@ -682,7 +686,7 @@ class TestAltDataDynamic:
 
     def test_valid_window_size(self) -> None:
         """Test window size smaller than periodicity raises an error."""
-        infiller = AltDataDynamic(alt_data_column="alt_values", window_size="PT1H", alt_dataset_name="dep_ts")
+        infiller = AltDataDynamic(alt_data_column="alt_values", window_size="PT1H")
         with pytest.raises(ValueError):
             infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
 
@@ -692,32 +696,26 @@ class TestAltDataDynamic:
         infiller_iso_hours = AltDataDynamic(
             alt_data_column="alt_values",
             window_size="PT1H",
-            alt_dataset_name="dep_ts",
         )
         infiller_period_hours = AltDataDynamic(
             alt_data_column="alt_values",
             window_size=Period.of_hours(1),
-            alt_dataset_name="dep_ts",
         )
         infiller_timedelta_hours = AltDataDynamic(
             alt_data_column="alt_values",
             window_size=timedelta(hours=1),
-            alt_dataset_name="dep_ts",
         )
         infiller_iso_days = AltDataDynamic(
             alt_data_column="alt_values",
             window_size="P1D",
-            alt_dataset_name="dep_ts",
         )
         infiller_period_days = AltDataDynamic(
             alt_data_column="alt_values",
             window_size=Period.of_days(1),
-            alt_dataset_name="dep_ts",
         )
         infiller_timedelta_days = AltDataDynamic(
             alt_data_column="alt_values",
             window_size=timedelta(days=1),
-            alt_dataset_name="dep_ts",
         )
 
         ctx = InfillCtx(self.tf.df, self.tf.time_name, Period.of_hours(1))
@@ -729,7 +727,7 @@ class TestAltDataDynamic:
         assert infiller_timedelta_days._window_duration(ctx) == timedelta(days=1)
 
         # Month/year window size cannot be converted to a fixed timedelta
-        infiller_month = AltDataDynamic(alt_data_column="alt_values", window_size="P1M", alt_dataset_name="dep_ts")
+        infiller_month = AltDataDynamic(alt_data_column="alt_values", window_size="P1M")
         with pytest.raises(ValueError, match="Cannot resolve month or year"):
             infiller_month._window_duration(ctx)
 
@@ -742,7 +740,6 @@ class TestAltDataDynamic:
         infiller = AltDataDynamic(
             alt_data_column="alt_values_all_missing",
             window_size="P3D",
-            alt_dataset_name="dep_ts",
         )
         result_df = infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
         assert_frame_equal(result_df, self.df, check_column_order=False)
@@ -753,7 +750,6 @@ class TestAltDataDynamic:
             alt_data_column="alt_values",
             window_size="P3D",
             min_threshold=10,
-            alt_dataset_name="dep_ts",
         )
         with pytest.raises(ValueError):
             infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
@@ -764,7 +760,6 @@ class TestAltDataDynamic:
             alt_data_column="alt_values",
             window_size="P3D",
             min_threshold=4,
-            alt_dataset_name="dep_ts",
         )
         result_df = infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
         result_df = result_df.with_columns(pl.col("values").round(1))
@@ -785,7 +780,6 @@ class TestAltDataDynamic:
             alt_data_column="alt_values",
             window_size="P3D",
             max_threshold=4,
-            alt_dataset_name="dep_ts",
         )
         result_df = infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
         result_df = result_df.with_columns(pl.col("values").round(1))
@@ -814,7 +808,6 @@ class TestAltDataDynamic:
             alt_data_column="alt_values",
             window_size="P4D",
             max_threshold=4,
-            alt_dataset_name="dep_ts",
         )
         result_symmetric_df = infiller_symmetric.apply(tf.df, tf.time_name, tf.periodicity, "values")
         result_symmetric_df = result_symmetric_df.with_columns(pl.col("values").round(1))
@@ -828,7 +821,6 @@ class TestAltDataDynamic:
             alt_data_column="alt_values",
             window_size="P3D",
             max_threshold=4,
-            alt_dataset_name="dep_ts",
         )
         result_asymmetric_df = infiller_asymmetric.apply(tf.df, tf.time_name, tf.periodicity, "values")
         result_asymmetric_df = result_asymmetric_df.with_columns(pl.col("values").round(1))
@@ -846,7 +838,6 @@ class TestAltDataDynamic:
             alt_data_column="alt_values",
             window_size="P3D",
             window_side="left",
-            alt_dataset_name="dep_ts",
         )
         result_left_df = infiller_left.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
         expected_left_df = self.df.with_columns(
@@ -858,7 +849,6 @@ class TestAltDataDynamic:
             alt_data_column="alt_values",
             window_size="P3D",
             window_side="right",
-            alt_dataset_name="dep_ts",
         )
         result_right_df = infiller_right.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
         expected_right_df = self.df.with_columns(
@@ -870,7 +860,6 @@ class TestAltDataDynamic:
             alt_data_column="alt_values",
             window_size="P3D",
             window_side="both",
-            alt_dataset_name="dep_ts",
         )
         result_both_df = infiller_both.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
 
@@ -878,7 +867,6 @@ class TestAltDataDynamic:
         infiller_none = AltDataDynamic(
             alt_data_column="alt_values",
             window_size="P3D",
-            alt_dataset_name="dep_ts",
         )
         result_none_df = infiller_none.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
 
@@ -911,7 +899,6 @@ class TestAltDataDynamic:
             alt_data_column="external_alt",
             window_size="P3D",
             alt_df=alt_df,
-            alt_dataset_name="dep_ts",
         )
 
         result_df = infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
@@ -919,7 +906,6 @@ class TestAltDataDynamic:
         infiller_inline = AltDataDynamic(
             alt_data_column="alt_values",
             window_size="P3D",
-            alt_dataset_name="dep_ts",
         )
         expected_df = infiller_inline.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
         assert_frame_equal(result_df, expected_df, check_column_order=False)
@@ -933,7 +919,6 @@ class TestAltDataDynamic:
                 window_size="P3D",
                 min_threshold=5,
                 max_threshold=3,
-                alt_dataset_name="dep_ts",
             )
 
         with pytest.raises(ValueError):
@@ -941,20 +926,19 @@ class TestAltDataDynamic:
                 alt_data_column="alt_values",
                 window_size="P3D",
                 max_threshold=0,
-                alt_dataset_name="dep_ts",
             )
 
     def test_no_missing_data(self) -> None:
         """Test that nothing happens when there is no missing data."""
         df_complete = self.df.with_columns(pl.Series("values", [i * 1.0 for i in range(12)]))
         tf_complete = TimeFrame(df_complete, "timestamp", "P1D")
-        infiller = AltDataDynamic(alt_data_column="alt_values", window_size="P1D", alt_dataset_name="dep_ts")
+        infiller = AltDataDynamic(alt_data_column="alt_values", window_size="P1D")
         result_df = infiller.apply(tf_complete.df, tf_complete.time_name, tf_complete.periodicity, "values")
         assert_frame_equal(result_df, tf_complete.df, check_column_order=False)
 
     def test_missing_alt_data_column_column(self) -> None:
         """Test that an error is raised if the alt_data_column column is missing."""
-        infiller = AltDataDynamic(alt_data_column="non_existent_column", window_size="P3D", alt_dataset_name="dep_ts")
+        infiller = AltDataDynamic(alt_data_column="non_existent_column", window_size="P3D")
         with pytest.raises(ColumnNotFoundError):
             infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
 
@@ -963,9 +947,8 @@ class TestAltDataDynamic:
         alt_df = pl.DataFrame({"alt_values_df": [i * 1.0 for i in range(12)]})
         infiller = AltDataDynamic(
             alt_data_column="alt_values",
-            alt_df=alt_df,
             window_size="P3D",
-            alt_dataset_name="dep_ts",
+            alt_df=alt_df,
         )
         with pytest.raises(ColumnNotFoundError):
             infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
@@ -975,9 +958,8 @@ class TestAltDataDynamic:
         alt_df = pl.DataFrame({"time": self.df["timestamp"]})
         infiller = AltDataDynamic(
             alt_data_column="non_existent_column",
-            alt_df=alt_df,
             window_size="P3D",
-            alt_dataset_name="dep_ts",
+            alt_df=alt_df,
         )
         with pytest.raises(ColumnNotFoundError):
             infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
@@ -992,9 +974,8 @@ class TestAltDataDynamic:
         )
         infiller = AltDataDynamic(
             alt_data_column="alt_values",
-            alt_df=alt_df,
             window_size="P3D",
-            alt_dataset_name="dep_ts",
+            alt_df=alt_df,
         )
 
         result_df = infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
@@ -1028,7 +1009,6 @@ class TestAltDataDynamic:
             alt_data_column="alt_values",
             window_size="P2D",
             max_threshold=1,
-            alt_dataset_name="dep_ts",
         )
         result_df = infiller.apply(tf.df, tf.time_name, tf.periodicity, "values")
         result_df = result_df.with_columns(pl.col("values").round(1))
@@ -1052,7 +1032,7 @@ class TestAltDataDynamic:
             "timestamp",
             "P1D",
         )
-        infiller = AltDataDynamic(alt_data_column="alt_values", window_size="P1D", alt_dataset_name="dep_ts")
+        infiller = AltDataDynamic(alt_data_column="alt_values", window_size="P1D")
         result_df = infiller.apply(tf.df, tf.time_name, tf.periodicity, "values")
         expected_df = tf.df.with_columns(pl.Series("values", [1.0, None, 3.0, 4.0, 5.0, 6.0, 7.0]))
         assert_frame_equal(result_df, expected_df, check_column_order=False)
@@ -1074,10 +1054,9 @@ class TestAltDataDynamic:
         infiller = AltDataDynamic(
             alt_data_column="alt_values",
             window_size="P3D",
-            max_threshold=2,
             min_threshold=2,
+            max_threshold=2,
             window_side="right",
-            alt_dataset_name="dep_ts",
         )
         result_df = infiller.apply(tf.df, tf.time_name, tf.periodicity, "values")
         # Right-side only, max_threshold=2: uses Jan 4 and Jan 5 (closest 2 after the gap)
@@ -1103,19 +1082,23 @@ class TestAltDataDynamic:
         infiller = AltDataDynamic(
             alt_data_column="alt_values",
             window_size="P3D",
-            alt_dataset_name="dep_ts",
         )
         result_df = infiller.apply(tf.df, tf.time_name, tf.periodicity, "values", max_gap_size=1)
         expected_df = tf.df.with_columns(pl.Series("values", [10.0, None, None, None, 50.0, 60.0, 70.0]))
         assert_frame_equal(result_df, expected_df, check_column_order=False)
+
+    def test_add_metadata_without_dataset_name_raises(self) -> None:
+        """Test that ValueError is raised when add_metadata=True but alt_dataset_name is not provided."""
+        with pytest.raises(ValueError, match="alt_dataset_name must be provided when add_metadata=True"):
+            AltDataDynamic(alt_data_column="alt_values", window_size="P3D", add_metadata=True)
 
     def test_metadata(self) -> None:
         """Test that __INFILL_META__ is added with JSON strings and correct keys when add_metadata=True."""
         infiller = AltDataDynamic(
             alt_data_column="alt_values",
             window_size="P3D",
-            alt_dataset_name="dep_ts",
             add_metadata=True,
+            alt_dataset_name="alt_dataset_name",
         )
         result_df = infiller.apply(self.tf.df, self.tf.time_name, self.tf.periodicity, "values")
         assert "__INFILL_META__" in result_df.columns
@@ -1123,7 +1106,7 @@ class TestAltDataDynamic:
         # Spot-check one filled row: gap at index 3 uses a 3-day window on both sides
         filled_meta = json.loads(result_df["__INFILL_META__"][3])
         assert filled_meta["infill_method"] == "alt_data_dynamic"
-        assert filled_meta["alt_dataset_name"] == "dep_ts"
+        assert filled_meta["alt_dataset_name"] == "alt_dataset_name"
         assert "timestamps" in filled_meta
         assert "correction_factor" in filled_meta
         # Edge gap at index 11 remains null (not infilled)
@@ -1151,11 +1134,11 @@ class TestMultipleInfillMethods:
         step1 = LinearInterpolation(add_metadata=True).apply(
             tf.df, tf.time_name, tf.periodicity, "values", max_gap_size=1
         )
-        step2 = AltData(alt_data_column="alt_values", alt_dataset_name="dep_ts", add_metadata=True).apply(
+        step2 = AltData(alt_data_column="alt_values", add_metadata=True, alt_dataset_name="alt_dataset_name").apply(
             step1, tf.time_name, tf.periodicity, "values", max_gap_size=2
         )
         step3 = AltDataDynamic(
-            alt_data_column="alt_values", window_size="P2D", alt_dataset_name="dep_ts", add_metadata=True
+            alt_data_column="alt_values", window_size="P2D", add_metadata=True, alt_dataset_name="alt_dataset_name"
         ).apply(step2, tf.time_name, tf.periodicity, "values")
 
         assert "__INFILL_META__" in step3.columns
@@ -1166,8 +1149,8 @@ class TestMultipleInfillMethods:
         # Gap A filled by linear
         assert meta[1] == {"infill_method": "linear"}
         # Gap B filled by alt_data
-        assert meta[3] == {"infill_method": "alt_data", "alt_dataset_name": "dep_ts"}
-        assert meta[4] == {"infill_method": "alt_data", "alt_dataset_name": "dep_ts"}
+        assert meta[3] == {"infill_method": "alt_data", "alt_dataset_name": "alt_dataset_name"}
+        assert meta[4] == {"infill_method": "alt_data", "alt_dataset_name": "alt_dataset_name"}
         # Gap C filled by alt_data_dynamic — has extra keys
         assert meta[6]["infill_method"] == "alt_data_dynamic"
         assert meta[7]["infill_method"] == "alt_data_dynamic"

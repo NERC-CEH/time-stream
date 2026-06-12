@@ -116,7 +116,7 @@ Alternative data methods
         column is taken from the current TimeFrame.
 
         ``alt_dataset_name``: A label for the alternative dataset, recorded in the ``__INFILL_META__``
-        output column (default: ``"dep_ts"``). See :ref:`infill_metadata`.
+        output column. Only required when ``add_metadata=True``. See :ref:`infill_metadata`.
 
     **Example usage:**
 
@@ -147,7 +147,7 @@ Alternative data methods
         from the current TimeFrame.
 
         ``alt_dataset_name``: A label for the alternative dataset, recorded in the ``__INFILL_META__``
-        output column (default: ``"dep_ts"``). See :ref:`infill_metadata`.
+        output column. Only required when ``add_metadata=True``. See :ref:`infill_metadata`.
 
         ``window_size``: A period around the missing data to be used to calculate the correction factor,
         as an ISO 8601 duration string, a :class:`~time_stream.Period`, or a :class:`datetime.timedelta`.
@@ -168,8 +168,8 @@ Alternative data methods
             "alt_data_dynamic",
             "flow",
             alt_data_column="flow_model",
-            alt_df=model_df,
             window_size="P3D",
+            alt_df=model_df,
             min_threshold=2,
             max_threshold=4,
             window_side="left",

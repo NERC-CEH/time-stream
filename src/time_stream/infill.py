@@ -418,10 +418,10 @@ class AltData(InfillMethod):
     def __init__(
         self,
         alt_data_column: str,
-        alt_dataset_name: str,
         correction_factor: float = 1.0,
         alt_df: pl.DataFrame | None = None,
         add_metadata: bool = False,
+        alt_dataset_name: str | None = None,
     ):
         """Initialize the alternative data infill method.
 
@@ -429,13 +429,16 @@ class AltData(InfillMethod):
             alt_data_column: The name of the column providing the alternative data.
             correction_factor: An optional correction factor to apply to the alternative data.
             alt_df: The DataFrame containing the alternative data.
-            alt_dataset_name: Name of the alternative dataset used for infilling.
             add_metadata: If True, attach a ``__INFILL_META__`` JSON string column when applying.
+            alt_dataset_name: Name of the alternative dataset, recorded in ``__INFILL_META__``.
+                Required when ``add_metadata=True``.
         """
+        if add_metadata and alt_dataset_name is None:
+            raise ValueError("alt_dataset_name must be provided when add_metadata=True")
+        self.alt_dataset_name = alt_dataset_name
         self.alt_data_column = alt_data_column
         self.correction_factor = correction_factor
         self.alt_df = alt_df
-        self.alt_dataset_name = alt_dataset_name
         self.add_metadata = add_metadata
 
     def _infill_meta(self, **kwargs) -> dict:
@@ -504,13 +507,13 @@ class AltDataDynamic(InfillMethod):
     def __init__(
         self,
         alt_data_column: str,
-        alt_dataset_name: str,
         window_size: str | Period | timedelta,
         alt_df: pl.DataFrame | None = None,
         min_threshold: int = 0,
         max_threshold: int | None = None,
         window_side: Literal["left", "right", "both"] = "both",
         add_metadata: bool = False,
+        alt_dataset_name: str | None = None,
     ):
         """Initialize the alternative data infill method.
 
@@ -518,7 +521,6 @@ class AltDataDynamic(InfillMethod):
             alt_data_column: Name of the column providing the alternative data.
             window_size: Time window around each gap used to calculate the correction factor.
                 Accepts an ISO duration string, Period, or timedelta.
-            alt_dataset_name: Name of alternative dataset used for infilling.
             alt_df: Optional separate DataFrame containing the alternative data. If None,
                 alt_data_column must exist in the DataFrame passed to the infill method.
             min_threshold: Minimum number of data points required in the window to calculate
@@ -528,17 +530,21 @@ class AltDataDynamic(InfillMethod):
             window_side: Which side of each gap to use for the window. Defaults to "both".
                 "left" uses only data before the gap; "right" uses only data after.
             add_metadata: If True, attach a ``__INFILL_META__`` JSON string column when applying.
+            alt_dataset_name: Name of the alternative dataset, recorded in ``__INFILL_META__``.
+                Required when ``add_metadata=True``.
         """
         if max_threshold is not None:
             if min_threshold > max_threshold:
                 raise ValueError(f"max_threshold must be greater than min_threshold ({min_threshold}).")
             if max_threshold == 0:
                 raise ValueError("max_threshold must be greater than zero.")
+        if add_metadata and alt_dataset_name is None:
+            raise ValueError("alt_dataset_name must be provided when add_metadata=True")
 
         self.alt_dataset_name = alt_dataset_name
         self.alt_data_column = alt_data_column
-        self.alt_df = alt_df
         self.window_size = window_size
+        self.alt_df = alt_df
         self.min_threshold = min_threshold
         self.max_threshold = max_threshold
         self.window_side = window_side
@@ -639,7 +645,6 @@ class AltDataDynamic(InfillMethod):
             time_column_name,
             gap_id_column_name,
             meta_column_name,
-            alt_data_column_name,
         )
 
         if meta_df is not None:
@@ -972,7 +977,6 @@ class AltDataDynamic(InfillMethod):
         time_column_name: str,
         gap_id_column_name: str,
         meta_column_name: str,
-        alt_data_column_name: str,
     ) -> pl.DataFrame | None:
 
         if cf_df is not None and windowed_df is not None:

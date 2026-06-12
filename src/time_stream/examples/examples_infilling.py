@@ -84,7 +84,7 @@ def alt_data_infill() -> None:
     tf = ts.TimeFrame(df, "time", resolution="PT15M", periodicity="PT15M")
 
     # [start_block_2]
-    tf_infill = tf.infill("alt_data", "flow", alt_df=alt_df, correction_factor=0.75, alt_data_column="alt_flow")
+    tf_infill = tf.infill("alt_data", "flow", alt_data_column="alt_flow", correction_factor=0.75, alt_df=alt_df)
     # [end_block_2]
     print(tf_infill.df)
 
@@ -100,9 +100,9 @@ def alt_data_dynamic_infill() -> None:
     tf_infill = tf.infill(
         "alt_data_dynamic",
         "flow",
-        alt_df=alt_df,
         alt_data_column="alt_flow",
         window_size="PT1H",
+        alt_df=alt_df,
     )
     # [end_block_4]
     print(tf_infill.df)
@@ -120,27 +120,27 @@ def alt_data_dynamic_window_size_formats() -> None:
     tf_infill_str = tf.infill(
         "alt_data_dynamic",
         "flow",
-        alt_df=alt_df,
         alt_data_column="alt_flow",
         window_size="PT1H",
+        alt_df=alt_df,
     )
 
     # ...as a Period object:
     tf_infill_period = tf.infill(
         "alt_data_dynamic",
         "flow",
-        alt_df=alt_df,
         alt_data_column="alt_flow",
         window_size=ts.Period.of_hours(1),
+        alt_df=alt_df,
     )
 
     # ...or as a timedelta:
     tf_infill_timedelta = tf.infill(
         "alt_data_dynamic",
         "flow",
-        alt_df=alt_df,
         alt_data_column="alt_flow",
         window_size=timedelta(hours=1),
+        alt_df=alt_df,
     )
     # [end_block_7]
 
@@ -160,9 +160,9 @@ def alt_data_dynamic_infill_with_thresholds() -> None:
     tf_infill = tf.infill(
         "alt_data_dynamic",
         "flow",
-        alt_df=alt_df,
         alt_data_column="alt_flow",
         window_size="PT2H",
+        alt_df=alt_df,
         min_threshold=2,
         max_threshold=4,
     )
@@ -181,9 +181,9 @@ def alt_data_dynamic_infill_one_sided() -> None:
     tf_infill = tf.infill(
         "alt_data_dynamic",
         "flow",
-        alt_df=alt_df,
         alt_data_column="alt_flow",
         window_size="PT1H",
+        alt_df=alt_df,
         window_side="left",
     )
     # [end_block_6]
