@@ -34,14 +34,14 @@ classifiers = [
 license = { file = "LICENSE" }
 dependencies = [
     "config>=0.5.1",
-    "polars>=1.41.2",
+    "polars>=1.42.0",
     "pyarrow>=24.0.0",
     "pydantic>=2.13.4",
     "isodate",
     "numpy",
-    "scipy>=1.17.1",
+    "scipy>=1.18.0",
     "matplotlib>=3.11.0",
-    "altair>=6.2.1",
+    "altair>=6.2.2",
     "pandas>=3.0.3",
     "sphinx-autodoc-typehints>=3.10.0",
 ]
