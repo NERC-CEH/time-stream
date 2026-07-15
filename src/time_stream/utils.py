@@ -28,11 +28,13 @@ class TimeWindow:
     Can be used to restrict which observations within a period are included. For example, to compute
     mean daily albedo from 30-minute values, you might restrict to the window 10:30-14:00.
 
-    Midnight-wrapping windows (where ``start >= end``) are not supported.
+    A single-instant window (``start == end``) is also supported, matching only that exact time of day.
+
+    Midnight-wrapping windows (where ``start > end``) are not supported.
 
     Attributes:
         start: The start of the time-of-day window.
-        end: The end of the time-of-day window. Must be after ``start``.
+        end: The end of the time-of-day window. Must not be before ``start``.
         closed: Which boundary times are included. Defaults to both ends being closed (inclusive).
     """
 
@@ -44,8 +46,8 @@ class TimeWindow:
         """Validate the time window on construction."""
         if not isinstance(self.start, time) or not isinstance(self.end, time):
             raise TimeWindowError("'start' and 'end' must be datetime.time objects.")
-        if self.start >= self.end:
-            raise TimeWindowError(f"'start' ({self.start}) must be strictly before 'end' ({self.end}).")
+        if self.start > self.end:
+            raise TimeWindowError(f"'start' ({self.start}) must not be after 'end' ({self.end}).")
 
     @classmethod
     def from_tuple(cls, t: tuple[time, time] | tuple[time, time, ClosedInterval]) -> "TimeWindow":

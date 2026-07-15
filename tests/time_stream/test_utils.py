@@ -2090,8 +2090,9 @@ class TestTimeWindow:
             (time(10, 30), time(14, 0), "left"),
             (time(10, 30), time(14, 0), "right"),
             (time(10, 30), time(14, 0), "none"),
+            (time(10, 0), time(10, 0), "both"),
         ],
-        ids=["both closed", "left closed", "right closed", "none closed"],
+        ids=["both closed", "left closed", "right closed", "none closed", "start equals end (instant)"],
     )
     def test_valid_construction(self, start: time, end: time, closed: ClosedInterval) -> None:
         """TimeWindow stores start, end, and closed correctly."""
@@ -2103,12 +2104,11 @@ class TestTimeWindow:
     @pytest.mark.parametrize(
         "start,end",
         [
-            (time(10, 0), time(10, 0)),
             (time(23, 0), time(1, 0)),
             ("10:30", time(14, 0)),
             (time(10, 30), "14:00"),
         ],
-        ids=["start equals end", "start after end", "non-time start", "non-time end"],
+        ids=["start after end", "non-time start", "non-time end"],
     )
     def test_invalid_construction_raises(self, start: Any, end: Any) -> None:
         """Invalid start/end combinations raise TimeWindowError."""
@@ -2121,8 +2121,9 @@ class TestTimeWindow:
             (time(10, 30), time(14, 0), timedelta(hours=3, minutes=30)),
             (time(9, 0), time(17, 0), timedelta(hours=8)),
             (time(12, 0, 0), time(12, 0, 30), timedelta(seconds=30)),
+            (time(9, 0), time(9, 0), timedelta(0)),
         ],
-        ids=["hours and minutes", "exact hours", "sub-minute"],
+        ids=["hours and minutes", "exact hours", "sub-minute", "instant (start equals end)"],
     )
     def test_duration(self, start: time, end: time, expected_duration: timedelta) -> None:
         """duration returns the timedelta between end and start."""
@@ -2138,6 +2139,7 @@ class TestTimeWindow:
             (time(10, 30), time(14, 0), "none", Period.of_minutes(30), 6),
             (time(10, 0), time(10, 15), "none", Period.of_minutes(30), 0),
             (time(10, 0), time(14, 0), "both", Period.of_hours(1), 5),
+            (time(9, 0), time(9, 0), "both", Period.of_hours(1), 1),
         ],
         ids=[
             "both closed, 30-min",
@@ -2146,6 +2148,7 @@ class TestTimeWindow:
             "none closed, 30-min",
             "narrow window none closed returns zero",
             "both closed, hourly",
+            "instant (start equals end), hourly",
         ],
     )
     def test_expected_count(

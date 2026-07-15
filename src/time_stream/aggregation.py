@@ -16,7 +16,7 @@ Both share a common abstract base class :class:`AggregationPipeline`.
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import time, timedelta
 from typing import Callable, get_args
 
 import polars as pl
@@ -58,6 +58,16 @@ class AggregationFunction(Operation, ABC):
     def post_expr(self, _ctx: AggregationCtx, _columns: list[str]) -> list[pl.Expr]:
         """Return additional Polars expressions to be applied after the aggregation."""
         return []
+
+    def implicit_time_window(self) -> TimeWindow | None:
+        """Return a time-of-day window this aggregation restricts itself to, or ``None``.
+
+        Used by aggregation functions (e.g. :class:`HourlyAsDaily`) that only make sense when applied to
+        a specific time-of-day window, rather than requiring the caller to also pass an explicit
+        ``time_window`` to :meth:`~time_stream.TimeFrame.aggregate`. The base implementation returns
+        ``None``.
+        """
+        return None
 
 
 class AggregationPipeline(ABC):
@@ -315,6 +325,15 @@ class StandardAggregationPipeline(AggregationPipeline):
         self.aggregation_time_anchor = (
             aggregation_time_anchor if aggregation_time_anchor is not None else ctx.time_anchor
         )
+
+        implicit_time_window = agg_func.implicit_time_window()
+        if implicit_time_window is not None:
+            if time_window is not None:
+                raise TimeWindowError(
+                    f"'{agg_func.name}' aggregation defines its own time window and cannot be combined "
+                    f"with an explicit 'time_window' argument."
+                )
+            time_window = implicit_time_window
         self.time_window = time_window
 
     def _validate(self) -> None:
@@ -442,8 +461,12 @@ class RollingAggregationPipeline(AggregationPipeline):
 
         Raises:
             AggregationPeriodError: If the window size is smaller than the data periodicity.
-            AggregationError: If CENTER alignment is used with a calendar-based (variable-length) window.
+            AggregationError: If CENTER alignment is used with a calendar-based (variable-length) window, or
+                if the aggregation function requires a time-of-day window (not supported for rolling
+                aggregation).
         """
+        if self.agg_func.implicit_time_window() is not None:
+            raise AggregationError(f"'{self.agg_func.name}' aggregation is not supported for rolling aggregation.")
         if not self.ctx.periodicity.is_subperiod_of(self.aggregation_period):
             raise AggregationPeriodError(
                 f"Rolling window size '{self.aggregation_period}' must be at least as large as the "
@@ -692,3 +715,39 @@ class StDev(AggregationFunction):
     def expr(self, ctx: AggregationCtx, columns: list[str]) -> list[pl.Expr]:
         """Return the `Polars` expression for calculating the standard deviation in an aggregation period."""
         return [pl.col(col).std().alias(f"stdev_{col}") for col in columns]
+
+
+@AggregationFunction.register
+class HourlyAsDaily(AggregationFunction):
+    """An aggregation class to downsample hourly (or other sub-daily) data to daily.
+
+    The hour of the day is specified, and the daily value is set to the value observed at that hour each day.
+    Internally this restricts the aggregation to a single-instant time window at the given hour, so it can
+    only be used with daily-or-longer aggregation periods over sub-daily data - the same constraints as the
+    ``time_window`` argument on :meth:`~time_stream.TimeFrame.aggregate`.
+    """
+
+    name = "hourly_value_as_daily"
+
+    def __init__(self, hour: int):
+        """Initialise HourlyAsDaily aggregation.
+
+        Args:
+            hour: The hour of the day (0-23) whose value should be used as the daily value.
+        """
+        super().__init__()
+        if not isinstance(hour, int) or not (0 <= hour <= 23):
+            raise ValueError("The hour value must be provided as an integer value from 0 to 23")
+        self.hour = hour
+
+    def implicit_time_window(self) -> TimeWindow:
+        """Return the single-instant time window for the specified hour."""
+        return TimeWindow(start=time(self.hour, 0), end=time(self.hour, 0))
+
+    def expr(self, ctx: AggregationCtx, columns: list[str]) -> list[pl.Expr]:
+        """Return the `Polars` expression for selecting the value at the specified hour.
+
+        The implicit time window restricts each aggregation period to at most one observation, so this
+        simply takes that (sole) value.
+        """
+        return [pl.col(col).first().alias(f"{self.name}_{col}") for col in columns]
