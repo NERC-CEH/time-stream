@@ -718,7 +718,7 @@ class StDev(AggregationFunction):
 
 
 @AggregationFunction.register
-class HourlyAsDaily(AggregationFunction):
+class HourlyValueAsDaily(AggregationFunction):
     """An aggregation class to downsample hourly (or other sub-daily) data to daily.
 
     The hour of the day is specified, and the daily value is set to the value observed at that hour each day.
