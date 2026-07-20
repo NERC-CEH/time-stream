@@ -184,7 +184,7 @@ class CategoricalListFlag(CategoricalSingleFlag, metaclass=CategoricalListMeta):
             CategoricalFlagUnknownError: If the series contains values not in this flag system.
         """
         valid_values = set(cls.to_dict().values())
-        unknown = set(series.explode().drop_nulls().unique().to_list()) - valid_values
+        unknown = set(series.explode(empty_as_null=True).drop_nulls().unique().to_list()) - valid_values
 
         if unknown:
             raise CategoricalFlagUnknownError(
