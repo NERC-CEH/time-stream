@@ -32,7 +32,7 @@ def all_example_funcs() -> Iterator[tuple[str, Callable]]:
 
 
 class TestExampleFunctions:
-    @pytest.mark.parametrize("name,func", all_example_funcs())
+    @pytest.mark.parametrize("name,func", list(all_example_funcs()))
     def test_examples(self, name: str, func: Callable) -> None:
         """Test that each example function can be called without errors."""
         func()

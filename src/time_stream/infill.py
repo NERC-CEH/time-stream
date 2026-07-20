@@ -834,7 +834,7 @@ class AltDataDynamic(InfillMethod):
                 f"window size is below min threshold ({self.min_threshold}).",
             )
         valid_ids = window_sizes.filter(pl.col("__COUNT__") >= self.min_threshold)[gap_id_column_name]
-        return windowed_df.filter(pl.col(gap_id_column_name).is_in(valid_ids))
+        return windowed_df.filter(pl.col(gap_id_column_name).is_in(valid_ids.implode()))
 
     def _build_correction_factors(
         self,
