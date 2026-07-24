@@ -705,12 +705,12 @@ class Nth(AggregationFunction):
         """Initialise Nth aggregation.
 
         Args:
-            n: The 1-based position of the value to select within each aggregation period
+            n: The index position (starting at 1) of the value to select within each aggregation period
                 (e.g. n=12 selects the 12th hour of each day when aggregating hourly data to daily).
         """
         super().__init__()
         if not isinstance(n, int) or n < 1:
-            raise ValueError("'n' must be a positive integer (1-based position within the period).")
+            raise ValueError("'n' must be a positive integer.")
         self.n = n
 
     def expr(self, ctx: AggregationCtx, columns: list[str]) -> list[pl.Expr]:

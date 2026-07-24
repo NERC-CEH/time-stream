@@ -1907,6 +1907,29 @@ class TestNthAggregation:
         with pytest.raises(ValueError, match="'n' must be a positive integer"):
             Nth(n=n)
 
+    def test_nth_missing_aggregation_period_raises(self) -> None:
+        """Test that Nth raises a clear error when the AggregationCtx has no aggregation_period set
+        (it defaults to None), rather than failing later with an unrelated error from periodicity.count(None)."""
+        input_tf = TS_PT1H_2DAYS
+
+        with pytest.raises(
+            AggregationPeriodError,
+            match="An aggregation_period must be defined for nth aggregation method.",
+        ):
+            StandardAggregationPipeline(
+                Nth(n=1),
+                AggregationCtx(
+                    df=input_tf.df,
+                    time_name=input_tf.time_name,
+                    time_anchor=input_tf.time_anchor,
+                    periodicity=input_tf.periodicity,
+                    # aggregation_period intentionally omitted - defaults to None
+                ),
+                P1D,
+                "value",
+                aggregation_time_anchor=input_tf.time_anchor,
+            ).execute()
+
     def test_nth_exceeds_fixed_period_count_raises(self) -> None:
         """Test that requesting the 13th value of a 2-hourly-resolution day (only 12 fit) raises immediately,
         rather than letting Polars fail with an opaque out-of-bounds error."""
