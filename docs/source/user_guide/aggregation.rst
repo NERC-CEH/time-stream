@@ -231,6 +231,43 @@ Choose how values inside each window are summarised. Pass a **string** correspon
 
     **Example usage:** ``tf_agg = tf.aggregate("P1D", "max", "flow")``
 
+``nth``
+^^^^^^^
+:class:`time_stream.aggregation.Nth`
+
+    **What it does:** Selects the value (and its timestamp) at a fixed 1-based position within each period -
+    for example, ``n=1`` selects the first value, ``n=49`` selects the 49th 15-minute reading of the day (12:00).
+
+    **When to use:** Useful when you need a specific, deterministic point from within a period rather than a
+    summary statistic - for example, always taking the reading at a particular time of day.
+
+    **Additional args:**
+        ``n``: The 1-based position of the value to select within each period. Must be a positive integer.
+
+    **Example usage:** ``tf_agg = tf.aggregate("P1D", "nth", "flow", n=49)``
+
+    .. note::
+
+        If ``n`` is larger than the number of periodicity points that always fit within the aggregation period
+        (e.g. requesting the 25th hour of a day), an ``AggregationPeriodError`` is raised. For periods where
+        that count isn't fixed (e.g. daily data aggregated to monthly, where months vary in length), or when a
+        period simply doesn't contain enough values (e.g. missing data, or an incomplete period at the
+        start/end of the series), the result is ``null`` instead.
+
+    Using the :ref:`15-minute flow example data <example_input_data_agg>`:
+
+    .. literalinclude:: ../../../src/time_stream/examples/examples_aggregation.py
+        :language: python
+        :start-after: [start_block_6]
+        :end-before: [end_block_6]
+        :dedent:
+
+    .. jupyter-execute::
+       :hide-code:
+
+       import examples_aggregation
+       examples_aggregation.aggregation_nth_example()
+
 ``percentile``
 ^^^^^^^^^^^^^^
 :class:`time_stream.aggregation.Percentile`

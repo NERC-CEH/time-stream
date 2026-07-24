@@ -16,6 +16,7 @@ from time_stream.aggregation import (
     Mean,
     MeanSum,
     Min,
+    Nth,
     PeaksOverThreshold,
     Percentile,
     RollingAggregationPipeline,
@@ -80,7 +81,7 @@ def generate_expected_df(
     values: dict[str, list[Any]],
     expected_counts: list[int],
     actual_counts: list[int],
-    timestamps_of: list[datetime] | None = None,
+    timestamps_of: list[datetime | None] | None = None,
     valid: dict[str, list[bool]] | None = None,
 ) -> pl.DataFrame:
     """Helper function to create a dataframe of expected results from an aggregation test.
@@ -129,6 +130,7 @@ def generate_expected_df(
 # Period instances used throughout these tests
 PT30M = Period.of_minutes(30)
 PT1H = Period.of_hours(1)
+PT2H = Period.of_hours(2)
 P1D = Period.of_days(1)
 P1D_OFF = P1D.with_hour_offset(9)  # water day
 P1M = Period.of_months(1)
@@ -144,8 +146,10 @@ TS_PT1H_HALF_DAY = generate_time_series(PT1H, PT1H, 12)  # half a day of 1-hour 
 TS_PT1H_2DAYS = generate_time_series(PT1H, PT1H, 48)  # 2 days of 1-hour data
 TS_PT1H_2DAYS_MISSING = generate_time_series(PT1H, PT1H, 48, missing_data=True)  # 2 days of 1-hour data
 TS_PT1H_2MONTH = generate_time_series(PT1H, PT1H, 1_416)  # 2 months (Jan, Feb 2025) of 1-hour data
+TS_PT2H_2DAYS = generate_time_series(PT2H, PT2H, 24)  # 2 days of 2-hourly data
 TS_P1M_2YEARS = generate_time_series(P1M, P1M, 24)  # 2 years of month data
 TS_P1D_2DAYS = generate_time_series(P1D, P1D, 2)  # 2 days of daily data
+TS_P1D_2MONTH = generate_time_series(P1D, P1D, 59)  # 2 months (Jan, Feb 2025) of daily data
 TS_P1D_OFF_2MONTH = generate_time_series(P1D, P1D_OFF, 59, offset="+9H")  # 2 months (Jan, Feb 2025) of 1-day-offset
 TS_P1M_OFF_2YEARS = generate_time_series(P1M, P1M_OFF, 24, offset="+9H")  # 2 years of 1-month-offset data
 
@@ -1861,6 +1865,171 @@ class TestPercentileAggregation:
             ).execute()
 
 
+class TestNthAggregation:
+    @pytest.mark.parametrize(
+        "n,expected_values,expected_timestamps_of",
+        [
+            (1, {"value": [0, 24]}, [datetime(2025, 1, 1, 0), datetime(2025, 1, 2, 0)]),
+            (12, {"value": [11, 35]}, [datetime(2025, 1, 1, 11), datetime(2025, 1, 2, 11)]),
+            (24, {"value": [23, 47]}, [datetime(2025, 1, 1, 23), datetime(2025, 1, 2, 23)]),
+        ],
+    )
+    def test_nth_aggregation(
+        self, n: int, expected_values: dict[str, list[int]], expected_timestamps_of: list[datetime | None]
+    ) -> None:
+        """Test that Nth selects the (1-based) nth value, and its timestamp, within each period."""
+        input_tf = TS_PT1H_2DAYS
+        column = "value"
+        timestamps = [datetime(2025, 1, 1), datetime(2025, 1, 2)]
+        counts = [24, 24]
+
+        expected_df = generate_expected_df(
+            timestamps, Nth, column, expected_values, counts, counts, expected_timestamps_of
+        )
+        result = StandardAggregationPipeline(
+            Nth(n=n),
+            AggregationCtx(
+                df=input_tf.df,
+                time_name=input_tf.time_name,
+                time_anchor=input_tf.time_anchor,
+                periodicity=input_tf.periodicity,
+                aggregation_period=P1D,
+            ),
+            P1D,
+            "value",
+            aggregation_time_anchor=input_tf.time_anchor,
+        ).execute()
+        assert_frame_equal(result, expected_df, check_dtypes=False, check_column_order=False)
+
+    @pytest.mark.parametrize("n", [0, -1, -100])
+    def test_nth_invalid_n_raises_value_error(self, n: int) -> None:
+        """Test that non-positive n is rejected at construction, before any aggregation runs."""
+        with pytest.raises(ValueError, match="'n' must be a positive integer"):
+            Nth(n=n)
+
+    def test_nth_exceeds_fixed_period_count_raises(self) -> None:
+        """Test that requesting the 13th value of a 2-hourly-resolution day (only 12 fit) raises immediately,
+        rather than letting Polars fail with an opaque out-of-bounds error."""
+        input_tf = TS_PT2H_2DAYS
+
+        with pytest.raises(
+            AggregationPeriodError,
+            match=r"Cannot select n=13: periodicity 'PT2H' fits only 12 points within aggregation period 'P1D'",
+        ):
+            StandardAggregationPipeline(
+                Nth(n=13),
+                AggregationCtx(
+                    df=input_tf.df,
+                    time_name=input_tf.time_name,
+                    time_anchor=input_tf.time_anchor,
+                    periodicity=input_tf.periodicity,
+                    aggregation_period=P1D,
+                ),
+                P1D,
+                "value",
+                aggregation_time_anchor=input_tf.time_anchor,
+            ).execute()
+
+    def test_nth_at_fixed_period_upper_bound_is_valid(self) -> None:
+        """Test that requesting the last valid position (12th of 12 for 2-hourly data over a day) succeeds."""
+        input_tf = TS_PT2H_2DAYS
+        timestamps = [datetime(2025, 1, 1), datetime(2025, 1, 2)]
+        counts = [12, 12]
+
+        expected_df = generate_expected_df(
+            timestamps,
+            Nth,
+            "value",
+            {"value": [11, 23]},
+            counts,
+            counts,
+            [datetime(2025, 1, 1, 22), datetime(2025, 1, 2, 22)],
+        )
+        result = StandardAggregationPipeline(
+            Nth(n=12),
+            AggregationCtx(
+                df=input_tf.df,
+                time_name=input_tf.time_name,
+                time_anchor=input_tf.time_anchor,
+                periodicity=input_tf.periodicity,
+                aggregation_period=P1D,
+            ),
+            P1D,
+            "value",
+            aggregation_time_anchor=input_tf.time_anchor,
+        ).execute()
+        assert_frame_equal(result, expected_df, check_dtypes=False, check_column_order=False)
+
+    def test_nth_variable_length_period_returns_null_when_out_of_range(self) -> None:
+        """Test that for variable-length aggregation periods (e.g. daily -> monthly, where the expected count
+        isn't fixed) an out-of-range n degrades to null for the shorter group, rather than raising - since
+        there's no single fixed count to validate against upfront."""
+        input_tf = TS_P1D_2MONTH
+        timestamps = [datetime(2025, 1, 1), datetime(2025, 2, 1)]
+
+        expected_df = generate_expected_df(
+            timestamps,
+            Nth,
+            "value",
+            {"value": [29, None]},
+            [31, 28],
+            [31, 28],
+            [datetime(2025, 1, 30), None],
+        )
+        result = StandardAggregationPipeline(
+            Nth(n=30),
+            AggregationCtx(
+                df=input_tf.df,
+                time_name=input_tf.time_name,
+                time_anchor=input_tf.time_anchor,
+                periodicity=input_tf.periodicity,
+                aggregation_period=P1M,
+            ),
+            P1M,
+            "value",
+            aggregation_time_anchor=input_tf.time_anchor,
+        ).execute()
+        assert_frame_equal(result, expected_df, check_dtypes=False, check_column_order=False)
+
+    def test_nth_rolling_aggregation(self) -> None:
+        """Test Nth via RollingAggregationPipeline: a leading 2-hour window over 1-hour data has a fixed
+        expected count of 2, but the final row is naturally truncated by the end of the series - that edge
+        case should return null rather than raise, since the period itself can hold n=2 values."""
+        input_tf = TS_PT1H_HALF_DAY
+        timestamps = input_tf.df["timestamp"].to_list()[:5]
+        df = input_tf.df.head(5)
+
+        expected_df = generate_expected_df(
+            timestamps,
+            Nth,
+            "value",
+            {"value": [1, 2, 3, 4, None]},
+            [2] * 5,
+            [2, 2, 2, 2, 1],
+            [
+                datetime(2025, 1, 1, 1),
+                datetime(2025, 1, 1, 2),
+                datetime(2025, 1, 1, 3),
+                datetime(2025, 1, 1, 4),
+                None,
+            ],
+        )
+        result = RollingAggregationPipeline(
+            Nth(n=2),
+            AggregationCtx(
+                df=df,
+                time_name=input_tf.time_name,
+                time_anchor=input_tf.time_anchor,
+                periodicity=input_tf.periodicity,
+                aggregation_period=PT2H,
+            ),
+            PT2H,
+            "value",
+            alignment="leading",
+        ).execute()
+        assert_frame_equal(result, expected_df, check_dtypes=False, check_column_order=False)
+
+
 class TestConditionalCount:
     @pytest.mark.parametrize(
         "input_tf,condition,target_period,column,timestamps,expected_counts,actual_counts,values",
@@ -2201,7 +2370,7 @@ class TestRollingAggregation:
         self,
         aggregator: type[AggregationFunction],
         expected_values: list[float | int],
-        timestamps_of: list[datetime] | None,
+        timestamps_of: list[datetime | None] | None,
         kwargs: dict[str, Any],
     ) -> None:
         """Check rolling aggregations are applied correctly."""
