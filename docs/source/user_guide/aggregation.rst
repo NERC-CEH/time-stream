@@ -235,8 +235,7 @@ Choose how values inside each window are summarised. Pass a **string** correspon
 ^^^^^^^
 :class:`time_stream.aggregation.Nth`
 
-    **What it does:** Selects the value (and its timestamp) at a fixed 1-based position within each period -
-    for example, ``n=1`` selects the first value, ``n=49`` selects the 49th 15-minute reading of the day (12:00).
+    **What it does:** Selects the value (and its timestamp) at a fixed 1-based position within each period - for example, ``n=1`` selects the first value, ``n=49`` selects the 49th value within the given aggregation period.
 
     **When to use:** Useful when you need a specific, deterministic point from within a period rather than a
     summary statistic - for example, always taking the reading at a particular time of day.
