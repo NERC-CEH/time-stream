@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "time-stream"
-version = "1.1.1"
+version = "1.2.0"
 description = "Time-Stream: Time Series Toolkit for Rapid Environmental Analysis and Monitoring"
 readme = "README.md"
 authors = [
@@ -34,15 +34,15 @@ classifiers = [
 license = { file = "LICENSE" }
 dependencies = [
     "config>=0.5.1",
-    "polars>=1.41.1",
-    "pyarrow>=24.0.0",
+    "polars>=1.43.0",
+    "pyarrow>=25.0.0",
     "pydantic>=2.13.4",
     "isodate",
     "numpy",
-    "scipy>=1.17.1",
-    "matplotlib>=3.10.9",
-    "altair>=6.1.0",
-    "pandas>=3.0.3",
+    "scipy>=1.18.0",
+    "matplotlib>=3.11.1",
+    "altair>=6.2.2",
+    "pandas>=3.0.5",
     "sphinx-autodoc-typehints>=3.10.0",
 ]
 requires-python = ">= 3.12"
@@ -67,7 +67,7 @@ typecheck = [
 ]
 docs = [
     "sphinx",
-    "shibuya>=2026.5.19",
+    "shibuya>=2026.7.12",
     "sphinx-copybutton",
     "sphinx-design>=0.6.1",
     "sphinx-iconify>=0.3.0",
@@ -76,7 +76,7 @@ docs = [
     "sphinx-contributors>=0.3.0",
     "myst-parser",
     "sphinx-tabs>=3.5.0",
-    "sphinxcontrib-mermaid>=2.0.2",
+    "sphinxcontrib-mermaid>=2.1.0",
     "nbsphinx",
     "jupyter_sphinx",
     "snowballstemmer<4"

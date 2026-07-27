@@ -22,6 +22,7 @@ Aggregation functions
     ~Mean
     ~MeanSum
     ~Min
+    ~Nth
     ~PeaksOverThreshold
     ~Percentile
     ~StDev

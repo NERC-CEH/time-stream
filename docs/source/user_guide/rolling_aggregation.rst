@@ -192,3 +192,28 @@ Rows where ``count_flow < 3`` have ``valid_flow = false``, as visible at the sta
 window has not yet accumulated enough observations.
 
 See :ref:`Missing data criteria <missing_criteria>` in the aggregation guide for the full list of available criteria.
+
+Selecting a specific point in the window
+=========================================
+
+The :ref:`nth <aggregation_functions>` aggregation function is particularly useful with rolling windows: it lets
+you pull out a value from a fixed position relative to each timestamp - for example, "the reading from (just
+under) an hour ago".
+
+.. literalinclude:: ../../../src/time_stream/examples/examples_rolling_aggregation.py
+   :language: python
+   :start-after: [start_block_3]
+   :end-before: [end_block_3]
+   :dedent:
+
+.. jupyter-execute::
+   :hide-code:
+
+   import examples_rolling_aggregation
+   examples_rolling_aggregation.rolling_nth_example()
+
+.. note::
+
+   With rolling windows, a request for ``n`` that fits within the window size but exceeds what's actually
+   available at the edges of the series (e.g. the very start of a trailing window) resolves to ``null`` rather
+   than raising, since this is a natural consequence of the series boundary rather than an invalid request.

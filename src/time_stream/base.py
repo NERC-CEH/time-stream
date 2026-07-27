@@ -751,6 +751,7 @@ class TimeFrame:
             time_name=self.time_name,
             time_anchor=self.time_anchor,
             periodicity=self.periodicity,
+            aggregation_period=aggregation_period,
         )
 
         agg_df = StandardAggregationPipeline(
@@ -827,6 +828,7 @@ class TimeFrame:
             time_name=self.time_name,
             time_anchor=self.time_anchor,
             periodicity=self.periodicity,
+            aggregation_period=window_size,
         )
 
         agg_df = RollingAggregationPipeline(

@@ -173,3 +173,15 @@ def aggregation_missing_criteria_example() -> None:
     tf_agg = tf.aggregate("P1M", "mean", "flow", missing_criteria=("missing", 150))
     # [end_block_5]
     print(tf_agg.df)
+
+
+def aggregation_nth_example() -> None:
+    with suppress_output():
+        df = get_example_df(library="polars")
+
+    tf = ts.TimeFrame(df, "time", resolution="PT15M", periodicity="PT15M")
+    # [start_block_6]
+    # 15-minute data: the 49th reading of the day falls at 12:00 (noon)
+    tf_agg = tf.aggregate("P1D", "nth", "flow", n=49)
+    # [end_block_6]
+    print(tf_agg.df)
