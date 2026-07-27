@@ -34,7 +34,7 @@ classifiers = [
 license = { file = "LICENSE" }
 dependencies = [
     "config>=0.5.1",
-    "polars>=1.42.1",
+    "polars>=1.43.0",
     "pyarrow>=25.0.0",
     "pydantic>=2.13.4",
     "isodate",
@@ -42,7 +42,7 @@ dependencies = [
     "scipy>=1.18.0",
     "matplotlib>=3.11.1",
     "altair>=6.2.2",
-    "pandas>=3.0.3",
+    "pandas>=3.0.5",
     "sphinx-autodoc-typehints>=3.10.0",
 ]
 requires-python = ">= 3.12"
