@@ -37,6 +37,7 @@ class AggregationCtx:
     time_name: str
     time_anchor: TimeAnchor
     periodicity: Period
+    aggregation_period: Period | None = None
 
 
 class AggregationFunction(Operation, ABC):
@@ -691,4 +692,54 @@ class StDev(AggregationFunction):
 
     def expr(self, ctx: AggregationCtx, columns: list[str]) -> list[pl.Expr]:
         """Return the `Polars` expression for calculating the standard deviation in an aggregation period."""
-        return [pl.col(col).std().alias(f"stdev_{col}") for col in columns]
+        return [pl.col(col).std().alias(f"{self.name}_{col}") for col in columns]
+
+
+@AggregationFunction.register
+class Nth(AggregationFunction):
+    """An aggregation class to select the nth value within each aggregation period."""
+
+    name = "nth"
+
+    def __init__(self, n: int):
+        """Initialise Nth aggregation.
+
+        Args:
+            n: The index position (starting at 1) of the value to select within each aggregation period
+                (e.g. n=12 selects the 12th hour of each day when aggregating hourly data to daily).
+        """
+        super().__init__()
+        if not isinstance(n, int) or n < 1:
+            raise ValueError("'n' must be a positive integer.")
+        self.n = n
+
+    def expr(self, ctx: AggregationCtx, columns: list[str]) -> list[pl.Expr]:
+        """Return the `Polars` expression for selecting the nth value in an aggregation period.
+        This expression also returns a column that holds the datetime the selected value occurred on.
+
+        Raises:
+            AggregationPeriodError: If aggregation_period not defined.
+
+            AggregationPeriodError: If `n` exceeds the fixed number of periodicity points that fit
+                within the aggregation period (e.g. requesting the 25th hour of a day).
+        """
+        if ctx.aggregation_period is None:
+            raise AggregationPeriodError("An aggregation_period must be defined for nth aggregation method.")
+
+        expected_count = ctx.periodicity.count(ctx.aggregation_period)
+        if expected_count > 0 and self.n > expected_count:
+            raise AggregationPeriodError(
+                f"Cannot select n={self.n}: periodicity '{ctx.periodicity}' fits only "
+                f"{expected_count} points within aggregation period '{ctx.aggregation_period}'."
+            )
+
+        index = self.n - 1
+        expressions = []
+        for col in columns:
+            expressions.extend(
+                [
+                    pl.col(col).get(index, null_on_oob=True).alias(f"{self.name}_{col}"),
+                    pl.col(ctx.time_name).get(index, null_on_oob=True).alias(f"{ctx.time_name}_of_{self.name}_{col}"),
+                ]
+            )
+        return expressions
