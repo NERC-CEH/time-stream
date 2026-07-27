@@ -177,7 +177,7 @@ class BitwiseFlagColumn(FlagColumn):
             BitwiseFlagUnknownError: If any flag name in the column is not in the flag system.
         """
         flag_map = self.flag_system.to_dict()
-        present = set(df[self.name].explode().drop_nulls().unique().to_list())
+        present = set(df[self.name].explode(empty_as_null=True).drop_nulls().unique().to_list())
         unknown = present - flag_map.keys()
         if unknown:
             raise BitwiseFlagUnknownError(f"Unknown flag names in column '{self.name}': {sorted(unknown)}.")
@@ -504,7 +504,7 @@ class CategoricalListFlagColumn(FlagColumn):
         vtype = self.flag_system.value_type()
         return_dtype = pl.Int32 if vtype is int else pl.Utf8
 
-        present = set(df[self.name].explode().drop_nulls().unique().to_list())
+        present = set(df[self.name].explode(empty_as_null=True).drop_nulls().unique().to_list())
         unknown = present - flag_map.keys()
         if unknown:
             raise CategoricalFlagUnknownError(f"Unknown flag names in column '{self.name}': {sorted(unknown)}.")
