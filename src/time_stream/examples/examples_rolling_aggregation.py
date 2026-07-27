@@ -31,3 +31,18 @@ def rolling_missing_criteria_example() -> None:
     # [end_block_2]
 
     print(tf_rolling.df)
+
+
+def rolling_nth_example() -> None:
+    with suppress_output():
+        df = get_example_df(library="polars")
+
+    tf = ts.TimeFrame(df, "time", resolution="PT15M", periodicity="PT15M")
+
+    # [start_block_3]
+    # Trailing 1-hour window, n=1: the oldest reading in each window - i.e. the value from
+    # (just under) an hour before the current timestamp.
+    tf_rolling = tf.rolling_aggregate("PT1H", "nth", "flow", n=1)
+    # [end_block_3]
+
+    print(tf_rolling.df)
