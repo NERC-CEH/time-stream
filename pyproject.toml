@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "time-stream"
-version = "1.2.0"
+version = "1.2.1"
 description = "Time-Stream: Time Series Toolkit for Rapid Environmental Analysis and Monitoring"
 readme = "README.md"
 authors = [
@@ -34,7 +34,7 @@ classifiers = [
 license = { file = "LICENSE" }
 dependencies = [
     "config>=0.5.1",
-    "polars>=1.43.0",
+    "polars>=1.43.2",
     "pyarrow>=25.0.0",
     "pydantic>=2.13.4",
     "isodate",
