@@ -22,12 +22,13 @@
 
 .image-row {
     display: flex;
+    flex-wrap: wrap;
     justify-content: center;
     gap: 2rem;
 }
 
 .image-item {
-    flex: 1;
+    flex: 0 1 auto;
     text-align: center;
 }
 

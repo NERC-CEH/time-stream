@@ -66,7 +66,7 @@ resolution, periodicity, and anchor points.
 
    .. container:: image-item
 
-      .. figure:: _static/ukceh_logo.png
+      .. figure:: _static/UKCEH_Logo_Master_Black.png
          :alt: UKCEH
          :height: 100px
          :target: https://www.ceh.ac.uk
