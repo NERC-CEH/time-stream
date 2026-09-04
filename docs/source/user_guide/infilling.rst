@@ -115,6 +115,9 @@ Alternative data methods
         ``alt_df``: A separate Polars DataFrame containing the alternative data. If omitted, the
         column is taken from the current TimeFrame.
 
+        ``alt_dataset_name``: A label for the alternative dataset, recorded in the ``__INFILL_META__``
+        output column. Only required when ``add_metadata=True``. See :ref:`infill_metadata`.
+
     **Example usage:**
 
         ``tf_filled = tf.infill("alt_data", "flow", alt_data_column="flow_model", alt_df=model_df)``
@@ -143,6 +146,9 @@ Alternative data methods
         ``alt_df``: A separate Polars DataFrame containing the alternative data. If omitted, the column is taken
         from the current TimeFrame.
 
+        ``alt_dataset_name``: A label for the alternative dataset, recorded in the ``__INFILL_META__``
+        output column. Only required when ``add_metadata=True``. See :ref:`infill_metadata`.
+
         ``window_size``: A period around the missing data to be used to calculate the correction factor,
         as an ISO 8601 duration string, a :class:`~time_stream.Period`, or a :class:`datetime.timedelta`.
 
@@ -162,8 +168,8 @@ Alternative data methods
             "alt_data_dynamic",
             "flow",
             alt_data_column="flow_model",
-            alt_df=model_df,
             window_size="P3D",
+            alt_df=model_df,
             min_threshold=2,
             max_threshold=4,
             window_side="left",
@@ -347,6 +353,58 @@ the infill. The flag column must already exist - see :doc:`flagging` for how to 
 
 Only rows whose value changed from null to non-null are flagged; rows that were already populated,
 or that remain null because the gap exceeded ``max_gap_size``, are left untouched.
+
+.. _infill_metadata:
+
+Infill metadata
+---------------
+
+Metadata recording is **opt-in** and off by default. Pass ``add_metadata=True`` to attach a
+``__INFILL_META__`` JSON string column (``pl.String``) to the output DataFrame. Each row that
+was actually filled carries a JSON string describing how it was infilled; all other rows carry
+``null``.
+
+**Code:**
+
+.. literalinclude:: ../../../src/time_stream/examples/examples_infilling.py
+    :language: python
+    :start-after: [start_block_8]
+    :end-before: [end_block_8]
+    :dedent:
+
+**Output:**
+
+.. jupyter-execute::
+    :hide-code:
+
+    import examples_infilling
+    examples_infilling.metadata_example()
+
+Using a JSON string column (rather than a struct) means that different infill methods can
+produce differently-shaped metadata in the same column, which is useful when chaining methods.
+
+The JSON keys present depend on the infill method:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 30 70
+
+   * - Infill method
+     - JSON keys
+   * - Interpolation methods (``linear``, ``quadratic``, ``cubic``, ``bspline``, ``pchip``, ``akima``)
+     - ``infill_method`` — method name (e.g. ``"linear"``)
+   * - ``alt_data``
+     - ``infill_method`` — ``"alt_data"``; ``alt_dataset_name`` — the value passed to the constructor
+       (default: ``"dep_ts"``)
+   * - ``alt_data_dynamic``
+     - ``infill_method`` — ``"alt_data_dynamic"``; ``alt_dataset_name`` — the value passed to the
+       constructor (default: ``"dep_ts"``); ``timestamps`` — list of timestamps used to compute the
+       correction factor; ``correction_factor`` — the computed ratio (``null`` if the alternative
+       data summed to zero)
+
+When ``add_metadata=False`` (the default), the ``__INFILL_META__`` column is never added.
+When ``add_metadata=True`` but there is nothing to infill (no gaps, or all gaps are excluded
+by ``max_gap_size`` / ``observation_interval``), the column is added but contains only nulls.
 
 Examples
 ========

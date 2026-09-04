@@ -84,7 +84,7 @@ def alt_data_infill() -> None:
     tf = ts.TimeFrame(df, "time", resolution="PT15M", periodicity="PT15M")
 
     # [start_block_2]
-    tf_infill = tf.infill("alt_data", "flow", alt_df=alt_df, correction_factor=0.75, alt_data_column="alt_flow")
+    tf_infill = tf.infill("alt_data", "flow", alt_data_column="alt_flow", correction_factor=0.75, alt_df=alt_df)
     # [end_block_2]
     print(tf_infill.df)
 
@@ -100,9 +100,9 @@ def alt_data_dynamic_infill() -> None:
     tf_infill = tf.infill(
         "alt_data_dynamic",
         "flow",
-        alt_df=alt_df,
         alt_data_column="alt_flow",
         window_size="PT1H",
+        alt_df=alt_df,
     )
     # [end_block_4]
     print(tf_infill.df)
@@ -120,27 +120,27 @@ def alt_data_dynamic_window_size_formats() -> None:
     tf_infill_str = tf.infill(
         "alt_data_dynamic",
         "flow",
-        alt_df=alt_df,
         alt_data_column="alt_flow",
         window_size="PT1H",
+        alt_df=alt_df,
     )
 
     # ...as a Period object:
     tf_infill_period = tf.infill(
         "alt_data_dynamic",
         "flow",
-        alt_df=alt_df,
         alt_data_column="alt_flow",
         window_size=ts.Period.of_hours(1),
+        alt_df=alt_df,
     )
 
     # ...or as a timedelta:
     tf_infill_timedelta = tf.infill(
         "alt_data_dynamic",
         "flow",
-        alt_df=alt_df,
         alt_data_column="alt_flow",
         window_size=timedelta(hours=1),
+        alt_df=alt_df,
     )
     # [end_block_7]
 
@@ -160,9 +160,9 @@ def alt_data_dynamic_infill_with_thresholds() -> None:
     tf_infill = tf.infill(
         "alt_data_dynamic",
         "flow",
-        alt_df=alt_df,
         alt_data_column="alt_flow",
         window_size="PT2H",
+        alt_df=alt_df,
         min_threshold=2,
         max_threshold=4,
     )
@@ -181,13 +181,31 @@ def alt_data_dynamic_infill_one_sided() -> None:
     tf_infill = tf.infill(
         "alt_data_dynamic",
         "flow",
-        alt_df=alt_df,
         alt_data_column="alt_flow",
         window_size="PT1H",
+        alt_df=alt_df,
         window_side="left",
     )
     # [end_block_6]
     print(tf_infill.df)
+
+
+def metadata_example() -> None:
+    with suppress_output():
+        df = get_example_df(library="polars")
+
+    tf = ts.TimeFrame(df, "time", resolution="PT15M", periodicity="PT15M")
+
+    # [start_block_8]
+    import json
+
+    tf_infill = tf.infill("linear", "flow", max_gap_size=3, add_metadata=True)
+
+    for row in tf_infill.df.iter_rows(named=True):
+        if row["__INFILL_META__"] is not None:
+            meta = json.loads(row["__INFILL_META__"])
+            print(meta)
+    # [end_block_8]
 
 
 def flagged_infill() -> None:
@@ -218,7 +236,9 @@ def all_infills() -> pl.DataFrame:
     for method in methods:
         tf_infilled = tf.infill(method, "original")
         tf_infilled = tf_infilled.with_df(tf_infilled.df.rename({"original": method}))
-        result = result.join(tf_infilled.df, on="time", how="full").drop("time_right")
+        result = result.join(tf_infilled.df.drop("__INFILL_META__", strict=False), on="time", how="full").drop(
+            "time_right"
+        )
 
     with pl.Config(tbl_rows=-1):
         print(result)
