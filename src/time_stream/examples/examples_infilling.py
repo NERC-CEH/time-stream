@@ -125,13 +125,15 @@ def alt_data_dynamic_window_size_formats() -> None:
         window_size="PT1H",
     )
 
-    # ...as a Period object:
+    # ...as a Period object (from the isoperiod package):
+    from isoperiod import Period
+
     tf_infill_period = tf.infill(
         "alt_data_dynamic",
         "flow",
         alt_df=alt_df,
         alt_data_column="alt_flow",
-        window_size=ts.Period.of_hours(1),
+        window_size=Period.of_hours(1),
     )
 
     # ...or as a timedelta:

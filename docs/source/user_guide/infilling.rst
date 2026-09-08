@@ -144,7 +144,7 @@ Alternative data methods
         from the current TimeFrame.
 
         ``window_size``: A period around the missing data to be used to calculate the correction factor,
-        as an ISO 8601 duration string, a :class:`~time_stream.Period`, or a :class:`datetime.timedelta`.
+        as an ISO 8601 duration string, a :class:`isoperiod.Period`, or a :class:`datetime.timedelta`.
 
         ``window_side``: Optional. By default, windows on both sides of the missing data are used to infill.
         If "left", only data to left of missing data is used to infill. If "right", only data to right of
@@ -485,7 +485,7 @@ to restrict it to one side only - useful when data quality or availability diffe
 Specifying window size
 ~~~~~~~~~~~~~~~~~~~~~~
 
-``window_size`` accepts an ISO 8601 duration string, a :class:`~time_stream.Period`, or a
+``window_size`` accepts an ISO 8601 duration string, a :class:`isoperiod.Period`, or a
 :class:`datetime.timedelta` - all three are equivalent:
 
 .. literalinclude:: ../../../src/time_stream/examples/examples_infilling.py

@@ -4,16 +4,14 @@ from datetime import datetime
 
 import polars as pl
 import pytest
+from isoperiod import Period, PeriodParsingError, PeriodValidationError
 from polars.testing import assert_frame_equal
 
-from time_stream import Period
 from time_stream.exceptions import (
     ColumnNotFoundError,
     ColumnTypeError,
     DuplicateTimeError,
     PeriodicityError,
-    PeriodParsingError,
-    PeriodValidationError,
     ResolutionError,
     TimeMutatedError,
 )
@@ -338,7 +336,7 @@ class TestConfigureResolutionProperty:
         be a "non-offset" period (which we can apply a specified offset to later).
         """
         with pytest.raises(PeriodParsingError):
-            TimeManager._configure_resolution_property("P1D+9H")
+            TimeManager._configure_resolution_property("P1D+T9H")
 
     def test_explicit_resolution_with_offset_raises(self) -> None:
         """Periods can have an offset. We want the resolution parameter to be a "non-offset" period
@@ -384,7 +382,7 @@ class TestConfigureAlignmentProperty:
     def test_non_offset_string_raises(self) -> None:
         """The offset parameter should be provided as an offset string (e.g. +T9H)."""
         with pytest.raises(PeriodParsingError):
-            TimeManager._configure_alignment_property(Period.of_days(1), "P1D+9H")
+            TimeManager._configure_alignment_property(Period.of_days(1), "P1D+T9H")
 
     def test_invalid_offset_string_raises(self) -> None:
         with pytest.raises(PeriodParsingError):

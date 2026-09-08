@@ -638,6 +638,11 @@ wheels = [
 ]
 
 [[package]]
+name = "isoperiod"
+version = "1.0.0"
+source = { git = "https://github.com/NERC-CEH/isoperiod.git#5ec5ffc88ec6aad5fe00615ba0bbf62c61aae6a1" }
+
+[[package]]
 name = "jedi"
 version = "0.19.2"
 source = { registry = "https://pypi.org/simple" }
@@ -2148,6 +2153,7 @@ dependencies = [
     { name = "altair" },
     { name = "config" },
     { name = "isodate" },
+    { name = "isoperiod" },
     { name = "matplotlib" },
     { name = "numpy" },
     { name = "pandas" },
@@ -2213,6 +2219,7 @@ requires-dist = [
     { name = "altair", specifier = ">=6.2.2" },
     { name = "config", specifier = ">=0.5.1" },
     { name = "isodate" },
+    { name = "isoperiod", git = "https://github.com/NERC-CEH/isoperiod.git" },
     { name = "matplotlib", specifier = ">=3.11.1" },
     { name = "numpy" },
     { name = "pandas", specifier = ">=3.0.5" },

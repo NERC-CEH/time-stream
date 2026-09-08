@@ -5,6 +5,7 @@ from unittest.mock import Mock
 
 import polars as pl
 import pytest
+from isoperiod import Period
 from polars.testing import assert_frame_equal
 
 from time_stream.aggregation import (
@@ -33,7 +34,6 @@ from time_stream.exceptions import (
     TimeWindowError,
     UnknownRegistryKeyError,
 )
-from time_stream.period import Period
 from time_stream.types import MissingCriteria
 from time_stream.utils import TimeWindow
 
@@ -150,8 +150,8 @@ TS_PT2H_2DAYS = generate_time_series(PT2H, PT2H, 24)  # 2 days of 2-hourly data
 TS_P1M_2YEARS = generate_time_series(P1M, P1M, 24)  # 2 years of month data
 TS_P1D_2DAYS = generate_time_series(P1D, P1D, 2)  # 2 days of daily data
 TS_P1D_2MONTH = generate_time_series(P1D, P1D, 59)  # 2 months (Jan, Feb 2025) of daily data
-TS_P1D_OFF_2MONTH = generate_time_series(P1D, P1D_OFF, 59, offset="+9H")  # 2 months (Jan, Feb 2025) of 1-day-offset
-TS_P1M_OFF_2YEARS = generate_time_series(P1M, P1M_OFF, 24, offset="+9H")  # 2 years of 1-month-offset data
+TS_P1D_OFF_2MONTH = generate_time_series(P1D, P1D_OFF, 59, offset="+T9H")  # 2 months (Jan, Feb 2025) of 1-day-offset
+TS_P1M_OFF_2YEARS = generate_time_series(P1M, P1M_OFF, 24, offset="+T9H")  # 2 years of 1-month-offset data
 
 
 class TestStandardAggregationPipeline:

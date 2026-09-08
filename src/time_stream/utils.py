@@ -9,12 +9,11 @@ from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
 
 import polars as pl
+from isoperiod import Period, PeriodValidationError
 
-from time_stream import Period
 from time_stream.exceptions import (
     ColumnNotFoundError,
     DuplicateValueError,
-    PeriodValidationError,
     TimeWindowError,
     UnhandledEnumError,
 )

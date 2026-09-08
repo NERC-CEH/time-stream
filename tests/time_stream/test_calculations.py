@@ -3,11 +3,11 @@ from datetime import datetime
 import numpy as np
 import polars as pl
 import pytest
+from isoperiod import Period
 from polars.testing import assert_frame_equal
 
 from time_stream.base import TimeFrame
 from time_stream.calculations import calculate_min_max_envelope, get_date_columns
-from time_stream.period import Period
 
 
 class TestCalculateMinMaxEnvelopes:

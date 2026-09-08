@@ -44,6 +44,7 @@ dependencies = [
     "altair>=6.2.2",
     "pandas>=3.0.5",
     "sphinx-autodoc-typehints>=3.10.0",
+    "isoperiod",
 ]
 requires-python = ">= 3.12"
 
@@ -134,7 +135,6 @@ source = ["src/", "tests/"]
 omit = [
     "*__init__.py",
     "src/time_stream/__main__.py",
-    "src/time_stream/period.py",
     "src/time_stream/examples/*",
     "src/time_stream/docs/*",
 ]
@@ -164,3 +164,6 @@ markers = ["slow: Marks slow tests"]
 [tool.uv]
 package = true
 default-groups = ["dev"]
+
+[tool.uv.sources]
+isoperiod = { git = "https://github.com/NERC-CEH/isoperiod.git" }

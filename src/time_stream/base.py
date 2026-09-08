@@ -38,6 +38,7 @@ from datetime import datetime, time
 from typing import Any, Sequence, Type, overload
 
 import polars as pl
+from isoperiod import Period
 
 from time_stream.aggregation import (
     AggregationCtx,
@@ -62,7 +63,6 @@ from time_stream.flags.flag_system import FlagSystemBase, FlagSystemLiteral
 from time_stream.formatting import timeframe_repr
 from time_stream.infill import InfillMethod
 from time_stream.metadata import ColumnMetadataDict
-from time_stream.period import Period
 from time_stream.qc import QCCheck
 from time_stream.time_manager import TimeManager
 from time_stream.types import (
@@ -83,7 +83,8 @@ class TimeFrame:
         df: The :class:`polars.DataFrame` containing the time-series data.
         time_name: The name of the time column in ``df``.
         resolution: Sampling interval for the timeseries; the unit of time step allowable between consecutive data
-            points. Accepts a :class:`Period` or ISO-8601 duration string (e.g. ``"PT15M"``, ``"P1D"``, ``"P1Y"``).
+            points. Accepts an :class:`isoperiod.Period` or ISO-8601 duration string (e.g. ``"PT15M"``, ``"P1D"``,
+            ``"P1Y"``).
             If ``None``, defaults to microsecond step (PT0.000001S) (effectively allows any set of datetime values).
         offset: Offset applied from the natural boundary of ``resolution`` to position the datetime values along the
             timeline. For example, you may have daily data (``resolution="P1D"``), but all the values are measured
@@ -94,8 +95,8 @@ class TimeFrame:
             entries are allowed within a given period of time. For example, you may have an annual maximum
             timeseries, where the individual data points are considered to be at daily resolution
             (``resolution="P1D"``), but are limited to only one data point per year (``periodicity="P1Y"``).
-            Accepts a :class:`Period` or ISO-8601 duration string (e.g. ``"PT15M"``, ``"P1D"``, ``"P1Y"``) with an
-            optional offset syntax (e.g. ``"P1D+T9H"``, ``"P1Y+9MT9H"``). If ``None``, it defaults to the period
+            Accepts an :class:`isoperiod.Period` or ISO-8601 duration string (e.g. ``"PT15M"``, ``"P1D"``, ``"P1Y"``)
+            with an optional offset syntax (e.g. ``"P1D+T9H"``, ``"P1Y+9MT9H"``). If ``None``, it defaults to the period
             defined by ``resolution + offset``.
         time_anchor: Defines the window of time over which a given timestamp refers to. In the descriptions below,
             "t" is the time value, "r" stands for a single unit of the resolution of the data:
@@ -145,14 +146,14 @@ class TimeFrame:
         >>> # Daily timestamps but uniqueness per water-year:
         >>>
         >>> tf = TimeFrame(
-        >>>     df, "timestamp", resolution="P1D", offset="+T9H", periodicity="P1Y+P9MT9H"
+        >>>     df, "timestamp", resolution="P1D", offset="+T9H", periodicity="P1Y+9MT9H"
         >>> )
         >>> print(
         >>>     "resolution=", tf.resolution,
         >>>     " alignment=", tf.alignment,
         >>>     " periodicity=", tf.periodicity
         >>> )
-        resoution=P1D alignment=P1D+T9H periodicity=P1Y+P9MT9H
+        resoution=P1D alignment=P1D+T9H periodicity=P1Y+9MT9H
 
         >>> # Annual series stored directly on water-year boundary:
         >>>
@@ -164,7 +165,7 @@ class TimeFrame:
         >>>     " alignment=", tf.alignment,
         >>>     " periodicity=", tf.periodicity
         >>> )
-        resoution=P1Y alignment=P1D+9MT9H periodicity=P1Y+P9MT9H
+        resoution=P1Y alignment=P1Y+9MT9H periodicity=P1Y+9MT9H
     """
 
     _df: pl.DataFrame
