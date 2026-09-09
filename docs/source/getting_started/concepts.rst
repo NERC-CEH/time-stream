@@ -101,7 +101,7 @@ timestamp positions.
 - ``resolution="PT15M"`` + ``offset=None`` = ``alignment="PT15M"``. Values expected at **:00, :15, :30, :45**
 - ``resolution="PT15M"`` + ``offset=+T5M`` = ``alignment="PT15M+T5M"``. Values expected at **:05, :20, :35, :50**
 - ``resolution="P1D"`` + ``offset="+T9H"`` = ``alignment="P1D+T9H"``. Values expected at **09:00 every day**
-- ``resolution="P1Y"`` + ``offset="+9MT9H"`` = ``alignment="P1D+9MT9H"``. Values expected on **1 Oct 09:00 each year**
+- ``resolution="P1Y"`` + ``offset="+9MT9H"`` = ``alignment="P1Y+9MT9H"``. Values expected on **1 Oct 09:00 each year**
 
 .. mermaid::
 
@@ -137,7 +137,7 @@ i.e. how many data points are allowed within a given period of time.
 - ``P1M`` - At most 1 datetime can occur within any given calendar month (from midnight on the 1st of the month
   up to, but not including, midnight on the 1st of the following month).
 - ``P3M`` - At most 1 datetime can occur within any given quarterly period.
-- ``P1Y+9M9H`` - at most one entry per **UK water year** (09:00 on 1st October each year).
+- ``P1Y+9MT9H`` - at most one entry per **UK water year** (09:00 on 1st October each year).
 
 **Why it matters:**
 

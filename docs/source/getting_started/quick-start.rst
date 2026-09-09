@@ -17,26 +17,27 @@ Create a TimeFrame
 
 Create sample data in a Polars DataFrame:
 
-.. literalinclude:: ../../../src/time_stream/examples/examples_timeseries_basics.py
+.. literalinclude:: ../examples/timeseries_basics.py
    :language: python
-   :start-after: [start_block_1]
-   :end-before: [end_block_1]
+   :start-after: [start:create_sample_dataframe]
+   :end-before: [end:create_sample_dataframe]
    :dedent:
 
 Now wrap the Polars DataFrame in a :class:`~time_stream.TimeFrame`, which adds specialized functionality
 for time series operations:
 
-.. literalinclude:: ../../../src/time_stream/examples/examples_timeseries_basics.py
+.. literalinclude:: ../examples/timeseries_basics.py
    :language: python
-   :start-after: [start_block_2]
-   :end-before: [end_block_2]
+   :start-after: [start:create_simple_time_series]
+   :end-before: [end:create_simple_time_series]
    :dedent:
 
 .. jupyter-execute::
    :hide-code:
 
-   import examples_timeseries_basics
-   tf = examples_timeseries_basics.create_simple_time_series()
+   from examples import timeseries_basics
+
+   timeseries_basics.create_simple_time_series()
 
 With Time Properties
 ====================
@@ -53,17 +54,18 @@ Without specifying ``resolution`` or ``periodicity``, the default initialisation
 **1 microsecond**, to account for any set of datetime values.
 The default is for no ``offset``. The ``time_anchor`` is set to **start**:
 
-.. literalinclude:: ../../../src/time_stream/examples/examples_timeseries_basics.py
+.. literalinclude:: ../examples/timeseries_basics.py
    :language: python
-   :start-after: [start_block_3]
-   :end-before: [end_block_3]
+   :start-after: [start:show_default_resolution]
+   :end-before: [end:show_default_resolution]
    :dedent:
 
 .. jupyter-execute::
    :hide-code:
 
-   import examples_timeseries_basics
-   examples_timeseries_basics.show_default_resolution()
+   from examples import timeseries_basics
+
+   timeseries_basics.show_default_resolution()
 
 
 Although the default of 1 microsecond will account for any datetime values, for more control over certain
@@ -80,17 +82,18 @@ Resolution
 For most cases, it is sufficient to just specify the ``resolution``. The ``offset`` will default to "no offset", and the
 ``periodicity`` will be set to the same as the resolution.
 
-.. literalinclude:: ../../../src/time_stream/examples/examples_timeseries_basics.py
+.. literalinclude:: ../examples/timeseries_basics.py
    :language: python
-   :start-after: [start_block_4]
-   :end-before: [end_block_4]
+   :start-after: [start:create_simple_time_series_with_periods]
+   :end-before: [end:create_simple_time_series_with_periods]
    :dedent:
 
 .. jupyter-execute::
    :hide-code:
 
-   import examples_timeseries_basics
-   tf = examples_timeseries_basics.create_simple_time_series_with_periods()
+   from examples import timeseries_basics
+
+   timeseries_basics.create_simple_time_series_with_periods()
 
 Offset
 ~~~~~~
@@ -100,17 +103,18 @@ point in time offset from the "natural boundary" of the ``resolution`` (more inf
 :doc:`concepts page <concepts>`). The ``periodicity`` is automatically built from the ``resolution + offset``, to
 specify that we only expect 1 value within those points in time.
 
-.. literalinclude:: ../../../src/time_stream/examples/examples_timeseries_basics.py
+.. literalinclude:: ../examples/timeseries_basics.py
    :language: python
-   :start-after: [start_block_8]
-   :end-before: [end_block_8]
+   :start-after: [start:create_simple_time_series_with_periods2]
+   :end-before: [end:create_simple_time_series_with_periods2]
    :dedent:
 
 .. jupyter-execute::
    :hide-code:
 
-   import examples_timeseries_basics
-   tf = examples_timeseries_basics.create_simple_time_series_with_periods2()
+   from examples import timeseries_basics
+
+   timeseries_basics.create_simple_time_series_with_periods2()
 
 Periodicity
 ~~~~~~~~~~~
@@ -120,17 +124,18 @@ time. This is when you would specify a specific ``periodicity``. The classic hyd
 have an annual-maximum (AMAX) timeseries, where the measured data is a daily resolution, but we only expect 1 value
 per year.
 
-.. literalinclude:: ../../../src/time_stream/examples/examples_timeseries_basics.py
+.. literalinclude:: ../examples/timeseries_basics.py
    :language: python
-   :start-after: [start_block_9]
-   :end-before: [end_block_9]
+   :start-after: [start:create_simple_time_series_with_periods3]
+   :end-before: [end:create_simple_time_series_with_periods3]
    :dedent:
 
 .. jupyter-execute::
    :hide-code:
 
-   import examples_timeseries_basics
-   tf = examples_timeseries_basics.create_simple_time_series_with_periods3()
+   from examples import timeseries_basics
+
+   timeseries_basics.create_simple_time_series_with_periods3()
 
 Duplicate Detection
 -------------------
@@ -142,8 +147,9 @@ Consider this DataFrame with duplicate time values:
 .. jupyter-execute::
    :hide-code:
 
-   import examples_timeseries_basics
-   df = examples_timeseries_basics.create_df_with_duplicate_rows()
+   from examples import timeseries_basics
+
+   timeseries_basics.duplicate_rows_data()
 
 The following strategies are available to use with the ``on_duplicate`` argument:
 
@@ -151,83 +157,88 @@ The following strategies are available to use with the ``on_duplicate`` argument
 
 Raises an error when duplicate rows are found. This is the default behavior to ensure data integrity.
 
-.. literalinclude:: ../../../src/time_stream/examples/examples_timeseries_basics.py
+.. literalinclude:: ../examples/timeseries_basics.py
    :language: python
-   :start-after: [start_block_28]
-   :end-before: [end_block_28]
+   :start-after: [start:duplicate_row_example_error]
+   :end-before: [end:duplicate_row_example_error]
    :dedent:
 
 .. jupyter-execute::
    :hide-code:
 
-   import examples_timeseries_basics
-   examples_timeseries_basics.duplicate_row_example_error()
+   from examples import timeseries_basics
+
+   timeseries_basics.duplicate_row_example_error()
 
 2. **Keep First:** ``on_duplicate="keep_first"``
 
 For a given group of rows with the same time value, keeps only the first row and discards the others.
 
-.. literalinclude:: ../../../src/time_stream/examples/examples_timeseries_basics.py
+.. literalinclude:: ../examples/timeseries_basics.py
    :language: python
-   :start-after: [start_block_29]
-   :end-before: [end_block_29]
+   :start-after: [start:duplicate_row_example_keep_first]
+   :end-before: [end:duplicate_row_example_keep_first]
    :dedent:
 
 .. jupyter-execute::
    :hide-code:
 
-   import examples_timeseries_basics
-   examples_timeseries_basics.duplicate_row_example_keep_first()
+   from examples import timeseries_basics
+
+   timeseries_basics.duplicate_row_example_keep_first()
 
 3. **Keep Last:** ``on_duplicate="keep_last"``
 
 For a given group of rows with the same time value, keeps only the last row and discards the others.
 
-.. literalinclude:: ../../../src/time_stream/examples/examples_timeseries_basics.py
+.. literalinclude:: ../examples/timeseries_basics.py
    :language: python
-   :start-after: [start_block_30]
-   :end-before: [end_block_30]
+   :start-after: [start:duplicate_row_example_keep_last]
+   :end-before: [end:duplicate_row_example_keep_last]
    :dedent:
 
 .. jupyter-execute::
    :hide-code:
 
-   import examples_timeseries_basics
-   examples_timeseries_basics.duplicate_row_example_keep_last()
+   from examples import timeseries_basics
+
+   timeseries_basics.duplicate_row_example_keep_last()
 
 4. **Drop**: ``on_duplicate="drop"``
 
 Removes all rows that have duplicate timestamps. This strategy is appropriate when you are unsure of the integrity of
 duplicate rows and only want unique, unambiguous data.
 
-.. literalinclude:: ../../../src/time_stream/examples/examples_timeseries_basics.py
+.. literalinclude:: ../examples/timeseries_basics.py
    :language: python
-   :start-after: [start_block_31]
-   :end-before: [end_block_31]
+   :start-after: [start:duplicate_row_example_drop]
+   :end-before: [end:duplicate_row_example_drop]
    :dedent:
 
 .. jupyter-execute::
    :hide-code:
 
-   import examples_timeseries_basics
-   examples_timeseries_basics.duplicate_row_example_drop()
+   from examples import timeseries_basics
+
+   timeseries_basics.duplicate_row_example_drop()
 
 5. **Merge**: ``on_duplicate="merge"``
 
 For a given group of rows with the same time value, performs a merge of all rows. This combines values with a top-down
 approach that preserves the first non-null value for each column.
 
-.. literalinclude:: ../../../src/time_stream/examples/examples_timeseries_basics.py
+.. literalinclude:: ../examples/timeseries_basics.py
    :language: python
-   :start-after: [start_block_32]
-   :end-before: [end_block_32]
+   :start-after: [start:duplicate_row_example_merge]
+   :end-before: [end:duplicate_row_example_merge]
    :dedent:
 
 .. jupyter-execute::
    :hide-code:
 
-   import examples_timeseries_basics
-   examples_timeseries_basics.duplicate_row_example_merge()
+   from examples import timeseries_basics
+
+   timeseries_basics.duplicate_row_example_merge()
 
 
 Misaligned Row Detection
@@ -270,8 +281,9 @@ Any rows identified as being misaligned are removed and the TimeFrame data is up
 .. jupyter-execute::
    :hide-code:
 
-   import examples_timeseries_basics
-   examples_timeseries_basics.create_misaligned_row_example()
+   from examples import timeseries_basics
+
+   timeseries_basics.create_misaligned_row_example()
 
 
 With Metadata
@@ -284,34 +296,35 @@ such as derivation functions, running infilling routines, plotting data, etc.
 
 Dataset-level metadata can be set with the :meth:`~time_stream.TimeFrame.with_metadata` method:
 
-.. literalinclude:: ../../../src/time_stream/examples/examples_timeseries_basics.py
+.. literalinclude:: ../examples/timeseries_basics.py
    :language: python
-   :start-after: [start_block_5]
-   :end-before: [end_block_5]
+   :start-after: [start:with_metadata]
+   :end-before: [end:with_metadata]
    :dedent:
 
 Column-level metadata can be set with the :meth:`~time_stream.TimeFrame.with_column_metadata` method:
 
-.. literalinclude:: ../../../src/time_stream/examples/examples_timeseries_basics.py
+.. literalinclude:: ../examples/timeseries_basics.py
    :language: python
-   :start-after: [start_block_6]
-   :end-before: [end_block_6]
+   :start-after: [start:with_column_metadata]
+   :end-before: [end:with_column_metadata]
    :dedent:
 
 Metadata can be accessed via the :attr:`~time_stream.TimeFrame.metadata` (dataset-level)
 and :attr:`~time_stream.TimeFrame.column_metadata` (column-level) attributes:
 
-.. literalinclude:: ../../../src/time_stream/examples/examples_timeseries_basics.py
+.. literalinclude:: ../examples/timeseries_basics.py
     :language: python
-    :start-after: [start_block_7]
-    :end-before: [end_block_7]
+    :start-after: [start:show_time_series_metadata]
+    :end-before: [end:show_time_series_metadata]
     :dedent:
 
 .. jupyter-execute::
     :hide-code:
 
-    import examples_timeseries_basics
-    examples_timeseries_basics.show_time_series_metadata()
+    from examples import timeseries_basics
+
+    timeseries_basics.show_time_series_metadata()
 
 Data Access and Update
 ======================
@@ -328,17 +341,18 @@ The underlying Polars DataFrame is accessed via the :attr:`~time_stream.TimeFram
 You can create new :class:`~time_stream.TimeFrame` objects as a selection, using the
 :meth:`~time_stream.TimeFrame.select` method, or via indexing syntax:
 
-.. literalinclude:: ../../../src/time_stream/examples/examples_timeseries_basics.py
+.. literalinclude:: ../examples/timeseries_basics.py
    :language: python
-   :start-after: [start_block_12]
-   :end-before: [end_block_12]
+   :start-after: [start:accessing_data]
+   :end-before: [end:accessing_data]
    :dedent:
 
 .. jupyter-execute::
    :hide-code:
 
-   import examples_timeseries_basics
-   examples_timeseries_basics.accessing_data()
+   from examples import timeseries_basics
+
+   timeseries_basics.accessing_data()
 
 
 .. note::
@@ -352,14 +366,15 @@ If you need to make changes to the underlying Polars DataFrame, use the :meth:`~
 This performs some checks on the new DataFrame to check the integrity of the time data has been maintained, and
 returns a new :class:`~time_stream.TimeFrame` object with the updated data.
 
-.. literalinclude:: ../../../src/time_stream/examples/examples_timeseries_basics.py
+.. literalinclude:: ../examples/timeseries_basics.py
    :language: python
-   :start-after: [start_block_19]
-   :end-before: [end_block_19]
+   :start-after: [start:add_new_column_to_df]
+   :end-before: [end:add_new_column_to_df]
    :dedent:
 
 .. jupyter-execute::
     :hide-code:
 
-    import examples_timeseries_basics
-    examples_timeseries_basics.add_new_column_to_df()
+    from examples import timeseries_basics
+
+    timeseries_basics.add_new_column_to_df()

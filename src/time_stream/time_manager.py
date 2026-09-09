@@ -13,15 +13,14 @@ This module defines and enforces integrity rules for the temporal aspects of a T
 import logging
 
 import polars as pl
+from isoperiod import Period, PeriodValidationError
 
-from time_stream import Period
 from time_stream.exceptions import (
     ColumnNotFoundError,
     ColumnTypeError,
     DuplicateTimeError,
     DuplicateValueError,
     PeriodicityError,
-    PeriodValidationError,
     ResolutionError,
     TimeMutatedError,
 )

@@ -6,8 +6,20 @@
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 import os
+import sys
+from pathlib import Path
 
 import time_stream
+
+# Make the documentation example modules importable as ``examples`` (e.g. ``from examples import aggregation``).
+# They live in ``docs/source/examples`` - outside the packaged source tree - so they are not shipped,
+# type-checked, or measured for coverage.
+#   - ``sys.path``   covers in-process consumers (the ``plot`` directive).
+#   - ``PYTHONPATH`` covers ``jupyter-execute``, which runs each block in a subprocess kernel that does not
+#     inherit this process's ``sys.path``.
+_DOCS_SOURCE = str(Path(__file__).parent)
+sys.path.insert(0, _DOCS_SOURCE)
+os.environ["PYTHONPATH"] = os.pathsep.join(filter(None, [_DOCS_SOURCE, os.environ.get("PYTHONPATH", "")]))
 
 
 project = "Time-Stream"
@@ -40,6 +52,18 @@ plot_formats = ['svg']
 plot_include_source = False
 plot_html_show_source_link = False
 plot_html_show_formats = False
+
+# -- jupyter-sphinx --------------------------------------------------------------
+# Kernels talk to the build over ZeroMQ. ipykernel warns on every start that a TCP transport is unencrypted, so
+# use Unix domain sockets instead: no ports are opened, and the warning goes away. Windows has no "ipc"
+# transport, so it keeps the default. Everything else here is jupyter-sphinx's own default, which must be
+# repeated because setting this replaces the value rather than adding to it.
+jupyter_execute_kwargs = {"timeout": -1, "allow_errors": True, "store_widget_state": True}
+
+if sys.platform != "win32":
+    from traitlets.config import Config
+
+    jupyter_execute_kwargs["config"] = Config({"KernelManager": {"transport": "ipc"}})
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ["_templates"]
@@ -97,9 +121,3 @@ napoleon_google_docstring = True
 napoleon_numpy_docstring = False
 napoleon_use_param = True
 napoleon_use_rtype = False
-
-# -- Jupyter-sphinx settings -------------------------------------------------------
-# Add examples path to Python's path
-examples_path = os.path.abspath('../../src/time_stream/examples')
-# Make sure jupyter-sphinx uses the same path
-os.environ['PYTHONPATH'] = examples_path + os.pathsep + os.environ.get('PYTHONPATH', '')

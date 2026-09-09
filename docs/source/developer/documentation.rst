@@ -21,9 +21,9 @@ Our documentation is organized as follows:
     │   ├── developer/         # Developer guides (like this one)
     │   ├── getting_started/   # Installation and basic usage
     │   ├── user_guide/        # In-depth guides for features
+    │   ├── examples/          # Runnable code the guide pages include
     │   ├── conf.py            # Sphinx configuration
     │   └── index.rst          # Main index page
-    ├── make.bat              # Build commands for Windows
     └── Makefile              # Build commands for Unix
 
 Building Documentation
@@ -49,86 +49,82 @@ To add a new page to the documentation:
 2. Start with a title and introduction, then add any relevant sections for your documentation.
 3. Add the page to the relevant **toctree** in ``index.rst``.
 
-Including Code Examples
-=======================
+Code Examples
+=============
 
-Good documentation includes clear code examples. The way we are including code snippets in these documentation is
-to write Python within actual script files, saved within the ``src/time_stream/examples`` directory. The code can
-then be included in the documentation using the ``literalinclude`` block, and executed using the ``jupyter-execute``
-block.
+User guide examples
+-------------------
 
-Code in the example Python file should be organised into individual functions, and use "start-after" and "end-before"
-markers. This ensures that the ``literalinclude`` and ``jupyter-execute`` blocks know which bit of code to show/execute.
-
-This approach:
-1. Shows the code exactly as it appears in your example file
-2. Executes the code and displays its output
-3. Keeps example code in maintainable, testable Python files
-4. Ensures documentation examples are accurate and up-to-date
-
-Using Markers with ``literalinclude``
--------------------------------------
-
-To include specific sections from a file, add marker comments to your code:
+The Python for every guide page lives in ``docs/source/examples/``, one module per page. Each example is a
+function whose body is wrapped in region markers:
 
 .. code-block:: python
 
-    import time_stream as ts
+    def wrap_a_dataframe() -> None:
+        """Wrap a Polars DataFrame in a TimeFrame."""
+        # [start:wrap_a_dataframe]
+        df = pl.DataFrame({"time": dates, "temperature": values})
 
-    def example_function():
-        # [start_block_1]
-        dates = [datetime(2023, 1, i) for i in range(1, 5)]
-        values = [10, 12, 15, 14]
-
-        df = pl.DataFrame({
-            "time": dates,
-            "temperature": values
-        })
-
-        tf = ts.TimeSeries(df=df, time_name="time")
+        tf = ts.TimeFrame(df=df, time_name="time")
         print(tf)
-        # [end_block_1]
+        # [end:wrap_a_dataframe]
 
-Then in your RST file:
+The page shows that region with ``literalinclude`` and renders its output with ``jupyter-execute``:
 
 .. code-block:: rst
 
-    .. literalinclude:: ../../../src/time_stream/examples/example.py
+    .. literalinclude:: ../examples/timeseries_basics.py
        :language: python
-       :start-after: [start_block_1]
-       :end-before: [end_block_1]
+       :start-after: [start:wrap_a_dataframe]
+       :end-before: [end:wrap_a_dataframe]
        :dedent:
-
-Key options for ``literalinclude``:
-
-- ``:language:`` Syntax highlighting language
-- ``:start-after:`` Start including after a specific string
-- ``:end-before:`` Stop including before a specific string
-- ``:dedent:`` Remove indented spaces from each line to make the code snippet in the documentation flush
-
-
-Executing Code with ``jupyter-execute``
----------------------------------------
-
-To show the output of the code snippet, use ``jupyter-execute`` and call the function containing the code snippet:
-
-.. code-block:: rst
 
     .. jupyter-execute::
        :hide-code:
-       import examples
-       ts = examples.example_function()
 
-Key options for ``jupyter-execute``:
+       from examples import timeseries_basics
 
-- ``:hide-code:`` Show only the output, not the code
+       timeseries_basics.wrap_a_dataframe()
 
-Example Workflow
-================
+Because the markers sit inside the function, the code shown is the code that ran, and the output beneath it is
+generated at build time rather than typed out. Setup that is not the point of the example goes *above* the
+``# [start:...]`` marker, so it runs but is not shown.
 
-1. **Write example code**: Create a Python file in ``src/time_stream/examples``
-2. **Test the example**: Ensure it works correctly
-3. **Add marker comments**: Add ``[start_block_X]`` and ``[end_block_X]`` markers
-4. **Create documentation**: Write an RST file referencing the example
-5. **Build and verify**: Build the documentation and check the results
-6. **Review and refine**: Ensure clarity and completeness
+Docstring examples
+------------------
+
+Docstrings use standard ``>>>`` doctests, with the expected output written beneath the call:
+
+.. code-block:: python
+
+    Examples:
+        >>> import polars as pl
+        >>> from time_stream import TimeFrame
+        >>> df = pl.DataFrame({"t": ["2024-01-01", "2024-01-02"]}).with_columns(pl.col("t").str.to_datetime())
+        >>> TimeFrame(df, "t", resolution="P1D").resolution
+        Period(P1D)
+
+These are collected by pytest's ``--doctest-modules``, so a changed return value fails the suite. The module's
+own globals are in scope, but import what a reader would need anyway.
+
+Running the checks
+------------------
+
+Both run with the rest of the suite:
+
+.. code-block:: bash
+
+    pytest
+
+To run just the docstring examples, or just the guide examples:
+
+.. code-block:: bash
+
+    pytest src/time_stream/base.py
+    pytest tests/time_stream/examples/test_examples.py
+
+A broken example also fails the documentation build, since ``jupyter-execute`` runs it:
+
+.. code-block:: bash
+
+    make -C docs html

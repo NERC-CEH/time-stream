@@ -4,6 +4,7 @@ from typing import Any
 
 import polars as pl
 import pytest
+from isoperiod import Period
 from polars.testing import assert_frame_equal, assert_frame_not_equal, assert_series_equal
 
 from time_stream.aggregation import Percentile
@@ -18,7 +19,6 @@ from time_stream.exceptions import (
 )
 from time_stream.flags.flag_manager import BitwiseFlagColumn
 from time_stream.flags.flag_system import FlagSystemBase
-from time_stream.period import Period
 
 
 class TestSortTime:
