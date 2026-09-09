@@ -45,15 +45,16 @@ Let's take our example 15-minute river flow data that contains a few short outag
 .. jupyter-execute::
    :hide-code:
 
-   import examples_aggregation
-   ts = examples_aggregation.get_example_df("polars")
+   from examples import aggregation
+
+   aggregation.sample_data()
 
 **Code:**
 
-.. literalinclude:: ../../../src/time_stream/examples/examples_infilling.py
+.. literalinclude:: ../examples/infilling.py
     :language: python
-    :start-after: [start_block_1]
-    :end-before: [end_block_1]
+    :start-after: [start:time_stream_example]
+    :end-before: [end:time_stream_example]
     :dedent:
 
 **Output:**
@@ -61,8 +62,9 @@ Let's take our example 15-minute river flow data that contains a few short outag
 .. jupyter-execute::
     :hide-code:
 
-    import examples_infilling
-    ts = examples_infilling.time_stream_example()
+    from examples import infilling
+
+    infilling.time_stream_example()
 
 Key benefits
 ------------
@@ -331,10 +333,10 @@ the infill. The flag column must already exist - see :doc:`flagging` for how to 
 
 **Code:**
 
-.. literalinclude:: ../../../src/time_stream/examples/examples_infilling.py
+.. literalinclude:: ../examples/infilling.py
     :language: python
-    :start-after: [start_block_3]
-    :end-before: [end_block_3]
+    :start-after: [start:flagged_infill]
+    :end-before: [end:flagged_infill]
     :dedent:
 
 **Output:**
@@ -342,8 +344,9 @@ the infill. The flag column must already exist - see :doc:`flagging` for how to 
 .. jupyter-execute::
     :hide-code:
 
-    import examples_infilling
-    examples_infilling.flagged_infill()
+    from examples import infilling
+
+    infilling.flagged_infill()
 
 Only rows whose value changed from null to non-null are flagged; rows that were already populated,
 or that remain null because the gap exceeded ``max_gap_size``, are left untouched.
@@ -383,23 +386,25 @@ can be used to infill these gaps.
         .. jupyter-execute::
             :hide-code:
 
-            import examples_infilling
-            ts = examples_infilling.alt_data_main()
+            from examples import infilling
+
+            infilling.main_data()
 
     .. tab-item:: Alternative Data
 
         .. jupyter-execute::
             :hide-code:
 
-            import examples_infilling
-            ts = examples_infilling.alt_data_alt()
+            from examples import infilling
+
+            infilling.alt_data()
 
 **Code:**
 
-.. literalinclude:: ../../../src/time_stream/examples/examples_infilling.py
+.. literalinclude:: ../examples/infilling.py
     :language: python
-    :start-after: [start_block_2]
-    :end-before: [end_block_2]
+    :start-after: [start:alt_data_infill]
+    :end-before: [end:alt_data_infill]
     :dedent:
 
 **Output:**
@@ -407,8 +412,9 @@ can be used to infill these gaps.
 .. jupyter-execute::
     :hide-code:
 
-    import examples_infilling
-    ts = examples_infilling.alt_data_infill()
+    from examples import infilling
+
+    infilling.alt_data_infill()
 
 .. _alt_data_dynamic_examples:
 
@@ -423,10 +429,10 @@ Basic usage
 
 **Code:**
 
-.. literalinclude:: ../../../src/time_stream/examples/examples_infilling.py
+.. literalinclude:: ../examples/infilling.py
     :language: python
-    :start-after: [start_block_4]
-    :end-before: [end_block_4]
+    :start-after: [start:alt_data_dynamic_infill]
+    :end-before: [end:alt_data_dynamic_infill]
     :dedent:
 
 **Output:**
@@ -434,8 +440,9 @@ Basic usage
 .. jupyter-execute::
     :hide-code:
 
-    import examples_infilling
-    examples_infilling.alt_data_dynamic_infill()
+    from examples import infilling
+
+    infilling.alt_data_dynamic_infill()
 
 Using thresholds
 ~~~~~~~~~~~~~~~~
@@ -446,10 +453,10 @@ caps the window so that only the data nearest the gap is used.
 
 **Code:**
 
-.. literalinclude:: ../../../src/time_stream/examples/examples_infilling.py
+.. literalinclude:: ../examples/infilling.py
     :language: python
-    :start-after: [start_block_5]
-    :end-before: [end_block_5]
+    :start-after: [start:alt_data_dynamic_infill_with_thresholds]
+    :end-before: [end:alt_data_dynamic_infill_with_thresholds]
     :dedent:
 
 **Output:**
@@ -457,8 +464,9 @@ caps the window so that only the data nearest the gap is used.
 .. jupyter-execute::
     :hide-code:
 
-    import examples_infilling
-    examples_infilling.alt_data_dynamic_infill_with_thresholds()
+    from examples import infilling
+
+    infilling.alt_data_dynamic_infill_with_thresholds()
 
 One-sided windows
 ~~~~~~~~~~~~~~~~~
@@ -468,10 +476,10 @@ to restrict it to one side only - useful when data quality or availability diffe
 
 **Code:**
 
-.. literalinclude:: ../../../src/time_stream/examples/examples_infilling.py
+.. literalinclude:: ../examples/infilling.py
     :language: python
-    :start-after: [start_block_6]
-    :end-before: [end_block_6]
+    :start-after: [start:alt_data_dynamic_infill_one_sided]
+    :end-before: [end:alt_data_dynamic_infill_one_sided]
     :dedent:
 
 **Output:**
@@ -479,8 +487,9 @@ to restrict it to one side only - useful when data quality or availability diffe
 .. jupyter-execute::
     :hide-code:
 
-    import examples_infilling
-    examples_infilling.alt_data_dynamic_infill_one_sided()
+    from examples import infilling
+
+    infilling.alt_data_dynamic_infill_one_sided()
 
 Specifying window size
 ~~~~~~~~~~~~~~~~~~~~~~
@@ -488,10 +497,10 @@ Specifying window size
 ``window_size`` accepts an ISO 8601 duration string, a :class:`isoperiod.Period`, or a
 :class:`datetime.timedelta` - all three are equivalent:
 
-.. literalinclude:: ../../../src/time_stream/examples/examples_infilling.py
+.. literalinclude:: ../examples/infilling.py
     :language: python
-    :start-after: [start_block_7]
-    :end-before: [end_block_7]
+    :start-after: [start:alt_data_dynamic_window_size_formats]
+    :end-before: [end:alt_data_dynamic_window_size_formats]
     :dedent:
 
 Visualisation of interpolation methods
@@ -504,10 +513,11 @@ You should do your research into which is most appropriate.
 .. jupyter-execute::
    :hide-code:
 
-   import examples_infilling
-   tf = examples_infilling.all_infills()
+   from examples import infilling
 
-.. plot:: ../../src/time_stream/examples/examples_infilling.py plot_all_infills
+   infilling.all_infills()
+
+.. plot:: examples/infilling.py plot_all_infills
 
 API reference
 =============

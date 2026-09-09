@@ -57,8 +57,9 @@ and then in Time-Stream:
 .. jupyter-execute::
    :hide-code:
 
-   import examples_aggregation
-   ts = examples_aggregation.get_example_df("polars")
+   from examples import aggregation
+
+   aggregation.sample_data()
 
 **Code:**
 
@@ -68,28 +69,28 @@ and then in Time-Stream:
     .. tab-item:: :iconify:`devicon:pandas` Pandas
         :sync: pandas
 
-        .. literalinclude:: ../../../src/time_stream/examples/examples_aggregation.py
+        .. literalinclude:: ../examples/aggregation.py
            :language: python
-           :start-after: [start_block_1]
-           :end-before: [end_block_1]
+           :start-after: [start:pandas_example]
+           :end-before: [end:pandas_example]
            :dedent:
 
     .. tab-item:: :iconify:`simple-icons:polars` Polars
         :sync: polars
 
-        .. literalinclude:: ../../../src/time_stream/examples/examples_aggregation.py
+        .. literalinclude:: ../examples/aggregation.py
            :language: python
-           :start-after: [start_block_2]
-           :end-before: [end_block_2]
+           :start-after: [start:polars_example]
+           :end-before: [end:polars_example]
            :dedent:
 
     .. tab-item:: :iconify:`tdesign:time` Time-Stream
         :sync: time_stream
 
-        .. literalinclude:: ../../../src/time_stream/examples/examples_aggregation.py
+        .. literalinclude:: ../examples/aggregation.py
            :language: python
-           :start-after: [start_block_3]
-           :end-before: [end_block_3]
+           :start-after: [start:time_stream_example]
+           :end-before: [end:time_stream_example]
            :dedent:
 
 **Output:**
@@ -103,8 +104,9 @@ and then in Time-Stream:
         .. jupyter-execute::
            :hide-code:
 
-           import examples_aggregation
-           ts = examples_aggregation.pandas_example()
+           from examples import aggregation
+
+           aggregation.pandas_example()
 
     .. tab-item:: :iconify:`simple-icons:polars` Polars
         :sync: polars
@@ -112,8 +114,9 @@ and then in Time-Stream:
         .. jupyter-execute::
            :hide-code:
 
-           import examples_aggregation
-           ts = examples_aggregation.polars_example()
+           from examples import aggregation
+
+           aggregation.polars_example()
 
     .. tab-item:: :iconify:`tdesign:time` Time-Stream
         :sync: time_stream
@@ -121,8 +124,9 @@ and then in Time-Stream:
         .. jupyter-execute::
            :hide-code:
 
-           import examples_aggregation
-           ts = examples_aggregation.time_stream_example()
+           from examples import aggregation
+
+           aggregation.time_stream_example()
 
 Key benefits
 ------------
@@ -255,17 +259,18 @@ Choose how values inside each window are summarised. Pass a **string** correspon
 
     Using the :ref:`15-minute flow example data <example_input_data_agg>`:
 
-    .. literalinclude:: ../../../src/time_stream/examples/examples_aggregation.py
+    .. literalinclude:: ../examples/aggregation.py
         :language: python
-        :start-after: [start_block_6]
-        :end-before: [end_block_6]
+        :start-after: [start:aggregation_nth_example]
+        :end-before: [end:aggregation_nth_example]
         :dedent:
 
     .. jupyter-execute::
        :hide-code:
 
-       import examples_aggregation
-       examples_aggregation.aggregation_nth_example()
+       from examples import aggregation
+
+       aggregation.aggregation_nth_example()
 
 ``percentile``
 ^^^^^^^^^^^^^^
@@ -387,8 +392,9 @@ the completeness of the aggregation windows, and whether an aggregated data poin
 .. jupyter-execute::
    :hide-code:
 
-   import examples_aggregation
-   examples_aggregation.aggregation_missing_criteria_example()
+   from examples import aggregation
+
+   aggregation.aggregation_missing_criteria_example()
 
 
 Time anchoring
@@ -425,17 +431,18 @@ controlling which boundaries are inclusive (default: both).
 
 Using the :ref:`15-minute flow example data <example_input_data_agg>`:
 
-.. literalinclude:: ../../../src/time_stream/examples/examples_aggregation.py
+.. literalinclude:: ../examples/aggregation.py
     :language: python
-    :start-after: [start_block_4]
-    :end-before: [end_block_4]
+    :start-after: [start:aggregation_time_window_example]
+    :end-before: [end:aggregation_time_window_example]
     :dedent:
 
 .. jupyter-execute::
    :hide-code:
 
-   import examples_aggregation
-   examples_aggregation.aggregation_time_window_example()
+   from examples import aggregation
+
+   aggregation.aggregation_time_window_example()
 
 The ``expected_count_<time>`` column reflects the number of observations expected within the window
 for each period - not the full period. This means that ``missing_criteria`` checks are automatically

@@ -33,17 +33,9 @@ classifiers = [
 ]
 license = { file = "LICENSE" }
 dependencies = [
-    "config>=0.5.1",
     "polars>=1.43.2",
-    "pyarrow>=25.0.0",
-    "pydantic>=2.13.4",
-    "isodate",
     "numpy",
     "scipy>=1.18.0",
-    "matplotlib>=3.11.1",
-    "altair>=6.2.2",
-    "pandas>=3.0.5",
-    "sphinx-autodoc-typehints>=3.10.0",
     "isoperiod",
 ]
 requires-python = ">= 3.12"
@@ -62,6 +54,7 @@ test = [
     "coverage",
     "pytest",
     "pytest-cov",
+    { include-group = "examples" },
 ]
 typecheck = [
     "pyright",
@@ -80,7 +73,14 @@ docs = [
     "sphinxcontrib-mermaid>=2.1.0",
     "nbsphinx",
     "jupyter_sphinx",
-    "snowballstemmer<4"
+    "snowballstemmer<4",
+    { include-group = "examples" },
+]
+
+examples = [
+    "matplotlib>=3.11.1",
+    "pandas>=3.0.5",
+    "pyarrow>=25.0.0",
 ]
 
 [project.urls]
@@ -93,15 +93,12 @@ homepage = "https://github.com/NERC-CEH/time-stream"
 venvPath = "."
 venv = ".venv"
 include = ["src", "tests"]
-exclude = ["src/time_stream/examples"]
+extraPaths = ["docs/source"]
 
 [tool.ruff]
 src = ["src", "tests"]
-include = ["src/**.py", "tests/**.py"]
+include = ["src/**.py", "tests/**.py", "docs/source/examples/**.py"]
 line-length = 120
-exclude = [
-    "src/time_stream/docs"
-]
 
 [tool.ruff.lint]
 select = [
@@ -126,7 +123,7 @@ strict = true
 
 [tool.ruff.lint.per-file-ignores]
 # Ignore "import not at top of file" for examples code snippets
-"src/time_stream/examples/*.py" = ["PLC0415"]
+"docs/source/examples/*.py" = ["PLC0415"]
 
 [tool.coverage.run]
 branch = true
@@ -135,8 +132,6 @@ source = ["src/", "tests/"]
 omit = [
     "*__init__.py",
     "src/time_stream/__main__.py",
-    "src/time_stream/examples/*",
-    "src/time_stream/docs/*",
 ]
 
 [tool.coverage.report]
@@ -157,8 +152,11 @@ exclude_also = [
 ]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
-addopts = "--cov=time_stream --cov-report=term-missing"
+# "src" is here so that --doctest-modules collects the ">>>" examples in the docstrings, which are rendered
+# into the API reference. The user guide's examples live in docs/source/examples and are run by
+# tests/time_stream/examples/test_examples.py.
+testpaths = ["tests", "src"]
+addopts = "--import-mode=importlib --cov=time_stream --cov-report=term-missing --doctest-modules"
 markers = ["slow: Marks slow tests"]
 
 [tool.uv]

@@ -78,31 +78,33 @@ Quality control methods
 
     **Temperature greater than or equal to 50:**
 
-    .. literalinclude:: ../../../src/time_stream/examples/examples_quality_control.py
+    .. literalinclude:: ../examples/quality_control.py
        :language: python
-       :start-after: [start_block_2]
-       :end-before: [end_block_2]
+       :start-after: [start:comparison_qc_1]
+       :end-before: [end:comparison_qc_1]
        :dedent:
 
     .. jupyter-execute::
        :hide-code:
 
-       import examples_quality_control
-       examples_quality_control.comparison_qc_1()
+       from examples import quality_control
+
+       quality_control.comparison_qc_1()
 
     **Sensor codes within a list:**
 
-    .. literalinclude:: ../../../src/time_stream/examples/examples_quality_control.py
+    .. literalinclude:: ../examples/quality_control.py
        :language: python
-       :start-after: [start_block_4]
-       :end-before: [end_block_4]
+       :start-after: [start:comparison_qc_3]
+       :end-before: [end:comparison_qc_3]
        :dedent:
 
     .. jupyter-execute::
        :hide-code:
 
-       import examples_quality_control
-       examples_quality_control.comparison_qc_3()
+       from examples import quality_control
+
+       quality_control.comparison_qc_3()
 
 ``range``
 ^^^^^^^^^
@@ -122,17 +124,18 @@ Quality control methods
 
     **Temperatures outside of the range -30 to 50:**
 
-    .. literalinclude:: ../../../src/time_stream/examples/examples_quality_control.py
+    .. literalinclude:: ../examples/quality_control.py
        :language: python
-       :start-after: [start_block_5]
-       :end-before: [end_block_5]
+       :start-after: [start:range_qc_1]
+       :end-before: [end:range_qc_1]
        :dedent:
 
     .. jupyter-execute::
        :hide-code:
 
-       import examples_quality_control
-       examples_quality_control.range_qc_1()
+       from examples import quality_control
+
+       quality_control.range_qc_1()
 
 ``time_range``
 ^^^^^^^^^^^^^^
@@ -154,31 +157,33 @@ Quality control methods
 
     **Flag rainfall values between the hours of 01:00 and 03:00:**
 
-    .. literalinclude:: ../../../src/time_stream/examples/examples_quality_control.py
+    .. literalinclude:: ../examples/quality_control.py
        :language: python
-       :start-after: [start_block_9]
-       :end-before: [end_block_9]
+       :start-after: [start:time_range_qc_1]
+       :end-before: [end:time_range_qc_1]
        :dedent:
 
     .. jupyter-execute::
        :hide-code:
 
-       import examples_quality_control
-       examples_quality_control.time_range_qc_1()
+       from examples import quality_control
+
+       quality_control.time_range_qc_1()
 
     **Flag temperature values between 03:30 and 09:30 on the 1st January:**
 
-    .. literalinclude:: ../../../src/time_stream/examples/examples_quality_control.py
+    .. literalinclude:: ../examples/quality_control.py
        :language: python
-       :start-after: [start_block_10]
-       :end-before: [end_block_10]
+       :start-after: [start:time_range_qc_2]
+       :end-before: [end:time_range_qc_2]
        :dedent:
 
     .. jupyter-execute::
        :hide-code:
 
-       import examples_quality_control
-       examples_quality_control.time_range_qc_2()
+       from examples import quality_control
+
+       quality_control.time_range_qc_2()
 
 ``spike``
 ^^^^^^^^^
@@ -198,17 +203,18 @@ Quality control methods
 
     **Spike check on temperature data:**
 
-    .. literalinclude:: ../../../src/time_stream/examples/examples_quality_control.py
+    .. literalinclude:: ../examples/quality_control.py
        :language: python
-       :start-after: [start_block_7]
-       :end-before: [end_block_7]
+       :start-after: [start:spike_qc_1]
+       :end-before: [end:spike_qc_1]
        :dedent:
 
     .. jupyter-execute::
        :hide-code:
 
-       import examples_quality_control
-       examples_quality_control.spike_qc_1()
+       from examples import quality_control
+
+       quality_control.spike_qc_1()
 
     .. note::
         The result doesn't flag the neighbouring high values of 50 and 52. The spike test detects a sudden
@@ -235,31 +241,33 @@ Quality control methods
 
     **Flag temperature values stuck at the same reading for 3 or more consecutive timesteps:**
 
-    .. literalinclude:: ../../../src/time_stream/examples/examples_quality_control.py
+    .. literalinclude:: ../examples/quality_control.py
        :language: python
-       :start-after: [start_block_11]
-       :end-before: [end_block_11]
+       :start-after: [start:flat_line_qc_1]
+       :end-before: [end:flat_line_qc_1]
        :dedent:
 
     .. jupyter-execute::
        :hide-code:
 
-       import examples_quality_control
-       examples_quality_control.flat_line_qc_1()
+       from examples import quality_control
+
+       quality_control.flat_line_qc_1()
 
     **Using** ``ignore_value`` **- suppress flagging when the repeated value is 0.0:**
 
-    .. literalinclude:: ../../../src/time_stream/examples/examples_quality_control.py
+    .. literalinclude:: ../examples/quality_control.py
        :language: python
-       :start-after: [start_block_12]
-       :end-before: [end_block_12]
+       :start-after: [start:flat_line_qc_2]
+       :end-before: [end:flat_line_qc_2]
        :dedent:
 
     .. jupyter-execute::
        :hide-code:
 
-       import examples_quality_control
-       examples_quality_control.flat_line_qc_2()
+       from examples import quality_control
+
+       quality_control.flat_line_qc_2()
 
     .. note::
         More than one ``ignore_value`` can be specified in a list, e.g. [0.0, 20.0]
@@ -269,17 +277,18 @@ Quality control methods
     The data below drifts slightly around 20 °C (varying by less than 0.01 between readings) before jumping
     to a different range. The ``tolerance`` parameter catches these near-flat runs that exact equality would miss.
 
-    .. literalinclude:: ../../../src/time_stream/examples/examples_quality_control.py
+    .. literalinclude:: ../examples/quality_control.py
        :language: python
-       :start-after: [start_block_13]
-       :end-before: [end_block_13]
+       :start-after: [start:flat_line_qc_3]
+       :end-before: [end:flat_line_qc_3]
        :dedent:
 
     .. jupyter-execute::
        :hide-code:
 
-       import examples_quality_control
-       examples_quality_control.flat_line_qc_3()
+       from examples import quality_control
+
+       quality_control.flat_line_qc_3()
 
 Observation interval
 ====================
@@ -306,10 +315,10 @@ The examples below use the flag-column style. Each sets up a bitwise flag system
 ``FLAGGED`` flag and calls :meth:`~time_stream.TimeFrame.init_flag_column` before running the
 check:
 
-.. literalinclude:: ../../../src/time_stream/examples/examples_quality_control.py
+.. literalinclude:: ../examples/quality_control.py
    :language: python
-   :start-after: [start_block_14]
-   :end-before: [end_block_14]
+   :start-after: [start:setup_flags]
+   :end-before: [end:setup_flags]
    :dedent:
 
 API reference

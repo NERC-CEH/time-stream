@@ -120,52 +120,34 @@ class TimeFrame:
             - ``RESOLVE``: Remove any misaligned rows
 
     Examples:
-        >>> # Simple 15 minute timeseries:
-        >>> tf = TimeFrame(
-        >>>     df, "timestamp", resolution="PT15M"
-        >>> )
-        >>> print(
-        >>>     "resolution=", tf.resolution,
-        >>>     " alignment=", tf.alignment,
-        >>>     " periodicity=", tf.periodicity
-        >>> )
-        resoution=PT15M alignment=PT15M periodicity=PT15M
+        >>> from datetime import datetime
+        >>> import polars as pl
+        >>> from time_stream import TimeFrame
 
-        >>> # Daily water day (09:00 to 09:00) with default uniqueness per water day:
-        >>>
-        >>> tf = TimeFrame(
-        >>>     df, "timestamp", resolution="P1D", offset="+T9H"
-        >>> )
-        >>> print(
-        >>>     "resolution=", tf.resolution,
-        >>>     " alignment=", tf.alignment,
-        >>>     " periodicity=", tf.periodicity
-        >>> )
-        resoution=P1D alignment=P1D+T9H periodicity=P1D+T9H
+        A simple daily timeseries - ``resolution`` is stated, ``alignment`` and ``periodicity`` follow from it:
 
-        >>> # Daily timestamps but uniqueness per water-year:
-        >>>
-        >>> tf = TimeFrame(
-        >>>     df, "timestamp", resolution="P1D", offset="+T9H", periodicity="P1Y+9MT9H"
-        >>> )
-        >>> print(
-        >>>     "resolution=", tf.resolution,
-        >>>     " alignment=", tf.alignment,
-        >>>     " periodicity=", tf.periodicity
-        >>> )
-        resoution=P1D alignment=P1D+T9H periodicity=P1Y+9MT9H
+        >>> df = pl.DataFrame({"time": [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)]})
+        >>> tf = TimeFrame(df, "time", resolution="P1D")
+        >>> print(f"resolution={tf.resolution} alignment={tf.alignment} periodicity={tf.periodicity}")
+        resolution=P1D alignment=P1D periodicity=P1D
 
-        >>> # Annual series stored directly on water-year boundary:
-        >>>
-        >>> tf = TimeFrame(
-        >>>     df, "timestamp", resolution="P1Y", offset="+9MT9H"
-        >>> )
-        >>> print(
-        >>>     "resolution=", tf.resolution,
-        >>>     " alignment=", tf.alignment,
-        >>>     " periodicity=", tf.periodicity
-        >>> )
-        resoution=P1Y alignment=P1Y+9MT9H periodicity=P1Y+9MT9H
+        An ``offset`` shifts the grid - here readings land at 09:00 each day:
+
+        >>> df = pl.DataFrame(
+        ...     {"time": [datetime(2024, 1, 1, 9), datetime(2024, 1, 2, 9), datetime(2024, 1, 3, 9)]}
+        ... )
+        >>> tf = TimeFrame(df, "time", resolution="P1D", offset="+T9H")
+        >>> print(f"resolution={tf.resolution} alignment={tf.alignment} periodicity={tf.periodicity}")
+        resolution=P1D alignment=P1D+T9H periodicity=P1D+T9H
+
+        A ``periodicity`` says the daily grid holds at most one value per water year (09:00 on 1 October):
+
+        >>> df = pl.DataFrame(
+        ...     {"time": [datetime(2022, 10, 1, 9), datetime(2023, 10, 1, 9), datetime(2024, 10, 1, 9)]}
+        ... )
+        >>> tf = TimeFrame(df, "time", resolution="P1D", offset="+T9H", periodicity="P1Y+9MT9H")
+        >>> print(f"resolution={tf.resolution} alignment={tf.alignment} periodicity={tf.periodicity}")
+        resolution=P1D alignment=P1D+T9H periodicity=P1Y+9MT9H
     """
 
     _df: pl.DataFrame
