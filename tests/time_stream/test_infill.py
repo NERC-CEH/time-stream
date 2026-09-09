@@ -5,9 +5,10 @@ from unittest.mock import Mock, patch
 import numpy as np
 import polars as pl
 import pytest
+from isoperiod import Period
 from polars.testing import assert_frame_equal, assert_series_equal
 
-from time_stream import Period, TimeFrame
+from time_stream.base import TimeFrame
 from time_stream.exceptions import (
     ColumnNotFoundError,
     InfillInsufficientValuesError,

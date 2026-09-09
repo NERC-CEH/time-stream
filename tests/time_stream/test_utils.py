@@ -4,9 +4,9 @@ from typing import Any
 
 import polars as pl
 import pytest
+from isoperiod import Period
 from polars.testing import assert_frame_equal, assert_series_equal
 
-from time_stream import Period
 from time_stream.exceptions import ColumnNotFoundError, TimeWindowError
 from time_stream.types import ClosedInterval, TimeAnchor
 from time_stream.utils import (

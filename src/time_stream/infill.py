@@ -22,9 +22,9 @@ from typing import Any, Literal
 
 import numpy as np
 import polars as pl
+from isoperiod import Period
 from scipy.interpolate import Akima1DInterpolator, PchipInterpolator, make_interp_spline
 
-from time_stream import Period
 from time_stream.exceptions import InfillError, InfillInsufficientValuesError
 from time_stream.operation import Operation
 from time_stream.utils import check_columns_in_dataframe, gap_size_count, get_date_filter, pad_time

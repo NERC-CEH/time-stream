@@ -62,17 +62,18 @@ utilising the same **Polars performance** with **TimeFrame semantics**.
 
 Using the :ref:`15-minute flow example data <example_input_data_agg>`:
 
-.. literalinclude:: ../../../src/time_stream/examples/examples_rolling_aggregation.py
+.. literalinclude:: ../examples/rolling_aggregation.py
     :language: python
-    :start-after: [start_block_1]
-    :end-before: [end_block_1]
+    :start-after: [start:rolling_mean_example]
+    :end-before: [end:rolling_mean_example]
     :dedent:
 
 .. jupyter-execute::
    :hide-code:
 
-   import examples_rolling_aggregation
-   examples_rolling_aggregation.rolling_mean_example()
+   from examples import rolling_aggregation
+
+   rolling_aggregation.rolling_mean_example()
 
 There are some specific parameters that are provided to the rolling aggregation method, explained below.
 
@@ -176,17 +177,18 @@ count. You can use ``missing_criteria`` to flag or filter these rows.
 
 For example, to mark a result as invalid unless the window contains at least 3 observations:
 
-.. literalinclude:: ../../../src/time_stream/examples/examples_rolling_aggregation.py
+.. literalinclude:: ../examples/rolling_aggregation.py
    :language: python
-   :start-after: [start_block_2]
-   :end-before: [end_block_2]
+   :start-after: [start:rolling_missing_criteria_example]
+   :end-before: [end:rolling_missing_criteria_example]
    :dedent:
 
 .. jupyter-execute::
    :hide-code:
 
-   import examples_rolling_aggregation
-   examples_rolling_aggregation.rolling_missing_criteria_example()
+   from examples import rolling_aggregation
+
+   rolling_aggregation.rolling_missing_criteria_example()
 
 Rows where ``count_flow < 3`` have ``valid_flow = false``, as visible at the start of the series where the trailing
 window has not yet accumulated enough observations.
@@ -200,17 +202,18 @@ The :ref:`nth <aggregation_functions>` aggregation function is particularly usef
 you pull out a value from a fixed position relative to each timestamp - for example, "the reading from (just
 under) an hour ago".
 
-.. literalinclude:: ../../../src/time_stream/examples/examples_rolling_aggregation.py
+.. literalinclude:: ../examples/rolling_aggregation.py
    :language: python
-   :start-after: [start_block_3]
-   :end-before: [end_block_3]
+   :start-after: [start:rolling_nth_example]
+   :end-before: [end:rolling_nth_example]
    :dedent:
 
 .. jupyter-execute::
    :hide-code:
 
-   import examples_rolling_aggregation
-   examples_rolling_aggregation.rolling_nth_example()
+   from examples import rolling_aggregation
+
+   rolling_aggregation.rolling_nth_example()
 
 .. note::
 

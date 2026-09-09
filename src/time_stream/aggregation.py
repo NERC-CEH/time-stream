@@ -20,9 +20,9 @@ from datetime import timedelta
 from typing import Callable, get_args
 
 import polars as pl
+from isoperiod import Period
 from polars.dataframe.group_by import DynamicGroupBy, RollingGroupBy
 
-from time_stream import Period
 from time_stream.exceptions import AggregationError, AggregationPeriodError, MissingCriteriaError, TimeWindowError
 from time_stream.operation import Operation
 from time_stream.types import MissingCriteria, RollingAlignment, TimeAnchor
@@ -197,8 +197,8 @@ class AggregationPipeline(ABC):
         if expr is None:
             # For some aggregations, the expected count is a constant so use that if possible.
             # For example, when aggregating 15-minute data over a day, the expected count is always 96.
-            if self.ctx.periodicity.count(self.aggregation_period) > 0:
-                expr = pl.lit(self.ctx.periodicity.count(self.aggregation_period))
+            if (n := self.ctx.periodicity.count(self.aggregation_period)) is not None:
+                expr = pl.lit(n)
             else:
                 expr = self._dynamic_expected_count_expr()
 
@@ -727,7 +727,7 @@ class Nth(AggregationFunction):
             raise AggregationPeriodError("An aggregation_period must be defined for nth aggregation method.")
 
         expected_count = ctx.periodicity.count(ctx.aggregation_period)
-        if expected_count > 0 and self.n > expected_count:
+        if expected_count is not None and self.n > expected_count:
             raise AggregationPeriodError(
                 f"Cannot select n={self.n}: periodicity '{ctx.periodicity}' fits only "
                 f"{expected_count} points within aggregation period '{ctx.aggregation_period}'."

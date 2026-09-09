@@ -21,17 +21,18 @@ Simple example
 
 Define your flags, link them to a column, and apply with a single call:
 
-.. literalinclude:: ../../../src/time_stream/examples/examples_flagging.py
+.. literalinclude:: ../examples/flagging.py
    :language: python
-   :start-after: [start_block_1]
-   :end-before: [end_block_1]
+   :start-after: [start:simple_example]
+   :end-before: [end:simple_example]
    :dedent:
 
 .. jupyter-execute::
    :hide-code:
 
-   import examples_flagging
-   examples_flagging.simple_example()
+   from examples import flagging
+
+   flagging.simple_example()
 
 A few lines to enrich the data: "I want to *flag* my *temperature* data as *SUSPECT* when values are *greater than 25*."
 
@@ -80,45 +81,48 @@ categorical list system.
 
     - ``None`` - produces a default system with a single ``FLAGGED`` flag at value ``1``:
 
-      .. literalinclude:: ../../../src/time_stream/examples/examples_flagging.py
+      .. literalinclude:: ../examples/flagging.py
          :language: python
-         :start-after: [start_block_3]
-         :end-before: [end_block_3]
+         :start-after: [start:register_default]
+         :end-before: [end:register_default]
          :dedent:
 
       .. jupyter-execute::
          :hide-code:
 
-         import examples_flagging
-         examples_flagging.register_default()
+         from examples import flagging
+
+         flagging.register_default()
 
     - ``list[str]`` - names are sorted and assigned powers of two automatically:
 
-      .. literalinclude:: ../../../src/time_stream/examples/examples_flagging.py
+      .. literalinclude:: ../examples/flagging.py
          :language: python
-         :start-after: [start_block_4]
-         :end-before: [end_block_4]
+         :start-after: [start:register_list]
+         :end-before: [end:register_list]
          :dedent:
 
       .. jupyter-execute::
          :hide-code:
 
-         import examples_flagging
-         examples_flagging.register_list()
+         from examples import flagging
+
+         flagging.register_list()
 
     - ``dict[str, int]`` - explicit mapping. Values must be powers of two and unique:
 
-      .. literalinclude:: ../../../src/time_stream/examples/examples_flagging.py
+      .. literalinclude:: ../examples/flagging.py
          :language: python
-         :start-after: [start_block_5]
-         :end-before: [end_block_5]
+         :start-after: [start:register_bitwise_dict]
+         :end-before: [end:register_bitwise_dict]
          :dedent:
 
       .. jupyter-execute::
          :hide-code:
 
-         import examples_flagging
-         examples_flagging.register_bitwise_dict()
+         from examples import flagging
+
+         flagging.register_bitwise_dict()
 
     .. note::
 
@@ -139,46 +143,49 @@ categorical list system.
 
     - ``list[str]`` with ``flag_type="categorical"`` - each name is used as both the name and the value:
 
-      .. literalinclude:: ../../../src/time_stream/examples/examples_flagging.py
+      .. literalinclude:: ../examples/flagging.py
          :language: python
-         :start-after: [start_block_21]
-         :end-before: [end_block_21]
+         :start-after: [start:register_categorical_name_list]
+         :end-before: [end:register_categorical_name_list]
          :dedent:
 
       .. jupyter-execute::
          :hide-code:
 
-         import examples_flagging
-         examples_flagging.register_categorical_name_list()
+         from examples import flagging
+
+         flagging.register_categorical_name_list()
 
     - ``dict[str, int]`` with ``flag_type="categorical"`` - arbitrary integer values:
 
-      .. literalinclude:: ../../../src/time_stream/examples/examples_flagging.py
+      .. literalinclude:: ../examples/flagging.py
          :language: python
-         :start-after: [start_block_6]
-         :end-before: [end_block_6]
+         :start-after: [start:register_categorical_single]
+         :end-before: [end:register_categorical_single]
          :dedent:
 
       .. jupyter-execute::
          :hide-code:
 
-         import examples_flagging
-         examples_flagging.register_categorical_single()
+         from examples import flagging
+
+         flagging.register_categorical_single()
 
     - ``dict[str, str]`` - string-valued dicts are inferred as categorical automatically, so ``flag_type`` can be
       omitted:
 
-      .. literalinclude:: ../../../src/time_stream/examples/examples_flagging.py
+      .. literalinclude:: ../examples/flagging.py
          :language: python
-         :start-after: [start_block_7]
-         :end-before: [end_block_7]
+         :start-after: [start:register_categorical_string]
+         :end-before: [end:register_categorical_string]
          :dedent:
 
       .. jupyter-execute::
          :hide-code:
 
-         import examples_flagging
-         examples_flagging.register_categorical_string()
+         from examples import flagging
+
+         flagging.register_categorical_string()
 
 ``categorical_list``
 ^^^^^^^^^^^^^^^^^^^^
@@ -225,34 +232,36 @@ flag system. The data type of the resulting column depends on the flag system ty
 
 You can also pre-populate the column with a default flag value:
 
-.. literalinclude:: ../../../src/time_stream/examples/examples_flagging.py
+.. literalinclude:: ../examples/flagging.py
    :language: python
-   :start-after: [start_block_10]
-   :end-before: [end_block_10]
+   :start-after: [start:init_flag_column_prepopulated]
+   :end-before: [end:init_flag_column_prepopulated]
    :dedent:
 
 .. jupyter-execute::
    :hide-code:
 
-   import examples_flagging
-   examples_flagging.init_flag_column_prepopulated()
+   from examples import flagging
+
+   flagging.init_flag_column_prepopulated()
 
 .. note::
     Normally, you would supply a sensible ``column_name`` so that you can keep track of your flags. However, if you
     do omit it, the column is given a default name of ``__flag__{flag_system_name}``, with an integer suffix appended
     if a name collides.
 
-    .. literalinclude:: ../../../src/time_stream/examples/examples_flagging.py
+    .. literalinclude:: ../examples/flagging.py
        :language: python
-       :start-after: [start_block_9]
-       :end-before: [end_block_9]
+       :start-after: [start:init_flag_column_default_name]
+       :end-before: [end:init_flag_column_default_name]
        :dedent:
 
     .. jupyter-execute::
        :hide-code:
 
-       import examples_flagging
-       examples_flagging.init_flag_column_default_name()
+       from examples import flagging
+
+       flagging.init_flag_column_default_name()
 
 **2. Register an existing column** using :meth:`~time_stream.TimeFrame.register_flag_column`.
 
@@ -279,60 +288,64 @@ this method does depends on the flag system type:
 
 **Bitwise workflow:**
 
-.. literalinclude:: ../../../src/time_stream/examples/examples_flagging.py
+.. literalinclude:: ../examples/flagging.py
    :language: python
-   :start-after: [start_block_11]
-   :end-before: [end_block_11]
+   :start-after: [start:bitwise_flag_workflow]
+   :end-before: [end:bitwise_flag_workflow]
    :dedent:
 
 .. jupyter-execute::
    :hide-code:
 
-   import examples_flagging
-   examples_flagging.bitwise_flag_workflow()
+   from examples import flagging
+
+   flagging.bitwise_flag_workflow()
 
 **Categorical single workflow:**
 
-.. literalinclude:: ../../../src/time_stream/examples/examples_flagging.py
+.. literalinclude:: ../examples/flagging.py
    :language: python
-   :start-after: [start_block_12]
-   :end-before: [end_block_12]
+   :start-after: [start:categorical_single_workflow]
+   :end-before: [end:categorical_single_workflow]
    :dedent:
 
 .. jupyter-execute::
    :hide-code:
 
-   import examples_flagging
-   examples_flagging.categorical_single_workflow()
+   from examples import flagging
+
+   flagging.categorical_single_workflow()
 
 Each ``add_flag`` call overwrites the previous verdict on matching rows, so the order of calls matters. Use
 ``overwrite=False`` to fill in only the rows that have no verdict yet:
 
-.. literalinclude:: ../../../src/time_stream/examples/examples_flagging.py
+.. literalinclude:: ../examples/flagging.py
    :language: python
-   :start-after: [start_block_13]
-   :end-before: [end_block_13]
+   :start-after: [start:categorical_single_overwrite]
+   :end-before: [end:categorical_single_overwrite]
    :dedent:
 
 .. jupyter-execute::
    :hide-code:
 
-   import examples_flagging
-   examples_flagging.categorical_single_overwrite()
+   from examples import flagging
+
+   flagging.categorical_single_overwrite()
 
 **Categorical list workflow:**
 
-.. literalinclude:: ../../../src/time_stream/examples/examples_flagging.py
+.. literalinclude:: ../examples/flagging.py
    :language: python
-   :start-after: [start_block_14]
-   :end-before: [end_block_14]
+   :start-after: [start:categorical_list_workflow]
+   :end-before: [end:categorical_list_workflow]
    :dedent:
 
 .. jupyter-execute::
    :hide-code:
 
-   import examples_flagging
-   examples_flagging.categorical_list_workflow()
+   from examples import flagging
+
+   flagging.categorical_list_workflow()
 
 The ``flag_value`` argument accepts either the flag name as a string or its underlying value (integer or string,
 depending on the system). The ``expr`` argument is any valid Polars expression that returns a boolean Series, or a
@@ -377,31 +390,33 @@ Use :meth:`~time_stream.TimeFrame.filter_by_flag` to return a new TimeFrame cont
 
 **Keep only matching rows:**
 
-.. literalinclude:: ../../../src/time_stream/examples/examples_flagging.py
+.. literalinclude:: ../examples/flagging.py
    :language: python
-   :start-after: [start_block_17]
-   :end-before: [end_block_17]
+   :start-after: [start:filter_by_flag_include]
+   :end-before: [end:filter_by_flag_include]
    :dedent:
 
 .. jupyter-execute::
    :hide-code:
 
-   import examples_flagging
-   examples_flagging.filter_by_flag_include()
+   from examples import flagging
+
+   flagging.filter_by_flag_include()
 
 **Drop matching rows** by passing ``include=False`` and a list of flags:
 
-.. literalinclude:: ../../../src/time_stream/examples/examples_flagging.py
+.. literalinclude:: ../examples/flagging.py
    :language: python
-   :start-after: [start_block_18]
-   :end-before: [end_block_18]
+   :start-after: [start:filter_by_flag_exclude]
+   :end-before: [end:filter_by_flag_exclude]
    :dedent:
 
 .. jupyter-execute::
    :hide-code:
 
-   import examples_flagging
-   examples_flagging.filter_by_flag_exclude()
+   from examples import flagging
+
+   flagging.filter_by_flag_exclude()
 
 For bitwise columns, "matching" means any of the requested flag bits are set. For categorical columns, it means the
 row's value (or any element of the list, in list mode) is any of the requested flag values.
@@ -418,17 +433,18 @@ to replace the raw values with their flag names:
 - **Categorical single** - each raw value becomes its flag name.
 - **Categorical list** - each value in each list becomes its flag name.
 
-.. literalinclude:: ../../../src/time_stream/examples/examples_flagging.py
+.. literalinclude:: ../examples/flagging.py
    :language: python
-   :start-after: [start_block_15]
-   :end-before: [end_block_15]
+   :start-after: [start:decode_bitwise]
+   :end-before: [end:decode_bitwise]
    :dedent:
 
 .. jupyter-execute::
    :hide-code:
 
-   import examples_flagging
-   examples_flagging.decode_bitwise()
+   from examples import flagging
+
+   flagging.decode_bitwise()
 
 Decoded columns remain registered as flag columns: :meth:`~time_stream.TimeFrame.add_flag`,
 :meth:`~time_stream.TimeFrame.remove_flag`, and :meth:`~time_stream.TimeFrame.filter_by_flag` all continue to work
@@ -436,17 +452,18 @@ transparently on the decoded form.
 
 Use :meth:`~time_stream.TimeFrame.encode_flag_column` to round-trip the column back to raw values:
 
-.. literalinclude:: ../../../src/time_stream/examples/examples_flagging.py
+.. literalinclude:: ../examples/flagging.py
    :language: python
-   :start-after: [start_block_16]
-   :end-before: [end_block_16]
+   :start-after: [start:encode_bitwise]
+   :end-before: [end:encode_bitwise]
    :dedent:
 
 .. jupyter-execute::
    :hide-code:
 
-   import examples_flagging
-   examples_flagging.encode_bitwise()
+   from examples import flagging
+
+   flagging.encode_bitwise()
 
 Integration with ``TimeStream`` operations
 ==========================================
