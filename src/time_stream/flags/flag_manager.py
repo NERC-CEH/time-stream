@@ -15,6 +15,7 @@ Typical use from within the ``TimeFrame`` class:
     3) Use ``add_flag`` / ``remove_flag`` on the flag column, with Polars expressions to modify the flag values.
 """
 
+import itertools
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -155,12 +156,42 @@ class BitwiseFlagColumn(FlagColumn):
         # Sort the flag system mapping into ascending bit value order
         flag_map = sorted(self.flag_system.to_dict().items(), key=lambda kv: kv[1])
 
-        # Build expressions for decoding each flag value
-        exprs = [
-            pl.when((pl.col(self.name) & pl.lit(val)) != 0).then(pl.lit(name)).otherwise(pl.lit(None))
-            for name, val in flag_map
-        ]
-        return df.with_columns(pl.concat_list(exprs).list.drop_nulls().alias(self.name))
+        # Find only the unique flags that we need to decode. We'll then map the decoded values back on to the rows
+        # with matching bits. e.g lets assume that across 1,000 rows, there are only 4 unique flag values [0, 1, 3, 5]
+        # This is much more efficient than decoding each row individually (even if the code is longer!)
+        col = df[self.name]
+        uniques = col.unique().drop_nulls()
+
+        # Decode each unique value once
+        # For our 4 unique flag example:
+        # 0 -> []
+        # 1 -> ["A"]
+        # 3 -> ["A", "B"]      (3 = 1 + 2)
+        # 5 -> ["A", "C"]      (5 = 1 + 4)
+        decoded = [[name for name, val in flag_map if code & val] for code in uniques.to_list()]
+        # decoded = [[], ["A"], ["A", "B"], ["A", "C"]]
+
+        # Flatten the decoded names, recording where each unique value's names start and how many there are
+        lengths = [len(row) for row in decoded]
+        starts = list(itertools.accumulate(lengths, initial=0))[:-1]
+        names = pl.Series([name for row in decoded for name in row], dtype=pl.String)
+        # lengths = [0, 1, 2, 2]
+        # starts = [0, 0, 1, 3]
+        # names = ["A", "A", "B", "A", "C"]
+
+        # Map each original row to its start and length (nulls get 0 length, so decode to [])
+        # This is where we are mapping the decoded values back on to the original rows.
+        start = col.replace_strict(uniques, pl.Series(starts, dtype=pl.UInt32), default=0, return_dtype=pl.UInt32)
+        length = col.replace_strict(uniques, pl.Series(lengths, dtype=pl.UInt32), default=0, return_dtype=pl.UInt32)
+
+        # Build each row's list of positions, then swap positions for names.
+        # Cast needed because if all lists are empty, list.eval returns List(UInt32)
+        result = (
+            pl.int_ranges(start, start + length, dtype=pl.UInt32, eager=True)
+            .list.eval(pl.element().replace_strict(pl.int_range(len(names), eager=True, dtype=pl.UInt32), names))
+            .cast(pl.List(pl.String))
+        )
+        return df.with_columns(result.alias(self.name))
 
     def encode(self, df: pl.DataFrame) -> pl.DataFrame:
         """Replace a ``List(String)`` flag column with a bitwise integer column.

@@ -394,9 +394,7 @@ def handle_duplicates(
     Raises:
         DuplicateValueError: If on_duplicates is set to ERROR and duplicates exist.
     """
-    duplicate_mask = df[column].is_duplicated()
-
-    if not duplicate_mask.any():
+    if df[column].n_unique() == df.height:
         # Nothing to do!
         return df
 
@@ -414,7 +412,7 @@ def handle_duplicates(
         new_df = df.group_by(column).agg([pl.col(col).drop_nulls().first().alias(col) for col in merge_cols])
 
     elif on_duplicates == "drop":
-        new_df = df.filter(~duplicate_mask)
+        new_df = df.filter(~df[column].is_duplicated())
 
     else:
         # Should never reach here, unless a new enum value is added in the future and logic has not been added here

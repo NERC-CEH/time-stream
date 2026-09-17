@@ -15,6 +15,7 @@ from time_stream.exceptions import (
 )
 from time_stream.flags.bitwise_flag_system import BitwiseFlag
 from time_stream.flags.categorical_flag_system import CategoricalSingleFlag
+from time_stream.flags.flag_manager import BitwiseFlagColumn
 
 
 class Flags(BitwiseFlag):
@@ -397,6 +398,30 @@ class TestDecodeFlagColumn:
         tf = self.setup_tf()
         with pytest.raises(ColumnNotFoundError):
             tf.decode_flag_column("value")
+
+    @pytest.mark.parametrize(
+        "values, dtype, expected",
+        [
+            ([1, None, 3], pl.Int64, [["FLAG_A"], [], ["FLAG_A", "FLAG_B"]]),
+            ([None, None], pl.Int64, [[], []]),
+            ([], pl.Int64, []),
+            ([9, 0], pl.Int64, [["FLAG_A"], []]),
+            ([6, 6, 1, 6], pl.UInt8, [["FLAG_B", "FLAG_C"], ["FLAG_B", "FLAG_C"], ["FLAG_A"], ["FLAG_B", "FLAG_C"]]),
+        ],
+        ids=["with_null", "all_null", "empty", "unknown_bit_ignored", "repeated_uint8"],
+    )
+    def test_decode_edge_cases(self, values: list, dtype: pl.DataType, expected: list) -> None:
+        """Test decoding of nulls, empty columns, unknown bits and repeated values."""
+        df = pl.DataFrame({"flag": pl.Series(values, dtype=dtype)})
+        result = BitwiseFlagColumn("flag", Flags).decode(df)["flag"]
+        assert result.dtype == pl.List(pl.String)
+        assert result.to_list() == expected
+
+    def test_decode_encode_round_trip(self) -> None:
+        """Test that encoding a decoded column returns the original values."""
+        df = pl.DataFrame({"flag": [0, 5, 7, 5, 0, 2]})
+        column = BitwiseFlagColumn("flag", Flags)
+        assert column.encode(column.decode(df)).equals(df)
 
 
 class TestEncodeFlagColumn:
