@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "time-stream"
-version = "2.0.0"
+version = "2.0.1"
 description = "Time-Stream: Time Series Toolkit for Rapid Environmental Analysis and Monitoring"
 readme = "README.md"
 authors = [
@@ -51,7 +51,6 @@ lint = [
     "ruff",
 ]
 test = [
-    "coverage",
     "pytest",
     "pytest-cov",
     { include-group = "examples" },
@@ -68,19 +67,15 @@ docs = [
     "sphinx-autodoc-typehints",
     "sphinx-autobuild",
     "sphinx-contributors>=0.3.0",
-    "myst-parser",
     "sphinx-tabs>=3.5.0",
     "sphinxcontrib-mermaid>=2.1.0",
-    "nbsphinx",
     "jupyter_sphinx",
-    "snowballstemmer<4",
     { include-group = "examples" },
 ]
 
 examples = [
     "matplotlib>=3.11.1",
     "pandas>=3.0.5",
-    "pyarrow>=25.0.0",
 ]
 
 [project.urls]
