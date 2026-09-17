@@ -15,6 +15,7 @@ Typical use from within the ``TimeFrame`` class:
     3) Use ``add_flag`` / ``remove_flag`` on the flag column, with Polars expressions to modify the flag values.
 """
 
+import itertools
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -143,8 +144,17 @@ class BitwiseFlagColumn(FlagColumn):
     def decode(self, df: pl.DataFrame) -> pl.DataFrame:
         """Replace the integer flag column with a ``List(String)`` column of active flag names.
 
-        Each row contains the names of flags that are set, sorted by ascending 'bit' value. A value of 0 produces an
-        empty list.
+        Each output row contains the names of flags that are set, sorted by ascending 'bit' value. A value of 0 produces
+        an empty list.
+
+        The general logic is to gather unique flag values first, decode those, then map them back on to the
+        original flag values. This saves time versus decoding on a per-row basis: in a typical usage there are
+        relatively few unique flag values per flag column, so we don't want to waste time decoding a flag
+        value that has already been decoded on a previous row.
+
+        The implementation may seem a little convoluted at first, but it aims to take advantage of vectorised Polars
+        methods, use of fast integer mappings, and to minimise converting anything into raw Python objects or
+        iterations.
 
         Args:
             df: The DataFrame containing the integer flag column.
@@ -152,15 +162,31 @@ class BitwiseFlagColumn(FlagColumn):
         Returns:
             A new DataFrame with the flag column replaced by a ``List(String)`` column.
         """
+        col = df[self.name]
+
         # Sort the flag system mapping into ascending bit value order
         flag_map = sorted(self.flag_system.to_dict().items(), key=lambda kv: kv[1])
 
-        # Build expressions for decoding each flag value
-        exprs = [
-            pl.when((pl.col(self.name) & pl.lit(val)) != 0).then(pl.lit(name)).otherwise(pl.lit(None))
-            for name, val in flag_map
-        ]
-        return df.with_columns(pl.concat_list(exprs).list.drop_nulls().alias(self.name))
+        # Find only the unique flags that we need to decode
+        uniques = col.unique().drop_nulls()
+        decoded = [[name for name, val in flag_map if code & val] for code in uniques.to_list()]
+
+        # Flatten the decoded names, recording where each unique value's names start and how many there are
+        lengths = [len(row) for row in decoded]
+        starts = list(itertools.accumulate(lengths, initial=0))[:-1]
+        names = pl.Series([name for row in decoded for name in row], dtype=pl.String)
+
+        # Map each original row to its start and length
+        start = col.replace_strict(uniques, pl.Series(starts, dtype=pl.UInt32), default=0, return_dtype=pl.UInt32)
+        length = col.replace_strict(uniques, pl.Series(lengths, dtype=pl.UInt32), default=0, return_dtype=pl.UInt32)
+
+        # Build each row's list of positions, then swap positions for names
+        result = (
+            pl.int_ranges(start, start + length, dtype=pl.UInt32, eager=True)
+            .list.eval(pl.element().replace_strict(pl.int_range(len(names), eager=True, dtype=pl.UInt32), names))
+            .cast(pl.List(pl.String))
+        )
+        return df.with_columns(result.alias(self.name))
 
     def encode(self, df: pl.DataFrame) -> pl.DataFrame:
         """Replace a ``List(String)`` flag column with a bitwise integer column.
