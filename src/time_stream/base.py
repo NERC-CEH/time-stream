@@ -412,8 +412,7 @@ class TimeFrame:
         Returns:
             Padded TimeFrame
         """
-        tf = self.copy()
-        tf._df = pad_time(
+        padded_df = pad_time(
             df=self.df,
             time_name=self.time_name,
             periodicity=self.periodicity,
@@ -421,6 +420,14 @@ class TimeFrame:
             start=start,
             end=end,
         )
+
+        # Padding gives null in every column - even flag columns. Init default flag column values on those padded rows
+        padded_rows = ~pl.col(self.time_name).is_in(self.df[self.time_name].implode())
+        for flag_column in self._flag_manager.flag_columns.values():
+            padded_df = flag_column.fill_empty(padded_df, padded_rows)
+
+        tf = self.copy()
+        tf._df = padded_df
         tf.sort_time()
         return tf
 
@@ -497,27 +504,15 @@ class TimeFrame:
                     to ``None`` (null) in single mode or an empty list in list mode.
         """
         flag_sys = self.get_flag_system(flag_system_name)
-        flag_type = flag_sys.flag_type
+        col_dtype = flag_sys.column_dtype()
 
-        # 1. Resolve dtype
-        if flag_type in ("categorical", "categorical_list"):
-            inner_dtype = pl.Int32 if flag_sys.value_type() is int else pl.Utf8
-            col_dtype = pl.List(inner_dtype) if flag_type == "categorical_list" else inner_dtype
-        else:
-            col_dtype = pl.Int64
-
-        # 2. Build column - if it's a scalar or missing, use pl.lit; otherwise it's a sequence so cast to a Series
+        # 1. Build column - if it's a scalar or missing, use pl.lit; otherwise it's a sequence so cast to a Series
         if isinstance(data, (int, str)) or data is None:
-            if data is None:
-                if flag_type == "categorical_list":
-                    data = []
-                elif flag_type == "bitwise":
-                    data = 0
-            col_data = pl.lit(data, dtype=col_dtype)
+            col_data = pl.lit(flag_sys.empty_value() if data is None else data, dtype=col_dtype)
         else:
             col_data = pl.Series(data, dtype=col_dtype)
 
-        # 3. Determine name of flag column
+        # 2. Determine name of flag column
         if not column_name:
             column_name = f"__flag__{flag_system_name}"
             if column_name in self.df.columns:
@@ -526,7 +521,7 @@ class TimeFrame:
                     col_suffix += 1
                 column_name = f"{column_name}__{col_suffix}"
 
-        # 4. Add and register as a flag column
+        # 3. Add and register as a flag column
         self._df = self.df.with_columns(col_data.alias(column_name))
         self._flag_manager.register_flag_column(column_name, flag_system_name)
         self._column_metadata.sync()
@@ -916,22 +911,26 @@ class TimeFrame:
             **kwargs: Parameters specific to the infill method.
 
         Returns:
-            A TimeFrame containing the aggregated data.
+            A TimeFrame containing the infilled data. Missing time steps are padded in, so the result can contain
+            more rows than this TimeFrame. Values added by padding are null in all other columns.
         """
+        # Infilling fills in missing time steps, so work from a padded TimeFrame
+        tf_padded = self if self.df.is_empty() else self.pad()
+
         # Get the infill method instance and run the apply method
         infill_instance = InfillMethod.get(infill_method, **kwargs)
         infill_result = infill_instance.apply(
-            self.df, self.time_name, self.periodicity, column_name, observation_interval, max_gap_size
+            tf_padded.df, self.time_name, self.periodicity, column_name, observation_interval, max_gap_size
         )
 
-        # Create a copy of the current TimeFrame, and update the dataframe with the infilled data
-        tf_result = self.with_df(infill_result)
+        # Update the dataframe with the infilled data
+        tf_result = tf_padded.with_df(infill_result)
 
         if flag_params:
             # Add flag where we have infilled data
             flag_column_name, flag_value = flag_params
 
-            before = self.df[column_name]
+            before = tf_padded.df[column_name]
             after = tf_result.df[column_name]
 
             before_is_null = before.is_null() | before.is_nan()

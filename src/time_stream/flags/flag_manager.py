@@ -124,6 +124,25 @@ class FlagColumn(ABC):
         """
         raise NotImplementedError
 
+    def fill_empty(self, df: pl.DataFrame, where: pl.Expr) -> pl.DataFrame:
+        """Set the flag column to the value that means "no flags set", on the rows where ``where`` is true.
+
+        A decoded column holds flag names, so its empty value is an empty list wherever the encoded column
+        would hold one.
+
+        Args:
+            df: The DataFrame containing the flag column.
+            where: A boolean Polars expression selecting the rows to set.
+
+        Returns:
+            A new DataFrame with the flag column updated.
+        """
+        dtype = df.schema[self.name]
+        empty = [] if isinstance(dtype, pl.List) else self.flag_system.empty_value()
+        return df.with_columns(
+            pl.when(where).then(pl.lit(empty, dtype=dtype)).otherwise(pl.col(self.name)).alias(self.name)
+        )
+
 
 @dataclass
 class BitwiseFlagColumn(FlagColumn):

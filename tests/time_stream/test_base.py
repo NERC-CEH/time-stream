@@ -18,7 +18,7 @@ from time_stream.exceptions import (
     MetadataError,
 )
 from time_stream.flags.flag_manager import BitwiseFlagColumn
-from time_stream.flags.flag_system import FlagSystemBase
+from time_stream.flags.flag_system import FlagSystemBase, FlagSystemLiteral
 
 
 class TestSortTime:
@@ -1169,6 +1169,139 @@ class TestInfillWithFlagParams:
         tf.infill("linear", "value", flag_params=("flag_col", "FLAG_A"))
         expected = pl.Series("flag_col", [0, 0, 0, 0, 0], dtype=pl.Int64)
         assert_series_equal(tf.df["flag_col"], expected)
+
+
+class TestInfillWithMissingRows:
+    """Tests for TimeFrame.infill() when the time series is missing time steps."""
+
+    @staticmethod
+    def setup_tf() -> TimeFrame:
+        """Set up an hourly TimeFrame with the 01:00 and 02:00 rows missing."""
+        df = pl.DataFrame(
+            {
+                "time": [datetime(2024, 1, 1, 0), datetime(2024, 1, 1, 3), datetime(2024, 1, 1, 4)],
+                "value": [1.0, 4.0, 5.0],
+            }
+        )
+        return TimeFrame(df=df, time_name="time", resolution=Period.of_hours(1), periodicity=Period.of_hours(1))
+
+    def test_missing_rows_padded_and_infilled(self) -> None:
+        """Missing time steps are added to the result and infilled."""
+        tf = self.setup_tf()
+        result = tf.infill("linear", "value")
+        expected = pl.DataFrame(
+            {
+                "time": [datetime(2024, 1, 1, hour) for hour in range(5)],
+                "value": [1.0, 2.0, 3.0, 4.0, 5.0],
+            }
+        )
+        assert_frame_equal(result.df, expected)
+
+    def test_time_properties_preserved(self) -> None:
+        """The padded result keeps the temporal properties of the original TimeFrame."""
+        tf = self.setup_tf()
+        result = tf.infill("linear", "value")
+        assert result.time_name == tf.time_name
+        assert result.resolution == tf.resolution
+        assert result.periodicity == tf.periodicity
+        assert result.time_anchor == tf.time_anchor
+        assert result.df["time"].is_sorted()
+
+    def test_metadata_and_flag_systems_preserved(self) -> None:
+        """Metadata and registered flag systems carry over to the padded result."""
+        tf = self.setup_tf().with_metadata({"site": "test"}).with_column_metadata({"value": {"units": "m"}})
+        tf.register_flag_system("flags", {"FLAG_A": 1})
+        result = tf.infill("linear", "value")
+        assert result.metadata == {"site": "test"}
+        assert result.column_metadata["value"] == {"units": "m"}
+        assert result.flag_systems == tf.flag_systems
+
+    def test_existing_nulls_flagged(self) -> None:
+        """Rows that were present but null are flagged as infilled."""
+        df = pl.DataFrame(
+            {
+                "time": [datetime(2024, 1, 1, 0), datetime(2024, 1, 1, 1), datetime(2024, 1, 1, 3)],
+                "value": [1.0, None, 4.0],
+            }
+        )
+        tf = TimeFrame(df=df, time_name="time", resolution=Period.of_hours(1), periodicity=Period.of_hours(1))
+        tf.register_flag_system("flags", {"FLAG_A": 1})
+        tf.init_flag_column("flags", "flag_col")
+        result = tf.infill("linear", "value", flag_params=("flag_col", "FLAG_A"))
+        assert result.df.filter(pl.col("time") == datetime(2024, 1, 1, 1))["flag_col"].item() == 1
+
+    def test_original_tf_not_modified(self) -> None:
+        """Infilling a TimeFrame with missing rows does not modify the original."""
+        tf = self.setup_tf()
+        tf.infill("linear", "value")
+        assert tf.df.height == 3
+
+    def test_padded_rows_flagged(self) -> None:
+        """Rows added by padding are infilled and flagged."""
+        tf = self.setup_tf()
+        tf.register_flag_system("flags", {"FLAG_A": 1})
+        tf.init_flag_column("flags", "flag_col")
+        result = tf.infill("linear", "value", flag_params=("flag_col", "FLAG_A"))
+        expected = pl.Series("flag_col", [0, 1, 1, 0, 0], dtype=pl.Int64)
+        assert_series_equal(result.df["flag_col"], expected)
+
+
+class TestPadFlagColumns:
+    """Tests for how TimeFrame.pad() initialises flag columns on the rows it adds."""
+
+    @staticmethod
+    def setup_tf(flag_system: dict[str, int | str], flag_type: FlagSystemLiteral = "bitwise") -> TimeFrame:
+        """Set up an hourly TimeFrame missing its 01:00 row, with a flag column holding one flag."""
+        df = pl.DataFrame(
+            {
+                "time": [datetime(2024, 1, 1, 0), datetime(2024, 1, 1, 2)],
+                "value": [1.0, 3.0],
+            }
+        )
+        tf = TimeFrame(df=df, time_name="time", resolution=Period.of_hours(1), periodicity=Period.of_hours(1))
+        tf.register_flag_system("flags", flag_system, flag_type)
+        tf.init_flag_column("flags", "flag_col")
+        tf.add_flag("flag_col", next(iter(flag_system)), pl.col("time") == datetime(2024, 1, 1, 0))
+        return tf
+
+    def test_bitwise_padded_rows_set_to_zero(self) -> None:
+        """A bitwise flag column is 0 on padded rows."""
+        tf = self.setup_tf({"FLAG_A": 1, "FLAG_B": 2})
+        expected = pl.Series("flag_col", [1, 0, 0], dtype=pl.Int64)
+        assert_series_equal(tf.pad().df["flag_col"], expected)
+
+    def test_decoded_bitwise_padded_rows_set_to_empty_list(self) -> None:
+        """A decoded bitwise flag column is an empty list on padded rows."""
+        tf = self.setup_tf({"FLAG_A": 1, "FLAG_B": 2}).decode_flag_column("flag_col")
+        expected = pl.Series("flag_col", [["FLAG_A"], [], []], dtype=pl.List(pl.String))
+        assert_series_equal(tf.pad().df["flag_col"], expected)
+
+    def test_categorical_list_padded_rows_set_to_empty_list(self) -> None:
+        """A list-mode categorical flag column is an empty list on padded rows."""
+        tf = self.setup_tf({"FLAG_A": "a", "FLAG_B": "b"}, "categorical_list")
+        expected = pl.Series("flag_col", [["a"], [], []], dtype=pl.List(pl.String))
+        assert_series_equal(tf.pad().df["flag_col"], expected)
+
+    def test_categorical_single_padded_rows_left_null(self) -> None:
+        """A scalar categorical flag column stays null on padded rows, which is its empty value."""
+        tf = self.setup_tf({"FLAG_A": "a", "FLAG_B": "b"}, "categorical")
+        expected = pl.Series("flag_col", ["a", None, None], dtype=pl.String)
+        assert_series_equal(tf.pad().df["flag_col"], expected)
+
+    def test_existing_nulls_not_filled(self) -> None:
+        """Nulls already in a flag column are left as they are."""
+        df = pl.DataFrame(
+            {
+                "time": [datetime(2024, 1, 1, 0), datetime(2024, 1, 1, 2)],
+                "value": [1.0, 3.0],
+                "flag_col": [None, 1],
+            }
+        )
+        tf = TimeFrame(df=df, time_name="time", resolution=Period.of_hours(1), periodicity=Period.of_hours(1))
+        tf.register_flag_system("flags", {"FLAG_A": 1})
+        tf.register_flag_column("flag_col", "flags")
+        expected = pl.Series("flag_col", [None, 0, 1], dtype=pl.Int64)
+        assert_series_equal(tf.pad().df["flag_col"], expected)
 
 
 class TestRenameTimeColumnName:

@@ -129,6 +129,16 @@ class BitwiseFlag(FlagSystemBase, int, Flag, metaclass=BitwiseMeta):
         return int
 
     @classmethod
+    def column_dtype(cls) -> pl.DataType:
+        """Return the dtype of a bitwise flag column, which holds the combined flag bits."""
+        return pl.Int64()
+
+    @classmethod
+    def empty_value(cls) -> int:
+        """Return ``0`` - the bitwise value with no flags set."""
+        return 0
+
+    @classmethod
     def validate_column(cls, series: pl.Series) -> None:
         """Validate that all non-null values in ``series`` are valid bitwise combinations.
 

@@ -113,6 +113,28 @@ class FlagSystemBase:
         raise NotImplementedError
 
     @classmethod
+    def column_dtype(cls) -> "pl.DataType":
+        """Return the Polars dtype a column of this flag system holds.
+
+        Subclasses must override this method.
+
+        Returns:
+            The Polars dtype.
+        """
+        raise NotImplementedError
+
+    @classmethod
+    def empty_value(cls) -> int | list | None:
+        """Return the value that means "no flags set" for this flag system.
+
+        Subclasses must override this method.
+
+        Returns:
+            The empty value.
+        """
+        raise NotImplementedError
+
+    @classmethod
     def validate_column(cls, series: "pl.Series") -> None:
         """Validate that all non-null values in ``series`` are valid for this flag system.
 
