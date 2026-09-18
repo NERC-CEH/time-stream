@@ -406,7 +406,7 @@ class TimeFrame:
         Args:
             start: The starting datetime value to pad time values from (inclusive). If not provided then the beginning
                 of the dataframe will be used.
-            end: The final datetime value to pad time values to (inclusive). If not provided then the beginning of the
+            end: The final datetime value to pad time values to (inclusive). If not provided then the end of the
                 dataframe will be used.
 
         Returns:

@@ -1236,6 +1236,22 @@ class TestInfillWithMissingRows:
         tf.infill("linear", "value")
         assert tf.df.height == 3
 
+    def test_date_time_column(self) -> None:
+        """A Date time column is padded and infilled, keeping its dtype."""
+        df = pl.DataFrame({"time": [date(2024, 1, 1), date(2024, 1, 3)], "value": [1.0, 3.0]})
+        tf = TimeFrame(df=df, time_name="time", resolution=Period.of_days(1), periodicity=Period.of_days(1))
+        result = tf.infill("linear", "value")
+        expected = pl.DataFrame(
+            {"time": [date(2024, 1, i) for i in range(1, 4)], "value": [1.0, 2.0, 3.0]},
+        )
+        assert_frame_equal(result.df, expected)
+
+    def test_single_row_returns_unchanged(self) -> None:
+        """A single row TimeFrame has nothing to pad or infill, so is returned unchanged."""
+        df = pl.DataFrame({"time": [datetime(2024, 1, 1)], "value": [1.0]})
+        tf = TimeFrame(df=df, time_name="time", resolution=Period.of_days(1), periodicity=Period.of_days(1))
+        assert_frame_equal(tf.infill("linear", "value").df, df)
+
     def test_padded_rows_flagged(self) -> None:
         """Rows added by padding are infilled and flagged."""
         tf = self.setup_tf()
