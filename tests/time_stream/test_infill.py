@@ -123,6 +123,7 @@ class TestInfillMethodPipeline:
             (INSUFFICIENT_DATA, 1, None, False),
             (INSUFFICIENT_DATA, None, None, False),
             (ALL_MISSING, 1, None, False),
+            (VARYING_GAPS, 0, None, False),
             (VARYING_GAPS, 1, None, True),
             (VARYING_GAPS, 2, None, True),
             (VARYING_GAPS, 3, None, True),
@@ -159,6 +160,18 @@ class TestInfillMethodPipeline:
         df = gap_size_count(df, "values")
         result = not df.filter(mask).is_empty()
         assert result == expected
+
+    @pytest.mark.parametrize("max_gap_size", [-1, -10])
+    def test_negative_max_gap_size(self, max_gap_size: int) -> None:
+        """Test that a negative max_gap_size raises an error."""
+        df = VARYING_GAPS.with_columns(
+            pl.Series("timestamp", [datetime(2025, 1, d) for d in range(1, len(VARYING_GAPS) + 1)])
+        )
+        ctx = InfillCtx(df, "timestamp", Mock())
+        pipeline = InfillMethodPipeline(Mock(), ctx, "values", None, max_gap_size)
+
+        with pytest.raises(ValueError):
+            pipeline.execute()
 
 
 class TestBSplineInterpolation:
@@ -412,6 +425,7 @@ class TestApply:
             (START_GAP, None, None),
             (END_GAP, None, None),
             (GAP_OF_TWO, 1, None),
+            (VARYING_GAPS, 0, None),
             (VARYING_GAPS, None, (datetime(2025, 1, 3), datetime(2025, 1, 6))),
             (VARYING_GAPS, 1, (datetime(2025, 1, 6), datetime(2025, 1, 9))),
         ],
