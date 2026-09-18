@@ -268,7 +268,7 @@ class AggregationPipeline(ABC):
         expressions = []
         for col in self.columns:
             if criteria == "percent":
-                expr = ((pl.col(f"count_{col}") / pl.col(f"expected_count_{self.ctx.time_name}")) * 100) > threshold
+                expr = ((pl.col(f"count_{col}") / pl.col(f"expected_count_{self.ctx.time_name}")) * 100) >= threshold
 
             elif criteria == "missing":
                 expr = (pl.col(f"expected_count_{self.ctx.time_name}") - pl.col(f"count_{col}")) <= threshold

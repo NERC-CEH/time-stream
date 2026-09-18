@@ -1633,10 +1633,10 @@ class TestMissingCriteriaAggregations:
         "valid,criteria",
         [
             ({"value": [True, True]}, ("percent", 80)),
-            ({"value": [False, True]}, ("percent", (20 / 24) * 100)),
             ({"value": [False, True]}, ("percent", 85)),
-            ({"value": [False, False]}, ("percent", (21 / 24) * 100)),
+            ({"value": [False, True]}, ("percent", (21 / 24) * 100)),
             ({"value": [False, False]}, ("percent", 90)),
+            ({"value": [False, False]}, ("percent", 100)),
             ({"value": [True, True]}, ("missing", 5)),
             ({"value": [True, True]}, ("missing", 4)),
             ({"value": [False, True]}, ("missing", 3)),
@@ -1648,10 +1648,10 @@ class TestMissingCriteriaAggregations:
         ],
         ids=[
             "percent 80",
-            "percent 83.3",
             "percent 85",
-            "percent 87.5",
+            "percent 87.5 - exactly on the threshold",
             "percent 90",
+            "percent 100",
             "missing 3",
             "missing 4",
             "missing 5",
@@ -1689,6 +1689,26 @@ class TestMissingCriteriaAggregations:
         ).execute()
 
         assert_frame_equal(result, expected_df, check_dtypes=False, check_column_order=False, check_exact=False)
+
+    def test_percent_criteria_with_complete_data(self) -> None:
+        """Test that a complete aggregation window satisfies a percent criteria of 100."""
+        input_tf = TS_PT1H_2DAYS
+
+        result = StandardAggregationPipeline(
+            self.aggregator(),
+            AggregationCtx(
+                df=input_tf.df,
+                time_name=input_tf.time_name,
+                time_anchor=input_tf.time_anchor,
+                periodicity=input_tf.periodicity,
+            ),
+            self.target_period,
+            self.column,
+            missing_criteria=("percent", 100),
+            aggregation_time_anchor=input_tf.time_anchor,
+        ).execute()
+
+        assert result["valid_value"].to_list() == [True, True]
 
 
 class TestMeanSumWithMissingData:
