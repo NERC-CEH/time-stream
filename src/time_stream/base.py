@@ -218,6 +218,7 @@ class TimeFrame:
             new_df: The new Polars DataFrame to set as the new time series data.
         """
         old_df = self._df.clone()
+        new_df = new_df.sort(self.time_name)
         self._time_manager.check_integrity(old_df, new_df)
         tf = self.copy()
         tf._df = new_df

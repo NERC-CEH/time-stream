@@ -18,6 +18,7 @@ from time_stream.exceptions import (
     MetadataError,
     NullTimeValueError,
     PeriodicityError,
+    TimeMutatedError,
 )
 from time_stream.flags.flag_manager import BitwiseFlagColumn
 from time_stream.flags.flag_system import FlagSystemBase
@@ -1370,6 +1371,28 @@ class TestPadFlagColumns:
         tf.register_flag_column("flag_col", "flags")
         expected = pl.Series("flag_col", [None, 0, 1], dtype=pl.Int64)
         assert_series_equal(tf.pad().df["flag_col"], expected)
+
+
+class TestWithDf:
+    """Tests for TimeFrame.with_df()."""
+
+    @staticmethod
+    def setup_tf() -> TimeFrame:
+        """Set up a daily TimeFrame."""
+        df = pl.DataFrame({"time": [datetime(2024, 1, i) for i in range(1, 4)], "value": [1, 2, 3]})
+        return TimeFrame(df=df, time_name="time", resolution=Period.of_days(1))
+
+    def test_reordered_rows_are_sorted(self) -> None:
+        """A DataFrame with its rows in a different order is sorted back into time order."""
+        tf = self.setup_tf()
+        result = tf.with_df(tf.df.reverse())
+        assert_frame_equal(result.df, tf.df)
+
+    def test_changed_time_values_raise(self) -> None:
+        """A DataFrame with different time values is rejected."""
+        tf = self.setup_tf()
+        with pytest.raises(TimeMutatedError):
+            tf.with_df(tf.df.head(2))
 
 
 class TestWithPeriodicity:
