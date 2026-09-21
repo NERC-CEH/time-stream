@@ -23,7 +23,8 @@ from time_stream.exceptions import (
     BitwiseFlagUnknownError,
     BitwiseFlagValueError,
 )
-from time_stream.flags.flag_system import FlagMeta, FlagSystemBase, FlagSystemLiteral
+from time_stream.flags.flag_system import FlagMeta, FlagSystemBase
+from time_stream.types import FlagSystemLiteral
 
 
 class BitwiseMeta(FlagMeta):

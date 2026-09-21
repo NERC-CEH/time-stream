@@ -27,7 +27,8 @@ from time_stream.exceptions import (
     CategoricalFlagUnknownError,
     CategoricalFlagValueError,
 )
-from time_stream.flags.flag_system import FlagMeta, FlagSystemBase, FlagSystemLiteral
+from time_stream.flags.flag_system import FlagMeta, FlagSystemBase
+from time_stream.types import FlagSystemLiteral
 
 
 class CategoricalSingleMeta(FlagMeta):

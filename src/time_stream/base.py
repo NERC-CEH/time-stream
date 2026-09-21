@@ -59,7 +59,7 @@ from time_stream.flags.flag_manager import (
     FlagManager,
     FlagSystemType,
 )
-from time_stream.flags.flag_system import FlagSystemBase, FlagSystemLiteral
+from time_stream.flags.flag_system import FlagSystemBase
 from time_stream.formatting import timeframe_repr
 from time_stream.infill import InfillMethod
 from time_stream.metadata import ColumnMetadataDict
@@ -68,6 +68,7 @@ from time_stream.time_manager import TimeManager
 from time_stream.types import (
     ClosedInterval,
     DuplicateOption,
+    FlagSystemLiteral,
     MissingCriteria,
     RollingAlignment,
     TimeAnchor,
@@ -177,11 +178,7 @@ class TimeFrame:
             time_anchor=time_anchor,
         )
 
-        self._df = self._time_manager._handle_time_duplicates(df)
-        self._df = self._time_manager._handle_misaligned_rows(self._df)
-
-        self._time_manager.validate(self.df)
-        self.sort_time()
+        self._df = self._time_manager.prepare(df)
 
         self._metadata = {}
         self._column_metadata = ColumnMetadataDict(lambda: self.df.columns)
@@ -221,7 +218,7 @@ class TimeFrame:
             new_df: The new Polars DataFrame to set as the new time series data.
         """
         old_df = self._df.clone()
-        self._time_manager._check_time_integrity(old_df, new_df)
+        self._time_manager.check_integrity(old_df, new_df)
         tf = self.copy()
         tf._df = new_df
         tf._column_metadata.sync()
@@ -282,7 +279,7 @@ class TimeFrame:
             A new TimeFrame with a new periodicity set.
         """
         tf = self.copy()
-        tf._time_manager._periodicity = configure_period_object(periodicity)
+        tf._time_manager = tf._time_manager.with_periodicity(periodicity)
         tf._time_manager.validate(tf.df)
         return tf
 
@@ -1032,7 +1029,7 @@ class TimeFrame:
 
         tf = self.copy()
         tf._df = tf._df.rename({self.time_name: new_time_name})
-        tf._time_manager._time_name = new_time_name
+        tf._time_manager = tf._time_manager.with_time_name(new_time_name)
         tf._column_metadata.sync()
 
         return tf

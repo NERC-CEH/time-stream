@@ -12,13 +12,12 @@ Flag system types are enum-based and created from a name and a ``dict[str, int |
 
 from collections.abc import Mapping
 from enum import EnumType
-from typing import TYPE_CHECKING, Any, ClassVar, Literal, Self
+from typing import TYPE_CHECKING, Any, ClassVar, Self
+
+from time_stream.types import FlagSystemLiteral
 
 if TYPE_CHECKING:
     import polars as pl
-
-
-FlagSystemLiteral = Literal["bitwise", "categorical", "categorical_list"]
 
 
 class FlagMeta(EnumType):

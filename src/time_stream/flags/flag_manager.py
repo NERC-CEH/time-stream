@@ -33,7 +33,8 @@ from time_stream.exceptions import (
 )
 from time_stream.flags.bitwise_flag_system import BitwiseFlag
 from time_stream.flags.categorical_flag_system import CategoricalListFlag, CategoricalSingleFlag
-from time_stream.flags.flag_system import FlagSystemBase, FlagSystemLiteral
+from time_stream.flags.flag_system import FlagSystemBase
+from time_stream.types import FlagSystemLiteral
 from time_stream.utils import check_literal_value
 
 FlagSystemType = Mapping[str, int | str] | list[str] | None

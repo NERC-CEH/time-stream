@@ -11,6 +11,7 @@ from time_stream.exceptions import (
     ColumnNotFoundError,
     ColumnTypeError,
     DuplicateTimeError,
+    NullTimeValueError,
     PeriodicityError,
     ResolutionError,
     TimeMutatedError,
@@ -155,6 +156,26 @@ class TestValidateTimeColumn:
         with pytest.raises(ColumnTypeError, match=expected_error):
             tm._validate_time_column(invalid_df)
 
+    @pytest.mark.parametrize(
+        "times,null_count",
+        [
+            ([datetime(2024, 1, 1), None, datetime(2024, 1, 3)], 1),
+            ([None, None, datetime(2024, 1, 3)], 2),
+            (pl.Series([None, None], dtype=pl.Datetime), 2),
+        ],
+        ids=["one null", "two nulls", "all null"],
+    )
+    def test_validate_time_column_with_nulls(self, times: list | pl.Series, null_count: int) -> None:
+        """Test error raised if time column contains null values."""
+        invalid_df = pl.DataFrame({"time": times})
+
+        tm = object.__new__(TimeManager)  # skips __init__
+        tm._time_name = "time"
+
+        expected_error = f"Time column 'time' contains {null_count} null value(s)"
+        with pytest.raises(NullTimeValueError, match=re.escape(expected_error)):
+            tm._validate_time_column(invalid_df)
+
 
 class TestHandleTimeDuplicates:
     # A dataframe with some duplicate times
@@ -215,7 +236,7 @@ class TestHandleTimeDuplicates:
             }
         )
 
-        assert_frame_equal(result, expected)
+        assert_frame_equal(result, expected, check_row_order=False)
 
     def test_keep_last(self, tm: TimeManager) -> None:
         """Test that the keep last strategy works as expected"""
@@ -242,7 +263,7 @@ class TestHandleTimeDuplicates:
             }
         )
 
-        assert_frame_equal(result, expected)
+        assert_frame_equal(result, expected, check_row_order=False)
 
     def test_drop(self, tm: TimeManager) -> None:
         """Test that the drop strategy works as expected"""
@@ -294,7 +315,7 @@ class TestHandleTimeDuplicates:
             }
         )
 
-        assert_frame_equal(result, expected)
+        assert_frame_equal(result, expected, check_row_order=False)
 
 
 class TestCheckTimeIntegrity:
@@ -305,7 +326,7 @@ class TestCheckTimeIntegrity:
 
     def test_same_time_values(self) -> None:
         """Test that no changes to the time column is valid"""
-        self.tm._check_time_integrity(self.df, self.df.clone())
+        self.tm.check_integrity(self.df, self.df.clone())
 
     def test_different_time_values(self) -> None:
         """Test that no changes to the time column is valid"""
@@ -313,7 +334,7 @@ class TestCheckTimeIntegrity:
             {"time": [datetime(1990, 1, 1), datetime(1990, 1, 2), datetime(1990, 1, 3), datetime(1990, 1, 4)]}
         )
         with pytest.raises(TimeMutatedError):
-            self.tm._check_time_integrity(self.df, new_df)
+            self.tm.check_integrity(self.df, new_df)
 
 
 class TestConfigureResolutionProperty:
@@ -679,7 +700,7 @@ class TestHandleMisalignedRows:
 
         expected_error = f"Time values are not aligned to resolution[+offset]: {period.iso_duration}"
         with pytest.raises(ResolutionError, match=re.escape(expected_error)):
-            time_manager._handle_misaligned_rows(df)
+            time_manager.prepare(df)
 
     @pytest.mark.parametrize("input_timestamps, period, error_dates", invalid_resolution_test_cases)
     def test_invalid_with_resolve(

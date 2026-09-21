@@ -4,7 +4,7 @@ from typing import Any
 
 import polars as pl
 import pytest
-from isoperiod import Period
+from isoperiod import Period, PeriodValidationError
 from polars.testing import assert_frame_equal, assert_frame_not_equal, assert_series_equal
 
 from time_stream.aggregation import Percentile
@@ -16,9 +16,39 @@ from time_stream.exceptions import (
     DuplicateColumnError,
     FlagSystemNotFoundError,
     MetadataError,
+    NullTimeValueError,
+    PeriodicityError,
 )
 from time_stream.flags.flag_manager import BitwiseFlagColumn
-from time_stream.flags.flag_system import FlagSystemBase, FlagSystemLiteral
+from time_stream.flags.flag_system import FlagSystemBase
+from time_stream.types import FlagSystemLiteral
+
+
+class TestTimeFrameConstruction:
+    @pytest.mark.parametrize(
+        "times,kwargs",
+        [
+            ([datetime(2024, 1, 1), None], {}),
+            (pl.Series([None, None], dtype=pl.Datetime), {}),
+            (pl.Series([None, None], dtype=pl.Datetime), {"on_duplicates": "keep_first"}),
+            ([datetime(2024, 1, 1), None], {"on_misaligned_rows": "resolve"}),
+        ],
+        ids=["one null", "repeated nulls", "repeated nulls with on_duplicates", "null with on_misaligned_rows"],
+    )
+    def test_null_time_values_raise(self, times: list | pl.Series, kwargs: dict) -> None:
+        """Test that null values in the time column are rejected, whatever the other options are"""
+        df = pl.DataFrame({"time": times, "value": [1, 2]})
+
+        with pytest.raises(NullTimeValueError, match="contains .* null value"):
+            TimeFrame(df, time_name="time", resolution=Period.of_days(1), **kwargs)
+
+    def test_null_values_in_data_column_allowed(self) -> None:
+        """Test that null values outside the time column are fine"""
+        df = pl.DataFrame({"time": [datetime(2024, 1, 1), datetime(2024, 1, 2)], "value": [1.0, None]})
+
+        tf = TimeFrame(df, time_name="time", resolution=Period.of_days(1))
+
+        assert tf.df.height == 2
 
 
 class TestSortTime:
@@ -1340,6 +1370,53 @@ class TestPadFlagColumns:
         tf.register_flag_column("flag_col", "flags")
         expected = pl.Series("flag_col", [None, 0, 1], dtype=pl.Int64)
         assert_series_equal(tf.pad().df["flag_col"], expected)
+
+
+class TestWithPeriodicity:
+    """Tests for TimeFrame.with_periodicity()."""
+
+    @staticmethod
+    def setup_tf() -> TimeFrame:
+        """Set up a daily TimeFrame holding one value per month."""
+        df = pl.DataFrame({"time": [datetime(2024, 1, 1), datetime(2024, 2, 1)], "value": [1.0, 2.0]})
+        return TimeFrame(df=df, time_name="time", resolution=Period.of_days(1))
+
+    @pytest.mark.parametrize("periodicity", ["P1M", Period.of_months(1)], ids=["as str", "as Period"])
+    def test_sets_new_periodicity(self, periodicity: str | Period) -> None:
+        """The new periodicity is applied, given as either a string or a Period."""
+        result = self.setup_tf().with_periodicity(periodicity)
+        assert result.periodicity == Period.of_months(1)
+
+    def test_other_time_properties_preserved(self) -> None:
+        """Resolution, offset, time anchor and time name are carried over."""
+        df = pl.DataFrame({"time": [datetime(2024, 1, 1, 9), datetime(2024, 2, 1, 9)], "value": [1.0, 2.0]})
+        tf = TimeFrame(df=df, time_name="time", resolution=Period.of_days(1), offset="+T9H", time_anchor="end")
+
+        result = tf.with_periodicity("P1M+T9H")
+
+        assert result.resolution == tf.resolution
+        assert result.offset == tf.offset
+        assert result.time_anchor == tf.time_anchor
+        assert result.time_name == tf.time_name
+
+    def test_original_tf_not_modified(self) -> None:
+        """The original TimeFrame keeps its own periodicity."""
+        tf = self.setup_tf()
+        tf.with_periodicity("P1M")
+        assert tf.periodicity == Period.of_days(1)
+
+    def test_periodicity_not_met_by_data_raises(self) -> None:
+        """A periodicity the time values do not conform to raises an error."""
+        df = pl.DataFrame({"time": [datetime(2024, 1, 1), datetime(2024, 1, 2)], "value": [1.0, 2.0]})
+        tf = TimeFrame(df=df, time_name="time", resolution=Period.of_days(1))
+
+        with pytest.raises(PeriodicityError):
+            tf.with_periodicity("P1M")
+
+    def test_invalid_periodicity_type_raises(self) -> None:
+        """A periodicity that is not a string or Period raises an error."""
+        with pytest.raises(PeriodValidationError):
+            self.setup_tf().with_periodicity(123)  # type: ignore[arg-type]
 
 
 class TestRenameTimeColumnName:
