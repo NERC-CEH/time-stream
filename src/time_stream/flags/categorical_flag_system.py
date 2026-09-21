@@ -27,7 +27,8 @@ from time_stream.exceptions import (
     CategoricalFlagUnknownError,
     CategoricalFlagValueError,
 )
-from time_stream.flags.flag_system import FlagMeta, FlagSystemBase, FlagSystemLiteral
+from time_stream.flags.flag_system import FlagMeta, FlagSystemBase
+from time_stream.types import FlagSystemLiteral
 
 
 class CategoricalSingleMeta(FlagMeta):
@@ -147,6 +148,16 @@ class CategoricalSingleFlag(FlagSystemBase, Enum, metaclass=CategoricalSingleMet
         return type(first.value)
 
     @classmethod
+    def column_dtype(cls) -> pl.DataType:
+        """Return the dtype of a categorical flag column, which holds one flag value per row."""
+        return pl.Int32() if cls.value_type() is int else pl.Utf8()
+
+    @classmethod
+    def empty_value(cls) -> int | list | None:
+        """Return ``None`` - a null means no flag is set in scalar mode."""
+        return None
+
+    @classmethod
     def validate_column(cls, series: pl.Series) -> None:
         """Validate that all non-null values in ``series`` are valid for this flag system.
 
@@ -171,6 +182,16 @@ class CategoricalListFlag(CategoricalSingleFlag, metaclass=CategoricalListMeta):
     Flags can coexist - multiple flags can be present in a single row simultaneously. Inherits all
     validation and lookup behaviour from ``CategoricalSingleFlag``.
     """
+
+    @classmethod
+    def column_dtype(cls) -> pl.DataType:
+        """Return the dtype of a list-mode categorical flag column, which holds a list of values per row."""
+        return pl.List(super().column_dtype())
+
+    @classmethod
+    def empty_value(cls) -> int | list | None:
+        """Return an empty list - a row with no flags set holds no values."""
+        return []
 
     @classmethod
     def validate_column(cls, series: pl.Series) -> None:

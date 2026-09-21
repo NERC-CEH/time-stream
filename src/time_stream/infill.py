@@ -144,6 +144,8 @@ class InfillMethodPipeline:
         """Carry out validation that the infill method can actually be carried out."""
         if self.ctx.df.is_empty():
             raise InfillError("Cannot perform infilling on an empty DataFrame.")
+        if self.max_gap_size is not None and self.max_gap_size < 0:
+            raise ValueError(f"'max_gap_size' must be a non-negative integer. Got: {self.max_gap_size}")
         check_columns_in_dataframe(self.ctx.df, [self.column, self.ctx.time_name])
 
     def _infill_mask(self) -> pl.Expr:
@@ -161,8 +163,9 @@ class InfillMethodPipeline:
         filter_expr = pl.col("gap_size") > 0
 
         # Check for any gaps
-        if self.max_gap_size:
-            # If constrained, change the filter to check if there is any missing data with: 0 < gap <= max_gap_size
+        if self.max_gap_size is not None:
+            # If constrained, change the filter to check if there is any missing data with: 0 < gap <= max_gap_size.
+            # A max_gap_size of 0 therefore matches nothing, leaving every gap unfilled.
             filter_expr = pl.col("gap_size").is_between(0, self.max_gap_size, closed="right")
 
         # Apply observation interval constraint

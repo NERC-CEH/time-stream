@@ -17,7 +17,7 @@ Typical use from within the ``TimeFrame`` class:
 
 import itertools
 from abc import ABC, abstractmethod
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 
 import polars as pl
@@ -33,7 +33,9 @@ from time_stream.exceptions import (
 )
 from time_stream.flags.bitwise_flag_system import BitwiseFlag
 from time_stream.flags.categorical_flag_system import CategoricalListFlag, CategoricalSingleFlag
-from time_stream.flags.flag_system import FlagSystemBase, FlagSystemLiteral
+from time_stream.flags.flag_system import FlagSystemBase
+from time_stream.types import FlagSystemLiteral
+from time_stream.utils import check_literal_value
 
 FlagSystemType = Mapping[str, int | str] | list[str] | None
 
@@ -123,6 +125,25 @@ class FlagColumn(ABC):
             A boolean Polars expression.
         """
         raise NotImplementedError
+
+    def fill_empty(self, df: pl.DataFrame, where: pl.Expr) -> pl.DataFrame:
+        """Set the flag column to the value that means "no flags set", on the rows where ``where`` is true.
+
+        A decoded column holds flag names, so its empty value is an empty list wherever the encoded column
+        would hold one.
+
+        Args:
+            df: The DataFrame containing the flag column.
+            where: A boolean Polars expression selecting the rows to set.
+
+        Returns:
+            A new DataFrame with the flag column updated.
+        """
+        dtype = df.schema[self.name]
+        empty = [] if isinstance(dtype, pl.List) else self.flag_system.empty_value()
+        return df.with_columns(
+            pl.when(where).then(pl.lit(empty, dtype=dtype)).otherwise(pl.col(self.name)).alias(self.name)
+        )
 
 
 @dataclass
@@ -705,6 +726,8 @@ class FlagManager:
             DuplicateFlagSystemError: If a flag system with the same name is already registered.
             FlagSystemTypeError: If the flag system is not a recognised type, or a list contains duplicate names.
         """
+        check_literal_value(flag_type, FlagSystemLiteral, "flag_type")
+
         if flag_system_name in self._flag_systems:
             raise DuplicateFlagSystemError(f"Flag system '{flag_system_name}' already exists.")
 
@@ -809,8 +832,12 @@ class FlagManager:
         except KeyError:
             raise ColumnNotFoundError(f"No such flag column: '{name}'.")
 
-    def copy(self) -> "FlagManager":
+    def copy(self, columns: Iterable[str] | None = None) -> "FlagManager":
         """Create a deep copy of this ``FlagManager``, duplicating all registered systems and columns.
+
+        Args:
+            columns: If given, only flag columns with these names are copied. All flag systems are copied
+                either way.
 
         Returns:
             A new ``FlagManager`` with the same flag systems, flag columns, and ``is_decoded`` state.
@@ -821,6 +848,8 @@ class FlagManager:
             out.register_flag_system(name, flag_system.to_dict(), flag_type=flag_system.flag_type)
 
         for name, flag_column in self._flag_columns.items():
+            if columns is not None and name not in columns:
+                continue
             out.register_flag_column(name, flag_column.flag_system.system_name())
             out.flag_columns[name].is_decoded = flag_column.is_decoded
 

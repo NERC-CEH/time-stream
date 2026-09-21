@@ -186,6 +186,12 @@ class TestRangeCheck:
     tf = TimeFrame(data, "time")
     ctx = QcCtx(tf.df, tf.time_name)
 
+    @pytest.mark.parametrize("closed", ["BOTH", "neither", "", None])
+    def test_invalid_closed_raises(self, closed: Any) -> None:
+        """An unrecognised closed value raises an error."""
+        with pytest.raises(ValueError, match="Invalid closed"):
+            RangeCheck(0, 10, closed=closed)
+
     @pytest.mark.parametrize(
         "min_value,max_value",
         [

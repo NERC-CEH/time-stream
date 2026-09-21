@@ -59,7 +59,7 @@ from time_stream.flags.flag_manager import (
     FlagManager,
     FlagSystemType,
 )
-from time_stream.flags.flag_system import FlagSystemBase, FlagSystemLiteral
+from time_stream.flags.flag_system import FlagSystemBase
 from time_stream.formatting import timeframe_repr
 from time_stream.infill import InfillMethod
 from time_stream.metadata import ColumnMetadataDict
@@ -68,6 +68,7 @@ from time_stream.time_manager import TimeManager
 from time_stream.types import (
     ClosedInterval,
     DuplicateOption,
+    FlagSystemLiteral,
     MissingCriteria,
     RollingAlignment,
     TimeAnchor,
@@ -177,11 +178,7 @@ class TimeFrame:
             time_anchor=time_anchor,
         )
 
-        self._df = self._time_manager._handle_time_duplicates(df)
-        self._df = self._time_manager._handle_misaligned_rows(self._df)
-
-        self._time_manager.validate(self.df)
-        self.sort_time()
+        self._df = self._time_manager.prepare(df)
 
         self._metadata = {}
         self._column_metadata = ColumnMetadataDict(lambda: self.df.columns)
@@ -190,24 +187,21 @@ class TimeFrame:
     def copy(self, share_df: bool = True) -> TimeFrame:
         """Return a shallow copy of this ``TimeFrame``, either sharing or cloning the underlying DataFrame.
 
+        This TimeFrame is already valid, so the copy is built without re-running time validation.
+
         Args:
             share_df: If True, the copy references the same DataFrame object. If False, a cloned DataFrame is used.
 
         Returns:
             A copy of this TimeFrame
         """
-        df = self.df if share_df else self.df.clone()
-        out = TimeFrame(
-            df,
-            time_name=self.time_name,
-            resolution=self.resolution,
-            offset=self.offset,
-            periodicity=self.periodicity,
-            time_anchor=self.time_anchor,
-        )
+        out = object.__new__(TimeFrame)
+        out._df = self.df if share_df else self.df.clone()
+        out._time_manager = self._time_manager
 
-        out.metadata = deepcopy(self._metadata)
-        out.column_metadata.update(deepcopy(self._column_metadata))
+        out._metadata = deepcopy(self._metadata)
+        out._column_metadata = ColumnMetadataDict(lambda: out.df.columns)
+        out._column_metadata.update(deepcopy(self._column_metadata))
 
         out._flag_manager = self._flag_manager.copy()
 
@@ -221,7 +215,8 @@ class TimeFrame:
             new_df: The new Polars DataFrame to set as the new time series data.
         """
         old_df = self._df.clone()
-        self._time_manager._check_time_integrity(old_df, new_df)
+        new_df = new_df.sort(self.time_name)
+        self._time_manager.check_integrity(old_df, new_df)
         tf = self.copy()
         tf._df = new_df
         tf._column_metadata.sync()
@@ -282,7 +277,7 @@ class TimeFrame:
             A new TimeFrame with a new periodicity set.
         """
         tf = self.copy()
-        tf._time_manager._periodicity = configure_period_object(periodicity)
+        tf._time_manager = tf._time_manager.with_periodicity(periodicity)
         tf._time_manager.validate(tf.df)
         return tf
 
@@ -406,14 +401,13 @@ class TimeFrame:
         Args:
             start: The starting datetime value to pad time values from (inclusive). If not provided then the beginning
                 of the dataframe will be used.
-            end: The final datetime value to pad time values to (inclusive). If not provided then the beginning of the
+            end: The final datetime value to pad time values to (inclusive). If not provided then the end of the
                 dataframe will be used.
 
         Returns:
             Padded TimeFrame
         """
-        tf = self.copy()
-        tf._df = pad_time(
+        padded_df = pad_time(
             df=self.df,
             time_name=self.time_name,
             periodicity=self.periodicity,
@@ -421,6 +415,14 @@ class TimeFrame:
             start=start,
             end=end,
         )
+
+        # Padding gives null in every column - even flag columns. Init default flag column values on those padded rows
+        padded_rows = ~pl.col(self.time_name).is_in(self.df[self.time_name].implode())
+        for flag_column in self._flag_manager.flag_columns.values():
+            padded_df = flag_column.fill_empty(padded_df, padded_rows)
+
+        tf = self.copy()
+        tf._df = padded_df
         tf.sort_time()
         return tf
 
@@ -497,27 +499,15 @@ class TimeFrame:
                     to ``None`` (null) in single mode or an empty list in list mode.
         """
         flag_sys = self.get_flag_system(flag_system_name)
-        flag_type = flag_sys.flag_type
+        col_dtype = flag_sys.column_dtype()
 
-        # 1. Resolve dtype
-        if flag_type in ("categorical", "categorical_list"):
-            inner_dtype = pl.Int32 if flag_sys.value_type() is int else pl.Utf8
-            col_dtype = pl.List(inner_dtype) if flag_type == "categorical_list" else inner_dtype
-        else:
-            col_dtype = pl.Int64
-
-        # 2. Build column - if it's a scalar or missing, use pl.lit; otherwise it's a sequence so cast to a Series
+        # 1. Build column - if it's a scalar or missing, use pl.lit; otherwise it's a sequence so cast to a Series
         if isinstance(data, (int, str)) or data is None:
-            if data is None:
-                if flag_type == "categorical_list":
-                    data = []
-                elif flag_type == "bitwise":
-                    data = 0
-            col_data = pl.lit(data, dtype=col_dtype)
+            col_data = pl.lit(flag_sys.empty_value() if data is None else data, dtype=col_dtype)
         else:
             col_data = pl.Series(data, dtype=col_dtype)
 
-        # 3. Determine name of flag column
+        # 2. Determine name of flag column
         if not column_name:
             column_name = f"__flag__{flag_system_name}"
             if column_name in self.df.columns:
@@ -526,7 +516,7 @@ class TimeFrame:
                     col_suffix += 1
                 column_name = f"{column_name}__{col_suffix}"
 
-        # 4. Add and register as a flag column
+        # 3. Add and register as a flag column
         self._df = self.df.with_columns(col_data.alias(column_name))
         self._flag_manager.register_flag_column(column_name, flag_system_name)
         self._column_metadata.sync()
@@ -916,22 +906,26 @@ class TimeFrame:
             **kwargs: Parameters specific to the infill method.
 
         Returns:
-            A TimeFrame containing the aggregated data.
+            A TimeFrame containing the infilled data. Missing time steps are padded in, so the result can contain
+            more rows than this TimeFrame. Values added by padding are null in all other columns.
         """
+        # Infilling fills in missing time steps, so work from a padded TimeFrame
+        tf_padded = self if self.df.is_empty() else self.pad()
+
         # Get the infill method instance and run the apply method
         infill_instance = InfillMethod.get(infill_method, **kwargs)
         infill_result = infill_instance.apply(
-            self.df, self.time_name, self.periodicity, column_name, observation_interval, max_gap_size
+            tf_padded.df, self.time_name, self.periodicity, column_name, observation_interval, max_gap_size
         )
 
-        # Create a copy of the current TimeFrame, and update the dataframe with the infilled data
-        tf_result = self.with_df(infill_result)
+        # Update the dataframe with the infilled data
+        tf_result = tf_padded.with_df(infill_result)
 
         if flag_params:
             # Add flag where we have infilled data
             flag_column_name, flag_value = flag_params
 
-            before = self.df[column_name]
+            before = tf_padded.df[column_name]
             after = tf_result.df[column_name]
 
             before_is_null = before.is_null() | before.is_nan()
@@ -964,37 +958,27 @@ class TimeFrame:
         if not column_names:
             raise ColumnNotFoundError("No columns specified.")
 
-        if isinstance(column_names, str):
-            column_names = [column_names]
-        check_columns_in_dataframe(self.df, column_names)
+        # Work on a copy, so that the caller's list is left as it is
+        columns = [column_names] if isinstance(column_names, str) else list(column_names)
+        check_columns_in_dataframe(self.df, columns)
 
         # Include primary time column (if not already included)
-        if self.time_name not in column_names:
-            column_names.insert(0, self.time_name)
+        if self.time_name not in columns:
+            columns.insert(0, self.time_name)
 
         # Build new frame
-        new_df = self.df.select(column_names)
+        new_df = self.df.select(columns)
 
         # New TimeFrame
         tf = self.with_df(new_df)
 
         # Prune column level metadata to kept columns
-        kept_metadata = {col: self.column_metadata[col] for col in column_names}
+        kept_metadata = {col: self.column_metadata[col] for col in columns}
         tf.column_metadata.clear()
         tf.column_metadata.update(kept_metadata)
 
-        # Rebuild the flag registry for kept columns
-        new_flag_manager = FlagManager()
-        # re-register flag systems
-        for name, flag_system in self._flag_manager.flag_systems.items():
-            new_flag_manager.register_flag_system(name, flag_system.to_dict(), flag_system.flag_type)
-
-        # keep only flag columns that survived
-        for flag_name, flag_column in self._flag_manager.flag_columns.items():
-            if flag_name in column_names:
-                new_flag_manager.register_flag_column(flag_name, flag_column.flag_system.system_name())
-
-        tf._flag_manager = new_flag_manager
+        # Keep the flag systems, but only the flag columns that survived
+        tf._flag_manager = self._flag_manager.copy(columns=columns)
         tf._column_metadata.sync()
         return tf
 
@@ -1043,7 +1027,7 @@ class TimeFrame:
 
         tf = self.copy()
         tf._df = tf._df.rename({self.time_name: new_time_name})
-        tf._time_manager._time_name = new_time_name
+        tf._time_manager = tf._time_manager.with_time_name(new_time_name)
         tf._column_metadata.sync()
 
         return tf

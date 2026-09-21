@@ -23,7 +23,8 @@ from time_stream.exceptions import (
     BitwiseFlagUnknownError,
     BitwiseFlagValueError,
 )
-from time_stream.flags.flag_system import FlagMeta, FlagSystemBase, FlagSystemLiteral
+from time_stream.flags.flag_system import FlagMeta, FlagSystemBase
+from time_stream.types import FlagSystemLiteral
 
 
 class BitwiseMeta(FlagMeta):
@@ -127,6 +128,16 @@ class BitwiseFlag(FlagSystemBase, int, Flag, metaclass=BitwiseMeta):
     def value_type(cls) -> type:
         """Return ``int`` - bitwise flag values are always integers."""
         return int
+
+    @classmethod
+    def column_dtype(cls) -> pl.DataType:
+        """Return the dtype of a bitwise flag column, which holds the combined flag bits."""
+        return pl.Int64()
+
+    @classmethod
+    def empty_value(cls) -> int:
+        """Return ``0`` - the bitwise value with no flags set."""
+        return 0
 
     @classmethod
     def validate_column(cls, series: pl.Series) -> None:

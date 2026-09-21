@@ -22,7 +22,7 @@ import polars as pl
 from time_stream.exceptions import QcError, QcUnknownOperatorError
 from time_stream.operation import Operation
 from time_stream.types import ClosedInterval
-from time_stream.utils import check_columns_in_dataframe, get_date_filter
+from time_stream.utils import check_columns_in_dataframe, check_literal_value, get_date_filter
 
 
 @dataclass(frozen=True)
@@ -171,6 +171,7 @@ class RangeCheck(QCCheck):
                     (default = "both")
             within: Whether values get flagged when within or outside the range (default = True (within)).
         """
+        check_literal_value(closed, ClosedInterval, "closed")
         self.min_value = min_value
         self.max_value = max_value
         self.closed = closed

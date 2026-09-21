@@ -1,5 +1,5 @@
 import re
-from datetime import datetime, time, timedelta
+from datetime import date, datetime, time, timedelta
 from typing import Any
 
 import polars as pl
@@ -13,6 +13,7 @@ from time_stream.utils import (
     TimeWindow,
     check_alignment,
     check_columns_in_dataframe,
+    check_literal_value,
     check_periodicity,
     epoch_check,
     get_date_filter,
@@ -798,24 +799,8 @@ class TestPadTime:
         result = pad_time(df, "time", periodicity)
         assert_frame_equal(result, df)
 
-    @pytest.mark.parametrize(
-        "start_date,end_date",
-        [
-            (
-                datetime(2025, 1, 1, 12, 5, 0),
-                datetime(2025, 1, 1, 12, 2, 0),
-            ),
-            (
-                datetime(2025, 1, 1, 12, 5, 0),
-                datetime(2025, 1, 1, 12, 2, 0),
-            ),
-        ],
-        ids=[
-            "start date after end date",
-            "start date the same as end date",
-        ],
-    )
-    def test_invalid_start_end_dates(self, start_date: datetime, end_date: datetime) -> None:
+    def test_invalid_start_end_dates(self) -> None:
+        """Test that a start date after the end date raises an error"""
         df = pl.DataFrame(
             {
                 "time": pl.datetime_range(
@@ -823,11 +808,58 @@ class TestPadTime:
                 )
             }
         )
+        start_date = datetime(2025, 1, 1, 12, 5, 0)
+        end_date = datetime(2025, 1, 1, 12, 2, 0)
         periodicity = Period.of_minutes(1)
         expected_error = f"Invalid datetime range to pad. Start: {start_date}. End: {end_date}"
 
         with pytest.raises(ValueError, match=expected_error):
             pad_time(df, "time", periodicity, start=start_date, end=end_date)
+
+    def test_equal_start_end_dates(self) -> None:
+        """Test that a start date equal to the end date leaves the time series unchanged"""
+        df = pl.DataFrame(
+            {
+                "time": pl.datetime_range(
+                    datetime(2025, 1, 1, 12, 0, 0), datetime(2025, 1, 1, 12, 10, 0), interval="1m", eager=True
+                )
+            }
+        )
+        start_end_date = datetime(2025, 1, 1, 12, 5, 0)
+        result = pad_time(df, "time", Period.of_minutes(1), start=start_end_date, end=start_end_date)
+        assert_frame_equal(result, df)
+
+    def test_single_row(self) -> None:
+        """Test that a single row time series has nothing to pad, so is returned unchanged"""
+        df = pl.DataFrame({"time": [datetime(2025, 1, 1)], "value": [1.0]})
+        result = pad_time(df, "time", Period.of_days(1))
+        assert_frame_equal(result, df)
+
+    @pytest.mark.parametrize("time_unit", ["ms", "us", "ns"])
+    def test_time_unit_preserved(self, time_unit: str) -> None:
+        """Test that a time column is padded in its own time unit, whichever unit that is"""
+        times = pl.Series("time", [datetime(2025, 1, 1), datetime(2025, 1, 3)], dtype=pl.Datetime(time_unit))  # type: ignore[arg-type] - Polars Literal is a string
+        df = pl.DataFrame({"time": times, "value": [1.0, 3.0]})
+        result = pad_time(df, "time", Period.of_days(1))
+        expected = pl.DataFrame(
+            {
+                "time": pl.Series(
+                    [datetime(2025, 1, 1), datetime(2025, 1, 2), datetime(2025, 1, 3)],
+                    dtype=pl.Datetime(time_unit),  # type: ignore[arg-type] - Polars Literal is a string
+                ),
+                "value": [1.0, None, 3.0],
+            }
+        )
+        assert_frame_equal(result, expected)
+
+    def test_date_dtype_column(self) -> None:
+        """Test that a time column of Date values is padded, keeping the Date dtype"""
+        df = pl.DataFrame({"time": [date(2025, 1, 1), date(2025, 1, 3)], "value": [1.0, 3.0]})
+        result = pad_time(df, "time", Period.of_days(1))
+        expected = pl.DataFrame(
+            {"time": [date(2025, 1, 1), date(2025, 1, 2), date(2025, 1, 3)], "value": [1.0, None, 3.0]}
+        )
+        assert_frame_equal(result, expected)
 
     @pytest.mark.parametrize(
         "start_date,end_date,expected_start_date,expected_end_date",
@@ -2077,6 +2109,21 @@ class TestEpochCheck:
         epoch_check(period)
 
 
+class TestCheckLiteralValue:
+    @pytest.mark.parametrize("value", ["start", "end", "point"])
+    def test_valid_value(self, value: str) -> None:
+        """Test that a value allowed by the Literal passes."""
+        check_literal_value(value, TimeAnchor, "time_anchor")
+
+    @pytest.mark.parametrize("value", ["START", "middle", "", None, 1])
+    def test_invalid_value(self, value: Any) -> None:
+        """Test that a value not allowed by the Literal raises an error naming the options."""
+        expected_error = f"Invalid time_anchor '{value}'. Expected one of: ['start', 'end', 'point']"
+
+        with pytest.raises(ValueError, match=re.escape(expected_error)):
+            check_literal_value(value, TimeAnchor, "time_anchor")
+
+
 class TestTimeWindow:
     def test_default_closed_is_both(self) -> None:
         """Omitting closed defaults to "both"."""
@@ -2114,6 +2161,12 @@ class TestTimeWindow:
         """Invalid start/end combinations raise TimeWindowError."""
         with pytest.raises(TimeWindowError):
             TimeWindow(start=start, end=end)  # type: ignore[arg-type]
+
+    @pytest.mark.parametrize("closed", ["BOTH", "neither", "", None])
+    def test_invalid_closed_raises(self, closed: Any) -> None:
+        """An unrecognised closed value raises an error."""
+        with pytest.raises(ValueError, match="Invalid closed"):
+            TimeWindow(start=time(10, 30), end=time(14, 0), closed=closed)
 
     @pytest.mark.parametrize(
         "start,end,expected_duration",

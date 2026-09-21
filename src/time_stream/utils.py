@@ -7,6 +7,7 @@ This module provides helper functions used across the time_stream package for wo
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
+from typing import Any, get_args
 
 import polars as pl
 from isoperiod import Period, PeriodValidationError
@@ -37,7 +38,7 @@ class TimeWindow:
 
     start: time
     end: time
-    closed: ClosedInterval | None = "both"
+    closed: ClosedInterval = "both"
 
     def __post_init__(self) -> None:
         """Validate the time window on construction."""
@@ -45,6 +46,7 @@ class TimeWindow:
             raise TimeWindowError("'start' and 'end' must be datetime.time objects.")
         if self.start >= self.end:
             raise TimeWindowError(f"'start' ({self.start}) must be strictly before 'end' ({self.end}).")
+        check_literal_value(self.closed, ClosedInterval, "closed")
 
     @classmethod
     def from_tuple(cls, t: tuple[time, time] | tuple[time, time, ClosedInterval]) -> "TimeWindow":
@@ -228,7 +230,7 @@ def pad_time(
         time_anchor: The time anchor to which the date/times conform to.
         start: The starting datetime value to pad time values from (inclusive). If not provided then the beginning of
             the dataframe will be used.
-        end: The final datetime value to pad time values to (inclusive). If not provided then the beginning of the
+        end: The final datetime value to pad time values to (inclusive). If not provided then the end of the
             dataframe will be used.
 
     Returns:
@@ -245,24 +247,22 @@ def pad_time(
     if not isinstance(min_datetime, datetime) or not isinstance(max_datetime, datetime):
         raise ValueError("Cannot pad an empty time series.")
 
-    if min_datetime >= max_datetime:
+    if min_datetime > max_datetime:
         raise ValueError(f"Invalid datetime range to pad. Start: {min_datetime}. End: {max_datetime}")
 
-    dtype = df[time_name].dtype
-    time_unit = dtype.time_unit if isinstance(dtype, pl.Datetime) else "us"
-
-    # Generate a series of the datetimes we would expect with a full time series between the start and end date
+    # Generate a series of the datetimes we would expect with a full time series between the start and end date.
+    # This is cast to the dtype of the existing (truncated) datetimes, so that the two can be compared below.
     expected_datetimes = pl.datetime_range(
         min_datetime,
         max_datetime,
         interval=periodicity.pl_interval,
         eager=True,
-        time_unit=time_unit,
-    )
+    ).cast(existing_datetimes.dtype)
 
-    # Find any missing datetimes between expected and existing
+    # Find any missing datetimes between expected and existing. The expected datetimes are always generated as
+    # datetimes, so cast them back to the dtype of the time column (which may be a Date).
     missing_datetimes = expected_datetimes.filter(~expected_datetimes.is_in(existing_datetimes.implode()))
-    missing_df = pl.DataFrame({time_name: missing_datetimes})
+    missing_df = pl.DataFrame({time_name: missing_datetimes.cast(df[time_name].dtype)})
 
     # Perform a join to create a complete time series
     padded_df = missing_df.join(df, on=time_name, how="full", coalesce=True)
@@ -311,6 +311,22 @@ def check_columns_in_dataframe(df: pl.DataFrame, columns: str | Iterable[str]) -
     invalid_columns = sorted(set(columns) - set(df.columns))
     if invalid_columns:
         raise ColumnNotFoundError(f"Columns not found in dataframe: {invalid_columns}")
+
+
+def check_literal_value(value: Any, literal: Any, name: str) -> None:
+    """Checks that a value is one of the options allowed by a ``Literal`` type alias.
+
+    Args:
+        value: The value to check.
+        literal: The ``Literal`` type alias defining the allowed values.
+        name: The name of the parameter, used in the error message.
+
+    Raises:
+        ValueError: If the value is not one of the allowed options.
+    """
+    options = get_args(literal)
+    if value not in options:
+        raise ValueError(f"Invalid {name} '{value}'. Expected one of: {list(options)}")
 
 
 def configure_period_object(period: str | Period | None) -> Period:
