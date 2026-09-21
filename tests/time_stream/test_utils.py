@@ -840,6 +840,64 @@ class TestPadTime:
         with pytest.raises(ValueError, match=expected_error):
             pad_time(df, "time", periodicity, start=start_date, end=end_date)
 
+    @pytest.mark.parametrize(
+        "periodicity,anchor,time_stamps,start,end,expected",
+        [
+            (
+                Period.of_hours(1),
+                "start",
+                [datetime(2024, 1, 1, 0), datetime(2024, 1, 1, 1)],
+                datetime(2023, 12, 31, 22, 30),
+                datetime(2024, 1, 1, 3, 30),
+                [datetime(2023, 12, 31, 22), datetime(2023, 12, 31, 23)] + [datetime(2024, 1, 1, h) for h in range(4)],
+            ),
+            (
+                Period.of_hours(1),
+                "end",
+                [datetime(2024, 1, 1, 0), datetime(2024, 1, 1, 1)],
+                datetime(2023, 12, 31, 22, 30),
+                datetime(2024, 1, 1, 3, 30),
+                [datetime(2023, 12, 31, 23)] + [datetime(2024, 1, 1, h) for h in range(5)],
+            ),
+            (
+                Period.of_days(1).with_hour_offset(9),
+                "start",
+                [datetime(2024, 1, 2, 9)],
+                datetime(2024, 1, 1, 3),
+                datetime(2024, 1, 3, 12),
+                [datetime(2023, 12, 31, 9), datetime(2024, 1, 1, 9), datetime(2024, 1, 2, 9), datetime(2024, 1, 3, 9)],
+            ),
+        ],
+        ids=["start anchor", "end anchor", "offset periodicity"],
+    )
+    def test_unaligned_start_end_dates(
+        self,
+        periodicity: Period,
+        anchor: TimeAnchor,
+        time_stamps: list,
+        start: datetime,
+        end: datetime,
+        expected: list,
+    ) -> None:
+        """Test that start and end dates are truncated to the periodicity before padding"""
+        df = pl.DataFrame({"time": time_stamps})
+        result = pad_time(df, "time", periodicity, anchor, start=start, end=end)
+        assert_frame_equal(result, pl.DataFrame({"time": expected}))
+
+    @pytest.mark.parametrize(
+        "start,end,arg",
+        [
+            (date(2024, 1, 1), None, "start"),
+            (None, date(2024, 1, 1), "end"),
+        ],
+        ids=["date start", "date end"],
+    )
+    def test_date_start_end_dates(self, start: Any, end: Any, arg: str) -> None:
+        """Test that a date rather than a datetime for start or end raises an error"""
+        df = pl.DataFrame({"time": [datetime(2024, 1, 1)]})
+        with pytest.raises(TypeError, match=f"'{arg}' must be a datetime"):
+            pad_time(df, "time", Period.of_days(1), start=start, end=end)
+
     def test_equal_start_end_dates(self) -> None:
         """Test that a start date equal to the end date leaves the time series unchanged"""
         df = pl.DataFrame(

@@ -24,7 +24,7 @@ from time_stream.exceptions import (
 from time_stream.flags.flag_manager import BitwiseFlagColumn
 from time_stream.flags.flag_system import FlagSystemBase
 from time_stream.time_manager import TimeManager
-from time_stream.types import FlagSystemLiteral
+from time_stream.types import FlagSystemLiteral, TimeAnchor
 
 
 class TestTimeFrameConstruction:
@@ -1315,6 +1315,18 @@ class TestInfillWithMissingRows:
         result = tf.infill("linear", "value", flag_params=("flag_col", "FLAG_A"))
         expected = pl.Series("flag_col", [0, 1, 1, 0, 0], dtype=pl.Int64)
         assert_series_equal(result.df["flag_col"], expected)
+
+
+class TestPad:
+    """Tests for TimeFrame.pad()."""
+
+    @pytest.mark.parametrize("anchor", ["start", "end"])
+    def test_unaligned_start_end_gives_valid_timeframe(self, anchor: TimeAnchor) -> None:
+        """Padding to an unaligned start and end gives a TimeFrame that passes validation."""
+        df = pl.DataFrame({"time": [datetime(2024, 1, 1, h) for h in range(3)], "value": [1.0, 2.0, 3.0]})
+        tf = TimeFrame(df, "time", resolution="PT1H", time_anchor=anchor)
+        padded = tf.pad(start=datetime(2023, 12, 31, 22, 30), end=datetime(2024, 1, 1, 4, 30))
+        TimeFrame(padded.df, "time", resolution="PT1H", time_anchor=anchor)
 
 
 class TestPadFlagColumns:

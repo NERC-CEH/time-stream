@@ -399,13 +399,16 @@ class TimeFrame:
         """Pad the time series with missing datetime rows, filling in NULLs for missing values.
 
         Args:
-            start: The starting datetime value to pad time values from (inclusive). If not provided then the beginning
-                of the dataframe will be used.
-            end: The final datetime value to pad time values to (inclusive). If not provided then the end of the
-                dataframe will be used.
+            start: The starting datetime value to pad time values from (inclusive). If not on the periodicity, the
+                time step containing it is used. If not provided then the beginning of the dataframe will be used.
+            end: The final datetime value to pad time values to (inclusive). If not on the periodicity, the time step
+                containing it is used. If not provided then the end of the dataframe will be used.
 
         Returns:
             Padded TimeFrame
+
+        Raises:
+            TypeError: If ``start`` or ``end`` is not a datetime.
         """
         padded_df = pad_time(
             df=self.df,

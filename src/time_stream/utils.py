@@ -225,21 +225,32 @@ def pad_time(
         time_name: The name of the time column to pad.
         periodicity: The periodicity of the time series.
         time_anchor: The time anchor to which the date/times conform to.
-        start: The starting datetime value to pad time values from (inclusive). If not provided then the beginning of
-            the dataframe will be used.
-        end: The final datetime value to pad time values to (inclusive). If not provided then the end of the
-            dataframe will be used.
+        start: The starting datetime value to pad time values from (inclusive), truncated to the periodicity. If not
+            provided then the beginning of the dataframe will be used.
+        end: The final datetime value to pad time values to (inclusive), truncated to the periodicity. If not provided
+            then the end of the dataframe will be used.
 
     Returns:
         pl.DataFrame of padded data
 
+    Raises:
+        TypeError: If ``start`` or ``end`` is not a datetime.
+
     """
+    for name, value in (("start", start), ("end", end)):
+        if value is not None and not isinstance(value, datetime):
+            raise TypeError(f"'{name}' must be a datetime. Got: '{type(value)}'")
+
     # Extract the existing datetimes, truncated to the boundary of their periodicity period
     existing_datetimes = truncate_to_period(df[time_name], periodicity, time_anchor)
 
-    # Get the min and max datetime from the existing datetimes
-    min_datetime = start if start else existing_datetimes.min()
-    max_datetime = end if end else existing_datetimes.max()
+    # Get the min and max datetime, truncating any given start and end to the periodicity in the same way
+    min_datetime = (
+        truncate_to_period(pl.Series([start]), periodicity, time_anchor)[0] if start else existing_datetimes.min()
+    )
+    max_datetime = (
+        truncate_to_period(pl.Series([end]), periodicity, time_anchor)[0] if end else existing_datetimes.max()
+    )
 
     if not isinstance(min_datetime, datetime) or not isinstance(max_datetime, datetime):
         raise ValueError("Cannot pad an empty time series.")
