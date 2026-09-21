@@ -16,8 +16,8 @@ Both share a common abstract base class :class:`AggregationPipeline`.
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from datetime import timedelta
-from typing import Callable, get_args
+from datetime import datetime, timedelta
+from typing import Callable, ClassVar, get_args
 
 import polars as pl
 from isoperiod import Period
@@ -26,7 +26,7 @@ from polars.dataframe.group_by import DynamicGroupBy, RollingGroupBy
 from time_stream.exceptions import AggregationError, AggregationPeriodError, MissingCriteriaError, TimeWindowError
 from time_stream.operation import Operation
 from time_stream.types import MissingCriteria, RollingAlignment, TimeAnchor
-from time_stream.utils import TimeWindow, check_columns_in_dataframe, check_literal_value
+from time_stream.utils import TimeWindow, check_columns_in_dataframe, check_literal_value, pad_time, truncate_to_period
 
 
 @dataclass(frozen=True)
@@ -47,6 +47,9 @@ class AggregationFunction(Operation, ABC):
     Pipeline orchestration is handled separately by :class:`StandardAggregationPipeline` or
     :class:`RollingAggregationPipeline`.
     """
+
+    # Whether standard aggregation pads each period to its full set of time steps before grouping
+    pad_periods: ClassVar[bool] = False
 
     def __init__(self, **kwargs):
         pass
@@ -350,10 +353,42 @@ class StandardAggregationPipeline(AggregationPipeline):
             raise TimeWindowError("'time_window' requires the data periodicity to be sub-daily.")
 
     def _prepare_df(self, df: pl.DataFrame) -> pl.DataFrame:
-        """Filter rows to the time-of-day window if one is set."""
+        """Pad periods if the aggregation function needs it, then filter rows to the time window if one is set."""
+        if self.agg_func.pad_periods:
+            df = self._pad_periods(df)
         if self.time_window:
             return self.time_window.filter_df(df, self.ctx.time_name)
         return df
+
+    def _pad_periods(self, df: pl.DataFrame) -> pl.DataFrame:
+        """Pad every aggregation period in the data to its full set of time steps, taking into account the potential
+        gaps before the first time step and after the last time step.
+
+        Args:
+            df: The input DataFrame.
+
+        Returns:
+            The time and aggregated columns, with a row for every time step in each period.
+        """
+        time_name = self.ctx.time_name
+        time_anchor = self.ctx.time_anchor
+        period = self.aggregation_period.pl_interval
+        step = self.ctx.periodicity.pl_interval
+
+        periods = truncate_to_period(df[time_name], self.aggregation_period, time_anchor)
+        first, last = periods.min(), periods.max()
+        if not isinstance(first, datetime) or not isinstance(last, datetime):
+            raise AggregationError("Cannot aggregate an empty DataFrame.")
+
+        # Pad from the first time step of the first period to the last time step of the last period
+        if time_anchor == "end":
+            start, end = pl.Series([first]).dt.offset_by("-" + period).dt.offset_by(step)[0], last
+        else:
+            start, end = first, pl.Series([last]).dt.offset_by(period).dt.offset_by("-" + step)[0]
+
+        return pad_time(
+            df.select(time_name, *self.columns), time_name, self.ctx.periodicity, time_anchor, start=start, end=end
+        )
 
     def _get_label_closed(self) -> tuple[str, str]:
         """Map TimeAnchor to Polars label/closed semantics.
@@ -700,16 +735,19 @@ class StDev(AggregationFunction):
 
 @AggregationFunction.register
 class Nth(AggregationFunction):
-    """An aggregation class to select the nth value within each aggregation period."""
+    """An aggregation class to select the value at the nth time step within each aggregation period."""
 
     name = "nth"
+    pad_periods = True
 
     def __init__(self, n: int):
         """Initialise Nth aggregation.
 
         Args:
-            n: The index position (starting at 1) of the value to select within each aggregation period
-                (e.g. n=12 selects the 12th hour of each day when aggregating hourly data to daily).
+            n: The position (starting at 1) of the time step to select within each aggregation period
+                (e.g. n=12 selects the 12th hour of each day when aggregating hourly data to daily). With a time
+                window, the position counts time steps within the window. The value is null if that time step
+                is missing from the data.
         """
         super().__init__()
         if not isinstance(n, int) or n < 1:

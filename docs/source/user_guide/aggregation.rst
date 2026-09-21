@@ -239,7 +239,7 @@ Choose how values inside each window are summarised. Pass a **string** correspon
 ^^^^^^^
 :class:`time_stream.aggregation.Nth`
 
-    **What it does:** Selects the value (and its timestamp) at a fixed 1-based position within each period - for example, ``n=1`` selects the first value, ``n=49`` selects the 49th value within the given aggregation period.
+    **What it does:** Selects the value (and its timestamp) at a fixed 1-based time step within each period - for example, ``n=1`` selects the first time step, ``n=49`` selects the 49th time step within the given aggregation period. With a ``time_window``, ``n`` counts the time steps within the window.
 
     **When to use:** Useful when you need a specific, deterministic point from within a period rather than a
     summary statistic - for example, always taking the reading at a particular time of day.
@@ -253,9 +253,9 @@ Choose how values inside each window are summarised. Pass a **string** correspon
 
         If ``n`` is larger than the number of periodicity points that always fit within the aggregation period
         (e.g. requesting the 25th hour of a day), an ``AggregationPeriodError`` is raised. For periods where
-        that count isn't fixed (e.g. daily data aggregated to monthly, where months vary in length), or when a
-        period simply doesn't contain enough values (e.g. missing data, or an incomplete period at the
-        start/end of the series), the result is ``null`` instead.
+        that count isn't fixed (e.g. daily data aggregated to monthly, where months vary in length), the result is
+        ``null`` for periods too short to hold ``n`` time steps. The result is also ``null`` when the nth time step
+        is missing from the data - ``n`` counts time steps, not rows, so gaps earlier in the period don't shift it.
 
     Using the :ref:`15-minute flow example data <example_input_data_agg>`:
 

@@ -1,5 +1,5 @@
 import re
-from datetime import datetime, time
+from datetime import datetime, time, timedelta
 from typing import Any, Callable
 from unittest.mock import Mock
 
@@ -34,7 +34,7 @@ from time_stream.exceptions import (
     TimeWindowError,
     UnknownRegistryKeyError,
 )
-from time_stream.types import MissingCriteria
+from time_stream.types import MissingCriteria, TimeAnchor
 from time_stream.utils import TimeWindow
 
 
@@ -2071,6 +2071,50 @@ class TestNthAggregation:
             aggregation_time_anchor=input_tf.time_anchor,
         ).execute()
         assert_frame_equal(result, expected_df, check_dtypes=False, check_column_order=False)
+
+    @pytest.mark.parametrize(
+        "missing_hours,anchor,n,time_window,expected_value,expected_time",
+        [
+            ([1], "start", 12, None, 11.0, datetime(2025, 1, 1, 11)),
+            ([1], "start", 2, None, None, datetime(2025, 1, 1, 1)),
+            ([0, 1, 2], "start", 1, None, None, datetime(2025, 1, 1, 0)),
+            ([23], "start", 24, None, None, datetime(2025, 1, 1, 23)),
+            ([1], "end", 12, None, 12.0, datetime(2025, 1, 1, 12)),
+            ([10], "start", 1, (time(10), time(14)), None, datetime(2025, 1, 1, 10)),
+            ([10], "start", 2, (time(10), time(14)), 11.0, datetime(2025, 1, 1, 11)),
+        ],
+        ids=[
+            "gap before n",
+            "gap at n",
+            "leading gap",
+            "trailing gap",
+            "end anchor gap before n",
+            "time window gap at n",
+            "time window gap before n",
+        ],
+    )
+    def test_nth_with_missing_rows(
+        self,
+        missing_hours: list[int],
+        anchor: TimeAnchor,
+        n: int,
+        time_window: tuple[time, time] | None,
+        expected_value: float | None,
+        expected_time: datetime,
+    ) -> None:
+        """Test that Nth selects the nth time step of each period, not the nth row, when rows are missing."""
+        first = datetime(2025, 1, 1, 1) if anchor == "end" else datetime(2025, 1, 1, 0)
+        times = [first + timedelta(hours=h) for h in range(24) if h not in missing_hours]
+        df = pl.DataFrame({"time": times, "value": [float(t.hour) for t in times]})
+        tf = TimeFrame(df, "time", resolution="PT1H", time_anchor=anchor)
+
+        result = tf.aggregate("P1D", "nth", "value", n=n, time_window=time_window)
+
+        expected = pl.DataFrame(
+            {"nth_value": [expected_value], "time_of_nth_value": [expected_time]},
+            schema={"nth_value": pl.Float64, "time_of_nth_value": pl.Datetime("us")},
+        )
+        assert_frame_equal(result.df.select("nth_value", "time_of_nth_value"), expected)
 
     def test_nth_rolling_aggregation(self) -> None:
         """Test Nth via RollingAggregationPipeline: a leading 2-hour window over 1-hour data has a fixed
