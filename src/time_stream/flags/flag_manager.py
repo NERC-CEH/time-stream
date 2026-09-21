@@ -17,7 +17,7 @@ Typical use from within the ``TimeFrame`` class:
 
 import itertools
 from abc import ABC, abstractmethod
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 
 import polars as pl
@@ -828,8 +828,12 @@ class FlagManager:
         except KeyError:
             raise ColumnNotFoundError(f"No such flag column: '{name}'.")
 
-    def copy(self) -> "FlagManager":
+    def copy(self, columns: Iterable[str] | None = None) -> "FlagManager":
         """Create a deep copy of this ``FlagManager``, duplicating all registered systems and columns.
+
+        Args:
+            columns: If given, only flag columns with these names are copied. All flag systems are copied
+                either way.
 
         Returns:
             A new ``FlagManager`` with the same flag systems, flag columns, and ``is_decoded`` state.
@@ -840,6 +844,8 @@ class FlagManager:
             out.register_flag_system(name, flag_system.to_dict(), flag_type=flag_system.flag_type)
 
         for name, flag_column in self._flag_columns.items():
+            if columns is not None and name not in columns:
+                continue
             out.register_flag_column(name, flag_column.flag_system.system_name())
             out.flag_columns[name].is_decoded = flag_column.is_decoded
 

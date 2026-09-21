@@ -982,18 +982,8 @@ class TimeFrame:
         tf.column_metadata.clear()
         tf.column_metadata.update(kept_metadata)
 
-        # Rebuild the flag registry for kept columns
-        new_flag_manager = FlagManager()
-        # re-register flag systems
-        for name, flag_system in self._flag_manager.flag_systems.items():
-            new_flag_manager.register_flag_system(name, flag_system.to_dict(), flag_system.flag_type)
-
-        # keep only flag columns that survived
-        for flag_name, flag_column in self._flag_manager.flag_columns.items():
-            if flag_name in columns:
-                new_flag_manager.register_flag_column(flag_name, flag_column.flag_system.system_name())
-
-        tf._flag_manager = new_flag_manager
+        # Keep the flag systems, but only the flag columns that survived
+        tf._flag_manager = self._flag_manager.copy(columns=columns)
         tf._column_metadata.sync()
         return tf
 

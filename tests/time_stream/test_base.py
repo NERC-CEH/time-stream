@@ -166,6 +166,19 @@ class TestSelectColumns:
         assert "flag_col" in result.df.columns
         assert "flag_col" in result.flag_columns
 
+    def test_select_keeps_decoded_flag_column_decoded(self) -> None:
+        """A decoded flag column is still decoded after selecting, so flags can still be added to it"""
+        tf = TimeFrame(self.df, time_name="time").with_flag_system("system", {"A": 1, "B": 2, "C": 4})
+        tf.init_flag_column("system", "flag_col")
+        decoded = tf.decode_flag_column("flag_col")
+
+        result = decoded.select(["col1", "flag_col"])
+
+        assert result.get_flag_column("flag_col").is_decoded
+        result.add_flag("flag_col", "A")
+        expected = pl.Series("flag_col", [["A"], ["A"], ["A"]], dtype=pl.List(pl.String))
+        assert_series_equal(result.df["flag_col"], expected)
+
 
 class TestGetItem:
     df = pl.DataFrame(
