@@ -354,6 +354,25 @@ class TestColumnMetadata:
 
         assert self.tf.column_metadata == column_metadata
 
+    @pytest.mark.parametrize(
+        "method", ["with_column_metadata", "setter", "setitem"], ids=["with_column_metadata", "setter", "setitem"]
+    )
+    def test_column_metadata_is_copied(self, method: str) -> None:
+        """Test that changing the dict after setting it doesn't change the TimeFrame column metadata"""
+        metadata = {"col1": {"units": "mm", "info": {"source": "gauge"}}}
+        tf = TimeFrame(self.df, time_name="time")
+        if method == "with_column_metadata":
+            tf = tf.with_column_metadata(metadata)
+        elif method == "setter":
+            tf.column_metadata = metadata
+        else:
+            tf.column_metadata["col1"] = metadata["col1"]
+
+        metadata["col1"]["units"] = "m"
+        metadata["col1"]["info"]["source"] = "radar"
+
+        assert tf.column_metadata["col1"] == {"units": "mm", "info": {"source": "gauge"}}
+
 
 class TestMetadata:
     df = pl.DataFrame(
@@ -413,6 +432,21 @@ class TestMetadata:
         """Test that removing the metadata object sets it back to an empty dict"""
         del self.tf.metadata
         assert self.tf.metadata == {}
+
+    @pytest.mark.parametrize("use_setter", [False, True], ids=["with_metadata", "setter"])
+    def test_metadata_is_copied(self, use_setter: bool) -> None:
+        """Test that changing the dict after setting it doesn't change the TimeFrame metadata"""
+        metadata = {"site": "A", "info": {"network": "FDRI"}}
+        tf = TimeFrame(self.df, time_name="time")
+        if use_setter:
+            tf.metadata = metadata
+        else:
+            tf = tf.with_metadata(metadata)
+
+        metadata["site"] = "B"
+        metadata["info"]["network"] = "other"
+
+        assert tf.metadata == {"site": "A", "info": {"network": "FDRI"}}
 
 
 class TestInitFlagColumn:

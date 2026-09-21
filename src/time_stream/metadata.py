@@ -9,6 +9,7 @@ The ColumnMetadataDoct class extends the built-in dict type to enforce rules on 
 raising `MetadataError` if invalid values are provided.
 """
 
+from copy import deepcopy
 from typing import Any, Callable
 
 from time_stream.exceptions import MetadataError
@@ -87,7 +88,7 @@ class ColumnMetadataDict(dict[str, dict[str, Any]]):
             self[column] = {}
 
     def __setitem__(self, key: str, value: dict[str, Any]) -> None:
-        """Assign per-column metadata after validating key and value.
+        """Assign a deep copy of per-column metadata after validating key and value.
 
         Args:
             key: Column that metadata is valid for
@@ -95,4 +96,4 @@ class ColumnMetadataDict(dict[str, dict[str, Any]]):
         """
         self._validate_key(key)
         self._validate_value(value)
-        super().__setitem__(key, value)
+        super().__setitem__(key, deepcopy(value))

@@ -201,7 +201,7 @@ class TimeFrame:
 
         out._metadata = deepcopy(self._metadata)
         out._column_metadata = ColumnMetadataDict(lambda: out.df.columns)
-        out._column_metadata.update(deepcopy(self._column_metadata))
+        out._column_metadata.update(self._column_metadata)
 
         out._flag_manager = self._flag_manager.copy()
 
@@ -290,7 +290,8 @@ class TimeFrame:
     def metadata(self, value: dict[str, Any] | None) -> None:
         """Set the TimeFrame-level metadata.
 
-        This method checks type of object being set to ensure we continue to work with expected dicts.
+        This method checks type of object being set to ensure we continue to work with expected dicts. A deep copy
+        is stored, so later changes to ``value`` don't affect the TimeFrame.
 
         Args:
             value: The new metadata to set.
@@ -298,7 +299,7 @@ class TimeFrame:
         if value is None:
             self._metadata = {}
         elif isinstance(value, dict):
-            self._metadata = value
+            self._metadata = deepcopy(value)
         else:
             raise MetadataError(f"TimeFrame-level metadata must be a dict object. Got: '{type(value)}'")
 
@@ -752,7 +753,7 @@ class TimeFrame:
             periodicity=aggregation_period,
             time_anchor=aggregation_time_anchor,
         )
-        tf.metadata = deepcopy(self.metadata)
+        tf.metadata = self.metadata
         return tf
 
     def rolling_aggregate(
@@ -824,7 +825,7 @@ class TimeFrame:
             periodicity=self.periodicity,
             time_anchor=self.time_anchor,
         )
-        tf.metadata = deepcopy(self.metadata)
+        tf.metadata = self.metadata
         return tf
 
     # @overload lets type checkers know the return type depends on whether flag_params is provided.
