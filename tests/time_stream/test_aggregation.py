@@ -2285,6 +2285,30 @@ class TestAngularMean:
         ).execute()
         assert_frame_equal(result, expected_df, check_dtypes=False, check_column_order=False)
 
+    def test_all_null_period(self) -> None:
+        """Test that the angular mean of a period with no values is null."""
+        times = [datetime(2025, 1, 1) + timedelta(hours=h) for h in range(48)]
+        df = pl.DataFrame({"time": times, "value": [None] * 24 + [90.0] * 24}, schema_overrides={"value": pl.Float64})
+        tf = TimeFrame(df, "time", resolution="PT1H")
+
+        result = tf.aggregate("P1D", "angular_mean", "value")
+
+        expected = pl.DataFrame({"angular_mean_value": [None, 90.0]}, schema={"angular_mean_value": pl.Float64})
+        assert_frame_equal(result.df.select("angular_mean_value"), expected)
+
+    def test_all_null_rolling_window(self) -> None:
+        """Test that the rolling angular mean of a window with no values is null."""
+        times = [datetime(2025, 1, 1) + timedelta(hours=h) for h in range(4)]
+        df = pl.DataFrame({"time": times, "value": [None, None, 90.0, 90.0]}, schema_overrides={"value": pl.Float64})
+        tf = TimeFrame(df, "time", resolution="PT1H")
+
+        result = tf.rolling_aggregate("PT2H", "angular_mean", "value")
+
+        expected = pl.DataFrame(
+            {"angular_mean_value": [None, None, 90.0, 90.0]}, schema={"angular_mean_value": pl.Float64}
+        )
+        assert_frame_equal(result.df.select("angular_mean_value"), expected)
+
 
 class TestTimeWindowValidation:
     """Tests that invalid time_window configurations raise TimeWindowError."""

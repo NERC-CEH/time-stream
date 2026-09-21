@@ -571,11 +571,15 @@ class AngularMean(AggregationFunction):
         Desired output units: degrees
         """
 
+        # With no values, both sums are 0 and arctan2 would give 0 (north), so give null instead
         angular_mean = [
-            pl.arctan2((pl.col(col).radians().sin().sum()), (pl.col(col).radians().cos().sum()))
-            .degrees()
-            .round(1)
-            .mod(360)
+            pl.when(pl.col(col).count() > 0)
+            .then(
+                pl.arctan2((pl.col(col).radians().sin().sum()), (pl.col(col).radians().cos().sum()))
+                .degrees()
+                .round(1)
+                .mod(360)
+            )
             .alias(f"angular_mean_{col}")
             for col in columns
         ]
