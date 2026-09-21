@@ -139,6 +139,15 @@ class TestSelectColumns:
         assert col2_tf == expected
         assert_frame_equal(tf.df, original_df)
 
+    def test_select_does_not_mutate_input_list(self) -> None:
+        """When selecting columns, the list of column names passed in should be unchanged"""
+        tf = TimeFrame(self.df, time_name="time")
+        columns = ["col1", "col2"]
+
+        tf.select(columns)
+
+        assert columns == ["col1", "col2"]
+
     def test_select_column_does_not_auto_include_flags(self) -> None:
         """Flag columns are not automatically included when selecting a data column."""
         tf = TimeFrame(self.df, time_name="time").with_flag_system("system", {"A": 1, "B": 2, "C": 4})

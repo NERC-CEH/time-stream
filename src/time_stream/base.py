@@ -963,22 +963,22 @@ class TimeFrame:
         if not column_names:
             raise ColumnNotFoundError("No columns specified.")
 
-        if isinstance(column_names, str):
-            column_names = [column_names]
-        check_columns_in_dataframe(self.df, column_names)
+        # Work on a copy, so that the caller's list is left as it is
+        columns = [column_names] if isinstance(column_names, str) else list(column_names)
+        check_columns_in_dataframe(self.df, columns)
 
         # Include primary time column (if not already included)
-        if self.time_name not in column_names:
-            column_names.insert(0, self.time_name)
+        if self.time_name not in columns:
+            columns.insert(0, self.time_name)
 
         # Build new frame
-        new_df = self.df.select(column_names)
+        new_df = self.df.select(columns)
 
         # New TimeFrame
         tf = self.with_df(new_df)
 
         # Prune column level metadata to kept columns
-        kept_metadata = {col: self.column_metadata[col] for col in column_names}
+        kept_metadata = {col: self.column_metadata[col] for col in columns}
         tf.column_metadata.clear()
         tf.column_metadata.update(kept_metadata)
 
@@ -990,7 +990,7 @@ class TimeFrame:
 
         # keep only flag columns that survived
         for flag_name, flag_column in self._flag_manager.flag_columns.items():
-            if flag_name in column_names:
+            if flag_name in columns:
                 new_flag_manager.register_flag_column(flag_name, flag_column.flag_system.system_name())
 
         tf._flag_manager = new_flag_manager
