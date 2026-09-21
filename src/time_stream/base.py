@@ -187,24 +187,21 @@ class TimeFrame:
     def copy(self, share_df: bool = True) -> TimeFrame:
         """Return a shallow copy of this ``TimeFrame``, either sharing or cloning the underlying DataFrame.
 
+        This TimeFrame is already valid, so the copy is built without re-running time validation.
+
         Args:
             share_df: If True, the copy references the same DataFrame object. If False, a cloned DataFrame is used.
 
         Returns:
             A copy of this TimeFrame
         """
-        df = self.df if share_df else self.df.clone()
-        out = TimeFrame(
-            df,
-            time_name=self.time_name,
-            resolution=self.resolution,
-            offset=self.offset,
-            periodicity=self.periodicity,
-            time_anchor=self.time_anchor,
-        )
+        out = object.__new__(TimeFrame)
+        out._df = self.df if share_df else self.df.clone()
+        out._time_manager = self._time_manager
 
-        out.metadata = deepcopy(self._metadata)
-        out.column_metadata.update(deepcopy(self._column_metadata))
+        out._metadata = deepcopy(self._metadata)
+        out._column_metadata = ColumnMetadataDict(lambda: out.df.columns)
+        out._column_metadata.update(deepcopy(self._column_metadata))
 
         out._flag_manager = self._flag_manager.copy()
 

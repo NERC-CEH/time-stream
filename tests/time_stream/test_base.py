@@ -1,6 +1,7 @@
 import re
 from datetime import date, datetime
 from typing import Any
+from unittest.mock import patch
 
 import polars as pl
 import pytest
@@ -22,6 +23,7 @@ from time_stream.exceptions import (
 )
 from time_stream.flags.flag_manager import BitwiseFlagColumn
 from time_stream.flags.flag_system import FlagSystemBase
+from time_stream.time_manager import TimeManager
 from time_stream.types import FlagSystemLiteral
 
 
@@ -1373,6 +1375,72 @@ class TestPadFlagColumns:
         assert_series_equal(tf.pad().df["flag_col"], expected)
 
 
+class TestCopy:
+    """Tests for TimeFrame.copy()."""
+
+    @staticmethod
+    def setup_tf() -> TimeFrame:
+        """Set up a daily TimeFrame with non-default duplicate/misalignment options, flags and metadata."""
+        df = pl.DataFrame({"time": [datetime(2024, 1, i) for i in range(1, 4)], "value": [1, 2, 3]})
+        tf = TimeFrame(
+            df=df,
+            time_name="time",
+            resolution=Period.of_days(1),
+            on_duplicates="keep_first",
+            on_misaligned_rows="resolve",
+            time_anchor="end",
+        )
+        tf.register_flag_system("qc", {"FLAG_A": 1})
+        tf.init_flag_column("qc", "flags")
+        return tf.with_metadata({"site": "x"}).with_column_metadata({"value": {"units": "m"}})
+
+    def test_copy_equals_original(self) -> None:
+        """A copy is equal to the original TimeFrame."""
+        tf = self.setup_tf()
+        assert tf.copy() == tf
+
+    def test_time_manager_options_preserved(self) -> None:
+        """on_duplicates, on_misaligned_rows and time_anchor survive a copy."""
+        tf = self.setup_tf()
+        copied = tf.copy()
+        assert copied._time_manager._on_duplicates == "keep_first"
+        assert copied._time_manager._on_misaligned_rows == "resolve"
+        assert copied.time_anchor == "end"
+
+    def test_share_df_true_shares_dataframe(self) -> None:
+        """With share_df=True (the default), the copy references the same DataFrame object."""
+        tf = self.setup_tf()
+        assert tf.copy().df is tf.df
+
+    def test_share_df_false_clones_dataframe(self) -> None:
+        """With share_df=False, the copy gets an independent but equal DataFrame."""
+        tf = self.setup_tf()
+        copied = tf.copy(share_df=False)
+        assert copied.df is not tf.df
+        assert_frame_equal(copied.df, tf.df)
+
+    def test_metadata_independent(self) -> None:
+        """Changing the copy's metadata does not affect the original."""
+        tf = self.setup_tf()
+        copied = tf.copy()
+        copied.metadata["new"] = "value"
+        assert "new" not in tf.metadata
+
+    def test_column_metadata_independent(self) -> None:
+        """Changing the copy's column metadata does not affect the original."""
+        tf = self.setup_tf()
+        copied = tf.copy()
+        copied.column_metadata.update({"value": {"units": "ft"}})
+        assert tf.column_metadata["value"] == {"units": "m"}
+
+    def test_does_not_revalidate(self) -> None:
+        """copy() does not re-run time validation, since the original TimeFrame is already valid."""
+        tf = self.setup_tf()
+        with patch.object(TimeManager, "prepare") as mock_prepare:
+            tf.copy()
+        mock_prepare.assert_not_called()
+
+
 class TestWithDf:
     """Tests for TimeFrame.with_df()."""
 
@@ -1482,7 +1550,6 @@ class TestRenameTimeColumnName:
             }
         )
         assert_frame_equal(tf_new.df, expected)
-        assert tf_new.df is not tf.df
         assert tf_new is not tf
 
     def test_new_time_name_same_as_data_column(self) -> None:
