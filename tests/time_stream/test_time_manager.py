@@ -17,6 +17,7 @@ from time_stream.exceptions import (
     TimeMutatedError,
 )
 from time_stream.time_manager import TimeManager
+from time_stream.types import TimeAnchor, ValidationErrorOptions
 
 
 @pytest.fixture
@@ -837,3 +838,26 @@ class TestHandleMisalignedRows:
             assert caplog.messages[0] == expected_log_message
 
         assert_frame_equal(expected_df, actual_df)
+
+
+class TestTimeUnits:
+    @pytest.mark.parametrize("time_unit", ["ms", "us", "ns"])
+    @pytest.mark.parametrize("anchor", ["start", "end"])
+    @pytest.mark.parametrize("on_misaligned_rows", ["error", "resolve"])
+    def test_aligned_data_kept(
+        self, time_unit: str, anchor: TimeAnchor, on_misaligned_rows: ValidationErrorOptions
+    ) -> None:
+        """Test that aligned data is kept whatever the time unit, time anchor and misaligned rows option."""
+        df = pl.DataFrame(
+            {
+                "time": pl.Series(
+                    [datetime(2024, 1, 2), datetime(2024, 1, 3), datetime(2024, 1, 4)],
+                    dtype=pl.Datetime(time_unit),  # type: ignore[arg-type] - Polars Literal is a string
+                ),
+                "value": [1.0, 2.0, 3.0],
+            }
+        )
+        time_manager = TimeManager(
+            time_name="time", resolution="P1D", time_anchor=anchor, on_misaligned_rows=on_misaligned_rows
+        )
+        assert_frame_equal(time_manager.prepare(df), df)

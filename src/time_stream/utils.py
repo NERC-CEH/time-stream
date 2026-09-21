@@ -182,13 +182,10 @@ def truncate_to_period(date_times: pl.Series, period: Period, time_anchor: TimeA
     #    Here we need to determine where the anchor points are, and if we need to nudge the datetimes towards
     #    the anchor.
     if time_anchor == "end":
-        # In this case, the anchor point is at the END of the period.
-        #   - Subtract a micro-second (to handle datetimes on 'boundary' points that are within their own period),
-        #   - Truncate to the start of the period,
-        #   - Add on 1 period to get to the end point.
-        date_times = date_times.dt.offset_by("-1us")
-        date_times = date_times.dt.truncate(period.pl_interval)
-        date_times = date_times.dt.offset_by(period.pl_interval)
+        # In this case, the anchor point is at the END of the period. Datetimes on a boundary point are within their
+        #   own period, so stay as they are. All others move to the end of the period they fall in.
+        truncated = date_times.dt.truncate(period.pl_interval)
+        date_times = date_times.zip_with(truncated == date_times, truncated.dt.offset_by(period.pl_interval))
     else:
         # This is a "standard" case, where the anchor point is at the START of the period,
         #   so simply truncate to the start of the period

@@ -656,6 +656,30 @@ class TestTruncateToPeriod:
         result = truncate_to_period(self.dt, period, anchor)
         assert_series_equal(result, pl.Series(expected))
 
+    @pytest.mark.parametrize("time_unit", ["ms", "us", "ns"])
+    @pytest.mark.parametrize(
+        "anchor,expected",
+        [
+            ("start", [datetime(2024, 1, 2), datetime(2024, 1, 2), datetime(2024, 1, 3)]),
+            ("end", [datetime(2024, 1, 2), datetime(2024, 1, 3), datetime(2024, 1, 3)]),
+        ],
+        ids=["start anchor", "end anchor"],
+    )
+    def test_time_unit(self, time_unit: str, anchor: TimeAnchor, expected: list) -> None:
+        """Test that truncation gives the same result whatever the time unit of the series."""
+        dt = pl.Series(
+            [datetime(2024, 1, 2), datetime(2024, 1, 2, 12), datetime(2024, 1, 3)],
+            dtype=pl.Datetime(time_unit),  # type: ignore[arg-type] - Polars Literal is a string
+        )
+        result = truncate_to_period(dt, Period.of_days(1), anchor)
+        assert_series_equal(result, pl.Series(expected, dtype=pl.Datetime(time_unit)))  # type: ignore[arg-type] - Polars Literal is a string
+
+    def test_sub_microsecond_end_anchor(self) -> None:
+        """Test that a nanosecond value just after a boundary truncates to the next boundary with an end anchor."""
+        dt = pl.Series([datetime(2024, 1, 2)], dtype=pl.Datetime("ns")).dt.offset_by("500ns")
+        result = truncate_to_period(dt, Period.of_days(1), "end")
+        assert_series_equal(result, pl.Series([datetime(2024, 1, 3)], dtype=pl.Datetime("ns")))
+
 
 class TestPadTime:
     simple_test_cases = {
