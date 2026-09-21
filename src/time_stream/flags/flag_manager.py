@@ -34,6 +34,7 @@ from time_stream.exceptions import (
 from time_stream.flags.bitwise_flag_system import BitwiseFlag
 from time_stream.flags.categorical_flag_system import CategoricalListFlag, CategoricalSingleFlag
 from time_stream.flags.flag_system import FlagSystemBase, FlagSystemLiteral
+from time_stream.utils import check_literal_value
 
 FlagSystemType = Mapping[str, int | str] | list[str] | None
 
@@ -724,6 +725,8 @@ class FlagManager:
             DuplicateFlagSystemError: If a flag system with the same name is already registered.
             FlagSystemTypeError: If the flag system is not a recognised type, or a list contains duplicate names.
         """
+        check_literal_value(flag_type, FlagSystemLiteral, "flag_type")
+
         if flag_system_name in self._flag_systems:
             raise DuplicateFlagSystemError(f"Flag system '{flag_system_name}' already exists.")
 

@@ -1588,6 +1588,44 @@ class TestEndAnchorAggregations:
         assert_frame_equal(result, expected_df, check_dtypes=False, check_column_order=False)
 
 
+class TestPipelineLiteralValidation:
+    """Tests that the string options given to the aggregation pipelines are checked."""
+
+    input_tf = TS_PT1H_2DAYS
+
+    def ctx(self) -> AggregationCtx:
+        return AggregationCtx(
+            df=self.input_tf.df,
+            time_name=self.input_tf.time_name,
+            time_anchor=self.input_tf.time_anchor,
+            periodicity=self.input_tf.periodicity,
+        )
+
+    @pytest.mark.parametrize("anchor", ["middle", "START", ""])
+    def test_invalid_aggregation_time_anchor(self, anchor: str) -> None:
+        """An unrecognised aggregation_time_anchor raises an error."""
+        with pytest.raises(ValueError, match="Invalid aggregation_time_anchor"):
+            StandardAggregationPipeline(
+                Mean(),
+                self.ctx(),
+                P1D,
+                "value",
+                aggregation_time_anchor=anchor,  # type: ignore[arg-type]
+            )
+
+    @pytest.mark.parametrize("alignment", ["sideways", "TRAILING", ""])
+    def test_invalid_rolling_alignment(self, alignment: str) -> None:
+        """An unrecognised rolling alignment raises an error."""
+        with pytest.raises(ValueError, match="Invalid alignment"):
+            RollingAggregationPipeline(
+                Mean(),
+                self.ctx(),
+                PT1H,
+                "value",
+                alignment=alignment,  # type: ignore[arg-type]
+            )
+
+
 class TestMissingCriteriaAggregations:
     """Tests the missing criteria functionality for aggregations."""
 

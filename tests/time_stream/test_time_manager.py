@@ -417,6 +417,36 @@ class TestConfigurePeriodicityProperty:
             TimeManager._configure_periodicity_property("NOT_A_PERIOD", Period.of_days(1))
 
 
+class TestLiteralValidation:
+    """Tests that the string options given to TimeManager are checked."""
+
+    @pytest.mark.parametrize(
+        "kwargs,expected_error",
+        [
+            ({"time_anchor": "middle"}, "Invalid time_anchor 'middle'"),
+            ({"on_duplicates": "banana"}, "Invalid on_duplicates 'banana'"),
+            ({"on_misaligned_rows": "banana"}, "Invalid on_misaligned_rows 'banana'"),
+            ({"time_anchor": "START"}, "Invalid time_anchor 'START'"),
+        ],
+        ids=["time_anchor", "on_duplicates", "on_misaligned_rows", "wrong case"],
+    )
+    def test_invalid_option_raises(self, kwargs: dict, expected_error: str) -> None:
+        """An unrecognised string option raises an error naming the parameter."""
+        with pytest.raises(ValueError, match=re.escape(expected_error)):
+            TimeManager(time_name="time", resolution="P1D", **kwargs)
+
+    def test_valid_options_accepted(self) -> None:
+        """The documented string options are accepted."""
+        tm = TimeManager(
+            time_name="time",
+            resolution="P1D",
+            time_anchor="end",
+            on_duplicates="keep_first",
+            on_misaligned_rows="resolve",
+        )
+        assert tm.time_anchor == "end"
+
+
 class TestConfigureProperties:
     """Integration tests for the configure property methods called in sequence."""
 

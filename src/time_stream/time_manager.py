@@ -25,7 +25,14 @@ from time_stream.exceptions import (
     TimeMutatedError,
 )
 from time_stream.types import DuplicateOption, TimeAnchor, ValidationErrorOptions
-from time_stream.utils import check_alignment, check_periodicity, epoch_check, handle_duplicates, truncate_to_period
+from time_stream.utils import (
+    check_alignment,
+    check_literal_value,
+    check_periodicity,
+    epoch_check,
+    handle_duplicates,
+    truncate_to_period,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +63,10 @@ class TimeManager:
             on_misaligned_rows: What to do if misaligned rows are found in the data.
             time_anchor: The time anchor to which the date/times conform to.
         """
+        check_literal_value(time_anchor, TimeAnchor, "time_anchor")
+        check_literal_value(on_duplicates, DuplicateOption, "on_duplicates")
+        check_literal_value(on_misaligned_rows, ValidationErrorOptions, "on_misaligned_rows")
+
         self._time_name = time_name
         self._resolution = self._configure_resolution_property(resolution)
         self._offset = self._configure_offset_property(offset)

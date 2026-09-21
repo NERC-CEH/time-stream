@@ -26,7 +26,7 @@ from polars.dataframe.group_by import DynamicGroupBy, RollingGroupBy
 from time_stream.exceptions import AggregationError, AggregationPeriodError, MissingCriteriaError, TimeWindowError
 from time_stream.operation import Operation
 from time_stream.types import MissingCriteria, RollingAlignment, TimeAnchor
-from time_stream.utils import TimeWindow, check_columns_in_dataframe
+from time_stream.utils import TimeWindow, check_columns_in_dataframe, check_literal_value
 
 
 @dataclass(frozen=True)
@@ -313,6 +313,8 @@ class StandardAggregationPipeline(AggregationPipeline):
         time_window: TimeWindow | None = None,
     ):
         super().__init__(agg_func, ctx, aggregation_period, columns, missing_criteria)
+        if aggregation_time_anchor is not None:
+            check_literal_value(aggregation_time_anchor, TimeAnchor, "aggregation_time_anchor")
         self.aggregation_time_anchor = (
             aggregation_time_anchor if aggregation_time_anchor is not None else ctx.time_anchor
         )
@@ -431,6 +433,7 @@ class RollingAggregationPipeline(AggregationPipeline):
         alignment: RollingAlignment = "trailing",
     ):
         super().__init__(agg_func, ctx, aggregation_period, columns, missing_criteria)
+        check_literal_value(alignment, RollingAlignment, "alignment")
         self.alignment = alignment
 
     def _validate(self) -> None:

@@ -13,6 +13,7 @@ from time_stream.utils import (
     TimeWindow,
     check_alignment,
     check_columns_in_dataframe,
+    check_literal_value,
     check_periodicity,
     epoch_check,
     get_date_filter,
@@ -2108,6 +2109,21 @@ class TestEpochCheck:
         epoch_check(period)
 
 
+class TestCheckLiteralValue:
+    @pytest.mark.parametrize("value", ["start", "end", "point"])
+    def test_valid_value(self, value: str) -> None:
+        """Test that a value allowed by the Literal passes."""
+        check_literal_value(value, TimeAnchor, "time_anchor")
+
+    @pytest.mark.parametrize("value", ["START", "middle", "", None, 1])
+    def test_invalid_value(self, value: Any) -> None:
+        """Test that a value not allowed by the Literal raises an error naming the options."""
+        expected_error = f"Invalid time_anchor '{value}'. Expected one of: ['start', 'end', 'point']"
+
+        with pytest.raises(ValueError, match=re.escape(expected_error)):
+            check_literal_value(value, TimeAnchor, "time_anchor")
+
+
 class TestTimeWindow:
     def test_default_closed_is_both(self) -> None:
         """Omitting closed defaults to "both"."""
@@ -2145,6 +2161,12 @@ class TestTimeWindow:
         """Invalid start/end combinations raise TimeWindowError."""
         with pytest.raises(TimeWindowError):
             TimeWindow(start=start, end=end)  # type: ignore[arg-type]
+
+    @pytest.mark.parametrize("closed", ["BOTH", "neither", "", None])
+    def test_invalid_closed_raises(self, closed: Any) -> None:
+        """An unrecognised closed value raises an error."""
+        with pytest.raises(ValueError, match="Invalid closed"):
+            TimeWindow(start=time(10, 30), end=time(14, 0), closed=closed)
 
     @pytest.mark.parametrize(
         "start,end,expected_duration",

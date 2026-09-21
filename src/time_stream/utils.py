@@ -7,6 +7,7 @@ This module provides helper functions used across the time_stream package for wo
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
+from typing import Any, get_args
 
 import polars as pl
 from isoperiod import Period, PeriodValidationError
@@ -37,7 +38,7 @@ class TimeWindow:
 
     start: time
     end: time
-    closed: ClosedInterval | None = "both"
+    closed: ClosedInterval = "both"
 
     def __post_init__(self) -> None:
         """Validate the time window on construction."""
@@ -45,6 +46,7 @@ class TimeWindow:
             raise TimeWindowError("'start' and 'end' must be datetime.time objects.")
         if self.start >= self.end:
             raise TimeWindowError(f"'start' ({self.start}) must be strictly before 'end' ({self.end}).")
+        check_literal_value(self.closed, ClosedInterval, "closed")
 
     @classmethod
     def from_tuple(cls, t: tuple[time, time] | tuple[time, time, ClosedInterval]) -> "TimeWindow":
@@ -309,6 +311,22 @@ def check_columns_in_dataframe(df: pl.DataFrame, columns: str | Iterable[str]) -
     invalid_columns = sorted(set(columns) - set(df.columns))
     if invalid_columns:
         raise ColumnNotFoundError(f"Columns not found in dataframe: {invalid_columns}")
+
+
+def check_literal_value(value: Any, literal: Any, name: str) -> None:
+    """Checks that a value is one of the options allowed by a ``Literal`` type alias.
+
+    Args:
+        value: The value to check.
+        literal: The ``Literal`` type alias defining the allowed values.
+        name: The name of the parameter, used in the error message.
+
+    Raises:
+        ValueError: If the value is not one of the allowed options.
+    """
+    options = get_args(literal)
+    if value not in options:
+        raise ValueError(f"Invalid {name} '{value}'. Expected one of: {list(options)}")
 
 
 def configure_period_object(period: str | Period | None) -> Period:
