@@ -140,7 +140,6 @@ exclude_also = [
     "@typing.overload",
     "class .*\\bProtocol\\):",
     "@(abc\\.)?abstractmethod",
-    "raise NotImplementedError",
     "except PackageNotFoundError",
     "if __name__ == .__main__.",
     "\\.\\.\\.",

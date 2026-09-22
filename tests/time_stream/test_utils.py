@@ -15,7 +15,6 @@ from time_stream.utils import (
     check_columns_in_dataframe,
     check_literal_value,
     check_periodicity,
-    epoch_check,
     get_date_filter,
     pad_time,
     truncate_to_period,
@@ -2130,65 +2129,6 @@ class TestCheckPeriodicity:
     ) -> None:
         """Test that a microsecond based time series that doesn't conform to the given periodicity fails the check."""
         self._check_failure(name, times, periodicity, time_anchor)
-
-
-class TestEpochCheck:
-    @pytest.mark.parametrize(
-        "period",
-        [
-            Period.of_years(2),
-            Period.of_years(7),
-            Period.of_years(10),
-            Period.of_months(5),
-            Period.of_months(7),
-            Period.of_months(9),
-            Period.of_months(10),
-            Period.of_months(11),
-            Period.of_months(13),
-            Period.of_days(2),
-            Period.of_days(7),
-            Period.of_days(65),
-            Period.of_hours(5),
-            Period.of_hours(7),
-            Period.of_hours(9),
-            Period.of_hours(11),
-            Period.of_hours(25),
-            Period.of_minutes(7),
-            Period.of_minutes(11),
-            Period.of_minutes(50),
-            Period.of_minutes(61),
-        ],
-    )
-    def test_non_epoch_agnostic_period_fails(self, period: Period) -> None:
-        """Test that non epoch agnostic Periods fail the epoch check."""
-        with pytest.raises(NotImplementedError):
-            epoch_check(period)
-
-    @pytest.mark.parametrize(
-        "period",
-        [
-            Period.of_years(1),
-            Period.of_months(1),
-            Period.of_months(2),
-            Period.of_months(3),
-            Period.of_months(4),
-            Period.of_months(6),
-            Period.of_days(1),
-            Period.of_hours(1),
-            Period.of_hours(2),
-            Period.of_hours(3),
-            Period.of_hours(4),
-            Period.of_hours(24),
-            Period.of_minutes(1),
-            Period.of_minutes(2),
-            Period.of_minutes(15),
-            Period.of_minutes(30),
-            Period.of_minutes(60),
-        ],
-    )
-    def test_epoch_agnostic_period_passes(self, period: Period) -> None:
-        """Test that epoch agnostic Periods pass the epoch check."""
-        epoch_check(period)
 
 
 class TestCheckLiteralValue:

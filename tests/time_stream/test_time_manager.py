@@ -861,3 +861,69 @@ class TestTimeUnits:
             time_name="time", resolution="P1D", time_anchor=anchor, on_misaligned_rows=on_misaligned_rows
         )
         assert_frame_equal(time_manager.prepare(df), df)
+
+
+class TestEpochAgnostic:
+    df = pl.DataFrame({"time": [datetime(2020, 1, 1)]})
+
+    @pytest.mark.parametrize(
+        "period",
+        [
+            Period.of_years(2),
+            Period.of_years(7),
+            Period.of_years(10),
+            Period.of_months(5),
+            Period.of_months(7),
+            Period.of_months(9),
+            Period.of_months(10),
+            Period.of_months(11),
+            Period.of_months(13),
+            Period.of_days(2),
+            Period.of_days(7),
+            Period.of_days(65),
+            Period.of_hours(5),
+            Period.of_hours(7),
+            Period.of_hours(9),
+            Period.of_hours(11),
+            Period.of_hours(25),
+            Period.of_minutes(7),
+            Period.of_minutes(11),
+            Period.of_minutes(50),
+            Period.of_minutes(61),
+        ],
+    )
+    def test_non_epoch_agnostic_resolution_raises(self, period: Period) -> None:
+        """Test that a non epoch agnostic resolution raises a ResolutionError."""
+        with pytest.raises(ResolutionError, match="Non-epoch agnostic resolution is not supported"):
+            TimeManager("time", resolution=period).validate(self.df)
+
+    @pytest.mark.parametrize(
+        "period",
+        [
+            Period.of_years(1),
+            Period.of_months(1),
+            Period.of_months(2),
+            Period.of_months(3),
+            Period.of_months(4),
+            Period.of_months(6),
+            Period.of_days(1),
+            Period.of_hours(1),
+            Period.of_hours(2),
+            Period.of_hours(3),
+            Period.of_hours(4),
+            Period.of_hours(24),
+            Period.of_minutes(1),
+            Period.of_minutes(2),
+            Period.of_minutes(15),
+            Period.of_minutes(30),
+            Period.of_minutes(60),
+        ],
+    )
+    def test_epoch_agnostic_resolution_passes(self, period: Period) -> None:
+        """Test that an epoch agnostic resolution passes validation."""
+        TimeManager("time", resolution=period).validate(self.df)
+
+    def test_non_epoch_agnostic_periodicity_raises(self) -> None:
+        """Test that a non epoch agnostic periodicity raises a PeriodicityError."""
+        with pytest.raises(PeriodicityError, match="Non-epoch agnostic periodicity is not supported"):
+            TimeManager("time", resolution="P1D", periodicity="P7D").validate(self.df)

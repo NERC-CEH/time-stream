@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 import polars as pl
 import pytest
-from isoperiod import Period, PeriodValidationError
+from isoperiod import Period
 from polars.testing import assert_frame_equal, assert_frame_not_equal, assert_series_equal
 
 from time_stream.aggregation import Percentile
@@ -882,6 +882,14 @@ class TestAggregate:
 
         assert_frame_equal(aggregated_tf.df, expected_df, check_dtypes=False)
 
+    @pytest.mark.parametrize("method", ["aggregate", "rolling_aggregate"])
+    def test_invalid_period_type_raises(self, method: str) -> None:
+        """A period that is not a string or Period raises a TypeError."""
+        df = pl.DataFrame({"time": [datetime(2025, 1, 1)], "value": [1.0]})
+        tf = TimeFrame(df, "time", resolution="PT1H")
+        with pytest.raises(TypeError):
+            getattr(tf, method)(123, "mean", "value")
+
 
 class TestCalculateMinMaxEnvelope:
     def test_calculate_min_max_envelope(self) -> None:
@@ -1552,7 +1560,7 @@ class TestWithPeriodicity:
 
     def test_invalid_periodicity_type_raises(self) -> None:
         """A periodicity that is not a string or Period raises an error."""
-        with pytest.raises(PeriodValidationError):
+        with pytest.raises(TypeError):
             self.setup_tf().with_periodicity(123)  # type: ignore[arg-type]
 
 
