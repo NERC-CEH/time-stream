@@ -44,6 +44,8 @@ class TimeWindow:
         """Validate the time window on construction."""
         if not isinstance(self.start, time) or not isinstance(self.end, time):
             raise TimeWindowError("'start' and 'end' must be datetime.time objects.")
+        check_naive_time(self.start, "start")
+        check_naive_time(self.end, "end")
         if self.start >= self.end:
             raise TimeWindowError(f"'start' ({self.start}) must be strictly before 'end' ({self.end}).")
         check_literal_value(self.closed, ClosedInterval, "closed")
@@ -128,22 +130,33 @@ class TimeWindow:
 
 
 def get_date_filter(
-    time_name: str, observation_interval: datetime | tuple[datetime | None, datetime | None]
+    time_name: str,
+    observation_interval: datetime | tuple[datetime | None, datetime | None],
+    dtype: pl.DataType,
 ) -> pl.Expr:
     """Get Polars expression for observation date interval filtering.
 
     Args:
         time_name: The name of the time column to create the filter for
         observation_interval: Tuple of (start_date, end_date) defining the time period.
+        dtype: The dtype of the time column.
 
     Returns:
         pl.Expr: Boolean polars expression for date filtering.
+
+    Raises:
+        TypeError: If the time zone of a date in ``observation_interval`` doesn't match the time column.
     """
     if isinstance(observation_interval, datetime):
         start_date = observation_interval
         end_date = None
     else:
         start_date, end_date = observation_interval
+
+    if start_date is not None:
+        check_time_zone(start_date, dtype, "observation_interval start")
+    if end_date is not None:
+        check_time_zone(end_date, dtype, "observation_interval end")
 
     if start_date is None and end_date is None:
         return pl.lit(True).alias(time_name)
@@ -234,12 +247,16 @@ def pad_time(
         pl.DataFrame of padded data
 
     Raises:
-        TypeError: If ``start`` or ``end`` is not a datetime.
+        TypeError: If ``start`` or ``end`` is not a datetime, or its time zone doesn't match the time column.
 
     """
     for name, value in (("start", start), ("end", end)):
         if value is not None and not isinstance(value, datetime):
             raise TypeError(f"'{name}' must be a datetime. Got: '{type(value)}'")
+    if start is not None:
+        check_time_zone(start, df[time_name].dtype, "start")
+    if end is not None:
+        check_time_zone(end, df[time_name].dtype, "end")
 
     # Extract the existing datetimes, truncated to the boundary of their periodicity period
     existing_datetimes = truncate_to_period(df[time_name], periodicity, time_anchor)
@@ -279,6 +296,44 @@ def pad_time(
     padded_df = padded_df.sort(time_name)
 
     return padded_df
+
+
+def check_time_zone(value: datetime, dtype: pl.DataType, name: str) -> None:
+    """Check that a datetime is in the same time zone as the column it is compared with.
+
+    Args:
+        value: The datetime to check.
+        dtype: The dtype of the column.
+        name: The name of the parameter, used in the error message.
+
+    Raises:
+        TypeError: If the datetime's time zone is not the column's, including one having a time zone and the other not.
+    """
+    time_zone = dtype.time_zone if isinstance(dtype, pl.Datetime) else None
+    if time_zone is None:
+        if value.tzinfo is not None:
+            raise TypeError(f"'{name}' has a time zone but the column does not: {value}")
+        return
+    if value.tzinfo is None:
+        raise TypeError(f"'{name}' has no time zone but the column is in '{time_zone}': {value}")
+    # UTC has several tzinfo implementations, which all name it "UTC"
+    value_time_zone = "UTC" if value.tzname() == "UTC" else getattr(value.tzinfo, "key", str(value.tzinfo))
+    if value_time_zone != time_zone:
+        raise TypeError(f"'{name}' must be in the column's time zone '{time_zone}', got '{value_time_zone}': {value}")
+
+
+def check_naive_time(value: time, name: str) -> None:
+    """Check that a time of day has no time zone.
+
+    Args:
+        value: The time to check.
+        name: The name of the parameter, used in the error message.
+
+    Raises:
+        TypeError: If the time has a time zone.
+    """
+    if value.tzinfo is not None:
+        raise TypeError(f"'{name}' must not have a time zone: {value}")
 
 
 def gap_size_count(df: pl.DataFrame, column: str) -> pl.DataFrame:

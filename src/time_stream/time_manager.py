@@ -277,7 +277,7 @@ class TimeManager:
 
         Raises:
             ColumnNotFoundError: If the time column is missing.
-            ColumnTypeError: If the time column does not contain temporal data.
+            ColumnTypeError: If the time column is not Date or Datetime, or has a time zone other than UTC.
             NullTimeValueError: If the time column contains null values.
         """
         # Validate that the time column actually exists
@@ -288,8 +288,16 @@ class TimeManager:
 
         # Validate time column type
         dtype = df[self.time_name].dtype
-        if not dtype.is_temporal():
-            raise ColumnTypeError(f"Time column '{self.time_name}' must be datetime type, got '{dtype}'")
+        if not isinstance(dtype, (pl.Date, pl.Datetime)):
+            raise ColumnTypeError(f"Time column '{self.time_name}' must be Date or Datetime type, got '{dtype}'")
+
+        # Time zones with daylight saving have days that aren't 24 hours long, which aren't supported
+        if isinstance(dtype, pl.Datetime) and dtype.time_zone not in (None, "UTC"):
+            raise ColumnTypeError(
+                f"Time column '{self.time_name}' has time zone '{dtype.time_zone}'. Only UTC is supported, as time "
+                f"zones with daylight saving don't have 24-hour days. Convert the column to UTC with "
+                f"`.dt.convert_time_zone('UTC')`, or remove the time zone with `.dt.replace_time_zone(None)`."
+            )
 
         # Validate that every row has a time value
         null_count = df[self.time_name].null_count()

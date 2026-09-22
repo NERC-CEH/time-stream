@@ -1,6 +1,6 @@
 import logging
 import re
-from datetime import datetime
+from datetime import date, datetime, time, timedelta
 
 import polars as pl
 import pytest
@@ -153,9 +153,54 @@ class TestValidateTimeColumn:
         tm = object.__new__(TimeManager)  # skips __init__
         tm._time_name = "data_column"
 
-        expected_error = "Time column 'data_column' must be datetime type, got 'Int64'"
+        expected_error = "Time column 'data_column' must be Date or Datetime type, got 'Int64'"
         with pytest.raises(ColumnTypeError, match=expected_error):
             tm._validate_time_column(invalid_df)
+
+    @pytest.mark.parametrize(
+        "times,expected_error",
+        [
+            (pl.Series([datetime(2024, 1, 1)]).dt.replace_time_zone("Europe/London"), "time zone 'Europe/London'"),
+            (pl.Series([datetime(2024, 1, 1)]).dt.replace_time_zone("America/New_York"), "'America/New_York'"),
+            (pl.Series([datetime(2024, 1, 1)]).dt.replace_time_zone("+01:00"), "time zone 'Etc/GMT-1'"),
+            (pl.Series([time(1)]), "must be Date or Datetime type, got 'Time'"),
+            (pl.Series([timedelta(hours=1)]), "must be Date or Datetime type, got 'Duration"),
+        ],
+        ids=["Europe/London", "America/New_York", "fixed offset", "Time", "Duration"],
+    )
+    def test_validate_time_column_rejected_types(self, times: pl.Series, expected_error: str) -> None:
+        """Test error raised if the time column is not Date or Datetime, or has a time zone other than UTC."""
+        tm = object.__new__(TimeManager)  # skips __init__
+        tm._time_name = "time"
+
+        with pytest.raises(ColumnTypeError, match=re.escape(expected_error)):
+            tm._validate_time_column(pl.DataFrame({"time": times}))
+
+    @pytest.mark.parametrize(
+        "times",
+        [
+            pl.Series([datetime(2024, 1, 1)], dtype=pl.Datetime("ms")),
+            pl.Series([datetime(2024, 1, 1)], dtype=pl.Datetime("us")),
+            pl.Series([datetime(2024, 1, 1)], dtype=pl.Datetime("ns")),
+            pl.Series([date(2024, 1, 1)]),
+            pl.Series([datetime(2024, 1, 1)]).dt.replace_time_zone("UTC"),
+        ],
+        ids=["ms", "us", "ns", "Date", "UTC"],
+    )
+    def test_validate_time_column_accepted_types(self, times: pl.Series) -> None:
+        """Test that Date, naive Datetime and UTC Datetime time columns are accepted."""
+        tm = object.__new__(TimeManager)  # skips __init__
+        tm._time_name = "time"
+
+        tm._validate_time_column(pl.DataFrame({"time": times}))
+
+    def test_dst_time_zone_rejected_at_construction(self) -> None:
+        """Test that hourly data in a DST time zone is rejected when the TimeFrame is created."""
+        times = pl.datetime_range(datetime(2024, 3, 30), datetime(2024, 4, 1), "1h", eager=True, time_zone="UTC")
+        df = pl.DataFrame({"time": times.dt.convert_time_zone("Europe/London")})
+
+        with pytest.raises(ColumnTypeError, match="daylight saving"):
+            TimeManager("time", resolution="PT1H").prepare(df)
 
     @pytest.mark.parametrize(
         "times,null_count",

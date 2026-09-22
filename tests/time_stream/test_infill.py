@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from unittest.mock import Mock, patch
 
@@ -11,6 +11,7 @@ from polars.testing import assert_frame_equal, assert_series_equal
 from time_stream.base import TimeFrame
 from time_stream.exceptions import (
     ColumnNotFoundError,
+    ColumnTypeError,
     InfillInsufficientValuesError,
     RegistryKeyTypeError,
     UnknownRegistryKeyError,
@@ -929,3 +930,27 @@ class TestAltDataDynamic:
         result_df = infiller.apply(tf.df, tf.time_name, tf.periodicity, "values")
         expected_df = tf.df.with_columns(pl.Series("values", [10.0, 20.0, 30.0, 40.0, 50.0, 60.0]))
         assert_frame_equal(result_df, expected_df, check_column_order=False)
+
+
+class TestTimeZones:
+    df = pl.DataFrame(
+        {
+            "timestamp": [datetime(2025, 1, d) for d in range(1, 6)],
+            "values": [1.0, None, 3.0, None, 5.0],
+        }
+    )
+
+    def test_observation_interval_time_zone_mismatch_raises(self) -> None:
+        """Test that an observation interval whose time zone doesn't match the time column raises an error."""
+        tf = TimeFrame(self.df, "timestamp", "P1D")
+        with pytest.raises(TypeError, match="time zone"):
+            tf.infill("linear", "values", observation_interval=(datetime(2025, 1, 2, tzinfo=UTC), None))
+
+    @pytest.mark.parametrize("method", [AltData, AltDataDynamic], ids=["AltData", "AltDataDynamic"])
+    def test_alt_df_time_type_mismatch_raises(self, method: type[InfillMethod]) -> None:
+        """Test that an alternative DataFrame whose time column type differs from the TimeFrame's raises an error."""
+        tf = TimeFrame(self.df, "timestamp", "P1D")
+        alt_df = self.df.select(pl.col("timestamp").dt.replace_time_zone("UTC"), pl.lit(10.0).alias("alt"))
+        kwargs: dict[str, Any] = {"window_size": "P2D"} if method is AltDataDynamic else {}
+        with pytest.raises(ColumnTypeError, match="time column type"):
+            tf.infill(method, "values", alt_data_column="alt", alt_df=alt_df, **kwargs)

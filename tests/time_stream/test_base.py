@@ -1,6 +1,6 @@
 import re
-from datetime import date, datetime
-from typing import Any
+from datetime import date, datetime, timedelta
+from typing import Any, Callable
 from unittest.mock import patch
 
 import polars as pl
@@ -1357,6 +1357,36 @@ class TestInfillWithMissingRows:
         result = tf.infill("linear", "value", flag_params=("flag_col", "FLAG_A"))
         expected = pl.Series("flag_col", [0, 1, 1, 0, 0], dtype=pl.Int64)
         assert_series_equal(result.df["flag_col"], expected)
+
+
+class TestUtcTimeFrame:
+    """Tests that a UTC time column gives the same results as the same data without a time zone."""
+
+    times = [datetime(2025, 1, 1) + timedelta(hours=h) for h in range(24 * 62) if h not in (5, 30, 31)]
+    naive_df = pl.DataFrame({"time": times, "value": [float(i % 24) for i in range(len(times))]})
+
+    @staticmethod
+    def to_utc(df: pl.DataFrame) -> pl.DataFrame:
+        """Tag every datetime column as UTC."""
+        return df.with_columns(pl.col(pl.Datetime).dt.replace_time_zone("UTC"))
+
+    @pytest.mark.parametrize(
+        "operation",
+        [
+            lambda tf: tf.aggregate("P1D", "mean", "value"),
+            lambda tf: tf.aggregate("P1M", "sum", "value", missing_criteria=("percent", 90)),
+            lambda tf: tf.aggregate("P1D", "nth", "value", n=6),
+            lambda tf: tf.rolling_aggregate("PT3H", "mean", "value"),
+            lambda tf: tf.pad(),
+            lambda tf: tf.infill("linear", "value"),
+        ],
+        ids=["aggregate daily", "aggregate monthly", "nth", "rolling", "pad", "infill"],
+    )
+    def test_same_as_naive(self, operation: Callable[[TimeFrame], TimeFrame]) -> None:
+        """Test that an operation on a UTC TimeFrame gives the naive result, in UTC."""
+        naive_result = operation(TimeFrame(self.naive_df, "time", resolution="PT1H"))
+        utc_result = operation(TimeFrame(self.to_utc(self.naive_df), "time", resolution="PT1H"))
+        assert_frame_equal(utc_result.df, self.to_utc(naive_result.df))
 
 
 class TestPad:
