@@ -34,7 +34,7 @@ from time_stream.exceptions import (
     TimeWindowError,
     UnknownRegistryKeyError,
 )
-from time_stream.types import MissingCriteria, TimeAnchor
+from time_stream.types import MissingCriteria, RollingAlignment, TimeAnchor
 from time_stream.utils import TimeWindow
 
 
@@ -2078,6 +2078,19 @@ class TestNthAggregation:
                 aggregation_time_anchor=input_tf.time_anchor,
             ).execute()
 
+    def test_nth_exceeds_time_window_count_raises(self) -> None:
+        """Test that requesting the 6th value of a 5-step time window raises, rather than giving null every period."""
+        with pytest.raises(
+            AggregationPeriodError,
+            match=r"Cannot select n=6: periodicity 'PT1H' fits only 5 points within time window 10:00:00-14:00:00",
+        ):
+            TS_PT1H_2DAYS.aggregate("P1D", "nth", "value", n=6, time_window=(time(10), time(14)))
+
+    def test_nth_at_time_window_upper_bound_is_valid(self) -> None:
+        """Test that requesting the last step of a 5-step time window selects its last time step."""
+        result = TS_PT1H_2DAYS.aggregate("P1D", "nth", "value", n=5, time_window=(time(10), time(14)))
+        assert result.df["timestamp_of_nth_value"].to_list() == [datetime(2025, 1, 1, 14), datetime(2025, 1, 2, 14)]
+
     def test_nth_at_fixed_period_upper_bound_is_valid(self) -> None:
         """Test that requesting the last valid position (12th of 12 for 2-hourly data over a day) succeeds."""
         input_tf = TS_PT2H_2DAYS
@@ -2183,10 +2196,50 @@ class TestNthAggregation:
         )
         assert_frame_equal(result.df.select("nth_value", "time_of_nth_value"), expected)
 
+    @pytest.mark.parametrize(
+        "alignment,n,at,expected_value,expected_time",
+        [
+            ("trailing", 1, datetime(2025, 1, 1, 5), None, datetime(2025, 1, 1, 3)),
+            ("trailing", 2, datetime(2025, 1, 1, 5), 4.0, datetime(2025, 1, 1, 4)),
+            ("trailing", 1, datetime(2025, 1, 1, 0), None, datetime(2024, 12, 31, 22)),
+            ("leading", 2, datetime(2025, 1, 1, 2), None, datetime(2025, 1, 1, 3)),
+            ("leading", 3, datetime(2025, 1, 1, 5), None, datetime(2025, 1, 1, 7)),
+            ("center", 1, datetime(2025, 1, 1, 4), None, datetime(2025, 1, 1, 3)),
+        ],
+        ids=[
+            "trailing gap at n",
+            "trailing gap before n",
+            "trailing start of series",
+            "leading gap at n",
+            "leading end of series",
+            "center gap at n",
+        ],
+    )
+    def test_nth_rolling_with_missing_rows(
+        self,
+        alignment: RollingAlignment,
+        n: int,
+        at: datetime,
+        expected_value: float | None,
+        expected_time: datetime,
+    ) -> None:
+        """Test that rolling Nth selects the nth time step of each window, not the nth row, when rows are missing."""
+        times = [datetime(2025, 1, 1, h) for h in range(6) if h != 3]
+        tf = TimeFrame(pl.DataFrame({"time": times, "value": [float(t.hour) for t in times]}), "time", "PT1H")
+
+        result = tf.rolling_aggregate("PT3H", "nth", "value", n=n, alignment=alignment)
+
+        assert result.df["time"].to_list() == times
+        expected = pl.DataFrame(
+            {"nth_value": [expected_value], "time_of_nth_value": [expected_time]},
+            schema={"nth_value": pl.Float64, "time_of_nth_value": pl.Datetime("us")},
+        )
+        assert_frame_equal(result.df.filter(pl.col("time") == at).select("nth_value", "time_of_nth_value"), expected)
+
     def test_nth_rolling_aggregation(self) -> None:
         """Test Nth via RollingAggregationPipeline: a leading 2-hour window over 1-hour data has a fixed
         expected count of 2, but the final row is naturally truncated by the end of the series - that edge
-        case should return null rather than raise, since the period itself can hold n=2 values."""
+        case should return a null value at the missing time step rather than raise."""
         input_tf = TS_PT1H_HALF_DAY
         timestamps = input_tf.df["timestamp"].to_list()[:5]
         df = input_tf.df.head(5)
@@ -2203,7 +2256,7 @@ class TestNthAggregation:
                 datetime(2025, 1, 1, 2),
                 datetime(2025, 1, 1, 3),
                 datetime(2025, 1, 1, 4),
-                None,
+                datetime(2025, 1, 1, 5),
             ],
         )
         result = RollingAggregationPipeline(

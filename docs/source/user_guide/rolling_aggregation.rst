@@ -201,7 +201,8 @@ Selecting a specific point in the window
 
 The :ref:`nth <aggregation_functions>` aggregation function is particularly useful with rolling windows: it lets
 you pull out a value from a fixed position relative to each timestamp - for example, "the reading from (just
-under) an hour ago".
+under) an hour ago". ``n`` counts time steps within the window, not rows, so if that time step is missing from the
+data the result is ``null``.
 
 .. literalinclude:: ../examples/rolling_aggregation.py
    :language: python

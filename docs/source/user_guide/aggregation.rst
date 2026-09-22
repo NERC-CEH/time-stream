@@ -251,8 +251,8 @@ Choose how values inside each window are summarised. Pass a **string** correspon
 
     .. note::
 
-        If ``n`` is larger than the number of periodicity points that always fit within the aggregation period
-        (e.g. requesting the 25th hour of a day), an ``AggregationPeriodError`` is raised. For periods where
+        If ``n`` is larger than the number of periodicity points that always fit within the aggregation period, or
+        its ``time_window`` (e.g. requesting the 25th hour of a day), an ``AggregationPeriodError`` is raised. For periods where
         that count isn't fixed (e.g. daily data aggregated to monthly, where months vary in length), the result is
         ``null`` for periods too short to hold ``n`` time steps. The result is also ``null`` when the nth time step
         is missing from the data - ``n`` counts time steps, not rows, so gaps earlier in the period don't shift it.
