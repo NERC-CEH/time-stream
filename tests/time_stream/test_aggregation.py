@@ -2999,3 +2999,26 @@ class TestRollingAggregateMethod:
         input_tf = TS_P1M_2YEARS
         with pytest.raises(AggregationError):
             input_tf.rolling_aggregate("P3M", "mean", "value", alignment="center")
+
+    @pytest.mark.parametrize("window_size", ["PT30M", "PT90M"], ids=["smaller than a step", "part of a step"])
+    def test_rolling_aggregate_window_not_whole_steps_raises(self, window_size: str) -> None:
+        """Check that the window must be a whole number of time steps of the data periodicity."""
+        input_tf = TS_PT1H_HALF_DAY
+        with pytest.raises(AggregationPeriodError, match="must be a whole number of time steps"):
+            input_tf.rolling_aggregate(window_size, "mean", "value")
+
+    @pytest.mark.parametrize(
+        "window_size,steps", [("PT2H", 2), ("PT4H", 4), ("P1D", 24)], ids=["2 steps", "4 steps", "24 steps"]
+    )
+    def test_rolling_aggregate_center_even_steps_raises(self, window_size: str, steps: int) -> None:
+        """Check that CENTER alignment raises when the window spans an even number of time steps."""
+        input_tf = TS_PT1H_HALF_DAY
+        with pytest.raises(AggregationError, match=f"spans {steps} time steps"):
+            input_tf.rolling_aggregate(window_size, "mean", "value", alignment="center")
+
+    @pytest.mark.parametrize("window_size", ["PT1H", "PT3H", "PT5H"], ids=["1 step", "3 steps", "5 steps"])
+    def test_rolling_aggregate_center_odd_steps(self, window_size: str) -> None:
+        """Check that CENTER alignment is accepted when the window spans an odd number of time steps."""
+        input_tf = TS_PT1H_HALF_DAY
+        result = input_tf.rolling_aggregate(window_size, "mean", "value", alignment="center")
+        assert len(result.df) == len(input_tf.df)

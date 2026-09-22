@@ -49,7 +49,7 @@ class AggregationFunction(Operation, ABC):
     """
 
     # Whether standard aggregation pads each period to its full set of time steps before grouping
-    pad_periods: ClassVar[bool] = False
+    _requires_padding: ClassVar[bool] = False
 
     def __init__(self, **kwargs):
         pass
@@ -354,7 +354,7 @@ class StandardAggregationPipeline(AggregationPipeline):
 
     def _prepare_df(self, df: pl.DataFrame) -> pl.DataFrame:
         """Pad periods if the aggregation function needs it, then filter rows to the time window if one is set."""
-        if self.agg_func.pad_periods:
+        if self.agg_func._requires_padding:
             df = self._pad_periods(df)
         if self.time_window:
             return self.time_window.filter_df(df, self.ctx.time_name)
@@ -480,19 +480,30 @@ class RollingAggregationPipeline(AggregationPipeline):
         """Validate rolling-specific constraints.
 
         Raises:
-            AggregationPeriodError: If the window size is smaller than the data periodicity.
-            AggregationError: If CENTER alignment is used with a calendar-based (variable-length) window.
+            AggregationPeriodError: If the window size is not a whole number of time steps of the data periodicity.
+            AggregationError: If CENTER alignment is used with a calendar-based (variable-length) window, or a
+                window spanning an even number of time steps.
         """
         if not self.ctx.periodicity.is_subperiod_of(self.aggregation_period):
             raise AggregationPeriodError(
-                f"Rolling window size '{self.aggregation_period}' must be at least as large as the "
+                f"Rolling window size '{self.aggregation_period}' must be a whole number of time steps of the "
                 f"data periodicity '{self.ctx.periodicity}'."
             )
-        if self.alignment == "center" and self.aggregation_period.timedelta is None:
-            raise AggregationError(
-                "CENTER alignment is not supported for calendar-based window sizes (e.g., months or years), "
-                "because they have variable length and cannot be halved to a fixed offset."
-            )
+        if self.alignment == "center":
+            window_td = self.aggregation_period.timedelta
+            periodicity_td = self.ctx.periodicity.timedelta
+            if window_td is None or periodicity_td is None:
+                raise AggregationError(
+                    "CENTER alignment is not supported for calendar-based window sizes (e.g., months or years), "
+                    "because they have variable length and cannot be halved to a fixed offset."
+                )
+            # A window of an even number of time steps has no single centre time step
+            steps = window_td // periodicity_td
+            if steps % 2 == 0:
+                raise AggregationError(
+                    f"CENTER alignment requires the window to span an odd number of time steps. Window size "
+                    f"'{self.aggregation_period}' spans {steps} time steps of '{self.ctx.periodicity}'."
+                )
 
     def _get_rolling_params(self) -> tuple[str, str | None]:
         """Map the alignment to Polars ``closed`` and ``offset`` parameters.
@@ -742,7 +753,7 @@ class Nth(AggregationFunction):
     """An aggregation class to select the value at the nth time step within each aggregation period."""
 
     name = "nth"
-    pad_periods = True
+    _requires_padding = True
 
     def __init__(self, n: int):
         """Initialise Nth aggregation.

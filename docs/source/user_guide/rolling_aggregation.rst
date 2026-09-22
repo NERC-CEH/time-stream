@@ -158,8 +158,9 @@ contains partial data) appear at both the start and end of the series.
 
 .. note::
 
-   ``center`` alignment is not supported for calendar-based window sizes (months, years) because
-   they have variable length and cannot be halved to a fixed offset.
+   ``center`` alignment requires the window to span an odd number of time steps, so that it is centred on the
+   current one - e.g. ``PT3H`` or ``PT5H`` for hourly data, but not ``PT2H`` or ``P1D``. For the same reason, it is
+   not supported for calendar-based window sizes (months, years), which have variable length.
 
 .. _data-completeness:
 

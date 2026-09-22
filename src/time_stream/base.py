@@ -785,7 +785,8 @@ class TimeFrame:
                 - ``LEADING``: window looks forward - ``[t, t + window_size)``.
                   Edge effects appear at the end of the series.
                 - ``CENTER``: window is centered - ``[t - window_size/2, t + window_size/2]``.
-                  Edge effects appear at both ends. Not supported for calendar-based window sizes.
+                  Edge effects appear at both ends. The window must span an odd number of time steps.
+                  Not supported for calendar-based window sizes.
 
                 Accepts ``'trailing'``, ``'leading'``, or ``'center'``.
             **kwargs: Parameters specific to the aggregation function.
