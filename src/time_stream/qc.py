@@ -22,7 +22,13 @@ import polars as pl
 from time_stream.exceptions import QcError, QcUnknownOperatorError
 from time_stream.operation import Operation
 from time_stream.types import ClosedInterval
-from time_stream.utils import check_columns_in_dataframe, get_date_filter
+from time_stream.utils import (
+    check_columns_in_dataframe,
+    check_literal_value,
+    check_naive_time,
+    check_time_zone,
+    get_date_filter,
+)
 
 
 @dataclass(frozen=True)
@@ -54,7 +60,8 @@ class QCCheck(Operation, ABC):
             df: The Polars DataFrame containing the time series data to quality control
             time_name: Name of the time column in the dataframe
             check_column: The column to perform the check on.
-            observation_interval: Optional time interval to limit the check to.
+            observation_interval: Optional time interval to limit the check to. Datetimes must match the time column:
+                without a time zone if it has none, or in UTC if it is in UTC.
 
         Returns:
             pl.Series: Boolean series of the resolved expression.
@@ -92,7 +99,8 @@ class QcCheckPipeline:
 
         # Apply observation interval filter if specified
         if self.observation_interval:
-            date_filter = get_date_filter(self.ctx.time_name, self.observation_interval)
+            time_dtype = self.ctx.df.schema[self.ctx.time_name]
+            date_filter = get_date_filter(self.ctx.time_name, self.observation_interval, time_dtype)
             check_expr = check_expr & date_filter
 
         # Evaluate and return the result of the QC check
@@ -115,7 +123,7 @@ class ComparisonCheck(QCCheck):
 
     name = "comparison"
 
-    def __init__(self, compare_to: float | list, operator: str, flag_na: bool = False) -> None:
+    def __init__(self, compare_to: float | datetime | list, operator: str, flag_na: bool = False) -> None:
         """Initialise comparison check.
 
         Args:
@@ -129,14 +137,20 @@ class ComparisonCheck(QCCheck):
 
     def expr(self, ctx: QcCtx, column: str) -> pl.Expr:
         """Return the Polars expression for threshold checking."""
+        # Datetimes must be in the time zone of the column
+        compare_to = self.compare_to
+        for value in compare_to if isinstance(compare_to, list) else [compare_to]:
+            if isinstance(value, datetime):
+                check_time_zone(value, ctx.df.schema[column], "compare_to")
+
         operator_map = {
-            ">": pl.col(column) > self.compare_to,
-            ">=": pl.col(column) >= self.compare_to,
-            "<": pl.col(column) < self.compare_to,
-            "<=": pl.col(column) <= self.compare_to,
-            "==": pl.col(column) == self.compare_to,
-            "!=": pl.col(column) != self.compare_to,
-            "is_in": pl.col(column).is_in(self.compare_to if isinstance(self.compare_to, list) else [self.compare_to]),
+            ">": pl.col(column) > compare_to,
+            ">=": pl.col(column) >= compare_to,
+            "<": pl.col(column) < compare_to,
+            "<=": pl.col(column) <= compare_to,
+            "==": pl.col(column) == compare_to,
+            "!=": pl.col(column) != compare_to,
+            "is_in": pl.col(column).is_in(compare_to if isinstance(compare_to, list) else [compare_to]),
         }
 
         if self.operator not in operator_map:
@@ -144,7 +158,10 @@ class ComparisonCheck(QCCheck):
 
         operator_expr = operator_map[self.operator]
         if self.flag_na:
-            operator_expr = operator_expr | pl.col(column).is_null()
+            is_na = pl.col(column).is_null()
+            if ctx.df.schema[column].is_float():
+                is_na = is_na | pl.col(column).is_nan()
+            operator_expr = operator_expr | is_na
 
         return operator_expr
 
@@ -165,12 +182,19 @@ class RangeCheck(QCCheck):
         """Initialise range check.
 
         Args:
-            min_value: Minimum of the range.
+            min_value: Minimum of the range. A datetime must match the checked column: without a time zone if it
+                has none, or in UTC if it is in UTC. A time of day must not have a time zone.
             max_value: Maximum of the range.
             closed: Define which sides of the interval are closed (inclusive) {'both', 'left', 'right', 'none'}
                     (default = "both")
             within: Whether values get flagged when within or outside the range (default = True (within)).
+
+        Raises:
+            TypeError: If ``min_value`` and ``max_value`` are not of the same type.
         """
+        check_literal_value(closed, ClosedInterval, "closed")
+        if type(min_value) is not type(max_value):
+            raise TypeError("'min_value' and 'max_value' must be of same type")
         self.min_value = min_value
         self.max_value = max_value
         self.closed = closed
@@ -178,29 +202,37 @@ class RangeCheck(QCCheck):
 
     def expr(self, ctx: QcCtx, column: str) -> pl.Expr:
         """Return the Polars expression for range checking."""
-        if type(self.min_value) is not type(self.max_value):
-            raise TypeError("'min_value' and 'max_value' must be of same type")
+        # Make a local copy of these variables, otherwise the code that changes these values below would alter the
+        # class attributes
+        min_value, max_value, closed, within = self.min_value, self.max_value, self.closed, self.within
+        check_type = type(min_value)
 
-        check_type = type(self.min_value)
+        # Datetimes must be in the time zone of the column, and times of day can't have a time zone
+        if isinstance(min_value, datetime) and isinstance(max_value, datetime):
+            check_time_zone(min_value, ctx.df.schema[column], "min_value")
+            check_time_zone(max_value, ctx.df.schema[column], "max_value")
+        elif isinstance(min_value, time) and isinstance(max_value, time):
+            check_naive_time(min_value, "min_value")
+            check_naive_time(max_value, "max_value")
 
         # Check if we're doing a time-based range check
         if check_type is time:
             col_expr = pl.col(column).dt.time()
 
             # Consider ranges that cross midnight, e.g. min_value = 11:00, max_value = 01:00
-            if self.min_value > self.max_value:  # type: ignore[arg-type] - we know the types are the same by now
+            if min_value > max_value:  # type: ignore[operator] - we know the types are the same
                 # Swap the values so the comparison operators work the correct way around
-                self.min_value, self.max_value = self.max_value, self.min_value
+                min_value, max_value = max_value, min_value
 
                 # Reverse the within parameter, as we've swapped the min/max logic
-                self.within = not self.within
+                within = not within
 
                 # We also need to swap the close parameter (if "both" or "none")
                 # Don't have to change "left" or "right" as it shakes out the same even when reversing the min/max
-                if self.closed == "both":
-                    self.closed = "none"
-                elif self.closed == "none":
-                    self.closed = "both"
+                if closed == "both":
+                    closed = "none"
+                elif closed == "none":
+                    closed = "both"
 
         elif check_type is date:
             # For datetime.date objects (NOT datetime.datetime!), we want to consider the whole date part of the column
@@ -211,11 +243,11 @@ class RangeCheck(QCCheck):
             col_expr = pl.col(column)
 
         in_range = col_expr.is_between(
-            self.min_value,
-            self.max_value,
-            closed=self.closed,  # type: ignore[arg-type] ignore Literal typing as the enum constrains the values
+            min_value,
+            max_value,
+            closed=closed,  # type: ignore[arg-type] ignore Literal typing as the enum constrains the values
         )
-        return in_range if self.within else ~in_range
+        return in_range if within else ~in_range
 
 
 @QCCheck.register

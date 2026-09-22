@@ -1,5 +1,6 @@
 import copy
 from datetime import datetime
+from typing import Any
 from unittest.mock import Mock
 
 import polars as pl
@@ -38,6 +39,13 @@ class TestRegisterFlagSystem:
         flag_manager.register_flag_system("new_flags", {"FLAG_A": 0, "FLAG_B": 1}, flag_type="categorical")
         assert "new_flags" in flag_manager.flag_systems
         assert flag_manager.flag_systems["new_flags"].to_dict() == {"FLAG_A": 0, "FLAG_B": 1}
+
+    @pytest.mark.parametrize("flag_type", ["categorial", "BITWISE", "", None])
+    def test_invalid_flag_type_raises_error(self, flag_type: Any) -> None:
+        """Test that an unrecognised flag_type raises an error."""
+        flag_manager = FlagManager()
+        with pytest.raises(ValueError, match="Invalid flag_type"):
+            flag_manager.register_flag_system("new_flags", {"FLAG_A": 1}, flag_type=flag_type)
 
     def test_add_duplicate_flag_system_raises_error(self) -> None:
         """Test adding a duplicate flag system raises error."""

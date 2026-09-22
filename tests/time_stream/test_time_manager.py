@@ -1,6 +1,6 @@
 import logging
 import re
-from datetime import datetime
+from datetime import date, datetime, time, timedelta
 
 import polars as pl
 import pytest
@@ -11,11 +11,13 @@ from time_stream.exceptions import (
     ColumnNotFoundError,
     ColumnTypeError,
     DuplicateTimeError,
+    NullTimeValueError,
     PeriodicityError,
     ResolutionError,
     TimeMutatedError,
 )
 from time_stream.time_manager import TimeManager
+from time_stream.types import TimeAnchor, ValidationErrorOptions
 
 
 @pytest.fixture
@@ -151,8 +153,73 @@ class TestValidateTimeColumn:
         tm = object.__new__(TimeManager)  # skips __init__
         tm._time_name = "data_column"
 
-        expected_error = "Time column 'data_column' must be datetime type, got 'Int64'"
+        expected_error = "Time column 'data_column' must be Date or Datetime type, got 'Int64'"
         with pytest.raises(ColumnTypeError, match=expected_error):
+            tm._validate_time_column(invalid_df)
+
+    @pytest.mark.parametrize(
+        "times,expected_error",
+        [
+            (pl.Series([datetime(2024, 1, 1)]).dt.replace_time_zone("Europe/London"), "time zone 'Europe/London'"),
+            (pl.Series([datetime(2024, 1, 1)]).dt.replace_time_zone("America/New_York"), "'America/New_York'"),
+            (pl.Series([datetime(2024, 1, 1)]).dt.replace_time_zone("+01:00"), "time zone 'Etc/GMT-1'"),
+            (pl.Series([time(1)]), "must be Date or Datetime type, got 'Time'"),
+            (pl.Series([timedelta(hours=1)]), "must be Date or Datetime type, got 'Duration"),
+        ],
+        ids=["Europe/London", "America/New_York", "fixed offset", "Time", "Duration"],
+    )
+    def test_validate_time_column_rejected_types(self, times: pl.Series, expected_error: str) -> None:
+        """Test error raised if the time column is not Date or Datetime, or has a time zone other than UTC."""
+        tm = object.__new__(TimeManager)  # skips __init__
+        tm._time_name = "time"
+
+        with pytest.raises(ColumnTypeError, match=re.escape(expected_error)):
+            tm._validate_time_column(pl.DataFrame({"time": times}))
+
+    @pytest.mark.parametrize(
+        "times",
+        [
+            pl.Series([datetime(2024, 1, 1)], dtype=pl.Datetime("ms")),
+            pl.Series([datetime(2024, 1, 1)], dtype=pl.Datetime("us")),
+            pl.Series([datetime(2024, 1, 1)], dtype=pl.Datetime("ns")),
+            pl.Series([date(2024, 1, 1)]),
+            pl.Series([datetime(2024, 1, 1)]).dt.replace_time_zone("UTC"),
+        ],
+        ids=["ms", "us", "ns", "Date", "UTC"],
+    )
+    def test_validate_time_column_accepted_types(self, times: pl.Series) -> None:
+        """Test that Date, naive Datetime and UTC Datetime time columns are accepted."""
+        tm = object.__new__(TimeManager)  # skips __init__
+        tm._time_name = "time"
+
+        tm._validate_time_column(pl.DataFrame({"time": times}))
+
+    def test_dst_time_zone_rejected_at_construction(self) -> None:
+        """Test that hourly data in a DST time zone is rejected when the TimeFrame is created."""
+        times = pl.datetime_range(datetime(2024, 3, 30), datetime(2024, 4, 1), "1h", eager=True, time_zone="UTC")
+        df = pl.DataFrame({"time": times.dt.convert_time_zone("Europe/London")})
+
+        with pytest.raises(ColumnTypeError, match="daylight saving"):
+            TimeManager("time", resolution="PT1H").prepare(df)
+
+    @pytest.mark.parametrize(
+        "times,null_count",
+        [
+            ([datetime(2024, 1, 1), None, datetime(2024, 1, 3)], 1),
+            ([None, None, datetime(2024, 1, 3)], 2),
+            (pl.Series([None, None], dtype=pl.Datetime), 2),
+        ],
+        ids=["one null", "two nulls", "all null"],
+    )
+    def test_validate_time_column_with_nulls(self, times: list | pl.Series, null_count: int) -> None:
+        """Test error raised if time column contains null values."""
+        invalid_df = pl.DataFrame({"time": times})
+
+        tm = object.__new__(TimeManager)  # skips __init__
+        tm._time_name = "time"
+
+        expected_error = f"Time column 'time' contains {null_count} null value(s)"
+        with pytest.raises(NullTimeValueError, match=re.escape(expected_error)):
             tm._validate_time_column(invalid_df)
 
 
@@ -215,7 +282,7 @@ class TestHandleTimeDuplicates:
             }
         )
 
-        assert_frame_equal(result, expected)
+        assert_frame_equal(result, expected, check_row_order=False)
 
     def test_keep_last(self, tm: TimeManager) -> None:
         """Test that the keep last strategy works as expected"""
@@ -242,7 +309,7 @@ class TestHandleTimeDuplicates:
             }
         )
 
-        assert_frame_equal(result, expected)
+        assert_frame_equal(result, expected, check_row_order=False)
 
     def test_drop(self, tm: TimeManager) -> None:
         """Test that the drop strategy works as expected"""
@@ -294,7 +361,7 @@ class TestHandleTimeDuplicates:
             }
         )
 
-        assert_frame_equal(result, expected)
+        assert_frame_equal(result, expected, check_row_order=False)
 
 
 class TestCheckTimeIntegrity:
@@ -305,7 +372,7 @@ class TestCheckTimeIntegrity:
 
     def test_same_time_values(self) -> None:
         """Test that no changes to the time column is valid"""
-        self.tm._check_time_integrity(self.df, self.df.clone())
+        self.tm.check_integrity(self.df, self.df.clone())
 
     def test_different_time_values(self) -> None:
         """Test that no changes to the time column is valid"""
@@ -313,7 +380,7 @@ class TestCheckTimeIntegrity:
             {"time": [datetime(1990, 1, 1), datetime(1990, 1, 2), datetime(1990, 1, 3), datetime(1990, 1, 4)]}
         )
         with pytest.raises(TimeMutatedError):
-            self.tm._check_time_integrity(self.df, new_df)
+            self.tm.check_integrity(self.df, new_df)
 
 
 class TestConfigureResolutionProperty:
@@ -415,6 +482,36 @@ class TestConfigurePeriodicityProperty:
     def test_invalid_periodicity_string_raises(self) -> None:
         with pytest.raises(PeriodParsingError):
             TimeManager._configure_periodicity_property("NOT_A_PERIOD", Period.of_days(1))
+
+
+class TestLiteralValidation:
+    """Tests that the string options given to TimeManager are checked."""
+
+    @pytest.mark.parametrize(
+        "kwargs,expected_error",
+        [
+            ({"time_anchor": "middle"}, "Invalid time_anchor 'middle'"),
+            ({"on_duplicates": "banana"}, "Invalid on_duplicates 'banana'"),
+            ({"on_misaligned_rows": "banana"}, "Invalid on_misaligned_rows 'banana'"),
+            ({"time_anchor": "START"}, "Invalid time_anchor 'START'"),
+        ],
+        ids=["time_anchor", "on_duplicates", "on_misaligned_rows", "wrong case"],
+    )
+    def test_invalid_option_raises(self, kwargs: dict, expected_error: str) -> None:
+        """An unrecognised string option raises an error naming the parameter."""
+        with pytest.raises(ValueError, match=re.escape(expected_error)):
+            TimeManager(time_name="time", resolution="P1D", **kwargs)
+
+    def test_valid_options_accepted(self) -> None:
+        """The documented string options are accepted."""
+        tm = TimeManager(
+            time_name="time",
+            resolution="P1D",
+            time_anchor="end",
+            on_duplicates="keep_first",
+            on_misaligned_rows="resolve",
+        )
+        assert tm.time_anchor == "end"
 
 
 class TestConfigureProperties:
@@ -649,7 +746,7 @@ class TestHandleMisalignedRows:
 
         expected_error = f"Time values are not aligned to resolution[+offset]: {period.iso_duration}"
         with pytest.raises(ResolutionError, match=re.escape(expected_error)):
-            time_manager._handle_misaligned_rows(df)
+            time_manager.prepare(df)
 
     @pytest.mark.parametrize("input_timestamps, period, error_dates", invalid_resolution_test_cases)
     def test_invalid_with_resolve(
@@ -786,3 +883,92 @@ class TestHandleMisalignedRows:
             assert caplog.messages[0] == expected_log_message
 
         assert_frame_equal(expected_df, actual_df)
+
+
+class TestTimeUnits:
+    @pytest.mark.parametrize("time_unit", ["ms", "us", "ns"])
+    @pytest.mark.parametrize("anchor", ["start", "end"])
+    @pytest.mark.parametrize("on_misaligned_rows", ["error", "resolve"])
+    def test_aligned_data_kept(
+        self, time_unit: str, anchor: TimeAnchor, on_misaligned_rows: ValidationErrorOptions
+    ) -> None:
+        """Test that aligned data is kept whatever the time unit, time anchor and misaligned rows option."""
+        df = pl.DataFrame(
+            {
+                "time": pl.Series(
+                    [datetime(2024, 1, 2), datetime(2024, 1, 3), datetime(2024, 1, 4)],
+                    dtype=pl.Datetime(time_unit),  # type: ignore[arg-type] - Polars Literal is a string
+                ),
+                "value": [1.0, 2.0, 3.0],
+            }
+        )
+        time_manager = TimeManager(
+            time_name="time", resolution="P1D", time_anchor=anchor, on_misaligned_rows=on_misaligned_rows
+        )
+        assert_frame_equal(time_manager.prepare(df), df)
+
+
+class TestEpochAgnostic:
+    df = pl.DataFrame({"time": [datetime(2020, 1, 1)]})
+
+    @pytest.mark.parametrize(
+        "period",
+        [
+            Period.of_years(2),
+            Period.of_years(7),
+            Period.of_years(10),
+            Period.of_months(5),
+            Period.of_months(7),
+            Period.of_months(9),
+            Period.of_months(10),
+            Period.of_months(11),
+            Period.of_months(13),
+            Period.of_days(2),
+            Period.of_days(7),
+            Period.of_days(65),
+            Period.of_hours(5),
+            Period.of_hours(7),
+            Period.of_hours(9),
+            Period.of_hours(11),
+            Period.of_hours(25),
+            Period.of_minutes(7),
+            Period.of_minutes(11),
+            Period.of_minutes(50),
+            Period.of_minutes(61),
+        ],
+    )
+    def test_non_epoch_agnostic_resolution_raises(self, period: Period) -> None:
+        """Test that a non epoch agnostic resolution raises a ResolutionError."""
+        with pytest.raises(ResolutionError, match="Non-epoch agnostic resolution is not supported"):
+            TimeManager("time", resolution=period).validate(self.df)
+
+    @pytest.mark.parametrize(
+        "period",
+        [
+            Period.of_years(1),
+            Period.of_months(1),
+            Period.of_months(2),
+            Period.of_months(3),
+            Period.of_months(4),
+            Period.of_months(6),
+            Period.of_days(1),
+            Period.of_hours(1),
+            Period.of_hours(2),
+            Period.of_hours(3),
+            Period.of_hours(4),
+            Period.of_hours(24),
+            Period.of_minutes(1),
+            Period.of_minutes(2),
+            Period.of_minutes(15),
+            Period.of_minutes(30),
+            Period.of_minutes(60),
+        ],
+    )
+    def test_epoch_agnostic_resolution_passes(self, period: Period) -> None:
+        """Test that an epoch agnostic resolution passes validation."""
+        TimeManager("time", resolution=period).validate(self.df)
+
+    def test_non_epoch_agnostic_periodicity_raises(self) -> None:
+        """Test that a non epoch agnostic periodicity raises a PeriodicityError."""
+        with pytest.raises(PeriodicityError, match="Non-epoch agnostic periodicity is not supported"):
+            TimeManager("time", resolution="P1D", periodicity="P7D").validate(self.df)

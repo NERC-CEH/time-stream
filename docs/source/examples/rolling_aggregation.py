@@ -33,8 +33,8 @@ def rolling_nth_example() -> None:
     """Rolling ``nth`` aggregation - pick a fixed position within each trailing window."""
     tf = ts.TimeFrame(sample_frame(), "time", resolution="PT15M", periodicity="PT15M")
     # [start:rolling_nth_example]
-    # Trailing 1-hour window, n=1: the oldest reading in each window - i.e. the value from
-    # (just under) an hour before the current timestamp.
+    # Trailing 1-hour window, n=1: the first time step in each window - i.e. the value from
+    # (just under) an hour before the current timestamp, or null if that reading is missing.
     tf_rolling = tf.rolling_aggregate("PT1H", "nth", "flow", n=1)
 
     print(tf_rolling.df)

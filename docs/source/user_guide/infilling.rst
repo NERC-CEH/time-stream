@@ -351,6 +351,46 @@ the infill. The flag column must already exist - see :doc:`flagging` for how to 
 Only rows whose value changed from null to non-null are flagged; rows that were already populated,
 or that remain null because the gap exceeded ``max_gap_size``, are left untouched.
 
+Missing time steps
+------------------
+
+A gap is not always a null value - the rows themselves can be absent from your data. Before infilling,
+:meth:`~time_stream.TimeFrame.infill` pads the timeseries, so missing time steps are added to the result and
+then filled just like nulls. The returned :class:`~time_stream.TimeFrame` can therefore hold more rows than
+the one you called it on.
+
+**Input:**
+
+An hourly series where the 02:00 and 03:00 rows are missing altogether, and the 05:00 value is null:
+
+.. jupyter-execute::
+    :hide-code:
+
+    from examples import infilling
+
+    infilling.missing_rows_data()
+
+**Code:**
+
+.. literalinclude:: ../examples/infilling.py
+    :language: python
+    :start-after: [start:missing_rows_infill]
+    :end-before: [end:missing_rows_infill]
+    :dedent:
+
+**Output:**
+
+.. jupyter-execute::
+    :hide-code:
+
+    from examples import infilling
+
+    infilling.missing_rows_infill()
+
+Both kinds of gap are treated the same way: the added rows and the existing null are infilled, and each is
+flagged as ``INFILLED`` (bit value 1). Padding leaves the added rows null in every other column, but flag
+columns are initialised to their empty value - ``0`` for a bitwise system - so flagging works on them.
+
 Examples
 ========
 

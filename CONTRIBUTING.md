@@ -26,7 +26,7 @@ these are open to whoever wants to implement it.
 
 ### Write Documentation
 
-My Package could always use more documentation, whether as part of the official docs, local
+time-stream could always use more documentation, whether as part of the official docs, local
 README's or in docstrings, and comments.
 
 To preview the official docs locally:

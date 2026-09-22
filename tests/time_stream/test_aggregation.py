@@ -1,5 +1,5 @@
 import re
-from datetime import datetime, time
+from datetime import datetime, time, timedelta
 from typing import Any, Callable
 from unittest.mock import Mock
 
@@ -34,7 +34,7 @@ from time_stream.exceptions import (
     TimeWindowError,
     UnknownRegistryKeyError,
 )
-from time_stream.types import MissingCriteria
+from time_stream.types import MissingCriteria, RollingAlignment, TimeAnchor
 from time_stream.utils import TimeWindow
 
 
@@ -1588,6 +1588,44 @@ class TestEndAnchorAggregations:
         assert_frame_equal(result, expected_df, check_dtypes=False, check_column_order=False)
 
 
+class TestPipelineLiteralValidation:
+    """Tests that the string options given to the aggregation pipelines are checked."""
+
+    input_tf = TS_PT1H_2DAYS
+
+    def ctx(self) -> AggregationCtx:
+        return AggregationCtx(
+            df=self.input_tf.df,
+            time_name=self.input_tf.time_name,
+            time_anchor=self.input_tf.time_anchor,
+            periodicity=self.input_tf.periodicity,
+        )
+
+    @pytest.mark.parametrize("anchor", ["middle", "START", ""])
+    def test_invalid_aggregation_time_anchor(self, anchor: str) -> None:
+        """An unrecognised aggregation_time_anchor raises an error."""
+        with pytest.raises(ValueError, match="Invalid aggregation_time_anchor"):
+            StandardAggregationPipeline(
+                Mean(),
+                self.ctx(),
+                P1D,
+                "value",
+                aggregation_time_anchor=anchor,  # type: ignore[arg-type]
+            )
+
+    @pytest.mark.parametrize("alignment", ["sideways", "TRAILING", ""])
+    def test_invalid_rolling_alignment(self, alignment: str) -> None:
+        """An unrecognised rolling alignment raises an error."""
+        with pytest.raises(ValueError, match="Invalid alignment"):
+            RollingAggregationPipeline(
+                Mean(),
+                self.ctx(),
+                PT1H,
+                "value",
+                alignment=alignment,  # type: ignore[arg-type]
+            )
+
+
 class TestMissingCriteriaAggregations:
     """Tests the missing criteria functionality for aggregations."""
 
@@ -1633,10 +1671,10 @@ class TestMissingCriteriaAggregations:
         "valid,criteria",
         [
             ({"value": [True, True]}, ("percent", 80)),
-            ({"value": [False, True]}, ("percent", (20 / 24) * 100)),
             ({"value": [False, True]}, ("percent", 85)),
-            ({"value": [False, False]}, ("percent", (21 / 24) * 100)),
+            ({"value": [False, True]}, ("percent", (21 / 24) * 100)),
             ({"value": [False, False]}, ("percent", 90)),
+            ({"value": [False, False]}, ("percent", 100)),
             ({"value": [True, True]}, ("missing", 5)),
             ({"value": [True, True]}, ("missing", 4)),
             ({"value": [False, True]}, ("missing", 3)),
@@ -1648,10 +1686,10 @@ class TestMissingCriteriaAggregations:
         ],
         ids=[
             "percent 80",
-            "percent 83.3",
             "percent 85",
-            "percent 87.5",
+            "percent 87.5 - exactly on the threshold",
             "percent 90",
+            "percent 100",
             "missing 3",
             "missing 4",
             "missing 5",
@@ -1689,6 +1727,26 @@ class TestMissingCriteriaAggregations:
         ).execute()
 
         assert_frame_equal(result, expected_df, check_dtypes=False, check_column_order=False, check_exact=False)
+
+    def test_percent_criteria_with_complete_data(self) -> None:
+        """Test that a complete aggregation window satisfies a percent criteria of 100."""
+        input_tf = TS_PT1H_2DAYS
+
+        result = StandardAggregationPipeline(
+            self.aggregator(),
+            AggregationCtx(
+                df=input_tf.df,
+                time_name=input_tf.time_name,
+                time_anchor=input_tf.time_anchor,
+                periodicity=input_tf.periodicity,
+            ),
+            self.target_period,
+            self.column,
+            missing_criteria=("percent", 100),
+            aggregation_time_anchor=input_tf.time_anchor,
+        ).execute()
+
+        assert result["valid_value"].to_list() == [True, True]
 
 
 class TestMeanSumWithMissingData:
@@ -1764,16 +1822,16 @@ class TestPaddedAggregations:
         assert result == expected_tf
 
     def test_not_padded_result(self) -> None:
-        """Test that the aggregation result isn't padded if the original time series wasn't padded"""
+        """Test that the aggregation result has every period even if the original time series wasn't padded"""
         tf = TimeFrame(df=self.df, time_name="timestamp", resolution=Period.of_days(1), periodicity=Period.of_days(1))
 
         expected_df = pl.DataFrame(
             {
-                "timestamp": [datetime(2020, 1, 1), datetime(2020, 3, 1)],
-                "mean_value": [2.0, 5.0],
-                "count_value": [3, 3],
-                "expected_count_timestamp": [31, 31],
-                "valid_value": [True, True],
+                "timestamp": [datetime(2020, 1, 1), datetime(2020, 2, 1), datetime(2020, 3, 1)],
+                "mean_value": [2.0, None, 5.0],
+                "count_value": [3, 0, 3],
+                "expected_count_timestamp": [31, 29, 31],
+                "valid_value": [True, False, True],
             }
         )
 
@@ -1783,6 +1841,73 @@ class TestPaddedAggregations:
 
         result = tf.aggregate(Period.of_months(1), "mean", "value")
         assert result == expected_tf
+
+    def test_empty_period_end_anchor(self) -> None:
+        """Test that a period with no data is included when the periods are labelled by their end"""
+        times = [datetime(2020, 1, d) for d in range(2, 32)] + [datetime(2020, 3, d) for d in range(2, 32)]
+        df = pl.DataFrame({"timestamp": times, "value": [1.0] * len(times)})
+        tf = TimeFrame(df, "timestamp", resolution=Period.of_days(1), time_anchor="end")
+
+        result = tf.aggregate(Period.of_months(1), "sum", "value")
+
+        expected = pl.DataFrame(
+            {
+                "timestamp": [datetime(2020, 2, 1), datetime(2020, 3, 1), datetime(2020, 4, 1)],
+                "count_value": [30, 0, 30],
+                "expected_count_timestamp": [31, 29, 31],
+                "valid_value": [True, False, True],
+            }
+        )
+        assert_frame_equal(
+            result.df.select("timestamp", "count_value", "expected_count_timestamp", "valid_value"),
+            expected,
+            check_dtypes=False,
+        )
+
+    def test_empty_period_time_window(self) -> None:
+        """Test that a period left with no data by the time window is included"""
+        times = [datetime(2020, 1, 1) + timedelta(hours=h) for h in range(72) if not (34 <= h <= 38)]
+        df = pl.DataFrame({"timestamp": times, "value": [1.0] * len(times)})
+        tf = TimeFrame(df, "timestamp", resolution=Period.of_hours(1))
+
+        result = tf.aggregate(Period.of_days(1), "sum", "value", time_window=(time(10), time(14)))
+
+        expected = pl.DataFrame(
+            {
+                "timestamp": [datetime(2020, 1, 1), datetime(2020, 1, 2), datetime(2020, 1, 3)],
+                "count_value": [5, 0, 5],
+                "expected_count_timestamp": [5, 5, 5],
+                "valid_value": [True, False, True],
+            }
+        )
+        assert_frame_equal(
+            result.df.select("timestamp", "count_value", "expected_count_timestamp", "valid_value"),
+            expected,
+            check_dtypes=False,
+        )
+
+
+class TestAllNullPeriod:
+    """Tests that every aggregation function gives null for a period whose values are all null."""
+
+    KWARGS: dict[str, dict[str, Any]] = {
+        "conditional_count": {"condition": lambda col: col > 0},
+        "nth": {"n": 1},
+        "percentile": {"p": 50},
+        "pot": {"threshold": 0},
+    }
+
+    @pytest.mark.parametrize("name", AggregationFunction.available())
+    def test_all_null_period(self, name: str) -> None:
+        """Test that an aggregation of a period with only null values is null."""
+        times = [datetime(2025, 1, 1) + timedelta(hours=h) for h in range(48)]
+        df = pl.DataFrame({"time": times, "value": [None] * 24 + [1.0] * 24}, schema_overrides={"value": pl.Float64})
+        tf = TimeFrame(df, "time", resolution="PT1H")
+
+        result = tf.aggregate("P1D", name, "value", **self.KWARGS.get(name, {}))
+
+        assert result.df[f"{name}_value"][0] is None
+        assert result.df[f"{name}_value"][1] is not None
 
 
 class TestAggregationWithMetadata:
@@ -1953,6 +2078,19 @@ class TestNthAggregation:
                 aggregation_time_anchor=input_tf.time_anchor,
             ).execute()
 
+    def test_nth_exceeds_time_window_count_raises(self) -> None:
+        """Test that requesting the 6th value of a 5-step time window raises, rather than giving null every period."""
+        with pytest.raises(
+            AggregationPeriodError,
+            match=r"Cannot select n=6: periodicity 'PT1H' fits only 5 points within time window 10:00:00-14:00:00",
+        ):
+            TS_PT1H_2DAYS.aggregate("P1D", "nth", "value", n=6, time_window=(time(10), time(14)))
+
+    def test_nth_at_time_window_upper_bound_is_valid(self) -> None:
+        """Test that requesting the last step of a 5-step time window selects its last time step."""
+        result = TS_PT1H_2DAYS.aggregate("P1D", "nth", "value", n=5, time_window=(time(10), time(14)))
+        assert result.df["timestamp_of_nth_value"].to_list() == [datetime(2025, 1, 1, 14), datetime(2025, 1, 2, 14)]
+
     def test_nth_at_fixed_period_upper_bound_is_valid(self) -> None:
         """Test that requesting the last valid position (12th of 12 for 2-hourly data over a day) succeeds."""
         input_tf = TS_PT2H_2DAYS
@@ -2014,10 +2152,94 @@ class TestNthAggregation:
         ).execute()
         assert_frame_equal(result, expected_df, check_dtypes=False, check_column_order=False)
 
+    @pytest.mark.parametrize(
+        "missing_hours,anchor,n,time_window,expected_value,expected_time",
+        [
+            ([1], "start", 12, None, 11.0, datetime(2025, 1, 1, 11)),
+            ([1], "start", 2, None, None, datetime(2025, 1, 1, 1)),
+            ([0, 1, 2], "start", 1, None, None, datetime(2025, 1, 1, 0)),
+            ([23], "start", 24, None, None, datetime(2025, 1, 1, 23)),
+            ([1], "end", 12, None, 12.0, datetime(2025, 1, 1, 12)),
+            ([10], "start", 1, (time(10), time(14)), None, datetime(2025, 1, 1, 10)),
+            ([10], "start", 2, (time(10), time(14)), 11.0, datetime(2025, 1, 1, 11)),
+        ],
+        ids=[
+            "gap before n",
+            "gap at n",
+            "leading gap",
+            "trailing gap",
+            "end anchor gap before n",
+            "time window gap at n",
+            "time window gap before n",
+        ],
+    )
+    def test_nth_with_missing_rows(
+        self,
+        missing_hours: list[int],
+        anchor: TimeAnchor,
+        n: int,
+        time_window: tuple[time, time] | None,
+        expected_value: float | None,
+        expected_time: datetime,
+    ) -> None:
+        """Test that Nth selects the nth time step of each period, not the nth row, when rows are missing."""
+        first = datetime(2025, 1, 1, 1) if anchor == "end" else datetime(2025, 1, 1, 0)
+        times = [first + timedelta(hours=h) for h in range(24) if h not in missing_hours]
+        df = pl.DataFrame({"time": times, "value": [float(t.hour) for t in times]})
+        tf = TimeFrame(df, "time", resolution="PT1H", time_anchor=anchor)
+
+        result = tf.aggregate("P1D", "nth", "value", n=n, time_window=time_window)
+
+        expected = pl.DataFrame(
+            {"nth_value": [expected_value], "time_of_nth_value": [expected_time]},
+            schema={"nth_value": pl.Float64, "time_of_nth_value": pl.Datetime("us")},
+        )
+        assert_frame_equal(result.df.select("nth_value", "time_of_nth_value"), expected)
+
+    @pytest.mark.parametrize(
+        "alignment,n,at,expected_value,expected_time",
+        [
+            ("trailing", 1, datetime(2025, 1, 1, 5), None, datetime(2025, 1, 1, 3)),
+            ("trailing", 2, datetime(2025, 1, 1, 5), 4.0, datetime(2025, 1, 1, 4)),
+            ("trailing", 1, datetime(2025, 1, 1, 0), None, datetime(2024, 12, 31, 22)),
+            ("leading", 2, datetime(2025, 1, 1, 2), None, datetime(2025, 1, 1, 3)),
+            ("leading", 3, datetime(2025, 1, 1, 5), None, datetime(2025, 1, 1, 7)),
+            ("center", 1, datetime(2025, 1, 1, 4), None, datetime(2025, 1, 1, 3)),
+        ],
+        ids=[
+            "trailing gap at n",
+            "trailing gap before n",
+            "trailing start of series",
+            "leading gap at n",
+            "leading end of series",
+            "center gap at n",
+        ],
+    )
+    def test_nth_rolling_with_missing_rows(
+        self,
+        alignment: RollingAlignment,
+        n: int,
+        at: datetime,
+        expected_value: float | None,
+        expected_time: datetime,
+    ) -> None:
+        """Test that rolling Nth selects the nth time step of each window, not the nth row, when rows are missing."""
+        times = [datetime(2025, 1, 1, h) for h in range(6) if h != 3]
+        tf = TimeFrame(pl.DataFrame({"time": times, "value": [float(t.hour) for t in times]}), "time", "PT1H")
+
+        result = tf.rolling_aggregate("PT3H", "nth", "value", n=n, alignment=alignment)
+
+        assert result.df["time"].to_list() == times
+        expected = pl.DataFrame(
+            {"nth_value": [expected_value], "time_of_nth_value": [expected_time]},
+            schema={"nth_value": pl.Float64, "time_of_nth_value": pl.Datetime("us")},
+        )
+        assert_frame_equal(result.df.filter(pl.col("time") == at).select("nth_value", "time_of_nth_value"), expected)
+
     def test_nth_rolling_aggregation(self) -> None:
         """Test Nth via RollingAggregationPipeline: a leading 2-hour window over 1-hour data has a fixed
         expected count of 2, but the final row is naturally truncated by the end of the series - that edge
-        case should return null rather than raise, since the period itself can hold n=2 values."""
+        case should return a null value at the missing time step rather than raise."""
         input_tf = TS_PT1H_HALF_DAY
         timestamps = input_tf.df["timestamp"].to_list()[:5]
         df = input_tf.df.head(5)
@@ -2034,7 +2256,7 @@ class TestNthAggregation:
                 datetime(2025, 1, 1, 2),
                 datetime(2025, 1, 1, 3),
                 datetime(2025, 1, 1, 4),
-                None,
+                datetime(2025, 1, 1, 5),
             ],
         )
         result = RollingAggregationPipeline(
@@ -2182,6 +2404,30 @@ class TestAngularMean:
             aggregation_time_anchor=input_tf.time_anchor,
         ).execute()
         assert_frame_equal(result, expected_df, check_dtypes=False, check_column_order=False)
+
+    def test_all_null_period(self) -> None:
+        """Test that the angular mean of a period with no values is null."""
+        times = [datetime(2025, 1, 1) + timedelta(hours=h) for h in range(48)]
+        df = pl.DataFrame({"time": times, "value": [None] * 24 + [90.0] * 24}, schema_overrides={"value": pl.Float64})
+        tf = TimeFrame(df, "time", resolution="PT1H")
+
+        result = tf.aggregate("P1D", "angular_mean", "value")
+
+        expected = pl.DataFrame({"angular_mean_value": [None, 90.0]}, schema={"angular_mean_value": pl.Float64})
+        assert_frame_equal(result.df.select("angular_mean_value"), expected)
+
+    def test_all_null_rolling_window(self) -> None:
+        """Test that the rolling angular mean of a window with no values is null."""
+        times = [datetime(2025, 1, 1) + timedelta(hours=h) for h in range(4)]
+        df = pl.DataFrame({"time": times, "value": [None, None, 90.0, 90.0]}, schema_overrides={"value": pl.Float64})
+        tf = TimeFrame(df, "time", resolution="PT1H")
+
+        result = tf.rolling_aggregate("PT2H", "angular_mean", "value")
+
+        expected = pl.DataFrame(
+            {"angular_mean_value": [None, None, 90.0, 90.0]}, schema={"angular_mean_value": pl.Float64}
+        )
+        assert_frame_equal(result.df.select("angular_mean_value"), expected)
 
 
 class TestTimeWindowValidation:
@@ -2873,3 +3119,26 @@ class TestRollingAggregateMethod:
         input_tf = TS_P1M_2YEARS
         with pytest.raises(AggregationError):
             input_tf.rolling_aggregate("P3M", "mean", "value", alignment="center")
+
+    @pytest.mark.parametrize("window_size", ["PT30M", "PT90M"], ids=["smaller than a step", "part of a step"])
+    def test_rolling_aggregate_window_not_whole_steps_raises(self, window_size: str) -> None:
+        """Check that the window must be a whole number of time steps of the data periodicity."""
+        input_tf = TS_PT1H_HALF_DAY
+        with pytest.raises(AggregationPeriodError, match="must be a whole number of time steps"):
+            input_tf.rolling_aggregate(window_size, "mean", "value")
+
+    @pytest.mark.parametrize(
+        "window_size,steps", [("PT2H", 2), ("PT4H", 4), ("P1D", 24)], ids=["2 steps", "4 steps", "24 steps"]
+    )
+    def test_rolling_aggregate_center_even_steps_raises(self, window_size: str, steps: int) -> None:
+        """Check that CENTER alignment raises when the window spans an even number of time steps."""
+        input_tf = TS_PT1H_HALF_DAY
+        with pytest.raises(AggregationError, match=f"spans {steps} time steps"):
+            input_tf.rolling_aggregate(window_size, "mean", "value", alignment="center")
+
+    @pytest.mark.parametrize("window_size", ["PT1H", "PT3H", "PT5H"], ids=["1 step", "3 steps", "5 steps"])
+    def test_rolling_aggregate_center_odd_steps(self, window_size: str) -> None:
+        """Check that CENTER alignment is accepted when the window spans an odd number of time steps."""
+        input_tf = TS_PT1H_HALF_DAY
+        result = input_tf.rolling_aggregate(window_size, "mean", "value", alignment="center")
+        assert len(result.df) == len(input_tf.df)

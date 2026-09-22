@@ -15,9 +15,9 @@ Both share a common abstract base class :class:`AggregationPipeline`.
 """
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
-from datetime import timedelta
-from typing import Callable, get_args
+from dataclasses import dataclass, replace
+from datetime import datetime, timedelta
+from typing import Callable, ClassVar, get_args
 
 import polars as pl
 from isoperiod import Period
@@ -26,7 +26,7 @@ from polars.dataframe.group_by import DynamicGroupBy, RollingGroupBy
 from time_stream.exceptions import AggregationError, AggregationPeriodError, MissingCriteriaError, TimeWindowError
 from time_stream.operation import Operation
 from time_stream.types import MissingCriteria, RollingAlignment, TimeAnchor
-from time_stream.utils import TimeWindow, check_columns_in_dataframe
+from time_stream.utils import TimeWindow, check_columns_in_dataframe, check_literal_value, pad_time, truncate_to_period
 
 
 @dataclass(frozen=True)
@@ -38,6 +38,7 @@ class AggregationCtx:
     time_anchor: TimeAnchor
     periodicity: Period
     aggregation_period: Period | None = None
+    time_window: TimeWindow | None = None
 
 
 class AggregationFunction(Operation, ABC):
@@ -47,6 +48,9 @@ class AggregationFunction(Operation, ABC):
     Pipeline orchestration is handled separately by :class:`StandardAggregationPipeline` or
     :class:`RollingAggregationPipeline`.
     """
+
+    # Whether the pipeline pads the data to its full set of time steps before grouping
+    _requires_padding: ClassVar[bool] = False
 
     def __init__(self, **kwargs):
         pass
@@ -107,6 +111,10 @@ class AggregationPipeline(ABC):
         agg_expressions.extend(self._actual_count_expr())
         df = grouper.agg(agg_expressions)
 
+        # The output should contain all aggregation periods, so pad the output. This lets missing_criteria/valid flag
+        # rows with no data.
+        df = self._post_aggregate(df)
+
         # Build expressions to go in the .with_columns method.
         #   Note: - Order is important here. Expressions may have dependencies on the results of earlier expressions.
         #         - Doing separate .with_columns calls to group expressions together and take advantage of the Polars
@@ -135,6 +143,19 @@ class AggregationPipeline(ABC):
 
         Returns:
             The (optionally modified) DataFrame.
+        """
+        return df
+
+    def _post_aggregate(self, df: pl.DataFrame) -> pl.DataFrame:
+        """Adjust the rows of the aggregated DataFrame.
+
+        Default is to do nothing - subclasses can override this.
+
+        Args:
+            df: The aggregated DataFrame.
+
+        Returns:
+            The (optionally modified) aggregated DataFrame.
         """
         return df
 
@@ -268,7 +289,7 @@ class AggregationPipeline(ABC):
         expressions = []
         for col in self.columns:
             if criteria == "percent":
-                expr = ((pl.col(f"count_{col}") / pl.col(f"expected_count_{self.ctx.time_name}")) * 100) > threshold
+                expr = ((pl.col(f"count_{col}") / pl.col(f"expected_count_{self.ctx.time_name}")) * 100) >= threshold
 
             elif criteria == "missing":
                 expr = (pl.col(f"expected_count_{self.ctx.time_name}") - pl.col(f"count_{col}")) <= threshold
@@ -312,8 +333,12 @@ class StandardAggregationPipeline(AggregationPipeline):
         aggregation_time_anchor: TimeAnchor | None = None,
         time_window: TimeWindow | None = None,
     ):
+        if time_window is not None:
+            ctx = replace(ctx, time_window=time_window)
         super().__init__(agg_func, ctx, aggregation_period, columns, missing_criteria)
-        self.aggregation_time_anchor = (
+        if aggregation_time_anchor is not None:
+            check_literal_value(aggregation_time_anchor, TimeAnchor, "aggregation_time_anchor")
+        self.aggregation_time_anchor: TimeAnchor = (
             aggregation_time_anchor if aggregation_time_anchor is not None else ctx.time_anchor
         )
         self.time_window = time_window
@@ -348,10 +373,56 @@ class StandardAggregationPipeline(AggregationPipeline):
             raise TimeWindowError("'time_window' requires the data periodicity to be sub-daily.")
 
     def _prepare_df(self, df: pl.DataFrame) -> pl.DataFrame:
-        """Filter rows to the time-of-day window if one is set."""
+        """Pad periods if the aggregation function needs it, then filter rows to the time window if one is set."""
+        if self.agg_func._requires_padding:
+            df = self._pad_periods(df)
         if self.time_window:
             return self.time_window.filter_df(df, self.ctx.time_name)
         return df
+
+    def _post_aggregate(self, df: pl.DataFrame) -> pl.DataFrame:
+        """Add a row, with a count of zero, for each period between the first and last that has no data.
+
+        Args:
+            df: The aggregated DataFrame.
+
+        Returns:
+            The aggregated DataFrame with a row for every period.
+        """
+        if df.is_empty():
+            return df
+        df = pad_time(df, self.ctx.time_name, self.aggregation_period, self.aggregation_time_anchor)
+        return df.with_columns(pl.col(f"count_{col}").fill_null(0) for col in self.columns)
+
+    def _pad_periods(self, df: pl.DataFrame) -> pl.DataFrame:
+        """Pad every aggregation period in the data to its full set of time steps, taking into account the potential
+        gaps before the first time step and after the last time step.
+
+        Args:
+            df: The input DataFrame.
+
+        Returns:
+            The time and aggregated columns, with a row for every time step in each period.
+        """
+        time_name = self.ctx.time_name
+        time_anchor = self.ctx.time_anchor
+        period = self.aggregation_period.pl_interval
+        step = self.ctx.periodicity.pl_interval
+
+        periods = truncate_to_period(df[time_name], self.aggregation_period, time_anchor)
+        first, last = periods.min(), periods.max()
+        if not isinstance(first, datetime) or not isinstance(last, datetime):
+            raise AggregationError("Cannot aggregate an empty DataFrame.")
+
+        # Pad from the first time step of the first period to the last time step of the last period
+        if time_anchor == "end":
+            start, end = pl.Series([first]).dt.offset_by("-" + period).dt.offset_by(step)[0], last
+        else:
+            start, end = first, pl.Series([last]).dt.offset_by(period).dt.offset_by("-" + step)[0]
+
+        return pad_time(
+            df.select(time_name, *self.columns), time_name, self.ctx.periodicity, time_anchor, start=start, end=end
+        )
 
     def _get_label_closed(self) -> tuple[str, str]:
         """Map TimeAnchor to Polars label/closed semantics.
@@ -431,7 +502,45 @@ class RollingAggregationPipeline(AggregationPipeline):
         alignment: RollingAlignment = "trailing",
     ):
         super().__init__(agg_func, ctx, aggregation_period, columns, missing_criteria)
+        check_literal_value(alignment, RollingAlignment, "alignment")
         self.alignment = alignment
+
+    def _prepare_df(self, df: pl.DataFrame) -> pl.DataFrame:
+        """Pad the data to every time step if the aggregation function needs it.
+
+        The padding reaches one window beyond each end of the data, so windows at the edges of the series see the
+        time steps they cover there as missing.
+
+        Args:
+            df: The input DataFrame.
+
+        Returns:
+            The time and aggregated columns, padded if needed.
+        """
+        if not self.agg_func._requires_padding:
+            return df
+
+        time_name = self.ctx.time_name
+        window = self.aggregation_period.pl_interval
+        times = df[time_name]
+        start = times.head(1).dt.offset_by("-" + window)[0]
+        end = times.tail(1).dt.offset_by(window)[0]
+        return pad_time(
+            df.select(time_name, *self.columns), time_name, self.ctx.periodicity, self.ctx.time_anchor, start, end
+        )
+
+    def _post_aggregate(self, df: pl.DataFrame) -> pl.DataFrame:
+        """Keep only the rows of the original data, removing any added by padding.
+
+        Args:
+            df: The aggregated DataFrame.
+
+        Returns:
+            The aggregated DataFrame with one row per row of the original data.
+        """
+        if not self.agg_func._requires_padding:
+            return df
+        return df.filter(pl.col(self.ctx.time_name).is_in(self.ctx.df[self.ctx.time_name].implode()))
 
     def _validate(self) -> None:
         """Validate window size and alignment compatibility."""
@@ -442,19 +551,30 @@ class RollingAggregationPipeline(AggregationPipeline):
         """Validate rolling-specific constraints.
 
         Raises:
-            AggregationPeriodError: If the window size is smaller than the data periodicity.
-            AggregationError: If CENTER alignment is used with a calendar-based (variable-length) window.
+            AggregationPeriodError: If the window size is not a whole number of time steps of the data periodicity.
+            AggregationError: If CENTER alignment is used with a calendar-based (variable-length) window, or a
+                window spanning an even number of time steps.
         """
         if not self.ctx.periodicity.is_subperiod_of(self.aggregation_period):
             raise AggregationPeriodError(
-                f"Rolling window size '{self.aggregation_period}' must be at least as large as the "
+                f"Rolling window size '{self.aggregation_period}' must be a whole number of time steps of the "
                 f"data periodicity '{self.ctx.periodicity}'."
             )
-        if self.alignment == "center" and self.aggregation_period.timedelta is None:
-            raise AggregationError(
-                "CENTER alignment is not supported for calendar-based window sizes (e.g., months or years), "
-                "because they have variable length and cannot be halved to a fixed offset."
-            )
+        if self.alignment == "center":
+            window_td = self.aggregation_period.timedelta
+            periodicity_td = self.ctx.periodicity.timedelta
+            if window_td is None or periodicity_td is None:
+                raise AggregationError(
+                    "CENTER alignment is not supported for calendar-based window sizes (e.g., months or years), "
+                    "because they have variable length and cannot be halved to a fixed offset."
+                )
+            # A window of an even number of time steps has no single centre time step
+            steps = window_td // periodicity_td
+            if steps % 2 == 0:
+                raise AggregationError(
+                    f"CENTER alignment requires the window to span an odd number of time steps. Window size "
+                    f"'{self.aggregation_period}' spans {steps} time steps of '{self.ctx.periodicity}'."
+                )
 
     def _get_rolling_params(self) -> tuple[str, str | None]:
         """Map the alignment to Polars ``closed`` and ``offset`` parameters.
@@ -533,11 +653,15 @@ class AngularMean(AggregationFunction):
         Desired output units: degrees
         """
 
+        # With no values, both sums are 0 and arctan2 would give 0 (north), so give null instead
         angular_mean = [
-            pl.arctan2((pl.col(col).radians().sin().sum()), (pl.col(col).radians().cos().sum()))
-            .degrees()
-            .round(1)
-            .mod(360)
+            pl.when(pl.col(col).count() > 0)
+            .then(
+                pl.arctan2((pl.col(col).radians().sin().sum()), (pl.col(col).radians().cos().sum()))
+                .degrees()
+                .round(1)
+                .mod(360)
+            )
             .alias(f"angular_mean_{col}")
             for col in columns
         ]
@@ -553,7 +677,8 @@ class Sum(AggregationFunction):
 
     def expr(self, ctx: AggregationCtx, columns: list[str]) -> list[pl.Expr]:
         """Return the `Polars` expression for calculating the sum in an aggregation period."""
-        return [pl.col(col).sum().alias(f"sum_{col}") for col in columns]
+        # The sum of no values (even nan/null) is 0, so make sure to give null when there are no values
+        return [pl.when(pl.col(col).count() > 0).then(pl.col(col).sum()).alias(f"sum_{col}") for col in columns]
 
 
 @AggregationFunction.register
@@ -668,7 +793,10 @@ class ConditionalCount(AggregationFunction):
 
     def expr(self, ctx: AggregationCtx, columns: list[str]) -> list[pl.Expr]:
         """Return the `Polars` expression for calculating the conditional count in an aggregation period."""
-        return [self.condition(pl.col(col)).sum().alias(f"{self.name}_{col}") for col in columns]
+        return [
+            pl.when(pl.col(col).count() > 0).then(self.condition(pl.col(col)).sum()).alias(f"{self.name}_{col}")
+            for col in columns
+        ]
 
 
 @AggregationFunction.register
@@ -697,16 +825,19 @@ class StDev(AggregationFunction):
 
 @AggregationFunction.register
 class Nth(AggregationFunction):
-    """An aggregation class to select the nth value within each aggregation period."""
+    """An aggregation class to select the value at the nth time step within each aggregation period."""
 
     name = "nth"
+    _requires_padding = True
 
     def __init__(self, n: int):
         """Initialise Nth aggregation.
 
         Args:
-            n: The index position (starting at 1) of the value to select within each aggregation period
-                (e.g. n=12 selects the 12th hour of each day when aggregating hourly data to daily).
+            n: The position (starting at 1) of the time step to select within each aggregation period
+                (e.g. n=12 selects the 12th hour of each day when aggregating hourly data to daily). With a time
+                window, the position counts time steps within the window. The value is null if that time step
+                is missing from the data.
         """
         super().__init__()
         if not isinstance(n, int) or n < 1:
@@ -721,16 +852,26 @@ class Nth(AggregationFunction):
             AggregationPeriodError: If aggregation_period not defined.
 
             AggregationPeriodError: If `n` exceeds the fixed number of periodicity points that fit
-                within the aggregation period (e.g. requesting the 25th hour of a day).
+                within the aggregation period, or its time window (e.g. requesting the 25th hour of a day).
         """
         if ctx.aggregation_period is None:
             raise AggregationPeriodError("An aggregation_period must be defined for nth aggregation method.")
 
-        expected_count = ctx.periodicity.count(ctx.aggregation_period)
+        if ctx.time_window is None:
+            expected_count = ctx.periodicity.count(ctx.aggregation_period)
+            within = f"aggregation period '{ctx.aggregation_period}'"
+        else:
+            # The window repeats each day of the aggregation period, so there is only a fixed count for fixed periods
+            period_td = ctx.aggregation_period.timedelta
+            days = period_td // timedelta(days=1) if period_td is not None else None
+            expected_count = ctx.time_window.expected_count(ctx.periodicity) * days if days is not None else None
+            within = f"time window {ctx.time_window.start}-{ctx.time_window.end} of aggregation period "
+            within += f"'{ctx.aggregation_period}'"
+
         if expected_count is not None and self.n > expected_count:
             raise AggregationPeriodError(
-                f"Cannot select n={self.n}: periodicity '{ctx.periodicity}' fits only "
-                f"{expected_count} points within aggregation period '{ctx.aggregation_period}'."
+                f"Cannot select n={self.n}: periodicity '{ctx.periodicity}' fits only {expected_count} points within "
+                f"{within}."
             )
 
         index = self.n - 1

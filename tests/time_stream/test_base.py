@@ -1,6 +1,7 @@
 import re
-from datetime import date, datetime
-from typing import Any
+from datetime import date, datetime, timedelta
+from typing import Any, Callable
+from unittest.mock import patch
 
 import polars as pl
 import pytest
@@ -16,9 +17,41 @@ from time_stream.exceptions import (
     DuplicateColumnError,
     FlagSystemNotFoundError,
     MetadataError,
+    NullTimeValueError,
+    PeriodicityError,
+    TimeMutatedError,
 )
 from time_stream.flags.flag_manager import BitwiseFlagColumn
 from time_stream.flags.flag_system import FlagSystemBase
+from time_stream.time_manager import TimeManager
+from time_stream.types import FlagSystemLiteral, TimeAnchor
+
+
+class TestTimeFrameConstruction:
+    @pytest.mark.parametrize(
+        "times,kwargs",
+        [
+            ([datetime(2024, 1, 1), None], {}),
+            (pl.Series([None, None], dtype=pl.Datetime), {}),
+            (pl.Series([None, None], dtype=pl.Datetime), {"on_duplicates": "keep_first"}),
+            ([datetime(2024, 1, 1), None], {"on_misaligned_rows": "resolve"}),
+        ],
+        ids=["one null", "repeated nulls", "repeated nulls with on_duplicates", "null with on_misaligned_rows"],
+    )
+    def test_null_time_values_raise(self, times: list | pl.Series, kwargs: dict) -> None:
+        """Test that null values in the time column are rejected, whatever the other options are"""
+        df = pl.DataFrame({"time": times, "value": [1, 2]})
+
+        with pytest.raises(NullTimeValueError, match="contains .* null value"):
+            TimeFrame(df, time_name="time", resolution=Period.of_days(1), **kwargs)
+
+    def test_null_values_in_data_column_allowed(self) -> None:
+        """Test that null values outside the time column are fine"""
+        df = pl.DataFrame({"time": [datetime(2024, 1, 1), datetime(2024, 1, 2)], "value": [1.0, None]})
+
+        tf = TimeFrame(df, time_name="time", resolution=Period.of_days(1))
+
+        assert tf.df.height == 2
 
 
 class TestSortTime:
@@ -139,6 +172,15 @@ class TestSelectColumns:
         assert col2_tf == expected
         assert_frame_equal(tf.df, original_df)
 
+    def test_select_does_not_mutate_input_list(self) -> None:
+        """When selecting columns, the list of column names passed in should be unchanged"""
+        tf = TimeFrame(self.df, time_name="time")
+        columns = ["col1", "col2"]
+
+        tf.select(columns)
+
+        assert columns == ["col1", "col2"]
+
     def test_select_column_does_not_auto_include_flags(self) -> None:
         """Flag columns are not automatically included when selecting a data column."""
         tf = TimeFrame(self.df, time_name="time").with_flag_system("system", {"A": 1, "B": 2, "C": 4})
@@ -156,6 +198,19 @@ class TestSelectColumns:
         result = tf.select(["col1", "flag_col"])
         assert "flag_col" in result.df.columns
         assert "flag_col" in result.flag_columns
+
+    def test_select_keeps_decoded_flag_column_decoded(self) -> None:
+        """A decoded flag column is still decoded after selecting, so flags can still be added to it"""
+        tf = TimeFrame(self.df, time_name="time").with_flag_system("system", {"A": 1, "B": 2, "C": 4})
+        tf.init_flag_column("system", "flag_col")
+        decoded = tf.decode_flag_column("flag_col")
+
+        result = decoded.select(["col1", "flag_col"])
+
+        assert result.get_flag_column("flag_col").is_decoded
+        result.add_flag("flag_col", "A")
+        expected = pl.Series("flag_col", [["A"], ["A"], ["A"]], dtype=pl.List(pl.String))
+        assert_series_equal(result.df["flag_col"], expected)
 
 
 class TestGetItem:
@@ -299,6 +354,25 @@ class TestColumnMetadata:
 
         assert self.tf.column_metadata == column_metadata
 
+    @pytest.mark.parametrize(
+        "method", ["with_column_metadata", "setter", "setitem"], ids=["with_column_metadata", "setter", "setitem"]
+    )
+    def test_column_metadata_is_copied(self, method: str) -> None:
+        """Test that changing the dict after setting it doesn't change the TimeFrame column metadata"""
+        metadata = {"col1": {"units": "mm", "info": {"source": "gauge"}}}
+        tf = TimeFrame(self.df, time_name="time")
+        if method == "with_column_metadata":
+            tf = tf.with_column_metadata(metadata)
+        elif method == "setter":
+            tf.column_metadata = metadata
+        else:
+            tf.column_metadata["col1"] = metadata["col1"]
+
+        metadata["col1"]["units"] = "m"
+        metadata["col1"]["info"]["source"] = "radar"
+
+        assert tf.column_metadata["col1"] == {"units": "mm", "info": {"source": "gauge"}}
+
 
 class TestMetadata:
     df = pl.DataFrame(
@@ -358,6 +432,21 @@ class TestMetadata:
         """Test that removing the metadata object sets it back to an empty dict"""
         del self.tf.metadata
         assert self.tf.metadata == {}
+
+    @pytest.mark.parametrize("use_setter", [False, True], ids=["with_metadata", "setter"])
+    def test_metadata_is_copied(self, use_setter: bool) -> None:
+        """Test that changing the dict after setting it doesn't change the TimeFrame metadata"""
+        metadata = {"site": "A", "info": {"network": "FDRI"}}
+        tf = TimeFrame(self.df, time_name="time")
+        if use_setter:
+            tf.metadata = metadata
+        else:
+            tf = tf.with_metadata(metadata)
+
+        metadata["site"] = "B"
+        metadata["info"]["network"] = "other"
+
+        assert tf.metadata == {"site": "A", "info": {"network": "FDRI"}}
 
 
 class TestInitFlagColumn:
@@ -793,6 +882,14 @@ class TestAggregate:
 
         assert_frame_equal(aggregated_tf.df, expected_df, check_dtypes=False)
 
+    @pytest.mark.parametrize("method", ["aggregate", "rolling_aggregate"])
+    def test_invalid_period_type_raises(self, method: str) -> None:
+        """A period that is not a string or Period raises a TypeError."""
+        df = pl.DataFrame({"time": [datetime(2025, 1, 1)], "value": [1.0]})
+        tf = TimeFrame(df, "time", resolution="PT1H")
+        with pytest.raises(TypeError):
+            getattr(tf, method)(123, "mean", "value")
+
 
 class TestCalculateMinMaxEnvelope:
     def test_calculate_min_max_envelope(self) -> None:
@@ -1171,6 +1268,332 @@ class TestInfillWithFlagParams:
         assert_series_equal(tf.df["flag_col"], expected)
 
 
+class TestInfillWithMissingRows:
+    """Tests for TimeFrame.infill() when the time series is missing time steps."""
+
+    @staticmethod
+    def setup_tf() -> TimeFrame:
+        """Set up an hourly TimeFrame with the 01:00 and 02:00 rows missing."""
+        df = pl.DataFrame(
+            {
+                "time": [datetime(2024, 1, 1, 0), datetime(2024, 1, 1, 3), datetime(2024, 1, 1, 4)],
+                "value": [1.0, 4.0, 5.0],
+            }
+        )
+        return TimeFrame(df=df, time_name="time", resolution=Period.of_hours(1), periodicity=Period.of_hours(1))
+
+    def test_missing_rows_padded_and_infilled(self) -> None:
+        """Missing time steps are added to the result and infilled."""
+        tf = self.setup_tf()
+        result = tf.infill("linear", "value")
+        expected = pl.DataFrame(
+            {
+                "time": [datetime(2024, 1, 1, hour) for hour in range(5)],
+                "value": [1.0, 2.0, 3.0, 4.0, 5.0],
+            }
+        )
+        assert_frame_equal(result.df, expected)
+
+    def test_time_properties_preserved(self) -> None:
+        """The padded result keeps the temporal properties of the original TimeFrame."""
+        tf = self.setup_tf()
+        result = tf.infill("linear", "value")
+        assert result.time_name == tf.time_name
+        assert result.resolution == tf.resolution
+        assert result.periodicity == tf.periodicity
+        assert result.time_anchor == tf.time_anchor
+        assert result.df["time"].is_sorted()
+
+    def test_metadata_and_flag_systems_preserved(self) -> None:
+        """Metadata and registered flag systems carry over to the padded result."""
+        tf = self.setup_tf().with_metadata({"site": "test"}).with_column_metadata({"value": {"units": "m"}})
+        tf.register_flag_system("flags", {"FLAG_A": 1})
+        result = tf.infill("linear", "value")
+        assert result.metadata == {"site": "test"}
+        assert result.column_metadata["value"] == {"units": "m"}
+        assert result.flag_systems == tf.flag_systems
+
+    def test_existing_nulls_flagged(self) -> None:
+        """Rows that were present but null are flagged as infilled."""
+        df = pl.DataFrame(
+            {
+                "time": [datetime(2024, 1, 1, 0), datetime(2024, 1, 1, 1), datetime(2024, 1, 1, 3)],
+                "value": [1.0, None, 4.0],
+            }
+        )
+        tf = TimeFrame(df=df, time_name="time", resolution=Period.of_hours(1), periodicity=Period.of_hours(1))
+        tf.register_flag_system("flags", {"FLAG_A": 1})
+        tf.init_flag_column("flags", "flag_col")
+        result = tf.infill("linear", "value", flag_params=("flag_col", "FLAG_A"))
+        assert result.df.filter(pl.col("time") == datetime(2024, 1, 1, 1))["flag_col"].item() == 1
+
+    def test_original_tf_not_modified(self) -> None:
+        """Infilling a TimeFrame with missing rows does not modify the original."""
+        tf = self.setup_tf()
+        tf.infill("linear", "value")
+        assert tf.df.height == 3
+
+    def test_date_time_column(self) -> None:
+        """A Date time column is padded and infilled, keeping its dtype."""
+        df = pl.DataFrame({"time": [date(2024, 1, 1), date(2024, 1, 3)], "value": [1.0, 3.0]})
+        tf = TimeFrame(df=df, time_name="time", resolution=Period.of_days(1), periodicity=Period.of_days(1))
+        result = tf.infill("linear", "value")
+        expected = pl.DataFrame(
+            {"time": [date(2024, 1, i) for i in range(1, 4)], "value": [1.0, 2.0, 3.0]},
+        )
+        assert_frame_equal(result.df, expected)
+
+    def test_single_row_returns_unchanged(self) -> None:
+        """A single row TimeFrame has nothing to pad or infill, so is returned unchanged."""
+        df = pl.DataFrame({"time": [datetime(2024, 1, 1)], "value": [1.0]})
+        tf = TimeFrame(df=df, time_name="time", resolution=Period.of_days(1), periodicity=Period.of_days(1))
+        assert_frame_equal(tf.infill("linear", "value").df, df)
+
+    def test_padded_rows_flagged(self) -> None:
+        """Rows added by padding are infilled and flagged."""
+        tf = self.setup_tf()
+        tf.register_flag_system("flags", {"FLAG_A": 1})
+        tf.init_flag_column("flags", "flag_col")
+        result = tf.infill("linear", "value", flag_params=("flag_col", "FLAG_A"))
+        expected = pl.Series("flag_col", [0, 1, 1, 0, 0], dtype=pl.Int64)
+        assert_series_equal(result.df["flag_col"], expected)
+
+
+class TestUtcTimeFrame:
+    """Tests that a UTC time column gives the same results as the same data without a time zone."""
+
+    times = [datetime(2025, 1, 1) + timedelta(hours=h) for h in range(24 * 62) if h not in (5, 30, 31)]
+    naive_df = pl.DataFrame({"time": times, "value": [float(i % 24) for i in range(len(times))]})
+
+    @staticmethod
+    def to_utc(df: pl.DataFrame) -> pl.DataFrame:
+        """Tag every datetime column as UTC."""
+        return df.with_columns(pl.col(pl.Datetime).dt.replace_time_zone("UTC"))
+
+    @pytest.mark.parametrize(
+        "operation",
+        [
+            lambda tf: tf.aggregate("P1D", "mean", "value"),
+            lambda tf: tf.aggregate("P1M", "sum", "value", missing_criteria=("percent", 90)),
+            lambda tf: tf.aggregate("P1D", "nth", "value", n=6),
+            lambda tf: tf.rolling_aggregate("PT3H", "mean", "value"),
+            lambda tf: tf.pad(),
+            lambda tf: tf.infill("linear", "value"),
+        ],
+        ids=["aggregate daily", "aggregate monthly", "nth", "rolling", "pad", "infill"],
+    )
+    def test_same_as_naive(self, operation: Callable[[TimeFrame], TimeFrame]) -> None:
+        """Test that an operation on a UTC TimeFrame gives the naive result, in UTC."""
+        naive_result = operation(TimeFrame(self.naive_df, "time", resolution="PT1H"))
+        utc_result = operation(TimeFrame(self.to_utc(self.naive_df), "time", resolution="PT1H"))
+        assert_frame_equal(utc_result.df, self.to_utc(naive_result.df))
+
+
+class TestPad:
+    """Tests for TimeFrame.pad()."""
+
+    @pytest.mark.parametrize("anchor", ["start", "end"])
+    def test_unaligned_start_end_gives_valid_timeframe(self, anchor: TimeAnchor) -> None:
+        """Padding to an unaligned start and end gives a TimeFrame that passes validation."""
+        df = pl.DataFrame({"time": [datetime(2024, 1, 1, h) for h in range(3)], "value": [1.0, 2.0, 3.0]})
+        tf = TimeFrame(df, "time", resolution="PT1H", time_anchor=anchor)
+        padded = tf.pad(start=datetime(2023, 12, 31, 22, 30), end=datetime(2024, 1, 1, 4, 30))
+        TimeFrame(padded.df, "time", resolution="PT1H", time_anchor=anchor)
+
+
+class TestPadFlagColumns:
+    """Tests for how TimeFrame.pad() initialises flag columns on the rows it adds."""
+
+    @staticmethod
+    def setup_tf(flag_system: dict[str, int | str], flag_type: FlagSystemLiteral = "bitwise") -> TimeFrame:
+        """Set up an hourly TimeFrame missing its 01:00 row, with a flag column holding one flag."""
+        df = pl.DataFrame(
+            {
+                "time": [datetime(2024, 1, 1, 0), datetime(2024, 1, 1, 2)],
+                "value": [1.0, 3.0],
+            }
+        )
+        tf = TimeFrame(df=df, time_name="time", resolution=Period.of_hours(1), periodicity=Period.of_hours(1))
+        tf.register_flag_system("flags", flag_system, flag_type)
+        tf.init_flag_column("flags", "flag_col")
+        tf.add_flag("flag_col", next(iter(flag_system)), pl.col("time") == datetime(2024, 1, 1, 0))
+        return tf
+
+    def test_bitwise_padded_rows_set_to_zero(self) -> None:
+        """A bitwise flag column is 0 on padded rows."""
+        tf = self.setup_tf({"FLAG_A": 1, "FLAG_B": 2})
+        expected = pl.Series("flag_col", [1, 0, 0], dtype=pl.Int64)
+        assert_series_equal(tf.pad().df["flag_col"], expected)
+
+    def test_decoded_bitwise_padded_rows_set_to_empty_list(self) -> None:
+        """A decoded bitwise flag column is an empty list on padded rows."""
+        tf = self.setup_tf({"FLAG_A": 1, "FLAG_B": 2}).decode_flag_column("flag_col")
+        expected = pl.Series("flag_col", [["FLAG_A"], [], []], dtype=pl.List(pl.String))
+        assert_series_equal(tf.pad().df["flag_col"], expected)
+
+    def test_categorical_list_padded_rows_set_to_empty_list(self) -> None:
+        """A list-mode categorical flag column is an empty list on padded rows."""
+        tf = self.setup_tf({"FLAG_A": "a", "FLAG_B": "b"}, "categorical_list")
+        expected = pl.Series("flag_col", [["a"], [], []], dtype=pl.List(pl.String))
+        assert_series_equal(tf.pad().df["flag_col"], expected)
+
+    def test_categorical_single_padded_rows_left_null(self) -> None:
+        """A scalar categorical flag column stays null on padded rows, which is its empty value."""
+        tf = self.setup_tf({"FLAG_A": "a", "FLAG_B": "b"}, "categorical")
+        expected = pl.Series("flag_col", ["a", None, None], dtype=pl.String)
+        assert_series_equal(tf.pad().df["flag_col"], expected)
+
+    def test_existing_nulls_not_filled(self) -> None:
+        """Nulls already in a flag column are left as they are."""
+        df = pl.DataFrame(
+            {
+                "time": [datetime(2024, 1, 1, 0), datetime(2024, 1, 1, 2)],
+                "value": [1.0, 3.0],
+                "flag_col": [None, 1],
+            }
+        )
+        tf = TimeFrame(df=df, time_name="time", resolution=Period.of_hours(1), periodicity=Period.of_hours(1))
+        tf.register_flag_system("flags", {"FLAG_A": 1})
+        tf.register_flag_column("flag_col", "flags")
+        expected = pl.Series("flag_col", [None, 0, 1], dtype=pl.Int64)
+        assert_series_equal(tf.pad().df["flag_col"], expected)
+
+
+class TestCopy:
+    """Tests for TimeFrame.copy()."""
+
+    @staticmethod
+    def setup_tf() -> TimeFrame:
+        """Set up a daily TimeFrame with non-default duplicate/misalignment options, flags and metadata."""
+        df = pl.DataFrame({"time": [datetime(2024, 1, i) for i in range(1, 4)], "value": [1, 2, 3]})
+        tf = TimeFrame(
+            df=df,
+            time_name="time",
+            resolution=Period.of_days(1),
+            on_duplicates="keep_first",
+            on_misaligned_rows="resolve",
+            time_anchor="end",
+        )
+        tf.register_flag_system("qc", {"FLAG_A": 1})
+        tf.init_flag_column("qc", "flags")
+        return tf.with_metadata({"site": "x"}).with_column_metadata({"value": {"units": "m"}})
+
+    def test_copy_equals_original(self) -> None:
+        """A copy is equal to the original TimeFrame."""
+        tf = self.setup_tf()
+        assert tf.copy() == tf
+
+    def test_time_manager_options_preserved(self) -> None:
+        """on_duplicates, on_misaligned_rows and time_anchor survive a copy."""
+        tf = self.setup_tf()
+        copied = tf.copy()
+        assert copied._time_manager._on_duplicates == "keep_first"
+        assert copied._time_manager._on_misaligned_rows == "resolve"
+        assert copied.time_anchor == "end"
+
+    def test_share_df_true_shares_dataframe(self) -> None:
+        """With share_df=True (the default), the copy references the same DataFrame object."""
+        tf = self.setup_tf()
+        assert tf.copy().df is tf.df
+
+    def test_share_df_false_clones_dataframe(self) -> None:
+        """With share_df=False, the copy gets an independent but equal DataFrame."""
+        tf = self.setup_tf()
+        copied = tf.copy(share_df=False)
+        assert copied.df is not tf.df
+        assert_frame_equal(copied.df, tf.df)
+
+    def test_metadata_independent(self) -> None:
+        """Changing the copy's metadata does not affect the original."""
+        tf = self.setup_tf()
+        copied = tf.copy()
+        copied.metadata["new"] = "value"
+        assert "new" not in tf.metadata
+
+    def test_column_metadata_independent(self) -> None:
+        """Changing the copy's column metadata does not affect the original."""
+        tf = self.setup_tf()
+        copied = tf.copy()
+        copied.column_metadata.update({"value": {"units": "ft"}})
+        assert tf.column_metadata["value"] == {"units": "m"}
+
+    def test_does_not_revalidate(self) -> None:
+        """copy() does not re-run time validation, since the original TimeFrame is already valid."""
+        tf = self.setup_tf()
+        with patch.object(TimeManager, "prepare") as mock_prepare:
+            tf.copy()
+        mock_prepare.assert_not_called()
+
+
+class TestWithDf:
+    """Tests for TimeFrame.with_df()."""
+
+    @staticmethod
+    def setup_tf() -> TimeFrame:
+        """Set up a daily TimeFrame."""
+        df = pl.DataFrame({"time": [datetime(2024, 1, i) for i in range(1, 4)], "value": [1, 2, 3]})
+        return TimeFrame(df=df, time_name="time", resolution=Period.of_days(1))
+
+    def test_reordered_rows_are_sorted(self) -> None:
+        """A DataFrame with its rows in a different order is sorted back into time order."""
+        tf = self.setup_tf()
+        result = tf.with_df(tf.df.reverse())
+        assert_frame_equal(result.df, tf.df)
+
+    def test_changed_time_values_raise(self) -> None:
+        """A DataFrame with different time values is rejected."""
+        tf = self.setup_tf()
+        with pytest.raises(TimeMutatedError):
+            tf.with_df(tf.df.head(2))
+
+
+class TestWithPeriodicity:
+    """Tests for TimeFrame.with_periodicity()."""
+
+    @staticmethod
+    def setup_tf() -> TimeFrame:
+        """Set up a daily TimeFrame holding one value per month."""
+        df = pl.DataFrame({"time": [datetime(2024, 1, 1), datetime(2024, 2, 1)], "value": [1.0, 2.0]})
+        return TimeFrame(df=df, time_name="time", resolution=Period.of_days(1))
+
+    @pytest.mark.parametrize("periodicity", ["P1M", Period.of_months(1)], ids=["as str", "as Period"])
+    def test_sets_new_periodicity(self, periodicity: str | Period) -> None:
+        """The new periodicity is applied, given as either a string or a Period."""
+        result = self.setup_tf().with_periodicity(periodicity)
+        assert result.periodicity == Period.of_months(1)
+
+    def test_other_time_properties_preserved(self) -> None:
+        """Resolution, offset, time anchor and time name are carried over."""
+        df = pl.DataFrame({"time": [datetime(2024, 1, 1, 9), datetime(2024, 2, 1, 9)], "value": [1.0, 2.0]})
+        tf = TimeFrame(df=df, time_name="time", resolution=Period.of_days(1), offset="+T9H", time_anchor="end")
+
+        result = tf.with_periodicity("P1M+T9H")
+
+        assert result.resolution == tf.resolution
+        assert result.offset == tf.offset
+        assert result.time_anchor == tf.time_anchor
+        assert result.time_name == tf.time_name
+
+    def test_original_tf_not_modified(self) -> None:
+        """The original TimeFrame keeps its own periodicity."""
+        tf = self.setup_tf()
+        tf.with_periodicity("P1M")
+        assert tf.periodicity == Period.of_days(1)
+
+    def test_periodicity_not_met_by_data_raises(self) -> None:
+        """A periodicity the time values do not conform to raises an error."""
+        df = pl.DataFrame({"time": [datetime(2024, 1, 1), datetime(2024, 1, 2)], "value": [1.0, 2.0]})
+        tf = TimeFrame(df=df, time_name="time", resolution=Period.of_days(1))
+
+        with pytest.raises(PeriodicityError):
+            tf.with_periodicity("P1M")
+
+    def test_invalid_periodicity_type_raises(self) -> None:
+        """A periodicity that is not a string or Period raises an error."""
+        with pytest.raises(TypeError):
+            self.setup_tf().with_periodicity(123)  # type: ignore[arg-type]
+
+
 class TestRenameTimeColumnName:
     """Tests for TimeFrame.rename_time_column() with new_time_column name."""
 
@@ -1211,7 +1634,6 @@ class TestRenameTimeColumnName:
             }
         )
         assert_frame_equal(tf_new.df, expected)
-        assert tf_new.df is not tf.df
         assert tf_new is not tf
 
     def test_new_time_name_same_as_data_column(self) -> None:

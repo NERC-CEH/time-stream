@@ -205,6 +205,40 @@ def flagged_infill() -> None:
         print(tf_infill.df)
 
 
+def _hourly_frame_with_missing_rows() -> ts.TimeFrame:
+    """An hourly flow series with two rows missing altogether, one null value, and a flag column."""
+    df = pl.DataFrame(
+        {
+            "time": [datetime(2024, 1, 1, hour) for hour in (0, 1, 4, 5, 6)],
+            "flow": [10.0, 20.0, 50.0, None, 70.0],
+        }
+    )
+    tf = ts.TimeFrame(df, "time", resolution="PT1H", periodicity="PT1H")
+    tf.register_flag_system("INFILL_FLAGS", ["INFILLED"])
+    tf.init_flag_column("INFILL_FLAGS", "flow_flags")
+    return tf
+
+
+def missing_rows_data() -> None:
+    """An hourly series missing its 02:00 and 03:00 rows, with a null value at 05:00."""
+    # [start:missing_rows_data]
+    print(_hourly_frame_with_missing_rows().df)
+    # [end:missing_rows_data]
+
+
+def missing_rows_infill() -> None:
+    """Infill a series whose gaps are missing rows rather than null values."""
+    tf = _hourly_frame_with_missing_rows()
+    # fmt: off
+    # [start:missing_rows_infill]
+    tf_infill = tf.infill(
+        "linear", "flow", flag_params=("flow_flags", "INFILLED")
+    )
+    # [end:missing_rows_infill]
+    # fmt: on
+    print(tf_infill.df)
+
+
 def all_infills() -> None:
     """Every interpolation method over one gappy series, side by side."""
     # [start:all_infills]

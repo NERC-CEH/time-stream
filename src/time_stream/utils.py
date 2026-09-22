@@ -7,9 +7,10 @@ This module provides helper functions used across the time_stream package for wo
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
+from typing import Any, get_args
 
 import polars as pl
-from isoperiod import Period, PeriodValidationError
+from isoperiod import Period
 
 from time_stream.exceptions import (
     ColumnNotFoundError,
@@ -37,14 +38,17 @@ class TimeWindow:
 
     start: time
     end: time
-    closed: ClosedInterval | None = "both"
+    closed: ClosedInterval = "both"
 
     def __post_init__(self) -> None:
         """Validate the time window on construction."""
         if not isinstance(self.start, time) or not isinstance(self.end, time):
             raise TimeWindowError("'start' and 'end' must be datetime.time objects.")
+        check_naive_time(self.start, "start")
+        check_naive_time(self.end, "end")
         if self.start >= self.end:
             raise TimeWindowError(f"'start' ({self.start}) must be strictly before 'end' ({self.end}).")
+        check_literal_value(self.closed, ClosedInterval, "closed")
 
     @classmethod
     def from_tuple(cls, t: tuple[time, time] | tuple[time, time, ClosedInterval]) -> "TimeWindow":
@@ -126,22 +130,33 @@ class TimeWindow:
 
 
 def get_date_filter(
-    time_name: str, observation_interval: datetime | tuple[datetime | None, datetime | None]
+    time_name: str,
+    observation_interval: datetime | tuple[datetime | None, datetime | None],
+    dtype: pl.DataType,
 ) -> pl.Expr:
     """Get Polars expression for observation date interval filtering.
 
     Args:
         time_name: The name of the time column to create the filter for
         observation_interval: Tuple of (start_date, end_date) defining the time period.
+        dtype: The dtype of the time column.
 
     Returns:
         pl.Expr: Boolean polars expression for date filtering.
+
+    Raises:
+        TypeError: If the time zone of a date in ``observation_interval`` doesn't match the time column.
     """
     if isinstance(observation_interval, datetime):
         start_date = observation_interval
         end_date = None
     else:
         start_date, end_date = observation_interval
+
+    if start_date is not None:
+        check_time_zone(start_date, dtype, "observation_interval start")
+    if end_date is not None:
+        check_time_zone(end_date, dtype, "observation_interval end")
 
     if start_date is None and end_date is None:
         return pl.lit(True).alias(time_name)
@@ -180,13 +195,10 @@ def truncate_to_period(date_times: pl.Series, period: Period, time_anchor: TimeA
     #    Here we need to determine where the anchor points are, and if we need to nudge the datetimes towards
     #    the anchor.
     if time_anchor == "end":
-        # In this case, the anchor point is at the END of the period.
-        #   - Subtract a micro-second (to handle datetimes on 'boundary' points that are within their own period),
-        #   - Truncate to the start of the period,
-        #   - Add on 1 period to get to the end point.
-        date_times = date_times.dt.offset_by("-1us")
-        date_times = date_times.dt.truncate(period.pl_interval)
-        date_times = date_times.dt.offset_by(period.pl_interval)
+        # In this case, the anchor point is at the END of the period. Datetimes on a boundary point are within their
+        #   own period, so stay as they are. All others move to the end of the period they fall in.
+        truncated = date_times.dt.truncate(period.pl_interval)
+        date_times = date_times.zip_with(truncated == date_times, truncated.dt.offset_by(period.pl_interval))
     else:
         # This is a "standard" case, where the anchor point is at the START of the period,
         #   so simply truncate to the start of the period
@@ -226,43 +238,56 @@ def pad_time(
         time_name: The name of the time column to pad.
         periodicity: The periodicity of the time series.
         time_anchor: The time anchor to which the date/times conform to.
-        start: The starting datetime value to pad time values from (inclusive). If not provided then the beginning of
-            the dataframe will be used.
-        end: The final datetime value to pad time values to (inclusive). If not provided then the beginning of the
-            dataframe will be used.
+        start: The starting datetime value to pad time values from (inclusive), truncated to the periodicity. If not
+            provided then the beginning of the dataframe will be used.
+        end: The final datetime value to pad time values to (inclusive), truncated to the periodicity. If not provided
+            then the end of the dataframe will be used.
 
     Returns:
         pl.DataFrame of padded data
 
+    Raises:
+        TypeError: If ``start`` or ``end`` is not a datetime, or its time zone doesn't match the time column.
+
     """
+    for name, value in (("start", start), ("end", end)):
+        if value is not None and not isinstance(value, datetime):
+            raise TypeError(f"'{name}' must be a datetime. Got: '{type(value)}'")
+    if start is not None:
+        check_time_zone(start, df[time_name].dtype, "start")
+    if end is not None:
+        check_time_zone(end, df[time_name].dtype, "end")
+
     # Extract the existing datetimes, truncated to the boundary of their periodicity period
     existing_datetimes = truncate_to_period(df[time_name], periodicity, time_anchor)
 
-    # Get the min and max datetime from the existing datetimes
-    min_datetime = start if start else existing_datetimes.min()
-    max_datetime = end if end else existing_datetimes.max()
+    # Get the min and max datetime, truncating any given start and end to the periodicity in the same way
+    min_datetime = (
+        truncate_to_period(pl.Series([start]), periodicity, time_anchor)[0] if start else existing_datetimes.min()
+    )
+    max_datetime = (
+        truncate_to_period(pl.Series([end]), periodicity, time_anchor)[0] if end else existing_datetimes.max()
+    )
 
     if not isinstance(min_datetime, datetime) or not isinstance(max_datetime, datetime):
         raise ValueError("Cannot pad an empty time series.")
 
-    if min_datetime >= max_datetime:
+    if min_datetime > max_datetime:
         raise ValueError(f"Invalid datetime range to pad. Start: {min_datetime}. End: {max_datetime}")
 
-    dtype = df[time_name].dtype
-    time_unit = dtype.time_unit if isinstance(dtype, pl.Datetime) else "us"
-
-    # Generate a series of the datetimes we would expect with a full time series between the start and end date
+    # Generate a series of the datetimes we would expect with a full time series between the start and end date.
+    # This is cast to the dtype of the existing (truncated) datetimes, so that the two can be compared below.
     expected_datetimes = pl.datetime_range(
         min_datetime,
         max_datetime,
         interval=periodicity.pl_interval,
         eager=True,
-        time_unit=time_unit,
-    )
+    ).cast(existing_datetimes.dtype)
 
-    # Find any missing datetimes between expected and existing
+    # Find any missing datetimes between expected and existing. The expected datetimes are always generated as
+    # datetimes, so cast them back to the dtype of the time column (which may be a Date).
     missing_datetimes = expected_datetimes.filter(~expected_datetimes.is_in(existing_datetimes.implode()))
-    missing_df = pl.DataFrame({time_name: missing_datetimes})
+    missing_df = pl.DataFrame({time_name: missing_datetimes.cast(df[time_name].dtype)})
 
     # Perform a join to create a complete time series
     padded_df = missing_df.join(df, on=time_name, how="full", coalesce=True)
@@ -271,6 +296,44 @@ def pad_time(
     padded_df = padded_df.sort(time_name)
 
     return padded_df
+
+
+def check_time_zone(value: datetime, dtype: pl.DataType, name: str) -> None:
+    """Check that a datetime is in the same time zone as the column it is compared with.
+
+    Args:
+        value: The datetime to check.
+        dtype: The dtype of the column.
+        name: The name of the parameter, used in the error message.
+
+    Raises:
+        TypeError: If the datetime's time zone is not the column's, including one having a time zone and the other not.
+    """
+    time_zone = dtype.time_zone if isinstance(dtype, pl.Datetime) else None
+    if time_zone is None:
+        if value.tzinfo is not None:
+            raise TypeError(f"'{name}' has a time zone but the column does not: {value}")
+        return
+    if value.tzinfo is None:
+        raise TypeError(f"'{name}' has no time zone but the column is in '{time_zone}': {value}")
+    # UTC has several tzinfo implementations, which all name it "UTC"
+    value_time_zone = "UTC" if value.tzname() == "UTC" else getattr(value.tzinfo, "key", str(value.tzinfo))
+    if value_time_zone != time_zone:
+        raise TypeError(f"'{name}' must be in the column's time zone '{time_zone}', got '{value_time_zone}': {value}")
+
+
+def check_naive_time(value: time, name: str) -> None:
+    """Check that a time of day has no time zone.
+
+    Args:
+        value: The time to check.
+        name: The name of the parameter, used in the error message.
+
+    Raises:
+        TypeError: If the time has a time zone.
+    """
+    if value.tzinfo is not None:
+        raise TypeError(f"'{name}' must not have a time zone: {value}")
 
 
 def gap_size_count(df: pl.DataFrame, column: str) -> pl.DataFrame:
@@ -313,6 +376,22 @@ def check_columns_in_dataframe(df: pl.DataFrame, columns: str | Iterable[str]) -
         raise ColumnNotFoundError(f"Columns not found in dataframe: {invalid_columns}")
 
 
+def check_literal_value(value: Any, literal: Any, name: str) -> None:
+    """Checks that a value is one of the options allowed by a ``Literal`` type alias.
+
+    Args:
+        value: The value to check.
+        literal: The ``Literal`` type alias defining the allowed values.
+        name: The name of the parameter, used in the error message.
+
+    Raises:
+        ValueError: If the value is not one of the allowed options.
+    """
+    options = get_args(literal)
+    if value not in options:
+        raise ValueError(f"Invalid {name} '{value}'. Expected one of: {list(options)}")
+
+
 def configure_period_object(period: str | Period | None) -> Period:
     """Configure a time-stream Period object.
 
@@ -323,6 +402,9 @@ def configure_period_object(period: str | Period | None) -> Period:
 
     Returns:
          A Period object.
+
+    Raises:
+        TypeError: If ``period`` is not a string, Period or None.
     """
     if period is None:
         # Default to a period that accepts all datetimes
@@ -334,41 +416,7 @@ def configure_period_object(period: str | Period | None) -> Period:
         # If it's a string, let's assume it's provided as a valid ISO duration string. And create a Period object
         return Period.of_duration(period)
     else:
-        raise PeriodValidationError(
-            f"Incorrect type for defining a Period object. Expected str | Period. Got {type(period)}"
-        )
-
-
-def epoch_check(period: Period) -> None:
-    """Check if the period is epoch-agnostic.
-
-    A period is considered "epoch agnostic" if it divides the timeline into consistent intervals regardless of the
-    epoch (starting point) used for calculations. This ensures that the intervals are aligned with natural
-    calendar or clock units (e.g., days, months, years), rather than being influenced by the specific epoch used
-    in arithmetic.
-
-    Currently, Time-Stream does not allow working with non-epoch agnostic periods.
-
-    For example:
-        - Epoch-agnostic periods include:
-            - `P1Y` (1 year): Intervals are aligned to calendar years.
-            - `P1M` (1 month): Intervals are aligned to calendar months.
-            - `P1D` (1 day): Intervals are aligned to whole days.
-            - `PT15M` (15 minutes): Intervals are aligned to clock minutes.
-
-        - Non-epoch-agnostic periods include:
-            - `P7D` (7 days): Intervals depend on the epoch. For example, starting from 2023-01-01 vs. 2023-01-03
-                would result in different alignments of 7-day periods.
-
-    Args:
-        period: The period to check.
-
-    Raises:
-        NotImplementedError: If the period is not epoch-agnostic.
-    """
-    if not period.is_epoch_agnostic():
-        # E.g., 5 hours, 7 days, 9 months, etc.
-        raise NotImplementedError(f"Non-epoch agnostic  periods are not supported: {period}")
+        raise TypeError(f"Incorrect type for defining a Period object. Expected str | Period. Got {type(period)}")
 
 
 def handle_duplicates(

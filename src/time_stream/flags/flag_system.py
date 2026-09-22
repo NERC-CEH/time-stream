@@ -12,13 +12,12 @@ Flag system types are enum-based and created from a name and a ``dict[str, int |
 
 from collections.abc import Mapping
 from enum import EnumType
-from typing import TYPE_CHECKING, Any, ClassVar, Literal, Self
+from typing import TYPE_CHECKING, Any, ClassVar, Self
+
+from time_stream.types import FlagSystemLiteral
 
 if TYPE_CHECKING:
     import polars as pl
-
-
-FlagSystemLiteral = Literal["bitwise", "categorical", "categorical_list"]
 
 
 class FlagMeta(EnumType):
@@ -109,6 +108,28 @@ class FlagSystemBase:
 
         Returns:
             ``int`` or ``str``.
+        """
+        raise NotImplementedError
+
+    @classmethod
+    def column_dtype(cls) -> "pl.DataType":
+        """Return the Polars dtype a column of this flag system holds.
+
+        Subclasses must override this method.
+
+        Returns:
+            The Polars dtype.
+        """
+        raise NotImplementedError
+
+    @classmethod
+    def empty_value(cls) -> int | list | None:
+        """Return the value that means "no flags set" for this flag system.
+
+        Subclasses must override this method.
+
+        Returns:
+            The empty value.
         """
         raise NotImplementedError
 

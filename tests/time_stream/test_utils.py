@@ -1,6 +1,7 @@
 import re
-from datetime import datetime, time, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import polars as pl
 import pytest
@@ -13,8 +14,10 @@ from time_stream.utils import (
     TimeWindow,
     check_alignment,
     check_columns_in_dataframe,
+    check_literal_value,
+    check_naive_time,
     check_periodicity,
-    epoch_check,
+    check_time_zone,
     get_date_filter,
     pad_time,
     truncate_to_period,
@@ -78,10 +81,76 @@ class TestGetDateFilter:
     def test_get_date_filter(
         self, observation_interval: datetime | tuple[datetime, datetime | None], expected_eval: list
     ) -> None:
-        date_filter = get_date_filter("timestamp", observation_interval)
+        date_filter = get_date_filter("timestamp", observation_interval, self.df.schema["timestamp"])
         result = self.df.with_columns(date_filter).to_series()
         expected = pl.Series("timestamp", expected_eval)
         assert_series_equal(result, expected)
+
+    def test_get_date_filter_utc(self) -> None:
+        """Test that an observation interval in UTC filters a UTC time column."""
+        df = self.df.with_columns(pl.col("timestamp").dt.replace_time_zone("UTC"))
+        start = datetime(2025, 3, 1, tzinfo=UTC)
+        result = df.with_columns(get_date_filter("timestamp", start, df.schema["timestamp"])).to_series()
+        assert_series_equal(result, pl.Series("timestamp", [False, False, True, True, True, True, True]))
+
+    @pytest.mark.parametrize(
+        "observation_interval,utc",
+        [
+            ((datetime(2025, 1, 1, tzinfo=UTC), None), False),
+            ((None, datetime(2025, 1, 1)), True),
+            ((datetime(2025, 1, 1, tzinfo=ZoneInfo("Europe/Paris")), None), True),
+        ],
+        ids=["aware on naive column", "naive on UTC column", "other zone on UTC column"],
+    )
+    def test_get_date_filter_time_zone_mismatch(self, observation_interval: tuple, utc: bool) -> None:
+        """Test that an observation interval whose time zone doesn't match the time column raises an error."""
+        dtype = pl.Datetime("us", "UTC") if utc else pl.Datetime("us")
+        with pytest.raises(TypeError, match="time zone"):
+            get_date_filter("timestamp", observation_interval, dtype)
+
+
+class TestCheckTimeZone:
+    @pytest.mark.parametrize(
+        "value,dtype",
+        [
+            (datetime(2025, 1, 1), pl.Datetime("us")),
+            (datetime(2025, 1, 1), pl.Date()),
+            (datetime(2025, 1, 1, tzinfo=UTC), pl.Datetime("us", "UTC")),
+            (datetime(2025, 1, 1, tzinfo=ZoneInfo("UTC")), pl.Datetime("us", "UTC")),
+        ],
+        ids=["naive on naive", "naive on Date", "UTC on UTC", "ZoneInfo UTC on UTC"],
+    )
+    def test_match(self, value: datetime, dtype: pl.DataType) -> None:
+        """Test that a datetime in the column's time zone passes the check."""
+        check_time_zone(value, dtype, "start")
+
+    @pytest.mark.parametrize(
+        "value,dtype,expected_error",
+        [
+            (datetime(2025, 1, 1, tzinfo=UTC), pl.Datetime("us"), "'start' has a time zone but the column does not"),
+            (datetime(2025, 1, 1), pl.Datetime("us", "UTC"), "'start' has no time zone but the column is in 'UTC'"),
+            (
+                datetime(2025, 1, 1, 1, tzinfo=ZoneInfo("Europe/Paris")),
+                pl.Datetime("us", "UTC"),
+                "'start' must be in the column's time zone 'UTC', got 'Europe/Paris'",
+            ),
+            (
+                datetime(2025, 1, 1, tzinfo=ZoneInfo("Europe/London")),
+                pl.Datetime("us", "UTC"),
+                "'start' must be in the column's time zone 'UTC', got 'Europe/London'",
+            ),
+        ],
+        ids=["aware on naive", "naive on UTC", "other zone on UTC", "zero offset zone on UTC"],
+    )
+    def test_mismatch_raises(self, value: datetime, dtype: pl.DataType, expected_error: str) -> None:
+        """Test that a datetime not in the column's time zone raises an error."""
+        with pytest.raises(TypeError, match=re.escape(expected_error)):
+            check_time_zone(value, dtype, "start")
+
+    def test_time_with_time_zone_raises(self) -> None:
+        """Test that a time of day with a time zone raises an error."""
+        with pytest.raises(TypeError, match="'start' must not have a time zone"):
+            check_naive_time(time(10, tzinfo=UTC), "start")
 
 
 class TestTruncateToPeriod:
@@ -655,6 +724,30 @@ class TestTruncateToPeriod:
         result = truncate_to_period(self.dt, period, anchor)
         assert_series_equal(result, pl.Series(expected))
 
+    @pytest.mark.parametrize("time_unit", ["ms", "us", "ns"])
+    @pytest.mark.parametrize(
+        "anchor,expected",
+        [
+            ("start", [datetime(2024, 1, 2), datetime(2024, 1, 2), datetime(2024, 1, 3)]),
+            ("end", [datetime(2024, 1, 2), datetime(2024, 1, 3), datetime(2024, 1, 3)]),
+        ],
+        ids=["start anchor", "end anchor"],
+    )
+    def test_time_unit(self, time_unit: str, anchor: TimeAnchor, expected: list) -> None:
+        """Test that truncation gives the same result whatever the time unit of the series."""
+        dt = pl.Series(
+            [datetime(2024, 1, 2), datetime(2024, 1, 2, 12), datetime(2024, 1, 3)],
+            dtype=pl.Datetime(time_unit),  # type: ignore[arg-type] - Polars Literal is a string
+        )
+        result = truncate_to_period(dt, Period.of_days(1), anchor)
+        assert_series_equal(result, pl.Series(expected, dtype=pl.Datetime(time_unit)))  # type: ignore[arg-type] - Polars Literal is a string
+
+    def test_sub_microsecond_end_anchor(self) -> None:
+        """Test that a nanosecond value just after a boundary truncates to the next boundary with an end anchor."""
+        dt = pl.Series([datetime(2024, 1, 2)], dtype=pl.Datetime("ns")).dt.offset_by("500ns")
+        result = truncate_to_period(dt, Period.of_days(1), "end")
+        assert_series_equal(result, pl.Series([datetime(2024, 1, 3)], dtype=pl.Datetime("ns")))
+
 
 class TestPadTime:
     simple_test_cases = {
@@ -798,24 +891,8 @@ class TestPadTime:
         result = pad_time(df, "time", periodicity)
         assert_frame_equal(result, df)
 
-    @pytest.mark.parametrize(
-        "start_date,end_date",
-        [
-            (
-                datetime(2025, 1, 1, 12, 5, 0),
-                datetime(2025, 1, 1, 12, 2, 0),
-            ),
-            (
-                datetime(2025, 1, 1, 12, 5, 0),
-                datetime(2025, 1, 1, 12, 2, 0),
-            ),
-        ],
-        ids=[
-            "start date after end date",
-            "start date the same as end date",
-        ],
-    )
-    def test_invalid_start_end_dates(self, start_date: datetime, end_date: datetime) -> None:
+    def test_invalid_start_end_dates(self) -> None:
+        """Test that a start date after the end date raises an error"""
         df = pl.DataFrame(
             {
                 "time": pl.datetime_range(
@@ -823,11 +900,141 @@ class TestPadTime:
                 )
             }
         )
+        start_date = datetime(2025, 1, 1, 12, 5, 0)
+        end_date = datetime(2025, 1, 1, 12, 2, 0)
         periodicity = Period.of_minutes(1)
         expected_error = f"Invalid datetime range to pad. Start: {start_date}. End: {end_date}"
 
         with pytest.raises(ValueError, match=expected_error):
             pad_time(df, "time", periodicity, start=start_date, end=end_date)
+
+    @pytest.mark.parametrize(
+        "periodicity,anchor,time_stamps,start,end,expected",
+        [
+            (
+                Period.of_hours(1),
+                "start",
+                [datetime(2024, 1, 1, 0), datetime(2024, 1, 1, 1)],
+                datetime(2023, 12, 31, 22, 30),
+                datetime(2024, 1, 1, 3, 30),
+                [datetime(2023, 12, 31, 22), datetime(2023, 12, 31, 23)] + [datetime(2024, 1, 1, h) for h in range(4)],
+            ),
+            (
+                Period.of_hours(1),
+                "end",
+                [datetime(2024, 1, 1, 0), datetime(2024, 1, 1, 1)],
+                datetime(2023, 12, 31, 22, 30),
+                datetime(2024, 1, 1, 3, 30),
+                [datetime(2023, 12, 31, 23)] + [datetime(2024, 1, 1, h) for h in range(5)],
+            ),
+            (
+                Period.of_days(1).with_hour_offset(9),
+                "start",
+                [datetime(2024, 1, 2, 9)],
+                datetime(2024, 1, 1, 3),
+                datetime(2024, 1, 3, 12),
+                [datetime(2023, 12, 31, 9), datetime(2024, 1, 1, 9), datetime(2024, 1, 2, 9), datetime(2024, 1, 3, 9)],
+            ),
+        ],
+        ids=["start anchor", "end anchor", "offset periodicity"],
+    )
+    def test_unaligned_start_end_dates(
+        self,
+        periodicity: Period,
+        anchor: TimeAnchor,
+        time_stamps: list,
+        start: datetime,
+        end: datetime,
+        expected: list,
+    ) -> None:
+        """Test that start and end dates are truncated to the periodicity before padding"""
+        df = pl.DataFrame({"time": time_stamps})
+        result = pad_time(df, "time", periodicity, anchor, start=start, end=end)
+        assert_frame_equal(result, pl.DataFrame({"time": expected}))
+
+    @pytest.mark.parametrize(
+        "start,end,arg",
+        [
+            (date(2024, 1, 1), None, "start"),
+            (None, date(2024, 1, 1), "end"),
+        ],
+        ids=["date start", "date end"],
+    )
+    def test_date_start_end_dates(self, start: Any, end: Any, arg: str) -> None:
+        """Test that a date rather than a datetime for start or end raises an error"""
+        df = pl.DataFrame({"time": [datetime(2024, 1, 1)]})
+        with pytest.raises(TypeError, match=f"'{arg}' must be a datetime"):
+            pad_time(df, "time", Period.of_days(1), start=start, end=end)
+
+    @pytest.mark.parametrize(
+        "time_zone,start",
+        [
+            (None, datetime(2025, 1, 1, tzinfo=UTC)),
+            ("UTC", datetime(2025, 1, 1)),
+            ("UTC", datetime(2025, 1, 1, 1, tzinfo=ZoneInfo("Europe/Paris"))),
+        ],
+        ids=["aware on naive column", "naive on UTC column", "other zone on UTC column"],
+    )
+    def test_start_time_zone_mismatch(self, time_zone: str | None, start: datetime) -> None:
+        """Test that a start date whose time zone doesn't match the time column raises an error"""
+        df = pl.DataFrame({"time": [datetime(2025, 1, 2)]}).with_columns(pl.col("time").dt.replace_time_zone(time_zone))
+        with pytest.raises(TypeError, match="time zone"):
+            pad_time(df, "time", Period.of_days(1), start=start)
+
+    def test_utc_start_end_dates(self) -> None:
+        """Test that start and end dates in UTC pad a UTC time column"""
+        df = pl.DataFrame({"time": [datetime(2025, 1, 2)]}).with_columns(pl.col("time").dt.replace_time_zone("UTC"))
+        start = datetime(2025, 1, 1, tzinfo=UTC)
+        result = pad_time(df, "time", Period.of_days(1), start=start, end=datetime(2025, 1, 3, tzinfo=UTC))
+        expected = pl.DataFrame(
+            {"time": [datetime(2025, 1, 1), datetime(2025, 1, 2), datetime(2025, 1, 3)]}
+        ).with_columns(pl.col("time").dt.replace_time_zone("UTC"))
+        assert_frame_equal(result, expected)
+
+    def test_equal_start_end_dates(self) -> None:
+        """Test that a start date equal to the end date leaves the time series unchanged"""
+        df = pl.DataFrame(
+            {
+                "time": pl.datetime_range(
+                    datetime(2025, 1, 1, 12, 0, 0), datetime(2025, 1, 1, 12, 10, 0), interval="1m", eager=True
+                )
+            }
+        )
+        start_end_date = datetime(2025, 1, 1, 12, 5, 0)
+        result = pad_time(df, "time", Period.of_minutes(1), start=start_end_date, end=start_end_date)
+        assert_frame_equal(result, df)
+
+    def test_single_row(self) -> None:
+        """Test that a single row time series has nothing to pad, so is returned unchanged"""
+        df = pl.DataFrame({"time": [datetime(2025, 1, 1)], "value": [1.0]})
+        result = pad_time(df, "time", Period.of_days(1))
+        assert_frame_equal(result, df)
+
+    @pytest.mark.parametrize("time_unit", ["ms", "us", "ns"])
+    def test_time_unit_preserved(self, time_unit: str) -> None:
+        """Test that a time column is padded in its own time unit, whichever unit that is"""
+        times = pl.Series("time", [datetime(2025, 1, 1), datetime(2025, 1, 3)], dtype=pl.Datetime(time_unit))  # type: ignore[arg-type] - Polars Literal is a string
+        df = pl.DataFrame({"time": times, "value": [1.0, 3.0]})
+        result = pad_time(df, "time", Period.of_days(1))
+        expected = pl.DataFrame(
+            {
+                "time": pl.Series(
+                    [datetime(2025, 1, 1), datetime(2025, 1, 2), datetime(2025, 1, 3)],
+                    dtype=pl.Datetime(time_unit),  # type: ignore[arg-type] - Polars Literal is a string
+                ),
+                "value": [1.0, None, 3.0],
+            }
+        )
+        assert_frame_equal(result, expected)
+
+    def test_date_dtype_column(self) -> None:
+        """Test that a time column of Date values is padded, keeping the Date dtype"""
+        df = pl.DataFrame({"time": [date(2025, 1, 1), date(2025, 1, 3)], "value": [1.0, 3.0]})
+        result = pad_time(df, "time", Period.of_days(1))
+        expected = pl.DataFrame(
+            {"time": [date(2025, 1, 1), date(2025, 1, 2), date(2025, 1, 3)], "value": [1.0, None, 3.0]}
+        )
+        assert_frame_equal(result, expected)
 
     @pytest.mark.parametrize(
         "start_date,end_date,expected_start_date,expected_end_date",
@@ -2018,66 +2225,27 @@ class TestCheckPeriodicity:
         self._check_failure(name, times, periodicity, time_anchor)
 
 
-class TestEpochCheck:
-    @pytest.mark.parametrize(
-        "period",
-        [
-            Period.of_years(2),
-            Period.of_years(7),
-            Period.of_years(10),
-            Period.of_months(5),
-            Period.of_months(7),
-            Period.of_months(9),
-            Period.of_months(10),
-            Period.of_months(11),
-            Period.of_months(13),
-            Period.of_days(2),
-            Period.of_days(7),
-            Period.of_days(65),
-            Period.of_hours(5),
-            Period.of_hours(7),
-            Period.of_hours(9),
-            Period.of_hours(11),
-            Period.of_hours(25),
-            Period.of_minutes(7),
-            Period.of_minutes(11),
-            Period.of_minutes(50),
-            Period.of_minutes(61),
-        ],
-    )
-    def test_non_epoch_agnostic_period_fails(self, period: Period) -> None:
-        """Test that non epoch agnostic Periods fail the epoch check."""
-        with pytest.raises(NotImplementedError):
-            epoch_check(period)
+class TestCheckLiteralValue:
+    @pytest.mark.parametrize("value", ["start", "end", "point"])
+    def test_valid_value(self, value: str) -> None:
+        """Test that a value allowed by the Literal passes."""
+        check_literal_value(value, TimeAnchor, "time_anchor")
 
-    @pytest.mark.parametrize(
-        "period",
-        [
-            Period.of_years(1),
-            Period.of_months(1),
-            Period.of_months(2),
-            Period.of_months(3),
-            Period.of_months(4),
-            Period.of_months(6),
-            Period.of_days(1),
-            Period.of_hours(1),
-            Period.of_hours(2),
-            Period.of_hours(3),
-            Period.of_hours(4),
-            Period.of_hours(24),
-            Period.of_minutes(1),
-            Period.of_minutes(2),
-            Period.of_minutes(15),
-            Period.of_minutes(30),
-            Period.of_minutes(60),
-        ],
-    )
-    def test_epoch_agnostic_period_passes(self, period: Period) -> None:
-        """Test that epoch agnostic Periods pass the epoch check."""
-        epoch_check(period)
+    @pytest.mark.parametrize("value", ["START", "middle", "", None, 1])
+    def test_invalid_value(self, value: Any) -> None:
+        """Test that a value not allowed by the Literal raises an error naming the options."""
+        expected_error = f"Invalid time_anchor '{value}'. Expected one of: ['start', 'end', 'point']"
+
+        with pytest.raises(ValueError, match=re.escape(expected_error)):
+            check_literal_value(value, TimeAnchor, "time_anchor")
 
 
 class TestTimeWindow:
+    def test_time_zone_raises(self) -> None:
+        """A start or end with a time zone raises an error."""
+        with pytest.raises(TypeError, match="must not have a time zone"):
+            TimeWindow(start=time(10, 30, tzinfo=UTC), end=time(14, 0))
+
     def test_default_closed_is_both(self) -> None:
         """Omitting closed defaults to "both"."""
         tw = TimeWindow(start=time(10, 30), end=time(14, 0))
@@ -2114,6 +2282,12 @@ class TestTimeWindow:
         """Invalid start/end combinations raise TimeWindowError."""
         with pytest.raises(TimeWindowError):
             TimeWindow(start=start, end=end)  # type: ignore[arg-type]
+
+    @pytest.mark.parametrize("closed", ["BOTH", "neither", "", None])
+    def test_invalid_closed_raises(self, closed: Any) -> None:
+        """An unrecognised closed value raises an error."""
+        with pytest.raises(ValueError, match="Invalid closed"):
+            TimeWindow(start=time(10, 30), end=time(14, 0), closed=closed)
 
     @pytest.mark.parametrize(
         "start,end,expected_duration",

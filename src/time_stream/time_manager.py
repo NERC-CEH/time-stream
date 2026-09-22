@@ -11,6 +11,7 @@ This module defines and enforces integrity rules for the temporal aspects of a T
 """
 
 import logging
+from copy import copy
 
 import polars as pl
 from isoperiod import Period, PeriodValidationError
@@ -20,18 +21,35 @@ from time_stream.exceptions import (
     ColumnTypeError,
     DuplicateTimeError,
     DuplicateValueError,
+    NullTimeValueError,
     PeriodicityError,
     ResolutionError,
     TimeMutatedError,
 )
 from time_stream.types import DuplicateOption, TimeAnchor, ValidationErrorOptions
-from time_stream.utils import check_alignment, check_periodicity, epoch_check, handle_duplicates, truncate_to_period
+from time_stream.utils import (
+    check_alignment,
+    check_literal_value,
+    check_periodicity,
+    configure_period_object,
+    handle_duplicates,
+    truncate_to_period,
+)
 
 logger = logging.getLogger(__name__)
 
 
 class TimeManager:
     """Enforces integrity of the temporal aspects of the TimeFrame"""
+
+    _time_name: str
+    _resolution: Period
+    _offset: str | None
+    _alignment: Period
+    _periodicity: Period
+    _on_duplicates: DuplicateOption
+    _on_misaligned_rows: ValidationErrorOptions
+    _time_anchor: TimeAnchor
 
     def __init__(
         self,
@@ -56,14 +74,18 @@ class TimeManager:
             on_misaligned_rows: What to do if misaligned rows are found in the data.
             time_anchor: The time anchor to which the date/times conform to.
         """
+        check_literal_value(time_anchor, TimeAnchor, "time_anchor")
+        check_literal_value(on_duplicates, DuplicateOption, "on_duplicates")
+        check_literal_value(on_misaligned_rows, ValidationErrorOptions, "on_misaligned_rows")
+
         self._time_name = time_name
         self._resolution = self._configure_resolution_property(resolution)
         self._offset = self._configure_offset_property(offset)
         self._alignment = self._configure_alignment_property(self._resolution, self._offset)
         self._periodicity = self._configure_periodicity_property(periodicity, self._alignment)
-        self._on_duplicates: DuplicateOption = on_duplicates
+        self._on_duplicates = on_duplicates
         self._on_misaligned_rows = on_misaligned_rows
-        self._time_anchor: TimeAnchor = time_anchor
+        self._time_anchor = time_anchor
 
     @property
     def time_name(self) -> str:
@@ -174,6 +196,27 @@ class TimeManager:
         else:
             raise TypeError(f"Periodicity must be str | Period | None. Got: '{type(periodicity)}'")
 
+    def prepare(self, df: pl.DataFrame) -> pl.DataFrame:
+        """Return a sorted DataFrame whose time column satisfies this manager's temporal rules.
+
+        Duplicate and misaligned rows are resolved according to the configured strategies, and what remains
+        is validated.
+
+        Args:
+            df: Dataframe to prepare.
+
+        Returns:
+            The prepared DataFrame, sorted by the time column.
+        """
+        self._validate_time_column(df)
+
+        df = self._handle_time_duplicates(df)
+        df = self._handle_misaligned_rows(df)
+        df = df.sort(self._time_name)
+
+        self._validate_time_values(df[self.time_name])
+        return df
+
     def validate(self, df: pl.DataFrame) -> None:
         """Carry out a series of validations on the temporal aspects of the TimeFrame.
 
@@ -181,8 +224,14 @@ class TimeManager:
             df: Dataframe to validate against.
         """
         self._validate_time_column(df)
+        self._validate_time_values(df[self.time_name])
 
-        dt = df[self.time_name]
+    def _validate_time_values(self, dt: pl.Series) -> None:
+        """Validate the alignment and periodicity of the time values.
+
+        Args:
+            dt: The datetime series to validate.
+        """
         self._validate_alignment(dt)
         self._validate_periodicity(dt)
 
@@ -194,9 +243,11 @@ class TimeManager:
             dt: The datetime series to validate.
 
         Raises:
-            ResolutionError: If the datetimes are not aligned to the defined temporal lattice.
+            ResolutionError: If the resolution isn't epoch agnostic, or the datetimes are not aligned to the defined
+                temporal lattice.
         """
-        epoch_check(self.alignment)
+        if not self.alignment.is_epoch_agnostic():
+            raise ResolutionError(f"Non-epoch agnostic resolution is not supported: '{self.alignment}'")
         if not self.alignment.is_subperiod_of(self.periodicity):
             raise ResolutionError(
                 f"Alignment '{self.alignment}' must be a subperiod of periodicity '{self.periodicity}'"
@@ -211,9 +262,10 @@ class TimeManager:
             dt: The datetime series to validate the periodicity of.
 
         Raises:
-            PeriodicityError: If the datetimes do not conform to the periodicity.
+            PeriodicityError: If the periodicity isn't epoch agnostic, or the datetimes do not conform to it.
         """
-        epoch_check(self.periodicity)
+        if not self.periodicity.is_epoch_agnostic():
+            raise PeriodicityError(f"Non-epoch agnostic periodicity is not supported: '{self.periodicity}'")
         if not check_periodicity(dt, self.periodicity, self.time_anchor):
             raise PeriodicityError(f"Time values do not conform to periodicity: {self.periodicity}")
 
@@ -225,7 +277,8 @@ class TimeManager:
 
         Raises:
             ColumnNotFoundError: If the time column is missing.
-            ColumnTypeError: If the time column does not contain temporal data.
+            ColumnTypeError: If the time column is not Date or Datetime, or has a time zone other than UTC.
+            NullTimeValueError: If the time column contains null values.
         """
         # Validate that the time column actually exists
         if self.time_name not in df.columns:
@@ -235,10 +288,52 @@ class TimeManager:
 
         # Validate time column type
         dtype = df[self.time_name].dtype
-        if not dtype.is_temporal():
-            raise ColumnTypeError(f"Time column '{self.time_name}' must be datetime type, got '{dtype}'")
+        if not isinstance(dtype, (pl.Date, pl.Datetime)):
+            raise ColumnTypeError(f"Time column '{self.time_name}' must be Date or Datetime type, got '{dtype}'")
 
-    def _check_time_integrity(self, old_df: pl.DataFrame, new_df: pl.DataFrame) -> None:
+        # Time zones with daylight saving have days that aren't 24 hours long, which aren't supported
+        if isinstance(dtype, pl.Datetime) and dtype.time_zone not in (None, "UTC"):
+            raise ColumnTypeError(
+                f"Time column '{self.time_name}' has time zone '{dtype.time_zone}'. Only UTC is supported, as time "
+                f"zones with daylight saving don't have 24-hour days. Convert the column to UTC with "
+                f"`.dt.convert_time_zone('UTC')`, or remove the time zone with `.dt.replace_time_zone(None)`."
+            )
+
+        # Validate that every row has a time value
+        null_count = df[self.time_name].null_count()
+        if null_count:
+            raise NullTimeValueError(
+                f"Time column '{self.time_name}' contains {null_count} null value(s). A TimeFrame must have a "
+                f"time value on every row."
+            )
+
+    def with_periodicity(self, periodicity: str | Period) -> "TimeManager":
+        """Return a copy of this manager with a new periodicity.
+
+        Args:
+            periodicity: The new periodicity.
+
+        Returns:
+            A new TimeManager.
+        """
+        new = copy(self)
+        new._periodicity = configure_period_object(periodicity)
+        return new
+
+    def with_time_name(self, time_name: str) -> "TimeManager":
+        """Return a copy of this manager with a new time column name.
+
+        Args:
+            time_name: The new time column name.
+
+        Returns:
+            A new TimeManager.
+        """
+        new = copy(self)
+        new._time_name = time_name
+        return new
+
+    def check_integrity(self, old_df: pl.DataFrame, new_df: pl.DataFrame) -> None:
         """Raise an error if the time values change between old and new DataFrames.
 
         Args:
@@ -271,19 +366,15 @@ class TimeManager:
             DuplicateTimeError: If there are duplicate timestamps and the "error" strategy is being used.
         """
         try:
-            new_df = handle_duplicates(df, self._time_name, self._on_duplicates)
+            return handle_duplicates(df, self._time_name, self._on_duplicates)
         except DuplicateValueError:
             raise DuplicateTimeError()
-
-        # Polars aggregate methods can change the order due to how it optimises the functionality, so sort times after
-        new_df = new_df.sort(self._time_name)
-        return new_df
 
     def _handle_misaligned_rows(self, df: pl.DataFrame) -> pl.DataFrame:
         """Handle misaligned rows.
 
-        If the _on_misaligned_rows property is set to "ERROR" then alignment validation will run as normal. If it's set
-        to "RESOLVE" then any rows found to have an unexpected resolution are removed.
+        If the _on_misaligned_rows property is set to "RESOLVE" then any rows found to have an unexpected
+        resolution are removed. Otherwise the rows are left alone, for alignment validation to reject.
 
         Args:
             df: DataFrame to check for, and potentially remove, misaligned rows.
@@ -292,11 +383,7 @@ class TimeManager:
             DataFrame with any misaligned rows removed.
 
         """
-        if self._on_misaligned_rows == "error":
-            self._validate_alignment(df[self.time_name])
-        elif self._on_misaligned_rows == "resolve":
-            # No need to run _validate_alignment as the row removal logic will cover the same checks and any
-            # invalid rows will be logged before being removed
+        if self._on_misaligned_rows == "resolve":
             df = self._remove_misaligned_rows(df)
 
         return df

@@ -53,6 +53,10 @@ class ResolutionError(TimeStreamError):
     """Raised when datetime values are not aligned to the specified resolution."""
 
 
+class NullTimeValueError(TimeStreamError):
+    """Raised when the time column contains null values."""
+
+
 class TimeMutatedError(TimeStreamError):
     """Raised when the time values have been detected as being mutated."""
 
