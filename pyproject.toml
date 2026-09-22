@@ -28,13 +28,22 @@ maintainers = [
     { name = "Simon Stanley", email = "simsta@ceh.ac.uk" },
 ]
 classifiers = [
-"License :: OSI Approved :: MIT License",
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Scientific/Engineering :: Hydrology",
+    "Typing :: Typed",
 ]
 license = { file = "LICENSE" }
 dependencies = [
     "polars>=1.43.2",
-    "numpy",
+    "numpy>=2.0",
     "scipy>=1.18.0",
     "isoperiod",
 ]

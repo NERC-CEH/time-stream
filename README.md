@@ -15,8 +15,8 @@ with special attention to:
 
 - Precise temporal handling with Period-based time manipulations
 - Smart temporal aggregation
-- Provision of a flexible flagging system
-- Column relationships for organising complex timeseries datasets
+- Quality control checks and infilling of missing data
+- A flexible flagging system
 
 ## License
 
@@ -33,7 +33,7 @@ Contributions are welcome. Please feel free to submit a Pull Request.
 5. Open a Pull Request
 
 Please make sure your code passes all tests and follows the coding style before submitting a PR.
-See **developer setup** below for more information.
+See **developer setup** below, and [`CONTRIBUTING.md`](CONTRIBUTING.md), for more information.
 
 ## Developer Setup
 
@@ -59,28 +59,44 @@ uv sync
 source .venv/bin/activate
 ```
 
-### Linting
-Linting uses ruff using the config in pyproject.toml
+### Checking your changes
+To format, lint, type check and test in one go (run this before submitting a PR):
 ```
-ruff check --fix
+make qa
+```
+
+Run `make help` to list all the available commands. The individual checks are below.
+
+### Linting
+Linting uses ruff with the config in pyproject.toml.
+```
+uv run ruff check --fix
 ```
 
 ### Formatting
-Formating uses ruff using the config in pyproject.toml which follows the default black settings.
+Formatting uses ruff with the config in pyproject.toml, which follows the default black settings.
 ```
-ruff format .
+uv run ruff format .
+```
+
+### Type checking
+Type checking uses pyright, which must report no errors.
+```
+make type-check
 ```
 
 ### Testing
-Testing is done using pytest and tests are in the /tests directory.
+Testing uses pytest. The tests are in the `tests/` directory, and the examples in the docstrings under `src/` are run
+as tests too.
 ```
-pytest
+make test
 ```
+To run the tests on every supported Python version, use `make testall`.
 
 ### Pre commit hooks
-Run below to setup the pre-commit hooks.
+Run below to set up the pre-commit hooks.
 ```
-git config --local core.hooksPath .githooks/
+make install-hooks
 ```
 This will set this repo up to use the git hooks in the `.githooks/` directory.
 The hook runs `ruff format --check` and `ruff check` to prevent commits that are not formatted correctly or have errors.
@@ -88,9 +104,10 @@ The hook intentionally does not alter the files, but informs the user which comm
 
 ## Installing time-stream
 
-Whilst time-stream is under active development, to use time-stream within your project you can do one of two things:
+time-stream is not yet published on PyPI, so to use it within your project you can do one of two things:
 
-1. Clone the time-stream repository to a location next to your project's repository. Then, you can install time-series using a relative path.
+1. Clone the time-stream repository to a location next to your project's repository. Then, you can install
+    time-stream using a relative path.
 
     When you install a package in editable mode, any changes to the source code are immediately
     available to any projects using the package.
@@ -127,26 +144,30 @@ Whilst time-stream is under active development, to use time-stream within your p
         "time-stream"
     ]
     [tool.uv.sources]
-    time-stream = { git = "https://docs.astral.sh/uv/getting-started/installation/" }
+    time-stream = { git = "https://github.com/NERC-CEH/time-stream.git" }
     ```
+
+### Installing with pip
+
+time-stream depends on [`isoperiod`](https://github.com/NERC-CEH/isoperiod), which is not yet on PyPI. uv picks it up
+from time-stream's own configuration, but pip does not, so install `isoperiod` from git alongside time-stream:
+
+```commandline
+pip install git+https://github.com/NERC-CEH/isoperiod.git git+https://github.com/NERC-CEH/time-stream.git
+```
 
 ## Documentation
 
 For full documentation, visit https://nerc-ceh.github.io/time-stream/
 
-To build the documentation locally:
+To build the documentation locally (the documentation dependencies are installed by `uv sync` by default):
 
 ```bash
-# Install documentation dependencies (but they are included by default)
-uv sync --group docs
-
-# Build the documentation
-cd docs
-make html
-
-# View documentation
-open _build/html/index.html
+make docs-build
 ```
+
+The built documentation is in `docs/_build/html/index.html`. Alternatively, `make docs-serve` serves the
+documentation at http://localhost:8000 and rebuilds it as you edit.
 
 ## Citation
 

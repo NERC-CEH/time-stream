@@ -2286,7 +2286,7 @@ typecheck = [
 [package.metadata]
 requires-dist = [
     { name = "isoperiod", git = "https://github.com/NERC-CEH/isoperiod.git" },
-    { name = "numpy" },
+    { name = "numpy", specifier = ">=2.0" },
     { name = "polars", specifier = ">=1.43.2" },
     { name = "scipy", specifier = ">=1.18.0" },
 ]
