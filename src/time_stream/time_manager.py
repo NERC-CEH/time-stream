@@ -32,7 +32,6 @@ from time_stream.utils import (
     check_literal_value,
     check_periodicity,
     configure_period_object,
-    epoch_check,
     handle_duplicates,
     truncate_to_period,
 )
@@ -244,9 +243,11 @@ class TimeManager:
             dt: The datetime series to validate.
 
         Raises:
-            ResolutionError: If the datetimes are not aligned to the defined temporal lattice.
+            ResolutionError: If the resolution isn't epoch agnostic, or the datetimes are not aligned to the defined
+                temporal lattice.
         """
-        epoch_check(self.alignment)
+        if not self.alignment.is_epoch_agnostic():
+            raise ResolutionError(f"Non-epoch agnostic resolution is not supported: '{self.alignment}'")
         if not self.alignment.is_subperiod_of(self.periodicity):
             raise ResolutionError(
                 f"Alignment '{self.alignment}' must be a subperiod of periodicity '{self.periodicity}'"
@@ -261,9 +262,10 @@ class TimeManager:
             dt: The datetime series to validate the periodicity of.
 
         Raises:
-            PeriodicityError: If the datetimes do not conform to the periodicity.
+            PeriodicityError: If the periodicity isn't epoch agnostic, or the datetimes do not conform to it.
         """
-        epoch_check(self.periodicity)
+        if not self.periodicity.is_epoch_agnostic():
+            raise PeriodicityError(f"Non-epoch agnostic periodicity is not supported: '{self.periodicity}'")
         if not check_periodicity(dt, self.periodicity, self.time_anchor):
             raise PeriodicityError(f"Time values do not conform to periodicity: {self.periodicity}")
 

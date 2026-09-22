@@ -158,8 +158,9 @@ contains partial data) appear at both the start and end of the series.
 
 .. note::
 
-   ``center`` alignment is not supported for calendar-based window sizes (months, years) because
-   they have variable length and cannot be halved to a fixed offset.
+   ``center`` alignment requires the window to span an odd number of time steps, so that it is centred on the
+   current one - e.g. ``PT3H`` or ``PT5H`` for hourly data, but not ``PT2H`` or ``P1D``. For the same reason, it is
+   not supported for calendar-based window sizes (months, years), which have variable length.
 
 .. _data-completeness:
 
@@ -200,7 +201,8 @@ Selecting a specific point in the window
 
 The :ref:`nth <aggregation_functions>` aggregation function is particularly useful with rolling windows: it lets
 you pull out a value from a fixed position relative to each timestamp - for example, "the reading from (just
-under) an hour ago".
+under) an hour ago". ``n`` counts time steps within the window, not rows, so if that time step is missing from the
+data the result is ``null``.
 
 .. literalinclude:: ../examples/rolling_aggregation.py
    :language: python

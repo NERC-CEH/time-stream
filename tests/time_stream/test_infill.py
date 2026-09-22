@@ -808,6 +808,11 @@ class TestAltDataDynamic:
         with pytest.raises(ValueError):
             AltDataDynamic(alt_data_column="alt_values", window_size="P3D", max_threshold=0)
 
+    def test_invalid_window_side(self) -> None:
+        """Test that an invalid window_side raises ValueError at construction."""
+        with pytest.raises(ValueError, match="Invalid window_side 'lft'"):
+            AltDataDynamic(alt_data_column="alt_values", window_size="P3D", window_side="lft")  # type: ignore[arg-type] - invalid on purpose
+
     def test_no_missing_data(self) -> None:
         """Test that nothing happens when there is no missing data."""
         df_complete = self.df.with_columns(pl.Series("values", [i * 1.0 for i in range(12)]))

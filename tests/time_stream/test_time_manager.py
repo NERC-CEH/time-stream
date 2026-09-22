@@ -17,6 +17,7 @@ from time_stream.exceptions import (
     TimeMutatedError,
 )
 from time_stream.time_manager import TimeManager
+from time_stream.types import TimeAnchor, ValidationErrorOptions
 
 
 @pytest.fixture
@@ -837,3 +838,92 @@ class TestHandleMisalignedRows:
             assert caplog.messages[0] == expected_log_message
 
         assert_frame_equal(expected_df, actual_df)
+
+
+class TestTimeUnits:
+    @pytest.mark.parametrize("time_unit", ["ms", "us", "ns"])
+    @pytest.mark.parametrize("anchor", ["start", "end"])
+    @pytest.mark.parametrize("on_misaligned_rows", ["error", "resolve"])
+    def test_aligned_data_kept(
+        self, time_unit: str, anchor: TimeAnchor, on_misaligned_rows: ValidationErrorOptions
+    ) -> None:
+        """Test that aligned data is kept whatever the time unit, time anchor and misaligned rows option."""
+        df = pl.DataFrame(
+            {
+                "time": pl.Series(
+                    [datetime(2024, 1, 2), datetime(2024, 1, 3), datetime(2024, 1, 4)],
+                    dtype=pl.Datetime(time_unit),  # type: ignore[arg-type] - Polars Literal is a string
+                ),
+                "value": [1.0, 2.0, 3.0],
+            }
+        )
+        time_manager = TimeManager(
+            time_name="time", resolution="P1D", time_anchor=anchor, on_misaligned_rows=on_misaligned_rows
+        )
+        assert_frame_equal(time_manager.prepare(df), df)
+
+
+class TestEpochAgnostic:
+    df = pl.DataFrame({"time": [datetime(2020, 1, 1)]})
+
+    @pytest.mark.parametrize(
+        "period",
+        [
+            Period.of_years(2),
+            Period.of_years(7),
+            Period.of_years(10),
+            Period.of_months(5),
+            Period.of_months(7),
+            Period.of_months(9),
+            Period.of_months(10),
+            Period.of_months(11),
+            Period.of_months(13),
+            Period.of_days(2),
+            Period.of_days(7),
+            Period.of_days(65),
+            Period.of_hours(5),
+            Period.of_hours(7),
+            Period.of_hours(9),
+            Period.of_hours(11),
+            Period.of_hours(25),
+            Period.of_minutes(7),
+            Period.of_minutes(11),
+            Period.of_minutes(50),
+            Period.of_minutes(61),
+        ],
+    )
+    def test_non_epoch_agnostic_resolution_raises(self, period: Period) -> None:
+        """Test that a non epoch agnostic resolution raises a ResolutionError."""
+        with pytest.raises(ResolutionError, match="Non-epoch agnostic resolution is not supported"):
+            TimeManager("time", resolution=period).validate(self.df)
+
+    @pytest.mark.parametrize(
+        "period",
+        [
+            Period.of_years(1),
+            Period.of_months(1),
+            Period.of_months(2),
+            Period.of_months(3),
+            Period.of_months(4),
+            Period.of_months(6),
+            Period.of_days(1),
+            Period.of_hours(1),
+            Period.of_hours(2),
+            Period.of_hours(3),
+            Period.of_hours(4),
+            Period.of_hours(24),
+            Period.of_minutes(1),
+            Period.of_minutes(2),
+            Period.of_minutes(15),
+            Period.of_minutes(30),
+            Period.of_minutes(60),
+        ],
+    )
+    def test_epoch_agnostic_resolution_passes(self, period: Period) -> None:
+        """Test that an epoch agnostic resolution passes validation."""
+        TimeManager("time", resolution=period).validate(self.df)
+
+    def test_non_epoch_agnostic_periodicity_raises(self) -> None:
+        """Test that a non epoch agnostic periodicity raises a PeriodicityError."""
+        with pytest.raises(PeriodicityError, match="Non-epoch agnostic periodicity is not supported"):
+            TimeManager("time", resolution="P1D", periodicity="P7D").validate(self.df)

@@ -18,7 +18,7 @@ import math
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Any, Literal
+from typing import Any
 
 import numpy as np
 import polars as pl
@@ -27,7 +27,14 @@ from scipy.interpolate import Akima1DInterpolator, PchipInterpolator, make_inter
 
 from time_stream.exceptions import InfillError, InfillInsufficientValuesError
 from time_stream.operation import Operation
-from time_stream.utils import check_columns_in_dataframe, gap_size_count, get_date_filter, pad_time
+from time_stream.types import WindowSide
+from time_stream.utils import (
+    check_columns_in_dataframe,
+    check_literal_value,
+    gap_size_count,
+    get_date_filter,
+    pad_time,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -457,7 +464,7 @@ class AltDataDynamic(InfillMethod):
         alt_df: pl.DataFrame | None = None,
         min_threshold: int = 0,
         max_threshold: int | None = None,
-        window_side: Literal["left", "right", "both"] = "both",
+        window_side: WindowSide = "both",
     ):
         """Initialize the alternative data infill method.
 
@@ -485,6 +492,7 @@ class AltDataDynamic(InfillMethod):
         self.window_size = window_size
         self.min_threshold = min_threshold
         self.max_threshold = max_threshold
+        check_literal_value(window_side, WindowSide, "window_side")
         self.window_side = window_side
 
     def _fill(

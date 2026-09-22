@@ -240,6 +240,8 @@ class BitwiseFlagColumn(FlagColumn):
     def add_flag(self, df: pl.DataFrame, flag: int | str, expr: pl.Expr | pl.Series = pl.lit(True)) -> pl.DataFrame:
         """Add a flag value to this ``BitwiseFlagColumn`` using a bitwise OR operation.
 
+        A null value is treated as having no flags set.
+
         If the column is currently decoded, it is encoded first, the flag is applied, and the result is decoded again.
 
         Args:
@@ -255,7 +257,10 @@ class BitwiseFlagColumn(FlagColumn):
         if self.is_decoded:
             df = self.encode(df)
         df = df.with_columns(
-            pl.when(expr).then(pl.col(self.name) | pl.lit(flag_value)).otherwise(pl.col(self.name)).alias(self.name)
+            pl.when(expr)
+            .then(pl.col(self.name).fill_null(0) | pl.lit(flag_value))
+            .otherwise(pl.col(self.name))
+            .alias(self.name)
         )
         if self.is_decoded:
             df = self.decode(df)
@@ -263,6 +268,8 @@ class BitwiseFlagColumn(FlagColumn):
 
     def remove_flag(self, df: pl.DataFrame, flag: int | str, expr: pl.Expr | pl.Series = pl.lit(True)) -> pl.DataFrame:
         """Remove a flag value from this ``BitwiseFlagColumn`` using a bitwise AND NOT operation.
+
+        A null value is treated as having no flags set.
 
         If the column is currently decoded, it is encoded first, the flag is removed, and the result is decoded again.
 
@@ -279,7 +286,10 @@ class BitwiseFlagColumn(FlagColumn):
         if self.is_decoded:
             df = self.encode(df)
         df = df.with_columns(
-            pl.when(expr).then(pl.col(self.name) & ~pl.lit(flag_value)).otherwise(pl.col(self.name)).alias(self.name)
+            pl.when(expr)
+            .then(pl.col(self.name).fill_null(0) & ~pl.lit(flag_value))
+            .otherwise(pl.col(self.name))
+            .alias(self.name)
         )
         if self.is_decoded:
             df = self.decode(df)
@@ -567,7 +577,8 @@ class CategoricalListFlagColumn(FlagColumn):
     def add_flag(self, df: pl.DataFrame, flag: int | str, expr: pl.Expr | pl.Series = pl.lit(True)) -> pl.DataFrame:
         """Append a flag value to the list on rows where ``expr`` is true.
 
-        If the flag is already present in a row's list, it is not added again.
+        If the flag is already present in a row's list, it is not added again. A null value is treated as having no
+        flags set.
 
         If the column is currently decoded, it is encoded first, the flag is applied, and the result is
         decoded again.
@@ -584,9 +595,10 @@ class CategoricalListFlagColumn(FlagColumn):
         value = self.flag_system.get_flag(flag)
         if self.is_decoded:
             df = self.encode(df)
+        flags = self._fill_null_lists(df)
         df = df.with_columns(
-            pl.when(expr & ~pl.col(self.name).list.contains(pl.lit(value)))
-            .then(pl.concat_list([pl.col(self.name), pl.lit(value).implode()]))
+            pl.when(expr & ~flags.list.contains(pl.lit(value)))
+            .then(pl.concat_list([flags, pl.lit(value).implode()]))
             .otherwise(pl.col(self.name))
             .alias(self.name)
         )
@@ -597,7 +609,7 @@ class CategoricalListFlagColumn(FlagColumn):
     def remove_flag(self, df: pl.DataFrame, flag: int | str, expr: pl.Expr | pl.Series = pl.lit(True)) -> pl.DataFrame:
         """Remove all occurrences of a flag value from the list on rows where ``expr`` is true.
 
-        If the flag is not present, the row is unchanged.
+        If the flag is not present, the row is unchanged. A null value is treated as having no flags set.
 
         If the column is currently decoded, it is encoded first, the flag is removed, and the result is
         decoded again.
@@ -616,13 +628,24 @@ class CategoricalListFlagColumn(FlagColumn):
             df = self.encode(df)
         df = df.with_columns(
             pl.when(expr)
-            .then(pl.col(self.name).list.eval(pl.element().filter(pl.element() != pl.lit(value))))
+            .then(self._fill_null_lists(df).list.eval(pl.element().filter(pl.element() != pl.lit(value))))
             .otherwise(pl.col(self.name))
             .alias(self.name)
         )
         if self.is_decoded:
             df = self.decode(df)
         return df
+
+    def _fill_null_lists(self, df: pl.DataFrame) -> pl.Expr:
+        """Return the flag column with null values replaced by an empty list.
+
+        Args:
+            df: The DataFrame containing the flag column.
+
+        Returns:
+            A Polars expression for the flag column.
+        """
+        return pl.col(self.name).fill_null(pl.lit([], dtype=df.schema[self.name]))
 
     def filter_expr(self, flags: list[int | str]) -> pl.Expr:
         """Return a boolean expression that is True for rows where any of the given flags are set.

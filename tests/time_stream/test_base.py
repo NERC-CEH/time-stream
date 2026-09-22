@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 import polars as pl
 import pytest
-from isoperiod import Period, PeriodValidationError
+from isoperiod import Period
 from polars.testing import assert_frame_equal, assert_frame_not_equal, assert_series_equal
 
 from time_stream.aggregation import Percentile
@@ -24,7 +24,7 @@ from time_stream.exceptions import (
 from time_stream.flags.flag_manager import BitwiseFlagColumn
 from time_stream.flags.flag_system import FlagSystemBase
 from time_stream.time_manager import TimeManager
-from time_stream.types import FlagSystemLiteral
+from time_stream.types import FlagSystemLiteral, TimeAnchor
 
 
 class TestTimeFrameConstruction:
@@ -354,6 +354,25 @@ class TestColumnMetadata:
 
         assert self.tf.column_metadata == column_metadata
 
+    @pytest.mark.parametrize(
+        "method", ["with_column_metadata", "setter", "setitem"], ids=["with_column_metadata", "setter", "setitem"]
+    )
+    def test_column_metadata_is_copied(self, method: str) -> None:
+        """Test that changing the dict after setting it doesn't change the TimeFrame column metadata"""
+        metadata = {"col1": {"units": "mm", "info": {"source": "gauge"}}}
+        tf = TimeFrame(self.df, time_name="time")
+        if method == "with_column_metadata":
+            tf = tf.with_column_metadata(metadata)
+        elif method == "setter":
+            tf.column_metadata = metadata
+        else:
+            tf.column_metadata["col1"] = metadata["col1"]
+
+        metadata["col1"]["units"] = "m"
+        metadata["col1"]["info"]["source"] = "radar"
+
+        assert tf.column_metadata["col1"] == {"units": "mm", "info": {"source": "gauge"}}
+
 
 class TestMetadata:
     df = pl.DataFrame(
@@ -413,6 +432,21 @@ class TestMetadata:
         """Test that removing the metadata object sets it back to an empty dict"""
         del self.tf.metadata
         assert self.tf.metadata == {}
+
+    @pytest.mark.parametrize("use_setter", [False, True], ids=["with_metadata", "setter"])
+    def test_metadata_is_copied(self, use_setter: bool) -> None:
+        """Test that changing the dict after setting it doesn't change the TimeFrame metadata"""
+        metadata = {"site": "A", "info": {"network": "FDRI"}}
+        tf = TimeFrame(self.df, time_name="time")
+        if use_setter:
+            tf.metadata = metadata
+        else:
+            tf = tf.with_metadata(metadata)
+
+        metadata["site"] = "B"
+        metadata["info"]["network"] = "other"
+
+        assert tf.metadata == {"site": "A", "info": {"network": "FDRI"}}
 
 
 class TestInitFlagColumn:
@@ -847,6 +881,14 @@ class TestAggregate:
         )
 
         assert_frame_equal(aggregated_tf.df, expected_df, check_dtypes=False)
+
+    @pytest.mark.parametrize("method", ["aggregate", "rolling_aggregate"])
+    def test_invalid_period_type_raises(self, method: str) -> None:
+        """A period that is not a string or Period raises a TypeError."""
+        df = pl.DataFrame({"time": [datetime(2025, 1, 1)], "value": [1.0]})
+        tf = TimeFrame(df, "time", resolution="PT1H")
+        with pytest.raises(TypeError):
+            getattr(tf, method)(123, "mean", "value")
 
 
 class TestCalculateMinMaxEnvelope:
@@ -1317,6 +1359,18 @@ class TestInfillWithMissingRows:
         assert_series_equal(result.df["flag_col"], expected)
 
 
+class TestPad:
+    """Tests for TimeFrame.pad()."""
+
+    @pytest.mark.parametrize("anchor", ["start", "end"])
+    def test_unaligned_start_end_gives_valid_timeframe(self, anchor: TimeAnchor) -> None:
+        """Padding to an unaligned start and end gives a TimeFrame that passes validation."""
+        df = pl.DataFrame({"time": [datetime(2024, 1, 1, h) for h in range(3)], "value": [1.0, 2.0, 3.0]})
+        tf = TimeFrame(df, "time", resolution="PT1H", time_anchor=anchor)
+        padded = tf.pad(start=datetime(2023, 12, 31, 22, 30), end=datetime(2024, 1, 1, 4, 30))
+        TimeFrame(padded.df, "time", resolution="PT1H", time_anchor=anchor)
+
+
 class TestPadFlagColumns:
     """Tests for how TimeFrame.pad() initialises flag columns on the rows it adds."""
 
@@ -1506,7 +1560,7 @@ class TestWithPeriodicity:
 
     def test_invalid_periodicity_type_raises(self) -> None:
         """A periodicity that is not a string or Period raises an error."""
-        with pytest.raises(PeriodValidationError):
+        with pytest.raises(TypeError):
             self.setup_tf().with_periodicity(123)  # type: ignore[arg-type]
 
 

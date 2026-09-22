@@ -160,6 +160,21 @@ class TestComparisonCheck:
         expected = pl.Series([None, True, True, None])
         assert_series_equal(result, expected)
 
+    @pytest.mark.parametrize("operator", [">", ">=", "<", "<=", "==", "!=", "is_in"])
+    def test_flag_na_flags_nan(self, operator: str) -> None:
+        """Test that flag_na flags NaN as well as null, whatever the operator."""
+        df = pl.DataFrame({"time": [datetime(2025, 1, 1), datetime(2025, 1, 2)], "value": [float("nan"), None]})
+        check = ComparisonCheck(5, operator, flag_na=True)
+        result = check.apply(df, "time", "value")
+        assert_series_equal(result, pl.Series([True, True]))
+
+    def test_flag_na_integer_column(self) -> None:
+        """Test that flag_na flags null in a column type that has no NaN."""
+        df = pl.DataFrame({"time": [datetime(2025, 1, 1), datetime(2025, 1, 2)], "value": [1, None]})
+        check = ComparisonCheck(5, "<", flag_na=True)
+        result = check.apply(df, "time", "value")
+        assert_series_equal(result, pl.Series([True, True]))
+
     def test_invalid_operator(self) -> None:
         """Test that invalid operator raises error"""
         with pytest.raises(QcUnknownOperatorError):
@@ -203,10 +218,9 @@ class TestRangeCheck:
         ],
     )
     def test_type_mismatch(self, min_value: Any, max_value: Any) -> None:
-        """Test that error raised if min and max value are not the same type."""
-        with pytest.raises(TypeError):
-            check = RangeCheck(min_value, max_value)
-            check.expr(self.ctx, "value_a")
+        """Test that error raised on construction if min and max value are not the same type."""
+        with pytest.raises(TypeError, match="must be of same type"):
+            RangeCheck(min_value, max_value)
 
     @pytest.mark.parametrize(
         "min_value,max_value,closed,within,expected",
@@ -421,6 +435,16 @@ class TestRangeCheck:
         check = RangeCheck(min_value, max_value, closed, within)
         result = check.apply(self.tf.df, self.tf.time_name, "time")
         assert_series_equal(result, pl.Series(expected))
+
+    @pytest.mark.parametrize("closed", ["both", "left", "right", "none"])
+    def test_across_midnight_leaves_check_unchanged(self, closed: ClosedInterval) -> None:
+        """Test that applying a range check across midnight doesn't change the check's attributes"""
+        check = RangeCheck(time(23, 30), time(1, 30), closed, True)
+        before = vars(check).copy()
+        first = check.apply(self.tf.df, self.tf.time_name, "time")
+        second = check.apply(self.tf.df, self.tf.time_name, "time")
+        assert vars(check) == before
+        assert_series_equal(first, second)
 
     @pytest.mark.parametrize(
         "min_value,max_value,closed,within,expected",

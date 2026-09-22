@@ -201,7 +201,7 @@ class TimeFrame:
 
         out._metadata = deepcopy(self._metadata)
         out._column_metadata = ColumnMetadataDict(lambda: out.df.columns)
-        out._column_metadata.update(deepcopy(self._column_metadata))
+        out._column_metadata.update(self._column_metadata)
 
         out._flag_manager = self._flag_manager.copy()
 
@@ -290,7 +290,8 @@ class TimeFrame:
     def metadata(self, value: dict[str, Any] | None) -> None:
         """Set the TimeFrame-level metadata.
 
-        This method checks type of object being set to ensure we continue to work with expected dicts.
+        This method checks type of object being set to ensure we continue to work with expected dicts. A deep copy
+        is stored, so later changes to ``value`` don't affect the TimeFrame.
 
         Args:
             value: The new metadata to set.
@@ -298,7 +299,7 @@ class TimeFrame:
         if value is None:
             self._metadata = {}
         elif isinstance(value, dict):
-            self._metadata = value
+            self._metadata = deepcopy(value)
         else:
             raise MetadataError(f"TimeFrame-level metadata must be a dict object. Got: '{type(value)}'")
 
@@ -399,13 +400,16 @@ class TimeFrame:
         """Pad the time series with missing datetime rows, filling in NULLs for missing values.
 
         Args:
-            start: The starting datetime value to pad time values from (inclusive). If not provided then the beginning
-                of the dataframe will be used.
-            end: The final datetime value to pad time values to (inclusive). If not provided then the end of the
-                dataframe will be used.
+            start: The starting datetime value to pad time values from (inclusive). If not on the periodicity, the
+                time step containing it is used. If not provided then the beginning of the dataframe will be used.
+            end: The final datetime value to pad time values to (inclusive). If not on the periodicity, the time step
+                containing it is used. If not provided then the end of the dataframe will be used.
 
         Returns:
             Padded TimeFrame
+
+        Raises:
+            TypeError: If ``start`` or ``end`` is not a datetime.
         """
         padded_df = pad_time(
             df=self.df,
@@ -749,7 +753,7 @@ class TimeFrame:
             periodicity=aggregation_period,
             time_anchor=aggregation_time_anchor,
         )
-        tf.metadata = deepcopy(self.metadata)
+        tf.metadata = self.metadata
         return tf
 
     def rolling_aggregate(
@@ -781,7 +785,8 @@ class TimeFrame:
                 - ``LEADING``: window looks forward - ``[t, t + window_size)``.
                   Edge effects appear at the end of the series.
                 - ``CENTER``: window is centered - ``[t - window_size/2, t + window_size/2]``.
-                  Edge effects appear at both ends. Not supported for calendar-based window sizes.
+                  Edge effects appear at both ends. The window must span an odd number of time steps.
+                  Not supported for calendar-based window sizes.
 
                 Accepts ``'trailing'``, ``'leading'``, or ``'center'``.
             **kwargs: Parameters specific to the aggregation function.
@@ -821,7 +826,7 @@ class TimeFrame:
             periodicity=self.periodicity,
             time_anchor=self.time_anchor,
         )
-        tf.metadata = deepcopy(self.metadata)
+        tf.metadata = self.metadata
         return tf
 
     # @overload lets type checkers know the return type depends on whether flag_params is provided.

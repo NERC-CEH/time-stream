@@ -161,6 +161,22 @@ class TestBitwiseFlagEquality:
         assert original != non_bw
 
 
+def setup_tf_with_nulls() -> TimeFrame:
+    """Set up a TimeFrame with a registered bitwise flag column holding nulls."""
+    tf = TimeFrame(
+        pl.DataFrame(
+            {
+                "time": [datetime(2025, 1, 1), datetime(2025, 1, 2), datetime(2025, 1, 3)],
+                "value": [1, 2, 3],
+                "flag_col_1": [None, None, 2],
+            }
+        ),
+        "time",
+    ).with_flag_system("system1", {"FLAG_A": 1, "FLAG_B": 2, "FLAG_C": 4})
+    tf.register_flag_column("flag_col_1", "system1")
+    return tf
+
+
 class TestAddFlag:
     @staticmethod
     def setup_tf() -> TimeFrame:
@@ -251,6 +267,23 @@ class TestAddFlag:
         assert result.dtype == pl.List(pl.String)
         assert result.to_list() == [["FLAG_A"], ["FLAG_A"], ["FLAG_A"]]
 
+    @pytest.mark.parametrize(
+        "expr,expected",
+        [
+            (pl.lit(True), [1, 1, 3]),
+            (pl.col("value").lt(2), [1, None, 2]),
+        ],
+        ids=["no expr", "with expr"],
+    )
+    def test_add_flag_to_null_values(self, expr: pl.Expr, expected: list) -> None:
+        """Test that adding a flag to a null value treats it as having no flags set"""
+        tf = setup_tf_with_nulls()
+
+        tf.add_flag("flag_col_1", "FLAG_A", expr)
+        result = tf.df["flag_col_1"]
+
+        assert_series_equal(result, pl.Series("flag_col_1", expected))
+
 
 class TestRemoveFlag:
     @staticmethod
@@ -320,14 +353,14 @@ class TestRemoveFlag:
         tf = self.setup_tf()
 
         with pytest.raises(BitwiseFlagUnknownError):
-            tf.add_flag("flag_col_1", 10)
+            tf.remove_flag("flag_col_1", 10)
 
     def test_remove_flag_from_data_column_raises_error(self) -> None:
         """Test that trying to remove a flag to a data column raises error"""
         tf = self.setup_tf()
 
         with pytest.raises(ColumnNotFoundError):
-            tf.add_flag("value", 1)
+            tf.remove_flag("value", 1)
 
     def test_remove_flag_on_decoded_column(self) -> None:
         """Test that remove_flag on a decoded column leaves the column in List(String) with the flag removed."""
@@ -339,6 +372,23 @@ class TestRemoveFlag:
         result = tf_decoded.df["flag_col_1"]
         assert result.dtype == pl.List(pl.String)
         assert result.to_list() == [[], ["FLAG_B"], ["FLAG_B", "FLAG_C"]]
+
+    @pytest.mark.parametrize(
+        "expr,expected",
+        [
+            (pl.lit(True), [0, 0, 2]),
+            (pl.col("value").lt(2), [0, None, 2]),
+        ],
+        ids=["no expr", "with expr"],
+    )
+    def test_remove_flag_from_null_values(self, expr: pl.Expr, expected: list) -> None:
+        """Test that removing a flag from a null value treats it as having no flags set"""
+        tf = setup_tf_with_nulls()
+
+        tf.remove_flag("flag_col_1", "FLAG_A", expr)
+        result = tf.df["flag_col_1"]
+
+        assert_series_equal(result, pl.Series("flag_col_1", expected))
 
 
 class TestDecodeFlagColumn:

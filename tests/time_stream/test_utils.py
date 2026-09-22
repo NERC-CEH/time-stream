@@ -15,7 +15,6 @@ from time_stream.utils import (
     check_columns_in_dataframe,
     check_literal_value,
     check_periodicity,
-    epoch_check,
     get_date_filter,
     pad_time,
     truncate_to_period,
@@ -656,6 +655,30 @@ class TestTruncateToPeriod:
         result = truncate_to_period(self.dt, period, anchor)
         assert_series_equal(result, pl.Series(expected))
 
+    @pytest.mark.parametrize("time_unit", ["ms", "us", "ns"])
+    @pytest.mark.parametrize(
+        "anchor,expected",
+        [
+            ("start", [datetime(2024, 1, 2), datetime(2024, 1, 2), datetime(2024, 1, 3)]),
+            ("end", [datetime(2024, 1, 2), datetime(2024, 1, 3), datetime(2024, 1, 3)]),
+        ],
+        ids=["start anchor", "end anchor"],
+    )
+    def test_time_unit(self, time_unit: str, anchor: TimeAnchor, expected: list) -> None:
+        """Test that truncation gives the same result whatever the time unit of the series."""
+        dt = pl.Series(
+            [datetime(2024, 1, 2), datetime(2024, 1, 2, 12), datetime(2024, 1, 3)],
+            dtype=pl.Datetime(time_unit),  # type: ignore[arg-type] - Polars Literal is a string
+        )
+        result = truncate_to_period(dt, Period.of_days(1), anchor)
+        assert_series_equal(result, pl.Series(expected, dtype=pl.Datetime(time_unit)))  # type: ignore[arg-type] - Polars Literal is a string
+
+    def test_sub_microsecond_end_anchor(self) -> None:
+        """Test that a nanosecond value just after a boundary truncates to the next boundary with an end anchor."""
+        dt = pl.Series([datetime(2024, 1, 2)], dtype=pl.Datetime("ns")).dt.offset_by("500ns")
+        result = truncate_to_period(dt, Period.of_days(1), "end")
+        assert_series_equal(result, pl.Series([datetime(2024, 1, 3)], dtype=pl.Datetime("ns")))
+
 
 class TestPadTime:
     simple_test_cases = {
@@ -815,6 +838,64 @@ class TestPadTime:
 
         with pytest.raises(ValueError, match=expected_error):
             pad_time(df, "time", periodicity, start=start_date, end=end_date)
+
+    @pytest.mark.parametrize(
+        "periodicity,anchor,time_stamps,start,end,expected",
+        [
+            (
+                Period.of_hours(1),
+                "start",
+                [datetime(2024, 1, 1, 0), datetime(2024, 1, 1, 1)],
+                datetime(2023, 12, 31, 22, 30),
+                datetime(2024, 1, 1, 3, 30),
+                [datetime(2023, 12, 31, 22), datetime(2023, 12, 31, 23)] + [datetime(2024, 1, 1, h) for h in range(4)],
+            ),
+            (
+                Period.of_hours(1),
+                "end",
+                [datetime(2024, 1, 1, 0), datetime(2024, 1, 1, 1)],
+                datetime(2023, 12, 31, 22, 30),
+                datetime(2024, 1, 1, 3, 30),
+                [datetime(2023, 12, 31, 23)] + [datetime(2024, 1, 1, h) for h in range(5)],
+            ),
+            (
+                Period.of_days(1).with_hour_offset(9),
+                "start",
+                [datetime(2024, 1, 2, 9)],
+                datetime(2024, 1, 1, 3),
+                datetime(2024, 1, 3, 12),
+                [datetime(2023, 12, 31, 9), datetime(2024, 1, 1, 9), datetime(2024, 1, 2, 9), datetime(2024, 1, 3, 9)],
+            ),
+        ],
+        ids=["start anchor", "end anchor", "offset periodicity"],
+    )
+    def test_unaligned_start_end_dates(
+        self,
+        periodicity: Period,
+        anchor: TimeAnchor,
+        time_stamps: list,
+        start: datetime,
+        end: datetime,
+        expected: list,
+    ) -> None:
+        """Test that start and end dates are truncated to the periodicity before padding"""
+        df = pl.DataFrame({"time": time_stamps})
+        result = pad_time(df, "time", periodicity, anchor, start=start, end=end)
+        assert_frame_equal(result, pl.DataFrame({"time": expected}))
+
+    @pytest.mark.parametrize(
+        "start,end,arg",
+        [
+            (date(2024, 1, 1), None, "start"),
+            (None, date(2024, 1, 1), "end"),
+        ],
+        ids=["date start", "date end"],
+    )
+    def test_date_start_end_dates(self, start: Any, end: Any, arg: str) -> None:
+        """Test that a date rather than a datetime for start or end raises an error"""
+        df = pl.DataFrame({"time": [datetime(2024, 1, 1)]})
+        with pytest.raises(TypeError, match=f"'{arg}' must be a datetime"):
+            pad_time(df, "time", Period.of_days(1), start=start, end=end)
 
     def test_equal_start_end_dates(self) -> None:
         """Test that a start date equal to the end date leaves the time series unchanged"""
@@ -2048,65 +2129,6 @@ class TestCheckPeriodicity:
     ) -> None:
         """Test that a microsecond based time series that doesn't conform to the given periodicity fails the check."""
         self._check_failure(name, times, periodicity, time_anchor)
-
-
-class TestEpochCheck:
-    @pytest.mark.parametrize(
-        "period",
-        [
-            Period.of_years(2),
-            Period.of_years(7),
-            Period.of_years(10),
-            Period.of_months(5),
-            Period.of_months(7),
-            Period.of_months(9),
-            Period.of_months(10),
-            Period.of_months(11),
-            Period.of_months(13),
-            Period.of_days(2),
-            Period.of_days(7),
-            Period.of_days(65),
-            Period.of_hours(5),
-            Period.of_hours(7),
-            Period.of_hours(9),
-            Period.of_hours(11),
-            Period.of_hours(25),
-            Period.of_minutes(7),
-            Period.of_minutes(11),
-            Period.of_minutes(50),
-            Period.of_minutes(61),
-        ],
-    )
-    def test_non_epoch_agnostic_period_fails(self, period: Period) -> None:
-        """Test that non epoch agnostic Periods fail the epoch check."""
-        with pytest.raises(NotImplementedError):
-            epoch_check(period)
-
-    @pytest.mark.parametrize(
-        "period",
-        [
-            Period.of_years(1),
-            Period.of_months(1),
-            Period.of_months(2),
-            Period.of_months(3),
-            Period.of_months(4),
-            Period.of_months(6),
-            Period.of_days(1),
-            Period.of_hours(1),
-            Period.of_hours(2),
-            Period.of_hours(3),
-            Period.of_hours(4),
-            Period.of_hours(24),
-            Period.of_minutes(1),
-            Period.of_minutes(2),
-            Period.of_minutes(15),
-            Period.of_minutes(30),
-            Period.of_minutes(60),
-        ],
-    )
-    def test_epoch_agnostic_period_passes(self, period: Period) -> None:
-        """Test that epoch agnostic Periods pass the epoch check."""
-        epoch_check(period)
 
 
 class TestCheckLiteralValue:

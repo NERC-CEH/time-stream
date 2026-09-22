@@ -234,6 +234,14 @@ def make_str_list_tf() -> TimeFrame:
     return tf
 
 
+def make_str_list_tf_with_nulls() -> TimeFrame:
+    """Create a TimeFrame with a str categorical list flag column holding nulls."""
+    df = make_tf().df.with_columns(pl.Series("flag_col", [None, None, ["B"]], dtype=pl.List(pl.String)))
+    tf = TimeFrame(df, "time").with_flag_system("met", {"FLAG_A": "A", "FLAG_B": "B"}, flag_type="categorical_list")
+    tf.register_flag_column("flag_col", "met")
+    return tf
+
+
 class TestAddFlag:
     def test_int_scalar_all_rows(self) -> None:
         """Test adding an int flag to all rows by name."""
@@ -336,6 +344,20 @@ class TestAddFlag:
         assert result[1] == [1]
         assert result[2] == [1]
 
+    @pytest.mark.parametrize(
+        "expr,expected",
+        [
+            (pl.lit(True), [["A"], ["A"], ["B", "A"]]),
+            (pl.col("value").lt(15), [["A"], None, ["B"]]),
+        ],
+        ids=["no expr", "with expr"],
+    )
+    def test_str_list_null_values(self, expr: pl.Expr, expected: list) -> None:
+        """Test that adding a flag to a null list treats it as having no flags set."""
+        tf = make_str_list_tf_with_nulls()
+        tf.add_flag("flag_col", "FLAG_A", expr)
+        assert tf.df["flag_col"].to_list() == expected
+
 
 class TestRemoveFlag:
     def test_int_scalar_all_rows(self) -> None:
@@ -380,6 +402,20 @@ class TestRemoveFlag:
         assert result[0] == [0, 1]
         assert result[1] == [1]
         assert result[2] == [1]
+
+    @pytest.mark.parametrize(
+        "expr,expected",
+        [
+            (pl.lit(True), [[], [], []]),
+            (pl.col("value").lt(15), [[], None, ["B"]]),
+        ],
+        ids=["no expr", "with expr"],
+    )
+    def test_str_list_null_values(self, expr: pl.Expr, expected: list) -> None:
+        """Test that removing a flag from a null list treats it as having no flags set."""
+        tf = make_str_list_tf_with_nulls()
+        tf.remove_flag("flag_col", "FLAG_B", expr)
+        assert tf.df["flag_col"].to_list() == expected
 
     def test_int_list_absent_value_is_noop(self) -> None:
         """Test that removing a value not in the list is a no-op."""
