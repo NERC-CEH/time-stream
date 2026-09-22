@@ -1822,16 +1822,16 @@ class TestPaddedAggregations:
         assert result == expected_tf
 
     def test_not_padded_result(self) -> None:
-        """Test that the aggregation result isn't padded if the original time series wasn't padded"""
+        """Test that the aggregation result has every period even if the original time series wasn't padded"""
         tf = TimeFrame(df=self.df, time_name="timestamp", resolution=Period.of_days(1), periodicity=Period.of_days(1))
 
         expected_df = pl.DataFrame(
             {
-                "timestamp": [datetime(2020, 1, 1), datetime(2020, 3, 1)],
-                "mean_value": [2.0, 5.0],
-                "count_value": [3, 3],
-                "expected_count_timestamp": [31, 31],
-                "valid_value": [True, True],
+                "timestamp": [datetime(2020, 1, 1), datetime(2020, 2, 1), datetime(2020, 3, 1)],
+                "mean_value": [2.0, None, 5.0],
+                "count_value": [3, 0, 3],
+                "expected_count_timestamp": [31, 29, 31],
+                "valid_value": [True, False, True],
             }
         )
 
@@ -1841,6 +1841,73 @@ class TestPaddedAggregations:
 
         result = tf.aggregate(Period.of_months(1), "mean", "value")
         assert result == expected_tf
+
+    def test_empty_period_end_anchor(self) -> None:
+        """Test that a period with no data is included when the periods are labelled by their end"""
+        times = [datetime(2020, 1, d) for d in range(2, 32)] + [datetime(2020, 3, d) for d in range(2, 32)]
+        df = pl.DataFrame({"timestamp": times, "value": [1.0] * len(times)})
+        tf = TimeFrame(df, "timestamp", resolution=Period.of_days(1), time_anchor="end")
+
+        result = tf.aggregate(Period.of_months(1), "sum", "value")
+
+        expected = pl.DataFrame(
+            {
+                "timestamp": [datetime(2020, 2, 1), datetime(2020, 3, 1), datetime(2020, 4, 1)],
+                "count_value": [30, 0, 30],
+                "expected_count_timestamp": [31, 29, 31],
+                "valid_value": [True, False, True],
+            }
+        )
+        assert_frame_equal(
+            result.df.select("timestamp", "count_value", "expected_count_timestamp", "valid_value"),
+            expected,
+            check_dtypes=False,
+        )
+
+    def test_empty_period_time_window(self) -> None:
+        """Test that a period left with no data by the time window is included"""
+        times = [datetime(2020, 1, 1) + timedelta(hours=h) for h in range(72) if not (34 <= h <= 38)]
+        df = pl.DataFrame({"timestamp": times, "value": [1.0] * len(times)})
+        tf = TimeFrame(df, "timestamp", resolution=Period.of_hours(1))
+
+        result = tf.aggregate(Period.of_days(1), "sum", "value", time_window=(time(10), time(14)))
+
+        expected = pl.DataFrame(
+            {
+                "timestamp": [datetime(2020, 1, 1), datetime(2020, 1, 2), datetime(2020, 1, 3)],
+                "count_value": [5, 0, 5],
+                "expected_count_timestamp": [5, 5, 5],
+                "valid_value": [True, False, True],
+            }
+        )
+        assert_frame_equal(
+            result.df.select("timestamp", "count_value", "expected_count_timestamp", "valid_value"),
+            expected,
+            check_dtypes=False,
+        )
+
+
+class TestAllNullPeriod:
+    """Tests that every aggregation function gives null for a period whose values are all null."""
+
+    KWARGS: dict[str, dict[str, Any]] = {
+        "conditional_count": {"condition": lambda col: col > 0},
+        "nth": {"n": 1},
+        "percentile": {"p": 50},
+        "pot": {"threshold": 0},
+    }
+
+    @pytest.mark.parametrize("name", AggregationFunction.available())
+    def test_all_null_period(self, name: str) -> None:
+        """Test that an aggregation of a period with only null values is null."""
+        times = [datetime(2025, 1, 1) + timedelta(hours=h) for h in range(48)]
+        df = pl.DataFrame({"time": times, "value": [None] * 24 + [1.0] * 24}, schema_overrides={"value": pl.Float64})
+        tf = TimeFrame(df, "time", resolution="PT1H")
+
+        result = tf.aggregate("P1D", name, "value", **self.KWARGS.get(name, {}))
+
+        assert result.df[f"{name}_value"][0] is None
+        assert result.df[f"{name}_value"][1] is not None
 
 
 class TestAggregationWithMetadata:

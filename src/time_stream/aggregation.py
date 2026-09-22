@@ -110,6 +110,10 @@ class AggregationPipeline(ABC):
         agg_expressions.extend(self._actual_count_expr())
         df = grouper.agg(agg_expressions)
 
+        # The output should contain all aggregation periods, so pad the output. This lets missing_criteria/valid flag
+        # rows with no data.
+        df = self._fill_empty_periods(df)
+
         # Build expressions to go in the .with_columns method.
         #   Note: - Order is important here. Expressions may have dependencies on the results of earlier expressions.
         #         - Doing separate .with_columns calls to group expressions together and take advantage of the Polars
@@ -138,6 +142,19 @@ class AggregationPipeline(ABC):
 
         Returns:
             The (optionally modified) DataFrame.
+        """
+        return df
+
+    def _fill_empty_periods(self, df: pl.DataFrame) -> pl.DataFrame:
+        """Add rows for aggregation periods that have no data.
+
+        Default is to do nothing - subclasses can override this.
+
+        Args:
+            df: The aggregated DataFrame.
+
+        Returns:
+            The (optionally modified) aggregated DataFrame.
         """
         return df
 
@@ -318,7 +335,7 @@ class StandardAggregationPipeline(AggregationPipeline):
         super().__init__(agg_func, ctx, aggregation_period, columns, missing_criteria)
         if aggregation_time_anchor is not None:
             check_literal_value(aggregation_time_anchor, TimeAnchor, "aggregation_time_anchor")
-        self.aggregation_time_anchor = (
+        self.aggregation_time_anchor: TimeAnchor = (
             aggregation_time_anchor if aggregation_time_anchor is not None else ctx.time_anchor
         )
         self.time_window = time_window
@@ -359,6 +376,20 @@ class StandardAggregationPipeline(AggregationPipeline):
         if self.time_window:
             return self.time_window.filter_df(df, self.ctx.time_name)
         return df
+
+    def _fill_empty_periods(self, df: pl.DataFrame) -> pl.DataFrame:
+        """Add a row, with a count of zero, for each period between the first and last that has no data.
+
+        Args:
+            df: The aggregated DataFrame.
+
+        Returns:
+            The aggregated DataFrame with a row for every period.
+        """
+        if df.is_empty():
+            return df
+        df = pad_time(df, self.ctx.time_name, self.aggregation_period, self.aggregation_time_anchor)
+        return df.with_columns(pl.col(f"count_{col}").fill_null(0) for col in self.columns)
 
     def _pad_periods(self, df: pl.DataFrame) -> pl.DataFrame:
         """Pad every aggregation period in the data to its full set of time steps, taking into account the potential
@@ -606,7 +637,8 @@ class Sum(AggregationFunction):
 
     def expr(self, ctx: AggregationCtx, columns: list[str]) -> list[pl.Expr]:
         """Return the `Polars` expression for calculating the sum in an aggregation period."""
-        return [pl.col(col).sum().alias(f"sum_{col}") for col in columns]
+        # The sum of no values (even nan/null) is 0, so make sure to give null when there are no values
+        return [pl.when(pl.col(col).count() > 0).then(pl.col(col).sum()).alias(f"sum_{col}") for col in columns]
 
 
 @AggregationFunction.register
@@ -721,7 +753,10 @@ class ConditionalCount(AggregationFunction):
 
     def expr(self, ctx: AggregationCtx, columns: list[str]) -> list[pl.Expr]:
         """Return the `Polars` expression for calculating the conditional count in an aggregation period."""
-        return [self.condition(pl.col(col)).sum().alias(f"{self.name}_{col}") for col in columns]
+        return [
+            pl.when(pl.col(col).count() > 0).then(self.condition(pl.col(col)).sum()).alias(f"{self.name}_{col}")
+            for col in columns
+        ]
 
 
 @AggregationFunction.register
