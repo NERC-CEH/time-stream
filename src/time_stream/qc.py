@@ -144,7 +144,10 @@ class ComparisonCheck(QCCheck):
 
         operator_expr = operator_map[self.operator]
         if self.flag_na:
-            operator_expr = operator_expr | pl.col(column).is_null()
+            is_na = pl.col(column).is_null()
+            if ctx.df.schema[column].is_float():
+                is_na = is_na | pl.col(column).is_nan()
+            operator_expr = operator_expr | is_na
 
         return operator_expr
 

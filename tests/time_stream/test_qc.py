@@ -160,6 +160,21 @@ class TestComparisonCheck:
         expected = pl.Series([None, True, True, None])
         assert_series_equal(result, expected)
 
+    @pytest.mark.parametrize("operator", [">", ">=", "<", "<=", "==", "!=", "is_in"])
+    def test_flag_na_flags_nan(self, operator: str) -> None:
+        """Test that flag_na flags NaN as well as null, whatever the operator."""
+        df = pl.DataFrame({"time": [datetime(2025, 1, 1), datetime(2025, 1, 2)], "value": [float("nan"), None]})
+        check = ComparisonCheck(5, operator, flag_na=True)
+        result = check.apply(df, "time", "value")
+        assert_series_equal(result, pl.Series([True, True]))
+
+    def test_flag_na_integer_column(self) -> None:
+        """Test that flag_na flags null in a column type that has no NaN."""
+        df = pl.DataFrame({"time": [datetime(2025, 1, 1), datetime(2025, 1, 2)], "value": [1, None]})
+        check = ComparisonCheck(5, "<", flag_na=True)
+        result = check.apply(df, "time", "value")
+        assert_series_equal(result, pl.Series([True, True]))
+
     def test_invalid_operator(self) -> None:
         """Test that invalid operator raises error"""
         with pytest.raises(QcUnknownOperatorError):
