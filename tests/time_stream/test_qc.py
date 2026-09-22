@@ -218,10 +218,9 @@ class TestRangeCheck:
         ],
     )
     def test_type_mismatch(self, min_value: Any, max_value: Any) -> None:
-        """Test that error raised if min and max value are not the same type."""
-        with pytest.raises(TypeError):
-            check = RangeCheck(min_value, max_value)
-            check.expr(self.ctx, "value_a")
+        """Test that error raised on construction if min and max value are not the same type."""
+        with pytest.raises(TypeError, match="must be of same type"):
+            RangeCheck(min_value, max_value)
 
     @pytest.mark.parametrize(
         "min_value,max_value,closed,within,expected",
@@ -436,6 +435,16 @@ class TestRangeCheck:
         check = RangeCheck(min_value, max_value, closed, within)
         result = check.apply(self.tf.df, self.tf.time_name, "time")
         assert_series_equal(result, pl.Series(expected))
+
+    @pytest.mark.parametrize("closed", ["both", "left", "right", "none"])
+    def test_across_midnight_leaves_check_unchanged(self, closed: ClosedInterval) -> None:
+        """Test that applying a range check across midnight doesn't change the check's attributes"""
+        check = RangeCheck(time(23, 30), time(1, 30), closed, True)
+        before = vars(check).copy()
+        first = check.apply(self.tf.df, self.tf.time_name, "time")
+        second = check.apply(self.tf.df, self.tf.time_name, "time")
+        assert vars(check) == before
+        assert_series_equal(first, second)
 
     @pytest.mark.parametrize(
         "min_value,max_value,closed,within,expected",

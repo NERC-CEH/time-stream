@@ -173,8 +173,13 @@ class RangeCheck(QCCheck):
             closed: Define which sides of the interval are closed (inclusive) {'both', 'left', 'right', 'none'}
                     (default = "both")
             within: Whether values get flagged when within or outside the range (default = True (within)).
+
+        Raises:
+            TypeError: If ``min_value`` and ``max_value`` are not of the same type.
         """
         check_literal_value(closed, ClosedInterval, "closed")
+        if type(min_value) is not type(max_value):
+            raise TypeError("'min_value' and 'max_value' must be of same type")
         self.min_value = min_value
         self.max_value = max_value
         self.closed = closed
@@ -182,29 +187,29 @@ class RangeCheck(QCCheck):
 
     def expr(self, ctx: QcCtx, column: str) -> pl.Expr:
         """Return the Polars expression for range checking."""
-        if type(self.min_value) is not type(self.max_value):
-            raise TypeError("'min_value' and 'max_value' must be of same type")
-
-        check_type = type(self.min_value)
+        # Make a local copy of these variables, otherwise the code that changes these values below would alter the
+        # class attributes
+        min_value, max_value, closed, within = self.min_value, self.max_value, self.closed, self.within
+        check_type = type(min_value)
 
         # Check if we're doing a time-based range check
         if check_type is time:
             col_expr = pl.col(column).dt.time()
 
             # Consider ranges that cross midnight, e.g. min_value = 11:00, max_value = 01:00
-            if self.min_value > self.max_value:  # type: ignore[arg-type] - we know the types are the same by now
+            if min_value > max_value:  # type: ignore[operator] - we know the types are the same
                 # Swap the values so the comparison operators work the correct way around
-                self.min_value, self.max_value = self.max_value, self.min_value
+                min_value, max_value = max_value, min_value
 
                 # Reverse the within parameter, as we've swapped the min/max logic
-                self.within = not self.within
+                within = not within
 
                 # We also need to swap the close parameter (if "both" or "none")
                 # Don't have to change "left" or "right" as it shakes out the same even when reversing the min/max
-                if self.closed == "both":
-                    self.closed = "none"
-                elif self.closed == "none":
-                    self.closed = "both"
+                if closed == "both":
+                    closed = "none"
+                elif closed == "none":
+                    closed = "both"
 
         elif check_type is date:
             # For datetime.date objects (NOT datetime.datetime!), we want to consider the whole date part of the column
@@ -215,11 +220,11 @@ class RangeCheck(QCCheck):
             col_expr = pl.col(column)
 
         in_range = col_expr.is_between(
-            self.min_value,
-            self.max_value,
-            closed=self.closed,  # type: ignore[arg-type] ignore Literal typing as the enum constrains the values
+            min_value,
+            max_value,
+            closed=closed,  # type: ignore[arg-type] ignore Literal typing as the enum constrains the values
         )
-        return in_range if self.within else ~in_range
+        return in_range if within else ~in_range
 
 
 @QCCheck.register
