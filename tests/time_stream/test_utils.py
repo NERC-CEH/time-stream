@@ -17,8 +17,8 @@ from time_stream.utils import (
     check_literal_value,
     check_naive_time,
     check_periodicity,
+    check_time_zone,
     get_date_filter,
-    match_time_zone,
     pad_time,
     truncate_to_period,
 )
@@ -87,9 +87,9 @@ class TestGetDateFilter:
         assert_series_equal(result, expected)
 
     def test_get_date_filter_utc(self) -> None:
-        """Test that an observation interval with a time zone is compared in the time column's time zone."""
+        """Test that an observation interval in UTC filters a UTC time column."""
         df = self.df.with_columns(pl.col("timestamp").dt.replace_time_zone("UTC"))
-        start = datetime(2025, 3, 1, 1, tzinfo=ZoneInfo("Europe/Paris"))  # 00:00 UTC
+        start = datetime(2025, 3, 1, tzinfo=UTC)
         result = df.with_columns(get_date_filter("timestamp", start, df.schema["timestamp"])).to_series()
         assert_series_equal(result, pl.Series("timestamp", [False, False, True, True, True, True, True]))
 
@@ -98,8 +98,9 @@ class TestGetDateFilter:
         [
             ((datetime(2025, 1, 1, tzinfo=UTC), None), False),
             ((None, datetime(2025, 1, 1)), True),
+            ((datetime(2025, 1, 1, tzinfo=ZoneInfo("Europe/Paris")), None), True),
         ],
-        ids=["aware on naive column", "naive on UTC column"],
+        ids=["aware on naive column", "naive on UTC column", "other zone on UTC column"],
     )
     def test_get_date_filter_time_zone_mismatch(self, observation_interval: tuple, utc: bool) -> None:
         """Test that an observation interval whose time zone doesn't match the time column raises an error."""
@@ -108,39 +109,43 @@ class TestGetDateFilter:
             get_date_filter("timestamp", observation_interval, dtype)
 
 
-class TestMatchTimeZone:
+class TestCheckTimeZone:
     @pytest.mark.parametrize(
-        "value,dtype,expected",
+        "value,dtype",
         [
-            (datetime(2025, 1, 1), pl.Datetime("us"), datetime(2025, 1, 1)),
-            (datetime(2025, 1, 1), pl.Date(), datetime(2025, 1, 1)),
-            (datetime(2025, 1, 1, tzinfo=UTC), pl.Datetime("us", "UTC"), datetime(2025, 1, 1, tzinfo=UTC)),
-            (
-                datetime(2025, 1, 1, 1, tzinfo=ZoneInfo("Europe/Paris")),
-                pl.Datetime("us", "UTC"),
-                datetime(2025, 1, 1, tzinfo=UTC),
-            ),
+            (datetime(2025, 1, 1), pl.Datetime("us")),
+            (datetime(2025, 1, 1), pl.Date()),
+            (datetime(2025, 1, 1, tzinfo=UTC), pl.Datetime("us", "UTC")),
+            (datetime(2025, 1, 1, tzinfo=ZoneInfo("UTC")), pl.Datetime("us", "UTC")),
         ],
-        ids=["naive on naive", "naive on Date", "UTC on UTC", "other zone converted to UTC"],
+        ids=["naive on naive", "naive on Date", "UTC on UTC", "ZoneInfo UTC on UTC"],
     )
-    def test_match(self, value: datetime, dtype: pl.DataType, expected: datetime) -> None:
-        """Test that a datetime matching the column's time zone is returned in that time zone."""
-        result = match_time_zone(value, dtype, "start")
-        assert result == expected
-        assert result.utcoffset() == expected.utcoffset()
+    def test_match(self, value: datetime, dtype: pl.DataType) -> None:
+        """Test that a datetime in the column's time zone passes the check."""
+        check_time_zone(value, dtype, "start")
 
     @pytest.mark.parametrize(
         "value,dtype,expected_error",
         [
             (datetime(2025, 1, 1, tzinfo=UTC), pl.Datetime("us"), "'start' has a time zone but the column does not"),
             (datetime(2025, 1, 1), pl.Datetime("us", "UTC"), "'start' has no time zone but the column is in 'UTC'"),
+            (
+                datetime(2025, 1, 1, 1, tzinfo=ZoneInfo("Europe/Paris")),
+                pl.Datetime("us", "UTC"),
+                "'start' must be in the column's time zone 'UTC', got 'Europe/Paris'",
+            ),
+            (
+                datetime(2025, 1, 1, tzinfo=ZoneInfo("Europe/London")),
+                pl.Datetime("us", "UTC"),
+                "'start' must be in the column's time zone 'UTC', got 'Europe/London'",
+            ),
         ],
-        ids=["aware on naive", "naive on UTC"],
+        ids=["aware on naive", "naive on UTC", "other zone on UTC", "zero offset zone on UTC"],
     )
     def test_mismatch_raises(self, value: datetime, dtype: pl.DataType, expected_error: str) -> None:
-        """Test that a datetime not matching the column's time zone raises an error."""
+        """Test that a datetime not in the column's time zone raises an error."""
         with pytest.raises(TypeError, match=re.escape(expected_error)):
-            match_time_zone(value, dtype, "start")
+            check_time_zone(value, dtype, "start")
 
     def test_time_with_time_zone_raises(self) -> None:
         """Test that a time of day with a time zone raises an error."""
@@ -966,8 +971,9 @@ class TestPadTime:
         [
             (None, datetime(2025, 1, 1, tzinfo=UTC)),
             ("UTC", datetime(2025, 1, 1)),
+            ("UTC", datetime(2025, 1, 1, 1, tzinfo=ZoneInfo("Europe/Paris"))),
         ],
-        ids=["aware on naive column", "naive on UTC column"],
+        ids=["aware on naive column", "naive on UTC column", "other zone on UTC column"],
     )
     def test_start_time_zone_mismatch(self, time_zone: str | None, start: datetime) -> None:
         """Test that a start date whose time zone doesn't match the time column raises an error"""
@@ -976,9 +982,9 @@ class TestPadTime:
             pad_time(df, "time", Period.of_days(1), start=start)
 
     def test_utc_start_end_dates(self) -> None:
-        """Test that start and end dates in another time zone pad a UTC time column in UTC"""
+        """Test that start and end dates in UTC pad a UTC time column"""
         df = pl.DataFrame({"time": [datetime(2025, 1, 2)]}).with_columns(pl.col("time").dt.replace_time_zone("UTC"))
-        start = datetime(2025, 1, 1, 1, tzinfo=ZoneInfo("Europe/Paris"))  # 00:00 UTC
+        start = datetime(2025, 1, 1, tzinfo=UTC)
         result = pad_time(df, "time", Period.of_days(1), start=start, end=datetime(2025, 1, 3, tzinfo=UTC))
         expected = pl.DataFrame(
             {"time": [datetime(2025, 1, 1), datetime(2025, 1, 2), datetime(2025, 1, 3)]}

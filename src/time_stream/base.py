@@ -867,7 +867,7 @@ class TimeFrame:
             check: The QC check to apply.
             column_name: The column to perform the check on.
             observation_interval: Optional time interval to limit the check to. Datetimes must match the time column:
-                without a time zone if it has none, or with one if it is in UTC.
+                without a time zone if it has none, or in UTC if it is in UTC.
             flag_params: Tuple of (flag column name [str], flag value [str | int].
                             If provided, add given flag value to the flag column where the QC check returns ``True``.
                             If not provided, the result of the QC check is returned as a boolean series.
@@ -907,7 +907,7 @@ class TimeFrame:
             max_gap_size: The maximum size of consecutive null gaps that should be filled. Any gap larger than this
                           will not be infilled and will remain as null.
             observation_interval: Optional time interval to limit the check to. Datetimes must match the time column:
-                without a time zone if it has none, or with one if it is in UTC.
+                without a time zone if it has none, or in UTC if it is in UTC.
             flag_params: Tuple of (flag column name [str], flag value [str | int].
                             If provided, add given flag value to the flag column on rows that were infilled.
                             If not provided, no flags added.

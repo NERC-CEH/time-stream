@@ -8,7 +8,6 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
 from typing import Any, get_args
-from zoneinfo import ZoneInfo
 
 import polars as pl
 from isoperiod import Period
@@ -155,9 +154,9 @@ def get_date_filter(
         start_date, end_date = observation_interval
 
     if start_date is not None:
-        start_date = match_time_zone(start_date, dtype, "observation_interval start")
+        check_time_zone(start_date, dtype, "observation_interval start")
     if end_date is not None:
-        end_date = match_time_zone(end_date, dtype, "observation_interval end")
+        check_time_zone(end_date, dtype, "observation_interval end")
 
     if start_date is None and end_date is None:
         return pl.lit(True).alias(time_name)
@@ -255,9 +254,9 @@ def pad_time(
         if value is not None and not isinstance(value, datetime):
             raise TypeError(f"'{name}' must be a datetime. Got: '{type(value)}'")
     if start is not None:
-        start = match_time_zone(start, df[time_name].dtype, "start")
+        check_time_zone(start, df[time_name].dtype, "start")
     if end is not None:
-        end = match_time_zone(end, df[time_name].dtype, "end")
+        check_time_zone(end, df[time_name].dtype, "end")
 
     # Extract the existing datetimes, truncated to the boundary of their periodicity period
     existing_datetimes = truncate_to_period(df[time_name], periodicity, time_anchor)
@@ -299,28 +298,28 @@ def pad_time(
     return padded_df
 
 
-def match_time_zone(value: datetime, dtype: pl.DataType, name: str) -> datetime:
-    """Return a datetime in the time zone of the column it is compared with.
+def check_time_zone(value: datetime, dtype: pl.DataType, name: str) -> None:
+    """Check that a datetime is in the same time zone as the column it is compared with.
 
     Args:
         value: The datetime to check.
         dtype: The dtype of the column.
         name: The name of the parameter, used in the error message.
 
-    Returns:
-        The datetime, converted to the column's time zone if it has one.
-
     Raises:
-        TypeError: If the column has a time zone and the datetime doesn't, or the other way round.
+        TypeError: If the datetime's time zone is not the column's, including one having a time zone and the other not.
     """
     time_zone = dtype.time_zone if isinstance(dtype, pl.Datetime) else None
     if time_zone is None:
         if value.tzinfo is not None:
             raise TypeError(f"'{name}' has a time zone but the column does not: {value}")
-        return value
+        return
     if value.tzinfo is None:
         raise TypeError(f"'{name}' has no time zone but the column is in '{time_zone}': {value}")
-    return value.astimezone(ZoneInfo(time_zone))
+    # UTC has several tzinfo implementations, which all name it "UTC"
+    value_time_zone = "UTC" if value.tzname() == "UTC" else getattr(value.tzinfo, "key", str(value.tzinfo))
+    if value_time_zone != time_zone:
+        raise TypeError(f"'{name}' must be in the column's time zone '{time_zone}', got '{value_time_zone}': {value}")
 
 
 def check_naive_time(value: time, name: str) -> None:

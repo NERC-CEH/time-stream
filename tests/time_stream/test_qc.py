@@ -1131,7 +1131,7 @@ class TestTimeZones:
     def test_time_range_check_utc(self) -> None:
         """Test that a time range check with UTC datetimes works on a UTC time column."""
         tf = TimeFrame(self.utc_df, "time", resolution="PT1H")
-        start = datetime(2025, 1, 1, 2, tzinfo=ZoneInfo("Europe/Paris"))  # 01:00 UTC
+        start = datetime(2025, 1, 1, 1, tzinfo=UTC)
         result = tf.qc_check("time_range", "value", min_value=start, max_value=datetime(2025, 1, 1, 2, tzinfo=UTC))
         assert_series_equal(result, pl.Series([False, True, True, False]))
 
@@ -1142,8 +1142,18 @@ class TestTimeZones:
             (RangeCheck(datetime(2025, 1, 1), datetime(2025, 1, 2)), "utc_df"),
             (ComparisonCheck(datetime(2025, 1, 1), ">"), "utc_df"),
             (ComparisonCheck([datetime(2025, 1, 1, tzinfo=UTC)], "is_in"), "naive_df"),
+            (
+                RangeCheck(datetime(2025, 1, 1, tzinfo=ZoneInfo("Europe/Paris")), datetime(2025, 1, 2, tzinfo=UTC)),
+                "utc_df",
+            ),
         ],
-        ids=["range aware on naive", "range naive on UTC", "comparison naive on UTC", "is_in aware on naive"],
+        ids=[
+            "range aware on naive",
+            "range naive on UTC",
+            "comparison naive on UTC",
+            "is_in aware on naive",
+            "range other zone on UTC",
+        ],
     )
     def test_datetime_time_zone_mismatch_raises(self, check: QCCheck, df_name: str) -> None:
         """Test that a datetime whose time zone doesn't match the checked column raises an error."""

@@ -105,7 +105,7 @@ class InfillMethod(Operation, ABC):
             infill_column: The column to infill data within.
             periodicity: Periodicity of the time series
             observation_interval: Optional time interval to limit the infilling to. Datetimes must match the time
-                column: without a time zone if it has none, or with one if it is in UTC.
+                column: without a time zone if it has none, or in UTC if it is in UTC.
             max_gap_size: The maximum size of consecutive null gaps that should be filled. Any gap larger than this
                           will not be infilled and will remain as null.
         Returns:
