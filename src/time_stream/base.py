@@ -82,7 +82,8 @@ class TimeFrame:
 
     Args:
         df: The :class:`polars.DataFrame` containing the time-series data.
-        time_name: The name of the time column in ``df``.
+        time_name: The name of the time column in ``df``. It must be a ``Date`` or ``Datetime`` column, either
+            without a time zone or in UTC.
         resolution: Sampling interval for the timeseries; the unit of time step allowable between consecutive data
             points. Accepts an :class:`isoperiod.Period` or ISO-8601 duration string (e.g. ``"PT15M"``, ``"P1D"``,
             ``"P1Y"``).
@@ -409,7 +410,7 @@ class TimeFrame:
             Padded TimeFrame
 
         Raises:
-            TypeError: If ``start`` or ``end`` is not a datetime.
+            TypeError: If ``start`` or ``end`` is not a datetime, or its time zone doesn't match the time column.
         """
         padded_df = pad_time(
             df=self.df,
@@ -865,7 +866,8 @@ class TimeFrame:
         Args:
             check: The QC check to apply.
             column_name: The column to perform the check on.
-            observation_interval: Optional time interval to limit the check to.
+            observation_interval: Optional time interval to limit the check to. Datetimes must match the time column:
+                without a time zone if it has none, or with one if it is in UTC.
             flag_params: Tuple of (flag column name [str], flag value [str | int].
                             If provided, add given flag value to the flag column where the QC check returns ``True``.
                             If not provided, the result of the QC check is returned as a boolean series.
@@ -904,7 +906,8 @@ class TimeFrame:
             column_name: The column to infill
             max_gap_size: The maximum size of consecutive null gaps that should be filled. Any gap larger than this
                           will not be infilled and will remain as null.
-            observation_interval: Optional time interval to limit the check to.
+            observation_interval: Optional time interval to limit the check to. Datetimes must match the time column:
+                without a time zone if it has none, or with one if it is in UTC.
             flag_params: Tuple of (flag column name [str], flag value [str | int].
                             If provided, add given flag value to the flag column on rows that were infilled.
                             If not provided, no flags added.

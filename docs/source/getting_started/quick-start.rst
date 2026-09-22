@@ -39,6 +39,13 @@ for time series operations:
 
    timeseries_basics.create_simple_time_series()
 
+.. note::
+
+   The time column must be a Polars ``Date`` or ``Datetime`` column, either without a time zone or in UTC. Time
+   zones with daylight saving aren't supported, as their days aren't all 24 hours long. Convert such a column to UTC
+   with ``pl.col("time").dt.convert_time_zone("UTC")``, or keep the local clock times and remove the time zone with
+   ``pl.col("time").dt.replace_time_zone(None)``.
+
 With Time Properties
 ====================
 

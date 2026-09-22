@@ -1,6 +1,7 @@
-from datetime import date, datetime, time
+from datetime import UTC, date, datetime, time
 from typing import Any
 from unittest.mock import Mock
+from zoneinfo import ZoneInfo
 
 import polars as pl
 import pytest
@@ -1121,3 +1122,44 @@ class TestFlatLineCheck:
         check = FlatLineCheck(3, tolerance=0.1)
         with pytest.raises(Exception):
             check.apply(tf.df, tf.time_name, "value_a")
+
+
+class TestTimeZones:
+    naive_df = pl.DataFrame({"time": [datetime(2025, 1, 1, h) for h in range(4)], "value": [1.0, 2.0, 3.0, 4.0]})
+    utc_df = naive_df.with_columns(pl.col("time").dt.replace_time_zone("UTC"))
+
+    def test_time_range_check_utc(self) -> None:
+        """Test that a time range check with UTC datetimes works on a UTC time column."""
+        tf = TimeFrame(self.utc_df, "time", resolution="PT1H")
+        start = datetime(2025, 1, 1, 2, tzinfo=ZoneInfo("Europe/Paris"))  # 01:00 UTC
+        result = tf.qc_check("time_range", "value", min_value=start, max_value=datetime(2025, 1, 1, 2, tzinfo=UTC))
+        assert_series_equal(result, pl.Series([False, True, True, False]))
+
+    @pytest.mark.parametrize(
+        "check,df_name",
+        [
+            (RangeCheck(datetime(2025, 1, 1, tzinfo=UTC), datetime(2025, 1, 2, tzinfo=UTC)), "naive_df"),
+            (RangeCheck(datetime(2025, 1, 1), datetime(2025, 1, 2)), "utc_df"),
+            (ComparisonCheck(datetime(2025, 1, 1), ">"), "utc_df"),
+            (ComparisonCheck([datetime(2025, 1, 1, tzinfo=UTC)], "is_in"), "naive_df"),
+        ],
+        ids=["range aware on naive", "range naive on UTC", "comparison naive on UTC", "is_in aware on naive"],
+    )
+    def test_datetime_time_zone_mismatch_raises(self, check: QCCheck, df_name: str) -> None:
+        """Test that a datetime whose time zone doesn't match the checked column raises an error."""
+        df = getattr(self, df_name)
+        with pytest.raises(TypeError, match="time zone"):
+            check.apply(df, "time", "time")
+
+    def test_range_check_time_with_time_zone_raises(self) -> None:
+        """Test that a time of day with a time zone raises an error."""
+        with pytest.raises(TypeError, match="must not have a time zone"):
+            RangeCheck(time(1, tzinfo=UTC), time(2, tzinfo=UTC)).apply(self.naive_df, "time", "time")
+
+    def test_observation_interval_time_zone_mismatch_raises(self) -> None:
+        """Test that an observation interval whose time zone doesn't match the time column raises an error."""
+        tf = TimeFrame(self.utc_df, "time", resolution="PT1H")
+        with pytest.raises(TypeError, match="time zone"):
+            tf.qc_check(
+                "comparison", "value", compare_to=2, operator=">", observation_interval=(datetime(2025, 1, 1), None)
+            )
