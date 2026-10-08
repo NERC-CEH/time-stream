@@ -35,7 +35,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from datetime import datetime, time
-from typing import Any, Sequence, Type, overload
+from typing import TYPE_CHECKING, Any, Sequence, Type, overload
 
 import polars as pl
 from isoperiod import Period
@@ -70,11 +70,15 @@ from time_stream.types import (
     DuplicateOption,
     FlagSystemLiteral,
     MissingCriteria,
+    PlotStyle,
     RollingAlignment,
     TimeAnchor,
     ValidationErrorOptions,
 )
 from time_stream.utils import TimeWindow, check_columns_in_dataframe, configure_period_object, pad_time
+
+if TYPE_CHECKING:
+    from matplotlib.figure import Figure
 
 
 class TimeFrame:
@@ -1011,6 +1015,89 @@ class TimeFrame:
         tf = self.with_df(df_with_min_max)
 
         return tf
+
+    def plot(
+        self,
+        columns: str | Sequence[str | Sequence[str]] | None = None,
+        start: datetime | None = None,
+        end: datetime | None = None,
+        *,
+        subplots: bool = False,
+        plot_style: PlotStyle | dict[str, PlotStyle] | None = None,
+        envelope: bool | str | Sequence[str] = False,
+        long_term_mean: bool | str | Sequence[str] = False,
+        period_of_record: tuple[datetime | None, datetime | None] | None = None,
+        flags: str | Sequence[str] | dict[str, Sequence[int | str]] | None = None,
+        show_missing: bool = False,
+        title: str | None = None,
+        log_y: bool = False,
+        ylim: tuple[float | None, float | None] | None = None,
+        figsize: tuple[float, float] | None = None,
+    ) -> Figure:
+        """Plot the data in this TimeFrame with matplotlib.
+
+        Each value is drawn over the period it is valid for, following the time anchor: ``start`` and ``end``
+        anchored data as steps, ``point`` data as a line.
+
+        Labels, units, colours and styles can be read from the column metadata keys ``label``, ``units``, ``color`` and
+        ``plot_style``, and the title from the TimeFrame metadata key ``title``. Arguments take precedence.
+
+        Requires matplotlib: ``pip install "time-stream[plot]"``.
+
+        Args:
+            columns: Column(s) to plot, sharing one panel. A list of lists gives one panel per inner list. If omitted,
+                all numeric data columns are plotted.
+            start: Start of the time window to plot (inclusive). If omitted, the start of the data.
+            end: End of the time window to plot (inclusive). If omitted, the end of the data.
+            subplots: Whether to give every column its own panel.
+            plot_style: How to draw values, for every column or as a mapping of column to style:
+
+                - ``"step"``: flat across the period each value is valid for (default for ``start``/``end`` anchors).
+                - ``"line"``: a line joining the values (default for the ``point`` anchor).
+                - ``"bar"``: a bar across the period each value is valid for.
+                - ``"scatter"``: a marker at each value (default when the periodicity is coarser than the resolution).
+            envelope: Column(s) to draw the envelope of (``True`` for all): the maximum and minimum in the period of
+                record for each time of year, with the area above the maximum shaded blue and below the minimum red.
+            long_term_mean: Column(s) to draw the mean in the period of record for each time of year of
+                (``True`` for all), as a dashed line.
+            period_of_record: ``(start, end)`` (inclusive) of the data the envelope and long-term mean are calculated
+                from. ``None`` for either uses all data in the TimeFrame - not just the window being plotted.
+            flags: Flag column(s) to show in a strip below the plot, with every value coloured by its most severe flag.
+                A mapping of flag column to flags shows only those flags, ordered from the least to the most severe;
+                otherwise the flag system's order is used.
+            show_missing: Whether to shade the background where values are missing.
+            title: Title at the top left. If omitted, the ``title`` TimeFrame metadata.
+            log_y: Whether to use a logarithmic y axis.
+            ylim: ``(bottom, top)`` limits for the y axis of every panel. ``None`` for either is automatic.
+            figsize: ``(width, height)`` of the figure in inches.
+
+        Returns:
+            The matplotlib figure.
+        """
+        try:
+            from time_stream.plotting import plot_timeframe  # noqa: PLC0415
+        except ModuleNotFoundError as err:
+            if err.name != "matplotlib":
+                raise
+            raise ImportError('Plotting requires matplotlib: pip install "time-stream[plot]"') from err
+
+        return plot_timeframe(
+            self,
+            columns,
+            start,
+            end,
+            subplots=subplots,
+            plot_style=plot_style,
+            envelope=envelope,
+            long_term_mean=long_term_mean,
+            period_of_record=period_of_record,
+            flags=flags,
+            show_missing=show_missing,
+            title=title,
+            log_y=log_y,
+            ylim=ylim,
+            figsize=figsize,
+        )
 
     def rename_time_column(self, new_time_name: str) -> TimeFrame:
         """Return a new TimeFrame with the time column renamed
