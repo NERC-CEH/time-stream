@@ -72,6 +72,15 @@ Operations
     ~TimeFrame.infill
     ~TimeFrame.qc_check
 
+Plotting
+--------
+
+.. autosummary::
+    :nosignatures:
+    :toctree: _api/
+
+    ~TimeFrame.plot
+
 Flagging
 --------
 

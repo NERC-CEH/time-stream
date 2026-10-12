@@ -2,8 +2,8 @@
 Plotting Module.
 
 Plots the data in a :class:`~time_stream.TimeFrame` with matplotlib. Each value is drawn over the period of time it is
-valid for, with an optional envelope of the maximum and minimum from the period of record, and a strip below the plot
-marking flagged values.
+valid for, with an optional envelope of the maximum and minimum for each time of year (from
+:meth:`~time_stream.TimeFrame.time_of_year_aggregate`), and a strip below the plot marking flagged values.
 
 Metadata keywords read from the TimeFrame:
 
@@ -50,10 +50,10 @@ TITLE = "title"
 SERIES_COLORS = ["#000000", "#ff0000", "#00b200", "#0000ff", "#ff00ff", "#00b2b2", "#b28c00", "#007c00", "#b27a7a"]
 UPPER_FILL = "#b3b3ff"
 LOWER_FILL = "#ffb3b3"
-MISSING_FILL = "#b3ffb3"
+MISSING_FILL = "#a6a6a6"
 
 # Flag strip colours: unflagged, then a grey scale from the least to the most severe flag
-FLAG_NONE = "#e0e0e0"
+FLAG_NONE = "#f5f5f5"
 FLAG_LEAST = "#bdbdbd"
 FLAG_MOST = "#1a1a1a"
 
@@ -69,8 +69,9 @@ def plot_timeframe(
     subplots: bool = False,
     plot_style: PlotStyle | dict[str, PlotStyle] | None = None,
     envelope: bool | str | Sequence[str] = False,
+    envelope_colors: tuple[Any, Any] | None = None,
     long_term_mean: bool | str | Sequence[str] = False,
-    period_of_record: tuple[datetime | None, datetime | None] | None = None,
+    reference_interval: tuple[datetime | None, datetime | None] | None = None,
     flags: str | Sequence[str] | dict[str, Sequence[int | str]] | None = None,
     show_missing: bool = False,
     title: str | None = None,
@@ -90,7 +91,7 @@ def plot_timeframe(
     mean_columns = _selected(long_term_mean, plotted, "long_term_mean")
     flag_levels = _flag_levels(tf, flags)
 
-    bounds = [("start", start), ("end", end), *(("period_of_record", value) for value in period_of_record or ())]
+    bounds = [("start", start), ("end", end), *(("reference_interval", value) for value in reference_interval or ())]
     for name, value in bounds:
         if value is not None:
             check_time_zone(value, tf.df[tf.time_name].dtype, name)
@@ -100,8 +101,9 @@ def plot_timeframe(
     window = _window(tf, [*plotted, *flag_levels], start, end)
     times, starts, ends = _intervals(window[tf.time_name], tf.resolution, tf.time_anchor)
 
-    statistics_columns = list(dict.fromkeys([*envelope_columns, *mean_columns]))
-    statistics, record = _slot_statistics(tf, window, statistics_columns, period_of_record)
+    statistics, record = _time_of_year_statistics(
+        tf, window, envelope_columns, mean_columns, start, end, reference_interval
+    )
 
     width, height = figsize or (10.0, 4.0 * len(panels) + 0.3 * len(flag_levels) + 0.6)
     fig = plt.figure(figsize=(width, height), layout="constrained")
@@ -121,6 +123,7 @@ def plot_timeframe(
             colors,
             statistics,
             envelope_columns,
+            envelope_colors or (UPPER_FILL, LOWER_FILL),
             mean_columns,
             show_missing,
             log_y,
@@ -143,7 +146,9 @@ def plot_timeframe(
     years = window[tf.time_name].dt.year().to_numpy()
     axes[0].set_title(_period_label(int(years.min()), int(years.max())), loc="right", fontsize="x-large")
     if record is not None:
-        fig.supxlabel(f"Period of record: {record[0]} to {record[1]}", x=0.0, ha="left", fontsize="medium")
+        # All the data is the period of record; a reference interval only covers part of it
+        record_name = "Reference interval" if any(reference_interval or ()) else "Period of record"
+        fig.supxlabel(f"{record_name}: {record[0]} to {record[1]}", x=0.0, ha="left", fontsize="medium")
     return fig
 
 
@@ -398,57 +403,69 @@ def _runs(starts: np.ndarray, ends: np.ndarray, keys: np.ndarray) -> tuple[np.nd
     return keys[first], starts[first], ends[last]
 
 
-def _slot_statistics(
+def _time_of_year_statistics(
     tf: TimeFrame,
     window: pl.DataFrame,
-    columns: list[str],
-    period_of_record: tuple[datetime | None, datetime | None] | None,
+    envelope_columns: list[str],
+    mean_columns: list[str],
+    start: datetime | None,
+    end: datetime | None,
+    reference_interval: tuple[datetime | None, datetime | None] | None,
 ) -> tuple[pl.DataFrame, tuple[str, str] | None]:
-    """The maximum, minimum and mean from the period of record for each row of the window.
+    """The minimum and maximum (for the envelope) and mean for each time of year, on each row of the window.
 
-    Every value is placed in a slot by its month, day and time of day, so for daily data 1 January in the window gets
-    the statistics of every 1 January in the period of record.
+    Calculated with :meth:`~time_stream.TimeFrame.time_of_year_aggregate`, on the TimeFrame padded to the window, so
+    missing time steps in the window get a result too.
 
     Args:
         tf: The TimeFrame being plotted.
         window: The rows being plotted.
-        columns: The columns to calculate statistics for.
-        period_of_record: Start and end (inclusive) of the data to calculate from. ``None`` for either uses all data.
+        envelope_columns: Columns to calculate the minimum and maximum of.
+        mean_columns: Columns to calculate the mean of.
+        start: Start of the window (inclusive).
+        end: End of the window (inclusive).
+        reference_interval: Start and end (inclusive) of the data to calculate from. ``None`` for either uses all data.
 
     Returns:
-        ``<column>_max``, ``<column>_min`` and ``<column>_mean`` for each row of the window, and the months of the
-        first and last data in the period of record (e.g. ``"October 2013"``).
+        ``min_<column>``, ``max_<column>`` and ``mean_<column>`` for each row of the window, and the months of the
+        first and last data used (e.g. ``"October 2013"``).
     """
+    columns = list(dict.fromkeys([*envelope_columns, *mean_columns]))
     if not columns:
         return pl.DataFrame(), None
 
-    time = pl.col(tf.time_name)
-    source = tf.df.select(tf.time_name, *columns)
-    record_start, record_end = period_of_record or (None, None)
-    if record_start is not None:
-        source = source.filter(time >= record_start)
-    if record_end is not None:
-        source = source.filter(time <= record_end)
+    tf_statistics = tf.select(columns)
+    if tf.periodicity != Period.of_microseconds(1):
+        tf_statistics = tf_statistics.pad(start, end)
+    if envelope_columns:
+        tf_statistics = tf_statistics.time_of_year_aggregate(
+            "min", envelope_columns, reference_interval=reference_interval
+        ).time_of_year_aggregate("max", envelope_columns, reference_interval=reference_interval)
+    if mean_columns:
+        tf_statistics = tf_statistics.time_of_year_aggregate(
+            "mean", mean_columns, reference_interval=reference_interval
+        )
 
-    slot = [time.dt.month().alias("_month"), time.dt.day().alias("_day")]
-    if source[tf.time_name].dtype != pl.Date:
-        slot.append(time.dt.time().alias("_time"))
-    slot_names = [expr.meta.output_name() for expr in slot]
-
-    statistics = source.group_by(slot).agg(
-        *[pl.col(c).max().alias(f"{c}_max") for c in columns],
-        *[pl.col(c).min().alias(f"{c}_min") for c in columns],
-        *[pl.col(c).mean().alias(f"{c}_mean") for c in columns],
-    )
+    statistics = [
+        *(f"{name}_{c}" for c in envelope_columns for name in ("min", "max")),
+        *(f"mean_{c}" for c in mean_columns),
+    ]
     by_row = (
-        window.select(slot)
-        .join(statistics, on=slot_names, how="left", maintain_order="left")
-        .drop(slot_names)
+        window.select(tf.time_name)
+        .join(tf_statistics.df.select(tf.time_name, *statistics), on=tf.time_name, how="left", maintain_order="left")
+        .drop(tf.time_name)
         .cast(pl.Float64)
     )
 
-    with_data = source.filter(pl.any_horizontal(pl.col(columns).is_not_null()))[tf.time_name].sort()
-    months = with_data.dt.strftime("%B %Y")
+    # The months of the first and last values the statistics were calculated from
+    time = pl.col(tf.time_name)
+    used = tf.df.select(tf.time_name, *columns)
+    record_start, record_end = reference_interval or (None, None)
+    if record_start is not None:
+        used = used.filter(time >= record_start)
+    if record_end is not None:
+        used = used.filter(time <= record_end)
+    months = used.filter(pl.any_horizontal(pl.col(columns).is_not_null()))[tf.time_name].sort().dt.strftime("%B %Y")
     record = (months[0], months[-1]) if not months.is_empty() else None
     return by_row, record
 
@@ -565,6 +582,7 @@ def _draw_panel(
     colors: dict[str, Any],
     statistics: pl.DataFrame,
     envelope_columns: list[str],
+    envelope_colors: tuple[Any, Any],
     mean_columns: list[str],
     show_missing: bool,
     log_y: bool,
@@ -582,8 +600,9 @@ def _draw_panel(
         intervals: The time, interval start and interval end of each row.
         styles: The plot style of each column.
         colors: The colour of each column.
-        statistics: The period of record statistics for each row.
+        statistics: The time of year statistics for each row.
         envelope_columns: Columns to draw the envelope of.
+        envelope_colors: The colours above the maximum and below the minimum of the envelope.
         mean_columns: Columns to draw the long-term mean of.
         show_missing: Whether to shade where values are missing.
         log_y: Whether the y axis is logarithmic.
@@ -619,14 +638,14 @@ def _draw_panel(
 
         if column in mean_columns:
             mean_label = f"{label} long-term mean" if multiple else "Long-term mean"
-            x, y = xy(style, statistics[f"{column}_mean"].to_numpy())
+            x, y = xy(style, statistics[f"mean_{column}"].to_numpy())
             (line,) = ax.plot(x, y, color=_lighter(color), linestyle="--", linewidth=1.5, zorder=2)
             legend[mean_label] = line
             drawn.append(y)
 
         if column in envelope_columns:
-            upper = statistics[f"{column}_max"].to_numpy()
-            lower = statistics[f"{column}_min"].to_numpy()
+            upper = statistics[f"max_{column}"].to_numpy()
+            lower = statistics[f"min_{column}"].to_numpy()
             x, upper = xy(style, upper)
             _, lower = xy(style, lower)
             envelopes.append((column, x, upper, lower))
@@ -640,10 +659,11 @@ def _draw_panel(
     for index, (column, x, upper, lower) in enumerate(envelopes):
         prefix = f"{_label(tf, column)} " if multiple else ""
         if index == 0:
-            ax.fill_between(x, upper, top, color=UPPER_FILL, linewidth=0, zorder=1)
-            ax.fill_between(x, bottom, lower, color=LOWER_FILL, linewidth=0, zorder=1)
-            legend[f"{prefix}Maximum"] = Patch(color=UPPER_FILL)
-            legend[f"{prefix}Minimum"] = Patch(color=LOWER_FILL)
+            above, below = envelope_colors
+            ax.fill_between(x, upper, top, color=above, linewidth=0, zorder=1)
+            ax.fill_between(x, bottom, lower, color=below, linewidth=0, zorder=1)
+            legend[f"{prefix}Maximum"] = Patch(color=above)
+            legend[f"{prefix}Minimum"] = Patch(color=below)
         else:
             (line,) = ax.plot(x, upper, color=colors[column], linestyle=":", linewidth=1, zorder=2)
             ax.plot(x, lower, color=colors[column], linestyle=":", linewidth=1, zorder=2)
@@ -659,7 +679,10 @@ def _draw_panel(
 
     ax.set_ylabel(_y_label(tf, panel))
     ax.tick_params(axis="y", which="both", right=True, labelright=True)
-    if not log_y:
+    if log_y:
+        # Plain numbers (0.5, 1, 10) rather than powers of ten
+        ax.yaxis.set_major_formatter(FuncFormatter(lambda value, _: f"{value:g}"))
+    else:
         ax.yaxis.set_minor_locator(AutoMinorLocator())
     return legend
 

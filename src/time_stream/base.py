@@ -1079,8 +1079,9 @@ class TimeFrame:
         subplots: bool = False,
         plot_style: PlotStyle | dict[str, PlotStyle] | None = None,
         envelope: bool | str | Sequence[str] = False,
+        envelope_colors: tuple[Any, Any] | None = None,
         long_term_mean: bool | str | Sequence[str] = False,
-        period_of_record: tuple[datetime | None, datetime | None] | None = None,
+        reference_interval: tuple[datetime | None, datetime | None] | None = None,
         flags: str | Sequence[str] | dict[str, Sequence[int | str]] | None = None,
         show_missing: bool = False,
         title: str | None = None,
@@ -1110,11 +1111,14 @@ class TimeFrame:
                 - ``"line"``: a line joining the values (default for the ``point`` anchor).
                 - ``"bar"``: a bar across the period each value is valid for.
                 - ``"scatter"``: a marker at each value (default when the periodicity is coarser than the resolution).
-            envelope: Column(s) to draw the envelope of (``True`` for all): the maximum and minimum in the period of
-                record for each time of year, with the area above the maximum shaded blue and below the minimum red.
-            long_term_mean: Column(s) to draw the mean in the period of record for each time of year of
-                (``True`` for all), as a dashed line.
-            period_of_record: ``(start, end)`` (inclusive) of the data the envelope and long-term mean are calculated
+            envelope: Column(s) to draw the envelope of (``True`` for all): the maximum and minimum for each time of
+                year, from :meth:`time_of_year_aggregate`, with the area above the maximum shaded blue and below the
+                minimum red.
+            envelope_colors: ``(above, below)`` fill colours for the area above the maximum and below the minimum,
+                as any matplotlib colours. Defaults to blue above and red below, which suits river flow (wetter or
+                drier than ever seen); swap them for data such as temperature.
+            long_term_mean: Column(s) to draw the mean for each time of year of (``True`` for all), as a dashed line.
+            reference_interval: ``(start, end)`` (inclusive) of the data the envelope and long-term mean are calculated
                 from. ``None`` for either uses all data in the TimeFrame - not just the window being plotted.
             flags: Flag column(s) to show in a strip below the plot, with every value coloured by its most severe flag.
                 A mapping of flag column to flags shows only those flags, ordered from the least to the most severe;
@@ -1143,8 +1147,9 @@ class TimeFrame:
             subplots=subplots,
             plot_style=plot_style,
             envelope=envelope,
+            envelope_colors=envelope_colors,
             long_term_mean=long_term_mean,
-            period_of_record=period_of_record,
+            reference_interval=reference_interval,
             flags=flags,
             show_missing=show_missing,
             title=title,

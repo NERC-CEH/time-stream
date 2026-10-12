@@ -34,8 +34,8 @@ from time_stream.plotting import (
     _plot_style,
     _runs,
     _selected,
-    _slot_statistics,
     _step_xy,
+    _time_of_year_statistics,
     _window,
     _y_label,
     _y_limits,
@@ -276,42 +276,50 @@ class TestWindow:
             _window(tf, ["flow"], datetime(2024, 1, 2), datetime(2024, 1, 3))
 
 
-class TestSlotStatistics:
+class TestTimeOfYearStatistics:
     def test_statistics(self) -> None:
-        """Each row gets the statistics of its day of the year, over the period of record."""
+        """Each row gets the statistics of its day of the year, over all the data."""
         tf = _two_years()
         window = _window(tf, ["flow"], datetime(2024, 1, 1), datetime(2024, 1, 4))
-        actual, record = _slot_statistics(tf, window, ["flow"], None)
+        actual, record = _time_of_year_statistics(
+            tf, window, ["flow"], ["flow"], datetime(2024, 1, 1), datetime(2024, 1, 4), None
+        )
         expected = pl.DataFrame(
             {
-                "flow_max": [3.0, 2.0, 3.0, 6.0],
-                "flow_min": [1.0, 2.0, 1.0, 4.0],
-                "flow_mean": [2.0, 2.0, 2.0, 5.0],
+                "min_flow": [1.0, 2.0, 1.0, 4.0],
+                "max_flow": [3.0, 2.0, 3.0, 6.0],
+                "mean_flow": [2.0, 2.0, 2.0, 5.0],
             }
         )
         assert_frame_equal(actual, expected)
         assert record == ("January 2023", "January 2024")
 
-    def test_period_of_record(self) -> None:
-        """Only data in the period of record is used."""
+    def test_reference_interval(self) -> None:
+        """Only data in the reference interval is used."""
         tf = _two_years()
         window = _window(tf, ["flow"], datetime(2024, 1, 1), datetime(2024, 1, 2))
-        actual, record = _slot_statistics(tf, window, ["flow"], (None, datetime(2023, 12, 31)))
-        expected = pl.DataFrame({"flow_max": [1.0, 2.0], "flow_min": [1.0, 2.0], "flow_mean": [1.0, 2.0]})
+        actual, record = _time_of_year_statistics(
+            tf,
+            window,
+            ["flow"],
+            ["flow"],
+            datetime(2024, 1, 1),
+            datetime(2024, 1, 2),
+            (None, datetime(2023, 12, 31)),
+        )
+        expected = pl.DataFrame({"min_flow": [1.0, 2.0], "max_flow": [1.0, 2.0], "mean_flow": [1.0, 2.0]})
         assert_frame_equal(actual, expected)
         assert record == ("January 2023", "January 2023")
 
-    def test_no_slot_in_record(self) -> None:
-        """Rows with no data at their time of year in the period of record get nulls."""
-        tf = _two_years()
+    def test_missing_time_steps_in_window(self) -> None:
+        """Missing time steps in the window get the statistics of their time of year, or nulls if it has no data."""
+        tf = TimeFrame(TWO_YEARS.filter(pl.col("time") != datetime(2024, 1, 3)), "time", resolution="P1D")
         window = _window(tf, ["flow"], datetime(2024, 1, 3), datetime(2024, 1, 5))
-        actual, _ = _slot_statistics(tf, window, ["flow"], (datetime(2023, 1, 3), None))
-        expected = pl.DataFrame(
-            {"flow_max": [3.0, 6.0, None], "flow_min": [1.0, 4.0, None], "flow_mean": [2.0, 5.0, None]}
-        )
+        actual, _ = _time_of_year_statistics(tf, window, ["flow"], [], datetime(2024, 1, 3), datetime(2024, 1, 5), None)
+        expected = pl.DataFrame({"min_flow": [3.0, 4.0, None], "max_flow": [3.0, 6.0, None]})
         assert_frame_equal(actual, expected)
 
-    def test_sub_daily_slots(self) -> None:
+    def test_sub_daily(self) -> None:
         """Sub-daily data is matched by time of day as well."""
         df = pl.DataFrame(
             {
@@ -321,14 +329,14 @@ class TestSlotStatistics:
         )
         tf = TimeFrame(df, "time", resolution="PT12H")
         window = _window(tf, ["flow"], datetime(2024, 1, 1), None)
-        actual, _ = _slot_statistics(tf, window, ["flow"], None)
-        expected = pl.DataFrame({"flow_max": [3.0, 30.0], "flow_min": [1.0, 10.0], "flow_mean": [2.0, 20.0]})
+        actual, _ = _time_of_year_statistics(tf, window, [], ["flow"], datetime(2024, 1, 1), None, None)
+        expected = pl.DataFrame({"mean_flow": [2.0, 20.0]})
         assert_frame_equal(actual, expected)
 
     def test_no_columns(self) -> None:
         """Without columns there is nothing to calculate."""
         tf = _two_years()
-        actual, record = _slot_statistics(tf, tf.df, [], None)
+        actual, record = _time_of_year_statistics(tf, tf.df, [], [], None, None, None)
         assert actual.is_empty()
         assert record is None
 
@@ -543,6 +551,19 @@ class TestPlot:
         legend = [text.get_text() for text in fig.legends[0].get_texts()]
         assert legend == ["Flow", "Long-term mean", "Maximum", "Minimum"]
 
+    def test_envelope_colors(self) -> None:
+        """The envelope colours can be given, for the area above the maximum and below the minimum."""
+        fig = self.setup_tf().plot("flow", envelope=True, envelope_colors=("#ff0000", "#0000ff"))
+        fills = [c for c in fig.axes[0].collections if isinstance(c, PolyCollection)]
+        assert [_face(f) for f in fills] == ["#ff0000", "#0000ff"]
+        # The legend's colour patches are the maximum and minimum
+        assert [to_hex(patch.get_facecolor()) for patch in fig.legends[0].get_patches()] == ["#ff0000", "#0000ff"]
+
+    def test_reference_interval_footer(self) -> None:
+        """The footer names the reference interval, with the months of the data used."""
+        fig = self.setup_tf().plot("flow", envelope=True, reference_interval=(None, datetime(2023, 12, 31)))
+        assert fig.get_supxlabel() == "Reference interval: January 2023 to January 2023"
+
     def test_second_envelope_outlined(self) -> None:
         """Only the first envelope in a panel is filled."""
         fig = self.setup_tf().plot(["flow", "level"], envelope=True)
@@ -622,9 +643,9 @@ class TestPlot:
         [
             {"start": datetime(2024, 1, 1, tzinfo=UTC)},
             {"end": datetime(2024, 1, 1, tzinfo=UTC)},
-            {"period_of_record": (datetime(2024, 1, 1, tzinfo=UTC), None)},
+            {"reference_interval": (datetime(2024, 1, 1, tzinfo=UTC), None)},
         ],
-        ids=["start", "end", "period of record"],
+        ids=["start", "end", "reference interval"],
     )
     def test_time_zone_mismatch(self, kwargs: dict) -> None:
         """Datetimes must match the time column's time zone."""
