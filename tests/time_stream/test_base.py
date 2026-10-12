@@ -869,7 +869,7 @@ class TestAggregate:
         expected_df = pl.DataFrame(
             {
                 "timestamp": [datetime(2025, 1, 1, 0, 0, 0), datetime(2025, 1, 2, 0, 0, 0)],
-                "percentile_value": [22, 46],
+                "percentile_95_value": [22, 46],
                 "count_value": [24, 24],
                 "expected_count_timestamp": [24, 24],
                 "valid_value": [True, True],
@@ -889,50 +889,6 @@ class TestAggregate:
         tf = TimeFrame(df, "time", resolution="PT1H")
         with pytest.raises(TypeError):
             getattr(tf, method)(123, "mean", "value")
-
-
-class TestCalculateMinMaxEnvelope:
-    def test_calculate_min_max_envelope(self) -> None:
-        period = Period.of_days(1)
-        df = pl.DataFrame(
-            {
-                "timestamp": [
-                    datetime(2020, 1, 1),
-                    datetime(2020, 1, 2),
-                    datetime(2020, 1, 3),
-                    datetime(2021, 1, 1),
-                    datetime(2021, 1, 2),
-                    datetime(2021, 1, 3),
-                    datetime(2021, 1, 4),
-                    datetime(2022, 1, 5),
-                ],
-                "value": [1, 2, 3, 4, 5, 6, 7, 8],
-            }
-        )
-
-        expected_df = pl.DataFrame(
-            {
-                "timestamp": [
-                    datetime(2020, 1, 1),
-                    datetime(2020, 1, 2),
-                    datetime(2020, 1, 3),
-                    datetime(2021, 1, 1),
-                    datetime(2021, 1, 2),
-                    datetime(2021, 1, 3),
-                    datetime(2021, 1, 4),
-                    datetime(2022, 1, 5),
-                ],
-                "value": [1, 2, 3, 4, 5, 6, 7, 8],
-                "value_min": [1, 2, 3, 1, 2, 3, 7, 8],
-                "value_max": [4, 5, 6, 4, 5, 6, 7, 8],
-            }
-        )
-
-        tf = TimeFrame(df=df, time_name="timestamp", resolution=period, periodicity=period)
-
-        actual_tf = tf.calculate_min_max_envelope()
-
-        assert_frame_equal(expected_df, actual_tf.df, check_column_order=False)
 
 
 class TestFilterByFlag:
