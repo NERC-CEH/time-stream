@@ -6,12 +6,13 @@ This module provides a flexible framework for aggregating time series data using
 Aggregation functions are implemented as subclasses of :class:`AggregationFunction` and can be registered and
 instantiated by name, class, or instance. They provide Polars expressions but do not orchestrate execution.
 
-Execution is handled by two concrete pipeline classes:
+Execution is handled by three concrete pipeline classes:
 
 - :class:`StandardAggregationPipeline`: groups data by fixed periods using ``group_by_dynamic``.
 - :class:`RollingAggregationPipeline`: slides a window over the data using ``rolling``.
+- :class:`TimeOfYearAggregationPipeline`: groups data by its time of year, across years.
 
-Both share a common abstract base class :class:`AggregationPipeline`.
+All three share a common abstract base class :class:`AggregationPipeline`.
 """
 
 from abc import ABC, abstractmethod
@@ -21,12 +22,25 @@ from typing import Callable, ClassVar, get_args
 
 import polars as pl
 from isoperiod import Period
-from polars.dataframe.group_by import DynamicGroupBy, RollingGroupBy
+from polars.dataframe.group_by import DynamicGroupBy, GroupBy, RollingGroupBy
 
-from time_stream.exceptions import AggregationError, AggregationPeriodError, MissingCriteriaError, TimeWindowError
+from time_stream.exceptions import (
+    AggregationError,
+    AggregationPeriodError,
+    DuplicateColumnError,
+    MissingCriteriaError,
+    TimeWindowError,
+)
 from time_stream.operation import Operation
-from time_stream.types import MissingCriteria, RollingAlignment, TimeAnchor
-from time_stream.utils import TimeWindow, check_columns_in_dataframe, check_literal_value, pad_time, truncate_to_period
+from time_stream.types import LeapDayOption, MissingCriteria, RollingAlignment, TimeAnchor
+from time_stream.utils import (
+    TimeWindow,
+    check_columns_in_dataframe,
+    check_literal_value,
+    check_time_zone,
+    pad_time,
+    truncate_to_period,
+)
 
 
 @dataclass(frozen=True)
@@ -50,17 +64,17 @@ class AggregationFunction(Operation, ABC):
     """
 
     # Whether the pipeline pads the data to its full set of time steps before grouping
-    _requires_padding: ClassVar[bool] = False
+    requires_padding: ClassVar[bool] = False
 
     def __init__(self, **kwargs):
         pass
 
     @abstractmethod
-    def expr(self, _ctx: AggregationCtx, _columns: list[str]) -> list[pl.Expr]:
+    def expr(self, ctx: AggregationCtx, columns: list[str]) -> list[pl.Expr]:
         """Return the Polars expressions for this aggregation."""
         raise NotImplementedError
 
-    def post_expr(self, _ctx: AggregationCtx, _columns: list[str]) -> list[pl.Expr]:
+    def post_expr(self, ctx: AggregationCtx, columns: list[str]) -> list[pl.Expr]:
         """Return additional Polars expressions to be applied after the aggregation."""
         return []
 
@@ -68,11 +82,12 @@ class AggregationFunction(Operation, ABC):
 class AggregationPipeline(ABC):
     """Abstract base class for aggregation pipelines.
 
-    Subclasses implement the grouping strategy (standard period grouping or rolling window) while
+    Subclasses implement the grouping strategy (standard period grouping, rolling window or time of year) while
     sharing the common ``execute()`` template and helper expressions.
 
-    Use :class:`StandardAggregationPipeline` for fixed-period aggregation and
-    :class:`RollingAggregationPipeline` for sliding-window aggregation.
+    Use :class:`StandardAggregationPipeline` for fixed-period aggregation,
+    :class:`RollingAggregationPipeline` for sliding-window aggregation and
+    :class:`TimeOfYearAggregationPipeline` for aggregation by time of year.
     """
 
     def __init__(
@@ -165,8 +180,8 @@ class AggregationPipeline(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def _get_grouper(self, df: pl.DataFrame) -> DynamicGroupBy | RollingGroupBy:
-        """Return the Polars grouper (e.g. ``group_by_dynamic`` or ``rolling``).
+    def _get_grouper(self, df: pl.DataFrame) -> DynamicGroupBy | RollingGroupBy | GroupBy:
+        """Return the Polars grouper (e.g. ``group_by_dynamic``, ``rolling`` or ``group_by``).
 
         Args:
             df: The pre-processed DataFrame.
@@ -374,7 +389,7 @@ class StandardAggregationPipeline(AggregationPipeline):
 
     def _prepare_df(self, df: pl.DataFrame) -> pl.DataFrame:
         """Pad periods if the aggregation function needs it, then filter rows to the time window if one is set."""
-        if self.agg_func._requires_padding:
+        if self.agg_func.requires_padding:
             df = self._pad_periods(df)
         if self.time_window:
             return self.time_window.filter_df(df, self.ctx.time_name)
@@ -517,7 +532,7 @@ class RollingAggregationPipeline(AggregationPipeline):
         Returns:
             The time and aggregated columns, padded if needed.
         """
-        if not self.agg_func._requires_padding:
+        if not self.agg_func.requires_padding:
             return df
 
         time_name = self.ctx.time_name
@@ -538,7 +553,7 @@ class RollingAggregationPipeline(AggregationPipeline):
         Returns:
             The aggregated DataFrame with one row per row of the original data.
         """
-        if not self.agg_func._requires_padding:
+        if not self.agg_func.requires_padding:
             return df
         return df.filter(pl.col(self.ctx.time_name).is_in(self.ctx.df[self.ctx.time_name].implode()))
 
@@ -626,6 +641,215 @@ class RollingAggregationPipeline(AggregationPipeline):
         else:
             raise AggregationError("CENTER alignment is not supported for calendar-based window sizes.")
         return self._count_between_expr(start_expr, end_expr, closed)
+
+
+class TimeOfYearAggregationPipeline(AggregationPipeline):
+    """Aggregation pipeline that groups data by its time of year, across years.
+
+    This is the pipeline used by :meth:`~time_stream.TimeFrame.time_of_year_aggregate`. Each value is placed in a "slot"
+    by the month, day and time of day that its aggregation period starts, e.g. for daily data every 1 January is
+    aggregated together. Slots match on month and day, so 1 March lines up in leap and non-leap years. The result for
+    each slot is joined back onto every row of the input.
+
+    The data in the reference interval is padded to every time step, so the expected count of each slot is the number
+    of time steps it covers across the reference interval.
+
+    Args:
+        agg_func: The aggregation function to apply.
+        ctx: Immutable aggregation context (DataFrame, time column, anchor, periodicity).
+        aggregation_period: The period each time of year covers. Must fit evenly into a year, ignoring any offset,
+            and be a whole number of time steps of the data.
+        columns: The column(s) to aggregate.
+        missing_criteria: Optional completeness requirement as ``(policy, threshold)``.
+        reference_interval: Start and end (inclusive) of the data to aggregate. ``None`` for either uses the data.
+        leap_day: How 29 February is handled:
+
+            - ``separate``: its own slot, from leap years only.
+            - ``merge``: aggregated with 28 February, and given its result.
+            - ``drop``: left out, giving nulls on 29 February.
+    """
+
+    _KEY = "__SLOT__"
+
+    def __init__(
+        self,
+        agg_func: AggregationFunction,
+        ctx: AggregationCtx,
+        aggregation_period: Period,
+        columns: str | list[str],
+        missing_criteria: tuple[MissingCriteria, float | int] | None = None,
+        reference_interval: tuple[datetime | None, datetime | None] | None = None,
+        leap_day: LeapDayOption = "separate",
+    ):
+        super().__init__(agg_func, ctx, aggregation_period, columns, missing_criteria)
+        check_literal_value(leap_day, LeapDayOption, "leap_day")
+        self.reference_interval = reference_interval
+        self.leap_day = leap_day
+
+    def _validate(self) -> None:
+        """Validate the aggregation period, function, reference interval and result columns."""
+        self._validate_common()
+        self._validate_period_compatibility()
+        self._validate_function()
+        self._validate_reference_interval()
+        self._validate_result_columns()
+
+    def _validate_period_compatibility(self) -> None:
+        """Validate that the aggregation period fits evenly into a year, and is whole time steps of the data."""
+        if not self.aggregation_period.without_offset().is_subperiod_of(Period.of_years(1)):
+            raise AggregationPeriodError(
+                f"The aggregation period must fit evenly into a year. Got: '{self.aggregation_period}'"
+            )
+        if not self.ctx.periodicity.is_subperiod_of(self.aggregation_period):
+            raise AggregationPeriodError(
+                f"The aggregation period '{self.aggregation_period}' must be a whole number of time steps of the data "
+                f"periodicity '{self.ctx.periodicity}'."
+            )
+
+    def _validate_function(self) -> None:
+        """Validate that the aggregation function doesn't need whole aggregation periods, like ``nth``."""
+        if self.agg_func.requires_padding or type(self.agg_func).post_expr is not AggregationFunction.post_expr:
+            raise AggregationError(f"The '{self.agg_func.name}' aggregation cannot be used by time of year.")
+
+    def _validate_reference_interval(self) -> None:
+        """Validate that the reference interval matches the time column's time zone, and starts before it ends."""
+        start, end = self.reference_interval or (None, None)
+        for name, value in (("reference_interval start", start), ("reference_interval end", end)):
+            if value is not None:
+                check_time_zone(value, self.ctx.df[self.ctx.time_name].dtype, name)
+        if start is not None and end is not None and start > end:
+            raise ValueError(f"The reference_interval start must not be after its end. Got: {start} > {end}")
+
+    def _validate_result_columns(self) -> None:
+        """Validate that the aggregation function's results aren't already columns, e.g. from the same function.
+
+        The ``count_``, ``expected_count_`` and ``valid_`` columns are not checked, as they are replaced.
+        """
+        results = [expr.meta.output_name() for expr in self.agg_func.expr(self.ctx, self.columns)]
+        existing = [name for name in results if name in self.ctx.df.columns]
+        if existing:
+            raise DuplicateColumnError(f"Aggregation would replace existing columns: {existing}")
+
+    def _prepare_df(self, df: pl.DataFrame) -> pl.DataFrame:
+        """Limit the data to the reference interval, pad it to every time step, and add the slot key.
+
+        Args:
+            df: The input DataFrame.
+
+        Returns:
+            The time and aggregated columns in the reference interval, with the slot key.
+        """
+        df = self._select_reference_interval(df.select(self.ctx.time_name, *self.columns))
+        start, end = self.reference_interval or (None, None)
+        if not df.is_empty() or (start is not None and end is not None):
+            df = pad_time(df, self.ctx.time_name, self.ctx.periodicity, self.ctx.time_anchor, start, end)
+        return df.with_columns(self._slot_key(df[self.ctx.time_name]).alias(self._KEY))
+
+    def _select_reference_interval(self, df: pl.DataFrame) -> pl.DataFrame:
+        """Filter the dataframe to only the rows within the reference interval.
+
+        Args:
+            df: The input DataFrame.
+
+        Returns:
+            The rows to aggregate.
+        """
+        time = pl.col(self.ctx.time_name)
+        start, end = self.reference_interval or (None, None)
+        if start is not None:
+            df = df.filter(time >= start)
+        if end is not None:
+            df = df.filter(time <= end)
+        return df
+
+    def _get_grouper(self, df: pl.DataFrame) -> GroupBy:
+        """Return a ``group_by`` grouper on the slot key."""
+        return df.group_by(self._KEY)
+
+    def _actual_count_expr(self) -> list[pl.Expr]:
+        """Count the values in each slot, and the time steps the padded slot covers.
+
+        Returns:
+            The count of each column, and the number of time steps in each slot.
+        """
+        return [*super()._actual_count_expr(), pl.len().alias(f"expected_count_{self.ctx.time_name}")]
+
+    def _post_aggregate(self, df: pl.DataFrame) -> pl.DataFrame:
+        """Join the result for each slot onto every row of the input, keeping all of its columns.
+
+        Any ``count_``, ``expected_count_`` and ``valid_`` columns from an earlier aggregation are replaced.
+
+        Args:
+            df: The aggregated DataFrame, one row per slot.
+
+        Returns:
+            The input rows, with the result for their slot.
+        """
+        replaced = [f"expected_count_{self.ctx.time_name}"]
+        replaced.extend(f"{prefix}_{col}" for col in self.columns for prefix in ("count", "valid"))
+        rows = self.ctx.df.drop(replaced, strict=False)
+        rows = rows.with_columns(self._slot_key(rows[self.ctx.time_name]).alias(self._KEY))
+        rows = rows.join(df.drop_nulls(self._KEY), on=self._KEY, how="left", maintain_order="left")
+        return rows.drop(self._KEY).with_columns(pl.col(f"count_{col}").fill_null(0) for col in self.columns)
+
+    def _static_expected_count_expr(self) -> pl.Expr:
+        """The expected count, counted from the padded data while aggregating.
+
+        Returns:
+            The expected count column.
+        """
+        return pl.col(f"expected_count_{self.ctx.time_name}").fill_null(0)
+
+    def _dynamic_expected_count_expr(self) -> pl.Expr:
+        """Not used - see :meth:`_static_expected_count_expr`."""
+        return self._static_expected_count_expr()
+
+    def _slot_key(self, times: pl.Series) -> pl.Series:
+        """The time of year of each time, as a single integer key.
+
+        The key is the month, day and time of day that the slot containing the time starts. On 29 February it
+        follows ``leap_day``: the 28 February key to merge, or null to drop.
+
+        Args:
+            times: The time column.
+
+        Returns:
+            The key for each time.
+        """
+        slot = self.aggregation_period
+        starts = truncate_to_period(times, slot, self.ctx.time_anchor)
+        if self.ctx.time_anchor == "end":
+            # An end anchored time labels the slot it closes, so step back to the slot's start
+            starts = starts.dt.offset_by(f"-{slot.pl_interval}")
+
+        start = pl.col(times.name)
+        time_of_day = (start - start.dt.truncate("1d")).dt.total_microseconds()
+        key = self._key_expr(start.dt.month().cast(pl.Int64), start.dt.day().cast(pl.Int64), time_of_day)
+        return starts.to_frame().select(key.alias("key")).to_series()
+
+    def _key_expr(self, month: pl.Expr, day: pl.Expr, time_of_day: pl.Expr) -> pl.Expr:
+        """The slot key for the month, day and time of day (in microseconds) a slot starts, following ``leap_day``.
+
+        Args:
+            month: The month the slot starts.
+            day: The day of the month the slot starts.
+            time_of_day: The time of day the slot starts, in microseconds.
+
+        Returns:
+            The key: the 28 February key on 29 February to merge, or null to drop.
+        """
+        is_leap_day = (month == 2) & (day == 29)
+        if self.leap_day == "merge":
+            day = pl.when(is_leap_day).then(28).otherwise(day)
+
+        # This aims to pack three numbers (month, day and time of day) into one integer, so a time of year can be
+        # grouped and joined on a single column.
+        microseconds_per_day = 86_400_000_000
+        key = (month * 100 + day) * microseconds_per_day + time_of_day
+
+        if self.leap_day == "drop":
+            key = pl.when(is_leap_day).then(None).otherwise(key)
+        return key
 
 
 @AggregationFunction.register
@@ -767,7 +991,7 @@ class Percentile(AggregationFunction):
 
         quantile = self.p / 100
 
-        expressions = [(pl.col(col).quantile(quantile).alias(f"{self.name}_{col}")) for col in columns]
+        expressions = [(pl.col(col).quantile(quantile).alias(f"{self.name}_{int(self.p)}_{col}")) for col in columns]
 
         return expressions
 
@@ -828,7 +1052,7 @@ class Nth(AggregationFunction):
     """An aggregation class to select the value at the nth time step within each aggregation period."""
 
     name = "nth"
-    _requires_padding = True
+    requires_padding = True
 
     def __init__(self, n: int):
         """Initialise Nth aggregation.

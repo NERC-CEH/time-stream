@@ -45,8 +45,8 @@ from time_stream.aggregation import (
     AggregationFunction,
     RollingAggregationPipeline,
     StandardAggregationPipeline,
+    TimeOfYearAggregationPipeline,
 )
-from time_stream.calculations import calculate_min_max_envelope
 from time_stream.exceptions import (
     ColumnNotFoundError,
     ColumnTypeError,
@@ -69,6 +69,7 @@ from time_stream.types import (
     ClosedInterval,
     DuplicateOption,
     FlagSystemLiteral,
+    LeapDayOption,
     MissingCriteria,
     RollingAlignment,
     TimeAnchor,
@@ -830,6 +831,82 @@ class TimeFrame:
         tf.metadata = self.metadata
         return tf
 
+    def time_of_year_aggregate(
+        self,
+        aggregation_function: str | Type[AggregationFunction] | AggregationFunction,
+        columns: str | list[str] | None = None,
+        missing_criteria: tuple[MissingCriteria, float | int] | None = None,
+        aggregation_period: Period | str | None = None,
+        reference_interval: tuple[datetime | None, datetime | None] | None = None,
+        leap_day: LeapDayOption = "separate",
+        **kwargs,
+    ) -> TimeFrame:
+        """Aggregate each "time of year" across years.
+
+        Values are grouped by the month, day and time of day of their aggregation period, e.g. for daily data, every
+        1 January, 2 January, 3 January, etc. is aggregated together. The result for each time of year is given on
+        every row with that time of year, beside the original values, so the TimeFrame keeps its rows and temporal
+        properties.
+
+        Args:
+            aggregation_function: The aggregation function to apply. Functions that need whole aggregation periods
+                (``mean_sum``, ``nth``) are not supported.
+            columns: The column(s) to aggregate. If omitted, will use all data columns, including the results of any
+                earlier call, so pass this when chaining.
+            missing_criteria: How much data each time of year needs, as in :meth:`aggregate`. The expected count is
+                the number of time steps the time of year covers across the reference interval, so e.g.
+                ``("percent", 80)`` needs values for 80% of them.
+            aggregation_period: The period each time of year covers. If omitted, the periodicity of the TimeFrame. A
+                coarser period groups more values together, e.g. ``"P1D"`` for 15-minute data aggregates each day of
+                the year. Must fit evenly into a year, ignoring any offset, and be a whole number of time steps.
+            reference_interval: ``(start, end)`` (inclusive) of the data to aggregate. ``None`` for either uses the
+                start or end of the data. The results are given on every row, including those outside the interval.
+            leap_day: How 29 February is handled:
+
+                - ``separate`` (default): its own time of year, from leap years only.
+                - ``merge``: aggregated with 28 February, and given its result.
+                - ``drop``: left out of the aggregation, giving nulls on 29 February.
+            **kwargs: Parameters specific to the aggregation function.
+
+        Returns:
+            The TimeFrame with the aggregation results added, named as in :meth:`aggregate`: the results,
+            ``count_<column>`` (values found), ``expected_count_<time>`` (time steps covered) and ``valid_<column>``
+            (whether ``missing_criteria`` is met). Calls can be chained to add more results, passing ``columns`` to
+            each; the ``count_``, ``expected_count_`` and ``valid_`` columns then describe the last call.
+
+        Raises:
+            AggregationPeriodError: If the aggregation period does not fit evenly into a year or isn't a whole number
+                of time steps.
+            DuplicateColumnError: If a result is already a column, e.g. from applying the same function before.
+        """
+        agg_func = AggregationFunction.get(aggregation_function, **kwargs)
+
+        if not columns:
+            columns = self.data_columns
+        columns = [columns] if isinstance(columns, str) else list(columns)
+
+        if aggregation_period is None:
+            aggregation_period = self.periodicity
+
+        ctx = AggregationCtx(
+            df=self.df,
+            time_name=self.time_name,
+            time_anchor=self.time_anchor,
+            periodicity=self.periodicity,
+        )
+
+        df = TimeOfYearAggregationPipeline(
+            agg_func,
+            ctx,
+            configure_period_object(aggregation_period),
+            columns,
+            missing_criteria=missing_criteria,
+            reference_interval=reference_interval,
+            leap_day=leap_day,
+        ).execute()
+
+        return self.with_df(df)
+
     # @overload lets type checkers know the return type depends on whether flag_params is provided.
     # Without overloads, callers always get TimeFrame | Series, making e.g. .df access after qc_check a type error.
     @overload
@@ -988,28 +1065,6 @@ class TimeFrame:
         # Keep the flag systems, but only the flag columns that survived
         tf._flag_manager = self._flag_manager.copy(columns=columns)
         tf._column_metadata.sync()
-        return tf
-
-    def calculate_min_max_envelope(self, columns: list[str] | None = None) -> TimeFrame:
-        """Calculate the min-max envelope for the TimeFrame.
-
-        For each unique date-time find the historical min and max values across the time series. For example,
-        for a daily time series, the min-max envelope would be calculated from every instance of 01-Jan.
-
-        For sub-daily time series, the min-max envelope is calculated from ever instance of the day-time across the
-        time series. For example, for hourly resolution, the min-max envelope would be calculated for all instances of
-        01-Jan 00:00, 01-Jan 01:00 etc.
-
-        Args:
-            columns: The columns to calculate the min-max envelope on. If None, then all data columns will be used.
-
-        Returns:
-            TimeFrame: A new copy of the TimeFrame instance with an updated df attribute.
-
-        """
-        df_with_min_max = calculate_min_max_envelope(tf=self, columns=columns)
-        tf = self.with_df(df_with_min_max)
-
         return tf
 
     def rename_time_column(self, new_time_name: str) -> TimeFrame:
