@@ -868,13 +868,15 @@ class TimeFrame:
             **kwargs: Parameters specific to the aggregation function.
 
         Returns:
-            A TimeFrame with the time column, the aggregated columns, and the aggregation results named as in
-            :meth:`aggregate`: the results, ``count_<column>`` (values found), ``expected_count_<time>`` (time steps
-            covered) and ``valid_<column>`` (whether ``missing_criteria`` is met).
+            The TimeFrame with the aggregation results added, named as in :meth:`aggregate`: the results,
+            ``count_<column>`` (values found), ``expected_count_<time>`` (time steps covered) and ``valid_<column>``
+            (whether ``missing_criteria`` is met). Calls can be chained to add more results; the ``count_``,
+            ``expected_count_`` and ``valid_`` columns then describe the last call.
 
         Raises:
             AggregationPeriodError: If the aggregation period does not fit evenly into a year or isn't a whole number
                 of time steps.
+            DuplicateColumnError: If a result is already a column, e.g. from applying the same function before.
         """
         agg_func = AggregationFunction.get(aggregation_function, **kwargs)
 
@@ -902,7 +904,7 @@ class TimeFrame:
             leap_day=leap_day,
         ).execute()
 
-        return self.select(columns).with_df(df)
+        return self.with_df(df)
 
     # @overload lets type checkers know the return type depends on whether flag_params is provided.
     # Without overloads, callers always get TimeFrame | Series, making e.g. .df access after qc_check a type error.

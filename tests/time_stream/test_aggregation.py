@@ -31,6 +31,7 @@ from time_stream.exceptions import (
     AggregationError,
     AggregationPeriodError,
     ColumnNotFoundError,
+    DuplicateColumnError,
     MissingCriteriaError,
     RegistryKeyTypeError,
     TimeWindowError,
@@ -3408,7 +3409,7 @@ class TestTimeOfYearAggregate:
         assert tf.time_of_year_aggregate("max", "value").df["max_value"].to_list() == [2.0, 2.0]
 
     def test_result_timeframe(self) -> None:
-        """The result keeps the rows, temporal properties and metadata, and drops other columns."""
+        """The result keeps the rows, temporal properties, metadata and other columns, with the results added."""
         df = _two_years([(1, 1)]).with_columns(other=pl.Series([0.0, 0.0]))
         tf = TimeFrame(df, "timestamp", resolution="P1D", time_anchor="end")
         tf.metadata = {"site": "A"}
@@ -3418,6 +3419,7 @@ class TestTimeOfYearAggregate:
 
         assert result.columns == [
             "value",
+            "other",
             "max_value",
             "timestamp_of_max_value",
             "count_value",
@@ -3427,6 +3429,44 @@ class TestTimeOfYearAggregate:
         assert (result.resolution, result.periodicity, result.time_anchor) == (tf.resolution, tf.periodicity, "end")
         assert result.metadata == {"site": "A"}
         assert result.column_metadata["value"] == {"units": "m"}
+
+    def test_chained(self) -> None:
+        """Chained calls add their results, replacing the count, expected count and valid columns."""
+        df = _two_years([(1, 1), (1, 2)])
+        tf = TimeFrame(df, "timestamp", resolution="P1D")
+
+        result = tf.time_of_year_aggregate("min", "value").time_of_year_aggregate(
+            "max", "value", missing_criteria=("available", 3)
+        )
+
+        expected = df.with_columns(
+            min_value=pl.Series([1.0, 2.0, 1.0, 2.0]),
+            timestamp_of_min_value=pl.Series(df["timestamp"][:2].to_list() * 2),
+            max_value=pl.Series([3.0, 4.0, 3.0, 4.0]),
+            timestamp_of_max_value=pl.Series(df["timestamp"][2:].to_list() * 2),
+            count_value=pl.Series([2, 2, 2, 2], dtype=pl.UInt32),
+            expected_count_timestamp=pl.Series([2, 2, 2, 2], dtype=pl.UInt32),
+            valid_value=pl.Series([False] * 4),
+        )
+        assert_frame_equal(result.df, expected)
+
+    def test_chained_same_function(self) -> None:
+        """Applying the same function to the same column again raises, as it would replace its results."""
+        tf = TimeFrame(_two_years([(1, 1)]), "timestamp", resolution="P1D")
+        with pytest.raises(DuplicateColumnError, match="max_value"):
+            tf.time_of_year_aggregate("max", "value").time_of_year_aggregate("max", "value")
+
+    def test_flag_columns_kept(self) -> None:
+        """Flag columns and their flag system are kept."""
+        tf = TimeFrame(_two_years([(1, 1)]), "timestamp", resolution="P1D")
+        tf.register_flag_system("QC", {"SUSPECT": 1})
+        tf.init_flag_column("QC", "value_flags")
+        tf.add_flag("value_flags", "SUSPECT", pl.col("value") > 1)
+
+        result = tf.time_of_year_aggregate("max", "value")
+
+        assert result.flag_columns == ["value_flags"]
+        assert result.df["value_flags"].to_list() == [0, 1]
 
     def test_default_columns(self) -> None:
         """All data columns are aggregated by default."""

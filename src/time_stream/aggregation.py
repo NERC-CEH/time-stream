@@ -27,6 +27,7 @@ from polars.dataframe.group_by import DynamicGroupBy, GroupBy, RollingGroupBy
 from time_stream.exceptions import (
     AggregationError,
     AggregationPeriodError,
+    DuplicateColumnError,
     MissingCriteriaError,
     TimeWindowError,
 )
@@ -686,11 +687,12 @@ class TimeOfYearAggregationPipeline(AggregationPipeline):
         self.leap_day = leap_day
 
     def _validate(self) -> None:
-        """Validate the aggregation period, function and reference interval."""
+        """Validate the aggregation period, function, reference interval and result columns."""
         self._validate_common()
         self._validate_period_compatibility()
         self._validate_function()
         self._validate_reference_interval()
+        self._validate_result_columns()
 
     def _validate_period_compatibility(self) -> None:
         """Validate that the aggregation period fits evenly into a year, and is whole time steps of the data."""
@@ -717,6 +719,16 @@ class TimeOfYearAggregationPipeline(AggregationPipeline):
                 check_time_zone(value, self.ctx.df[self.ctx.time_name].dtype, name)
         if start is not None and end is not None and start > end:
             raise ValueError(f"The reference_interval start must not be after its end. Got: {start} > {end}")
+
+    def _validate_result_columns(self) -> None:
+        """Validate that the aggregation function's results aren't already columns, e.g. from the same function.
+
+        The ``count_``, ``expected_count_`` and ``valid_`` columns are not checked, as they are replaced.
+        """
+        results = [expr.meta.output_name() for expr in self.agg_func.expr(self.ctx, self.columns)]
+        existing = [name for name in results if name in self.ctx.df.columns]
+        if existing:
+            raise DuplicateColumnError(f"Aggregation would replace existing columns: {existing}")
 
     def _prepare_df(self, df: pl.DataFrame) -> pl.DataFrame:
         """Limit the data to the reference interval, pad it to every time step, and add the slot key.
@@ -763,7 +775,9 @@ class TimeOfYearAggregationPipeline(AggregationPipeline):
         return [*super()._actual_count_expr(), pl.len().alias(f"expected_count_{self.ctx.time_name}")]
 
     def _post_aggregate(self, df: pl.DataFrame) -> pl.DataFrame:
-        """Join the result for each slot onto every row of the input.
+        """Join the result for each slot onto every row of the input, keeping all of its columns.
+
+        Any ``count_``, ``expected_count_`` and ``valid_`` columns from an earlier aggregation are replaced.
 
         Args:
             df: The aggregated DataFrame, one row per slot.
@@ -771,7 +785,9 @@ class TimeOfYearAggregationPipeline(AggregationPipeline):
         Returns:
             The input rows, with the result for their slot.
         """
-        rows = self.ctx.df.select(self.ctx.time_name, *self.columns)
+        replaced = [f"expected_count_{self.ctx.time_name}"]
+        replaced.extend(f"{prefix}_{col}" for col in self.columns for prefix in ("count", "valid"))
+        rows = self.ctx.df.drop(replaced, strict=False)
         rows = rows.with_columns(self._slot_key(rows[self.ctx.time_name]).alias(self._KEY))
         rows = rows.join(df.drop_nulls(self._KEY), on=self._KEY, how="left", maintain_order="left")
         return rows.drop(self._KEY).with_columns(pl.col(f"count_{col}").fill_null(0) for col in self.columns)
