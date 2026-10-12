@@ -6,12 +6,12 @@ import numpy as np
 import polars as pl
 
 import time_stream as ts
-from examples._helpers import sample_frame
+from examples._helpers import flow_15min
 
 
 def min_max_example() -> None:
     """The highest and lowest flow seen on each 15 min of the year, and when it was seen."""
-    tf = ts.TimeFrame(sample_frame(), "time", resolution="PT15M")
+    tf = ts.TimeFrame(flow_15min(), "time", resolution="PT15M")
     # fmt: off
     # [start:min_max_example]
     tf_min_max = tf.time_of_year_aggregate(

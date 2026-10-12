@@ -7,12 +7,12 @@ import numpy as np
 import polars as pl
 
 import time_stream as ts
-from examples._helpers import sample_frame
+from examples._helpers import sample_frame, secondary_flow_15min
 
 
 def _alt_frame() -> pl.DataFrame:
-    """A complete companion series - ``alt_flow`` running 25% above ``flow`` - to stand in for the gaps."""
-    return sample_frame(complete=True).with_columns(pl.col("flow").mul(1.25).alias("alt_flow")).drop("flow")
+    """A second example flow dataset, as ``alt_flow``, to stand in for the gaps."""
+    return secondary_flow_15min().rename({"flow": "alt_flow"})
 
 
 def _gappy_daily_series() -> ts.TimeFrame:
@@ -73,7 +73,7 @@ def main_data() -> None:
 
 
 def alt_data() -> None:
-    """The complete companion series that stands in for the gaps."""
+    """A second example flow dataset, which stands in for the gaps."""
     # [start:alt_data]
     print(_alt_frame())
     # [end:alt_data]
@@ -89,7 +89,7 @@ def alt_data_infill() -> None:
         "alt_data",
         "flow",
         alt_df=alt_df,
-        correction_factor=0.75,
+        correction_factor=0.8,
         alt_data_column="alt_flow"
     )
     # [end:alt_data_infill]

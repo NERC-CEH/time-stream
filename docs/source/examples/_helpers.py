@@ -1,27 +1,40 @@
 """Shared fixtures for the user guide examples - not shown on any page."""
 
-import numpy as np
+from datetime import datetime
+from pathlib import Path
+
 import pandas as pd
 import polars as pl
 
+DATA = Path(__file__).parent / "data"
 
-def sample_frame(*, library: str = "polars", complete: bool = False) -> pd.DataFrame | pl.DataFrame:
-    """A 15-minute river-flow series from 2020-09-01 to 2023-11-01, seeded so it never changes.
+# The 15-minute examples start here, just before a run of short gaps that the infilling examples fill
+SAMPLE_START = datetime(2024, 1, 10, 2, 30)
+
+
+def flow_15min() -> pl.DataFrame:
+    """An example 15-minute river flow dataset (m³/s), from 2015 to 2025, with gaps."""
+    return pl.read_parquet(DATA / "example_flow_15min.parquet")
+
+
+def sample_frame(*, library: str = "polars") -> pd.DataFrame | pl.DataFrame:
+    """The example 15-minute river flow from 2024-01-10 02:30 to the end of 2025.
 
     Args:
         library: ``"polars"`` returns a Polars DataFrame; anything else a time-indexed pandas DataFrame.
-        complete: When False, a scattering of ``flow`` values (including a few fixed indices) is set to null.
     """
-    np.random.seed(31)
-    date_range = pd.date_range(start="2020-09-01", end="2023-11-01", freq="15min")
-    flow = np.random.uniform(90, 100, len(date_range)) + np.sin(np.arange(len(date_range)) * 0.01) * 20
-
-    df = pd.DataFrame({"time": date_range, "flow": flow})
-
-    if not complete:
-        df.loc[np.random.random(len(df)) > 0.95, "flow"] = np.nan
-        df.iloc[[1, 3, 4, 5, 6, -2, -3], df.columns.get_loc("flow")] = np.nan
-
+    df = flow_15min().filter(pl.col("time") >= SAMPLE_START)
     if library == "polars":
-        return pl.DataFrame(df)
-    return df.set_index("time")
+        return df
+    # Built from the column arrays, as to_pandas() would need pyarrow
+    return pd.DataFrame({"flow": df["flow"].to_numpy()}, index=pd.Index(df["time"].to_numpy(), name="time"))
+
+
+def secondary_flow_15min() -> pl.DataFrame:
+    """A second example 15-minute river flow dataset (m³/s), over the same period as the sample."""
+    return pl.read_parquet(DATA / "example_flow_15min_secondary.parquet").filter(pl.col("time") >= SAMPLE_START)
+
+
+def rainfall_15min() -> pl.DataFrame:
+    """An example 15-minute rainfall dataset (mm), from 2015 to 2025, with gaps."""
+    return pl.read_parquet(DATA / "example_rainfall_15min.parquet")

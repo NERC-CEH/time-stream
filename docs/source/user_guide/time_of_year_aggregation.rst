@@ -62,8 +62,8 @@ various time-of-year aggregations.
 
 **Example**
 
-Using the :ref:`15-minute flow example data <example_input_data_agg>`, the highest and lowest flow ever seen on
-each 15-minute time step of the year, and when it was seen:
+Using ten years (2015 to 2025) of the :ref:`15-minute flow example data <example_input_data_agg>`, the highest and
+lowest flow ever seen on each 15-minute time step of the year, and when it was seen:
 
 .. literalinclude:: ../examples/time_of_year_aggregation.py
     :language: python

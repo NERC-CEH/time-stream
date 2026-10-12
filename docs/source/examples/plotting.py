@@ -1,25 +1,22 @@
 """Examples for the "Plotting" user guide page."""
 
 from datetime import date, datetime
-from pathlib import Path
 
 import polars as pl
 
 import time_stream as ts
-
-_DATA = Path(__file__).parent / "data"
+from examples._helpers import DATA
 
 
 def _weather() -> pl.DataFrame:
     """Daily air temperature and precipitation, 2014 to 2025, from the COSMOS-UK site at Chimney Meadows."""
-    df = pl.read_csv(_DATA / "chimn_daily_ta_precip_2014-2025.csv", try_parse_dates=True)
+    df = pl.read_parquet(DATA / "chimn_daily_ta_precip_2014-2025.parquet")
     return df.rename({"Air_temperature": "temperature", "Precipitation": "precipitation"})
 
 
 def _daily_flow() -> pl.DataFrame:
     """Gauged daily flow, 1968 to 2025, from the UK National River Flow Archive: station 39027, Pang at Pangbourne."""
-    # The one missing day carries a third field, its NRFA "M" flag, which is dropped
-    return pl.read_csv(_DATA / "39027_gdf.csv", try_parse_dates=True, truncate_ragged_lines=True)
+    return pl.read_parquet(DATA / "39027_gdf.parquet")
 
 
 def _flow_timeframe() -> ts.TimeFrame:

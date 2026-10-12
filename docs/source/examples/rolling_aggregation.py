@@ -1,7 +1,11 @@
 """Examples for the "Rolling aggregation" user guide page."""
 
+from datetime import datetime
+
+import polars as pl
+
 import time_stream as ts
-from examples._helpers import sample_frame
+from examples._helpers import rainfall_15min, sample_frame
 
 
 def rolling_mean_example() -> None:
@@ -12,6 +16,17 @@ def rolling_mean_example() -> None:
 
     print(tf_rolling.df)
     # [end:rolling_mean_example]
+
+
+def rolling_rainfall_total_example() -> None:
+    """Rolling 24-hour totals of example 15-minute rainfall, through a storm in September 2024."""
+    tf = ts.TimeFrame(rainfall_15min(), "time", resolution="PT15M", periodicity="PT15M")
+    # [start:rolling_rainfall_total_example]
+    tf_rolling = tf.rolling_aggregate("PT24H", "sum", "rainfall")
+    # [end:rolling_rainfall_total_example]
+    storm = pl.col("time").is_between(datetime(2024, 9, 23, 20), datetime(2024, 9, 24, 2))
+    with pl.Config(tbl_rows=25):
+        print(tf_rolling.df.filter(storm))
 
 
 def rolling_missing_criteria_example() -> None:
