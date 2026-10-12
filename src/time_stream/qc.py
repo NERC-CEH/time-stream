@@ -43,7 +43,7 @@ class QCCheck(Operation, ABC):
     """Base class for quality control checks."""
 
     @abstractmethod
-    def expr(self, _ctx: QcCtx, _column: str) -> pl.Expr:
+    def expr(self, ctx: QcCtx, column: str) -> pl.Expr:
         """Return the boolean Polars expression for this QC check (result of True == Value failed the QC check)"""
         pass
 
