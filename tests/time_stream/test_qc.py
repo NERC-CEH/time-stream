@@ -16,8 +16,8 @@ from time_stream.types import ClosedInterval
 class MockQC(QCCheck):
     name = "Mock"
 
-    def expr(self, _ctx: QcCtx, _column: str) -> pl.Expr:
-        return pl.col(_column)
+    def expr(self, ctx: QcCtx, column: str) -> pl.Expr:
+        return pl.col(column)
 
 
 class TestQCCheck:

@@ -1,5 +1,5 @@
 import re
-from datetime import datetime, time, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from typing import Any, Callable
 from unittest.mock import Mock
 
@@ -24,11 +24,13 @@ from time_stream.aggregation import (
     StandardAggregationPipeline,
     StDev,
     Sum,
+    TimeOfYearAggregationPipeline,
 )
 from time_stream.base import TimeFrame
 from time_stream.exceptions import (
     AggregationError,
     AggregationPeriodError,
+    ColumnNotFoundError,
     MissingCriteriaError,
     RegistryKeyTypeError,
     TimeWindowError,
@@ -83,6 +85,7 @@ def generate_expected_df(
     actual_counts: list[int],
     timestamps_of: list[datetime | None] | None = None,
     valid: dict[str, list[bool]] | None = None,
+    kwargs: dict[str, Any] | None = None,
 ) -> pl.DataFrame:
     """Helper function to create a dataframe of expected results from an aggregation test.
 
@@ -95,12 +98,15 @@ def generate_expected_df(
         actual_counts: The actual counts of values found in each aggregation period
         timestamps_of: For max and min, the datetimes of when the max/min values were found
         valid: Whether the aggregation value is "valid" based on the missing data criteria
+        kwargs: Parameters given to the aggregation function
 
     Returns:
         Expected DataFrame
     """
     if isinstance(columns, str):
         columns = [columns]
+    # Percentile outputs are named by their percentile, e.g. percentile_95_value
+    prefix = f"{aggregator.name}_{(kwargs or {})['p']}" if aggregator is Percentile else aggregator.name
 
     df = pl.DataFrame(
         {
@@ -111,7 +117,7 @@ def generate_expected_df(
 
     for column in columns:
         df = df.with_columns(
-            pl.Series(f"{aggregator.name}_{column}", values[column]),
+            pl.Series(f"{prefix}_{column}", values[column]),
             pl.Series(f"count_{column}", actual_counts),
             pl.Series(f"valid_{column}", [True] * len(actual_counts)),
         )
@@ -465,7 +471,9 @@ class TestSimpleAggregations:
     ) -> None:
         """Test aggregations of microsecond-based (i.e., 1 day or less) resolution data, to another
         microsecond-based resolution."""
-        expected_df = generate_expected_df(timestamps, aggregator, column, values, counts, counts, timestamps_of)
+        expected_df = generate_expected_df(
+            timestamps, aggregator, column, values, counts, counts, timestamps_of, kwargs=kwargs
+        )
         result = StandardAggregationPipeline(
             aggregator(**kwargs),
             AggregationCtx(
@@ -608,7 +616,9 @@ class TestSimpleAggregations:
         kwargs: dict[str, Any],
     ) -> None:
         """Test aggregations of microsecond-based (i.e., 1-day or less) resolution data, to a month-based resolution."""
-        expected_df = generate_expected_df(timestamps, aggregator, column, values, counts, counts, timestamps_of)
+        expected_df = generate_expected_df(
+            timestamps, aggregator, column, values, counts, counts, timestamps_of, kwargs=kwargs
+        )
         result = StandardAggregationPipeline(
             aggregator(**kwargs),
             AggregationCtx(
@@ -751,7 +761,9 @@ class TestSimpleAggregations:
         kwargs: dict[str, Any],
     ) -> None:
         """Test aggregations of month-based resolution data, to a month-based resolution."""
-        expected_df = generate_expected_df(timestamps, aggregator, column, values, counts, counts, timestamps_of)
+        expected_df = generate_expected_df(
+            timestamps, aggregator, column, values, counts, counts, timestamps_of, kwargs=kwargs
+        )
         result = StandardAggregationPipeline(
             aggregator(**kwargs),
             AggregationCtx(
@@ -897,7 +909,9 @@ class TestSimpleAggregations:
         timestamps_of: list | None,
         kwargs: dict[str, Any],
     ) -> None:
-        expected_df = generate_expected_df(timestamps, aggregator, column, values, counts, counts, timestamps_of)
+        expected_df = generate_expected_df(
+            timestamps, aggregator, column, values, counts, counts, timestamps_of, kwargs=kwargs
+        )
         result = StandardAggregationPipeline(
             aggregator(**kwargs),
             AggregationCtx(
@@ -1906,8 +1920,9 @@ class TestAllNullPeriod:
 
         result = tf.aggregate("P1D", name, "value", **self.KWARGS.get(name, {}))
 
-        assert result.df[f"{name}_value"][0] is None
-        assert result.df[f"{name}_value"][1] is not None
+        output = "percentile_50_value" if name == "percentile" else f"{name}_value"
+        assert result.df[output][0] is None
+        assert result.df[output][1] is not None
 
 
 class TestAggregationWithMetadata:
@@ -1954,7 +1969,9 @@ class TestPercentileAggregation:
         timestamps = [datetime(2025, 1, 1), datetime(2025, 1, 2)]
         counts = [24, 24]
 
-        expected_df = generate_expected_df(timestamps, Percentile, column, expected_values, counts, counts, None)
+        expected_df = generate_expected_df(
+            timestamps, Percentile, column, expected_values, counts, counts, None, kwargs={"p": percentile}
+        )
         result = StandardAggregationPipeline(
             Percentile(p=percentile),
             AggregationCtx(
@@ -2390,7 +2407,9 @@ class TestAngularMean:
         timestamps_of: list | None,
         kwargs: dict[str, Any],
     ) -> None:
-        expected_df = generate_expected_df(timestamps, aggregator, column, values, counts, counts, timestamps_of)
+        expected_df = generate_expected_df(
+            timestamps, aggregator, column, values, counts, counts, timestamps_of, kwargs=kwargs
+        )
         result = StandardAggregationPipeline(
             aggregator(**kwargs),
             AggregationCtx(
@@ -2663,6 +2682,7 @@ class TestRollingAggregation:
             expected_counts=expected_counts,
             actual_counts=actual_counts,
             timestamps_of=timestamps_of,
+            kwargs=kwargs,
         )
 
         result = RollingAggregationPipeline(
@@ -3142,3 +3162,338 @@ class TestRollingAggregateMethod:
         input_tf = TS_PT1H_HALF_DAY
         result = input_tf.rolling_aggregate(window_size, "mean", "value", alignment="center")
         assert len(result.df) == len(input_tf.df)
+
+
+def _two_years(times: list[tuple[int, ...]]) -> pl.DataFrame:
+    """Values 1, 2, 3... at the given (month, day, ...) times in 2020, then continuing at the same times in 2021."""
+    padded = [(*t, 0, 0, 0) for t in times]
+    timestamps = [datetime(year, t[0], t[1], t[2], t[3], t[4]) for year in (2020, 2021) for t in padded]
+    return pl.DataFrame({"timestamp": timestamps, "value": [float(v) for v in range(1, len(timestamps) + 1)]})
+
+
+class TestTimeOfYearAggregate:
+    """Tests for aggregating each time of year across years."""
+
+    @pytest.mark.parametrize(
+        "resolution,times",
+        [
+            ("P1M", [(1, 1), (2, 1), (3, 1)]),
+            ("P1D", [(1, 1), (1, 2), (1, 3)]),
+            ("PT1H", [(1, 1, 0), (1, 1, 1), (1, 2, 0)]),
+            ("PT1M", [(1, 1, 0, 1), (1, 1, 0, 2), (1, 1, 1, 1)]),
+        ],
+        ids=["monthly", "daily", "hourly", "minute"],
+    )
+    @pytest.mark.parametrize("function,year", [("min", 0), ("max", 1)], ids=["min", "max"])
+    def test_resolutions(self, resolution: str, times: list[tuple[int, ...]], function: str, year: int) -> None:
+        """Each time of year is aggregated across the years, and the result given on every row."""
+        df = _two_years(times)
+        tf = TimeFrame(df, "timestamp", resolution=resolution)
+
+        result = tf.time_of_year_aggregate(function, "value")
+
+        # The minimum of each time of year is from the first year, and the maximum from the second
+        from_year = slice(3 * year, 3 * year + 3)
+        expected = df.with_columns(
+            pl.Series(f"{function}_value", df["value"][from_year].to_list() * 2),
+            pl.Series(f"timestamp_of_{function}_value", df["timestamp"][from_year].to_list() * 2),
+            count_value=pl.Series([2, 2, 2] * 2, dtype=pl.UInt32),
+            expected_count_timestamp=pl.Series([2, 2, 2] * 2, dtype=pl.UInt32),
+            valid_value=pl.Series([True] * 6),
+        )
+        assert_frame_equal(result.df, expected, check_column_order=False)
+
+    def test_time_of_year_in_one_year(self) -> None:
+        """A time of year seen in only one year is aggregated on its own."""
+        df = pl.DataFrame(
+            {"timestamp": [datetime(2020, 1, 1), datetime(2021, 1, 1), datetime(2022, 4, 1)], "value": [1.0, 4.0, 7.0]}
+        )
+        tf = TimeFrame(df, "timestamp", resolution="P1M")
+
+        result = tf.time_of_year_aggregate("max", "value")
+
+        assert result.df["max_value"].to_list() == [4.0, 4.0, 7.0]
+        assert result.df["count_value"].to_list() == [2, 2, 1]
+
+    @pytest.mark.parametrize(
+        "function,column,expected",
+        [("mean", "mean_value", [2.0, 3.0, 2.0, 3.0]), (Percentile(p=90), "percentile_90_value", [3.0, 4.0, 3.0, 4.0])],
+        ids=["name", "instance"],
+    )
+    def test_function(self, function: Any, column: str, expected: list[float]) -> None:
+        """The function can be given by name or instance, and percentiles are named by percentile."""
+        tf = TimeFrame(_two_years([(1, 1), (1, 2)]), "timestamp", resolution="P1D")
+
+        result = tf.time_of_year_aggregate(function, "value")
+
+        assert result.df.columns == [
+            "timestamp",
+            "value",
+            column,
+            "count_value",
+            "expected_count_timestamp",
+            "valid_value",
+        ]
+        assert result.df[column].to_list() == expected
+
+    def test_kwargs(self) -> None:
+        """Parameters are passed to a function given by name."""
+        tf = TimeFrame(_two_years([(1, 1)]), "timestamp", resolution="P1D")
+        result = tf.time_of_year_aggregate("percentile", "value", p=50)
+        assert result.df["percentile_50_value"].to_list() == [2.0, 2.0]
+
+    def test_reference_interval(self) -> None:
+        """Only data in the reference interval is aggregated, but every row gets the result."""
+        df = pl.DataFrame(
+            {
+                "timestamp": [datetime(y, 1, 1) for y in (2020, 2021, 2022)],
+                "value": [1.0, 5.0, 9.0],
+            }
+        )
+        tf = TimeFrame(df, "timestamp", resolution="P1D")
+
+        result = tf.time_of_year_aggregate("max", "value", reference_interval=(None, datetime(2021, 12, 31)))
+
+        assert result.df["max_value"].to_list() == [5.0, 5.0, 5.0]
+        assert result.df["count_value"].to_list() == [2, 2, 2]
+
+    def test_reference_interval_start(self) -> None:
+        """The reference interval can start part way through the data."""
+        df = pl.DataFrame({"timestamp": [datetime(y, 1, 1) for y in (2020, 2021, 2022)], "value": [1.0, 5.0, 9.0]})
+        tf = TimeFrame(df, "timestamp", resolution="P1D")
+        result = tf.time_of_year_aggregate("min", "value", reference_interval=(datetime(2021, 1, 1), None))
+        assert result.df["min_value"].to_list() == [5.0, 5.0, 5.0]
+
+    def test_coarser_aggregation_period(self) -> None:
+        """A coarser aggregation period aggregates every value within it, e.g. each day of the year from hourly data."""
+        tf = TimeFrame(_two_years([(1, 1, 0), (1, 1, 12), (1, 2, 0)]), "timestamp", resolution="PT1H")
+
+        result = tf.time_of_year_aggregate("max", "value", aggregation_period="P1D")
+
+        assert result.df["max_value"].to_list() == [5.0, 5.0, 6.0, 5.0, 5.0, 6.0]
+        assert result.df["count_value"].to_list() == [4, 4, 2, 4, 4, 2]
+
+    def test_aggregation_period_with_offset(self) -> None:
+        """An aggregation period with an offset groups from that time, e.g. a water day from 09:00."""
+        tf = TimeFrame(_two_years([(1, 2, 8), (1, 2, 10)]), "timestamp", resolution="PT1H")
+
+        result = tf.time_of_year_aggregate("max", "value", aggregation_period="P1D+T9H")
+
+        assert result.df["max_value"].to_list() == [3.0, 4.0, 3.0, 4.0]
+
+    def test_end_anchor(self) -> None:
+        """An end anchored value belongs to the period it closes - here 1 March 2024 closes 29 February."""
+        df = pl.DataFrame(
+            {
+                "timestamp": [datetime(2023, 3, 1), datetime(2024, 3, 1), datetime(2024, 3, 2)],
+                "value": [1.0, 2.0, 3.0],
+            }
+        )
+        tf = TimeFrame(df, "timestamp", resolution="P1D", time_anchor="end")
+
+        result = tf.time_of_year_aggregate("max", "value")
+
+        assert result.df["count_value"].to_list() == [1, 1, 1]
+
+    @pytest.mark.parametrize(
+        "leap_day,expected_max,expected_count",
+        [
+            ("separate", [3.0, 5.0, 3.0, 4.0, 5.0], [2, 2, 2, 1, 2]),
+            ("merge", [4.0, 5.0, 4.0, 4.0, 5.0], [3, 2, 3, 3, 2]),
+            ("drop", [3.0, 5.0, 3.0, None, 5.0], [2, 2, 2, 0, 2]),
+        ],
+        ids=["separate", "merge", "drop"],
+    )
+    def test_leap_day(self, leap_day: Any, expected_max: list, expected_count: list) -> None:
+        """29 February is its own time of year, merged with 28 February, or dropped; 1 March always lines up."""
+        times = [(2023, 2, 28), (2023, 3, 1), (2024, 2, 28), (2024, 2, 29), (2024, 3, 1)]
+        df = pl.DataFrame({"timestamp": [datetime(*t) for t in times], "value": [1.0, 2.0, 3.0, 4.0, 5.0]})
+        tf = TimeFrame(df, "timestamp", resolution="P1D")
+
+        result = tf.time_of_year_aggregate("max", "value", leap_day=leap_day)
+
+        assert result.df["max_value"].to_list() == expected_max
+        assert result.df["count_value"].to_list() == expected_count
+
+    @pytest.mark.parametrize(
+        "missing_criteria,expected_valid",
+        [
+            (None, [True, True]),
+            (("percent", 50), [True, True]),
+            (("percent", 80), [False, False]),
+            (("available", 2), [True, True]),
+            (("missing", 0), [False, False]),
+        ],
+        ids=["default", "percent met", "percent not met", "available", "missing"],
+    )
+    def test_missing_criteria(self, missing_criteria: Any, expected_valid: list[bool]) -> None:
+        """The expected count is every time step the time of year covers in the reference interval, here 3 years."""
+        df = pl.DataFrame({"timestamp": [datetime(2020, 1, 1), datetime(2022, 1, 1)], "value": [1.0, 3.0]})
+        tf = TimeFrame(df, "timestamp", resolution="P1D")
+
+        result = tf.time_of_year_aggregate("mean", "value", missing_criteria=missing_criteria)
+
+        assert result.df["count_value"].to_list() == [2, 2]
+        assert result.df["expected_count_timestamp"].to_list() == [3, 3]
+        assert result.df["valid_value"].to_list() == expected_valid
+
+    def test_expected_count_reference_interval(self) -> None:
+        """The reference interval sets the years expected, even beyond the data."""
+        df = pl.DataFrame({"timestamp": [datetime(2020, 1, 1), datetime(2021, 1, 1)], "value": [1.0, 3.0]})
+        tf = TimeFrame(df, "timestamp", resolution="P1D")
+
+        result = tf.time_of_year_aggregate(
+            "mean", "value", reference_interval=(datetime(2016, 1, 1), datetime(2021, 12, 31))
+        )
+
+        assert result.df["expected_count_timestamp"].to_list() == [6, 6]
+
+    def test_expected_count_coarser_aggregation_period(self) -> None:
+        """An aggregation period of a day expects every hour of that day in every year."""
+        tf = TimeFrame(_two_years([(1, 1, 0), (1, 1, 23)]), "timestamp", resolution="PT1H")
+        result = tf.time_of_year_aggregate("mean", "value", aggregation_period="P1D")
+        assert result.df["expected_count_timestamp"].to_list() == [48] * 4
+
+    @pytest.mark.parametrize(
+        "leap_day,expected",
+        [("separate", [2, 2, 1, 2]), ("merge", [3, 3, 3, 2]), ("drop", [2, 2, 0, 2])],
+        ids=["separate", "merge", "drop"],
+    )
+    def test_expected_count_leap_day(self, leap_day: Any, expected: list[int]) -> None:
+        """29 February is expected only in leap years, or adds to 28 February when merged."""
+        times = [(2023, 2, 28), (2024, 2, 28), (2024, 2, 29), (2024, 3, 1)]
+        df = pl.DataFrame({"timestamp": [datetime(*t) for t in times], "value": [1.0, 2.0, 3.0, 4.0]})
+        tf = TimeFrame(df, "timestamp", resolution="P1D")
+
+        result = tf.time_of_year_aggregate("mean", "value", leap_day=leap_day)
+
+        # 1 March 2023 is padded in, so 1 March is expected in both years
+        assert result.df["expected_count_timestamp"].to_list() == expected
+
+    def test_annual_periodicity(self) -> None:
+        """Annual maxima share one time of year, so are aggregated over all years."""
+        df = pl.DataFrame(
+            {
+                "timestamp": [datetime(2020, 11, 3, 9), datetime(2022, 2, 14, 9), datetime(2023, 1, 7, 9)],
+                "value": [10.0, 30.0, 20.0],
+            }
+        )
+        tf = TimeFrame(df, "timestamp", resolution="P1D", offset="+T9H", periodicity="P1Y+9MT9H")
+
+        result = tf.time_of_year_aggregate("max", "value")
+
+        assert result.df["max_value"].to_list() == [30.0, 30.0, 30.0]
+        assert result.df["timestamp_of_max_value"].to_list() == [datetime(2022, 2, 14, 9)] * 3
+
+    def test_date_part_column_names(self) -> None:
+        """Data columns named like date parts are left alone."""
+        df = _two_years([(1, 1)]).with_columns(month=pl.Series([5.0, 7.0]), slot=pl.Series([1.0, 2.0]))
+        tf = TimeFrame(df, "timestamp", resolution="P1D")
+
+        result = tf.time_of_year_aggregate("max", ["month", "slot"])
+
+        assert result.df["month"].to_list() == [5.0, 7.0]
+        assert result.df["max_month"].to_list() == [7.0, 7.0]
+        assert result.df["max_slot"].to_list() == [2.0, 2.0]
+
+    def test_time_column_with_quote(self) -> None:
+        """Any time column name works."""
+        tf = TimeFrame(_two_years([(1, 1)]).rename({"timestamp": "obs'time"}), "obs'time", resolution="P1D")
+        assert tf.time_of_year_aggregate("max", "value").df["max_value"].to_list() == [2.0, 2.0]
+
+    def test_date_column(self) -> None:
+        """A Date time column works."""
+        df = pl.DataFrame({"timestamp": [date(2020, 1, 1), date(2021, 1, 1)], "value": [1.0, 2.0]})
+        tf = TimeFrame(df, "timestamp", resolution="P1D")
+        assert tf.time_of_year_aggregate("max", "value").df["max_value"].to_list() == [2.0, 2.0]
+
+    def test_result_timeframe(self) -> None:
+        """The result keeps the rows, temporal properties and metadata, and drops other columns."""
+        df = _two_years([(1, 1)]).with_columns(other=pl.Series([0.0, 0.0]))
+        tf = TimeFrame(df, "timestamp", resolution="P1D", time_anchor="end")
+        tf.metadata = {"site": "A"}
+        tf.column_metadata["value"] = {"units": "m"}
+
+        result = tf.time_of_year_aggregate("max", "value")
+
+        assert result.columns == [
+            "value",
+            "max_value",
+            "timestamp_of_max_value",
+            "count_value",
+            "expected_count_timestamp",
+            "valid_value",
+        ]
+        assert (result.resolution, result.periodicity, result.time_anchor) == (tf.resolution, tf.periodicity, "end")
+        assert result.metadata == {"site": "A"}
+        assert result.column_metadata["value"] == {"units": "m"}
+
+    def test_default_columns(self) -> None:
+        """All data columns are aggregated by default."""
+        df = _two_years([(1, 1)]).with_columns(other=pl.Series([3.0, 4.0]))
+        tf = TimeFrame(df, "timestamp", resolution="P1D")
+        assert "max_other" in tf.time_of_year_aggregate("max").columns
+
+    @pytest.mark.parametrize(
+        "function,kwargs,error,match",
+        [
+            ("mean_sum", {}, AggregationError, "'mean_sum' aggregation cannot be used by time of year"),
+            ("nth", {"n": 1}, AggregationError, "'nth' aggregation cannot be used by time of year"),
+        ],
+        ids=["mean_sum", "nth"],
+    )
+    def test_invalid_functions(self, function: Any, kwargs: dict, error: type[Exception], match: str) -> None:
+        """Functions that need whole aggregation periods raise."""
+        tf = TimeFrame(_two_years([(1, 1)]), "timestamp", resolution="P1D")
+        with pytest.raises(error, match=match):
+            tf.time_of_year_aggregate(function, "value", **kwargs)
+
+    @pytest.mark.parametrize(
+        "kwargs,error,match",
+        [
+            ({"columns": "missing"}, ColumnNotFoundError, "missing"),
+            ({"aggregation_period": "P7D"}, AggregationPeriodError, "fit evenly into a year"),
+            ({"aggregation_period": "P2Y"}, AggregationPeriodError, "fit evenly into a year"),
+            ({"leap_day": "skip"}, ValueError, "Invalid leap_day"),
+            ({"reference_interval": (datetime(2021, 1, 1, tzinfo=UTC), None)}, TypeError, "has a time zone"),
+            ({"reference_interval": (None, datetime(2021, 1, 1, tzinfo=UTC))}, TypeError, "has a time zone"),
+            ({"reference_interval": (datetime(2021, 1, 1), datetime(2020, 1, 1))}, ValueError, "must not be after"),
+        ],
+        ids=[
+            "missing column",
+            "weekly period",
+            "two-year period",
+            "leap day",
+            "start tz",
+            "end tz",
+            "order",
+        ],
+    )
+    def test_invalid_arguments(self, kwargs: dict, error: type[Exception], match: str) -> None:
+        """Invalid arguments raise."""
+        tf = TimeFrame(_two_years([(1, 1)]), "timestamp", resolution="P1D")
+        with pytest.raises(error, match=match):
+            tf.time_of_year_aggregate("max", **{"columns": "value", **kwargs})
+
+    def test_empty(self) -> None:
+        """An empty DataFrame raises."""
+        df = pl.DataFrame({"timestamp": [], "value": []}, schema={"timestamp": pl.Datetime("us"), "value": pl.Float64})
+        ctx = AggregationCtx(df=df, time_name="timestamp", time_anchor="start", periodicity=Period.of_days(1))
+        with pytest.raises(AggregationError, match="empty DataFrame"):
+            TimeOfYearAggregationPipeline(Max(), ctx, Period.of_days(1), "value").execute()
+
+    def test_reference_interval_without_data(self) -> None:
+        """A reference interval with an open end and no data in it expects nothing."""
+        tf = TimeFrame(_two_years([(1, 1)]), "timestamp", resolution="P1D")
+
+        result = tf.time_of_year_aggregate("max", "value", reference_interval=(datetime(2030, 1, 1), None))
+
+        assert result.df["count_value"].to_list() == [0, 0]
+        assert result.df["expected_count_timestamp"].to_list() == [0, 0]
+        assert result.df["valid_value"].to_list() == [False, False]
+
+    def test_aggregation_period_not_whole_time_steps(self) -> None:
+        """An aggregation period that isn't a whole number of time steps raises."""
+        tf = TimeFrame(_two_years([(1, 1)]), "timestamp", resolution="P1D")
+        with pytest.raises(AggregationPeriodError, match="whole number of time steps"):
+            tf.time_of_year_aggregate("max", "value", aggregation_period="P1D+T9H")
