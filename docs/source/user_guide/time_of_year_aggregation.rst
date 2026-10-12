@@ -58,7 +58,8 @@ In more detail
 
 Any of the :ref:`aggregation functions <aggregation_functions>` can be used, except ``mean_sum`` and ``nth``, which
 need whole aggregation periods. Each call adds its results to the TimeFrame, so calls can be chained to build up
-various time-of-year aggregations.
+various time-of-year aggregations. Pass ``columns`` to each call when chaining, otherwise the results of earlier calls
+are aggregated too.
 
 **Example**
 

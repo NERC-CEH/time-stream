@@ -851,7 +851,8 @@ class TimeFrame:
         Args:
             aggregation_function: The aggregation function to apply. Functions that need whole aggregation periods
                 (``mean_sum``, ``nth``) are not supported.
-            columns: The column(s) to aggregate. If omitted, will use all data columns.
+            columns: The column(s) to aggregate. If omitted, will use all data columns, including the results of any
+                earlier call, so pass this when chaining.
             missing_criteria: How much data each time of year needs, as in :meth:`aggregate`. The expected count is
                 the number of time steps the time of year covers across the reference interval, so e.g.
                 ``("percent", 80)`` needs values for 80% of them.
@@ -870,8 +871,8 @@ class TimeFrame:
         Returns:
             The TimeFrame with the aggregation results added, named as in :meth:`aggregate`: the results,
             ``count_<column>`` (values found), ``expected_count_<time>`` (time steps covered) and ``valid_<column>``
-            (whether ``missing_criteria`` is met). Calls can be chained to add more results; the ``count_``,
-            ``expected_count_`` and ``valid_`` columns then describe the last call.
+            (whether ``missing_criteria`` is met). Calls can be chained to add more results, passing ``columns`` to
+            each; the ``count_``, ``expected_count_`` and ``valid_`` columns then describe the last call.
 
         Raises:
             AggregationPeriodError: If the aggregation period does not fit evenly into a year or isn't a whole number
