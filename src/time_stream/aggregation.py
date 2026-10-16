@@ -36,7 +36,7 @@ class AggregationCtx:
     df: pl.DataFrame
     time_name: str
     time_anchor: TimeAnchor
-    periodicity: Period
+    periodicity: Period | None
     aggregation_period: Period | None = None
     time_window: TimeWindow | None = None
 
@@ -50,17 +50,19 @@ class AggregationFunction(Operation, ABC):
     """
 
     # Whether the pipeline pads the data to its full set of time steps before grouping
-    _requires_padding: ClassVar[bool] = False
+    requires_padding: ClassVar[bool] = False
+    # Whether the aggregation needs the data to have a periodicity, i.e. not be irregular
+    requires_periodicity: ClassVar[bool] = False
 
     def __init__(self, **kwargs):
         pass
 
     @abstractmethod
-    def expr(self, _ctx: AggregationCtx, _columns: list[str]) -> list[pl.Expr]:
+    def expr(self, ctx: AggregationCtx, columns: list[str]) -> list[pl.Expr]:
         """Return the Polars expressions for this aggregation."""
         raise NotImplementedError
 
-    def post_expr(self, _ctx: AggregationCtx, _columns: list[str]) -> list[pl.Expr]:
+    def post_expr(self, ctx: AggregationCtx, columns: list[str]) -> list[pl.Expr]:
         """Return additional Polars expressions to be applied after the aggregation."""
         return []
 
@@ -177,12 +179,15 @@ class AggregationPipeline(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def _dynamic_expected_count_expr(self) -> pl.Expr:
+    def _dynamic_expected_count_expr(self, periodicity: Period) -> pl.Expr:
         """Compute the expected count expression for variable-length aggregation periods.
 
         Called by ``_expected_count_expr()`` when the constant-count fast path is not applicable.
         Subclasses implement this using their own grouping semantics (label/closed for standard,
         alignment for rolling).
+
+        Args:
+            periodicity: The periodicity of the data.
 
         Returns:
             A Polars expression for the expected count.
@@ -194,6 +199,11 @@ class AggregationPipeline(ABC):
         if self.ctx.df.is_empty():
             raise AggregationError("Cannot aggregate an empty DataFrame.")
         check_columns_in_dataframe(self.ctx.df, self.columns + [self.ctx.time_name])
+        if self.ctx.periodicity is None and self.agg_func.requires_periodicity:
+            raise AggregationError(
+                f"The '{self.agg_func.name}' aggregation needs an expected count of values, so can't be used on "
+                f"irregular data."
+            )
 
     def _actual_count_expr(self) -> list[pl.Expr]:
         """A `Polars` expression to generate the actual count of values in a TimeFrame found in each period.
@@ -206,37 +216,47 @@ class AggregationPipeline(ABC):
     def _expected_count_expr(self) -> pl.Expr:
         """A `Polars` expression to generate the expected count of values found in each period.
 
+        Irregular data has no expected count, so gives a null column.
+
         Returns:
             pl.Expr: Polars expression that can be used to generate expected count on a DataFrame
         """
         expected_count_name = f"expected_count_{self.ctx.time_name}"
 
+        periodicity = self.ctx.periodicity
+        if periodicity is None:
+            return pl.lit(None, dtype=pl.UInt32).alias(expected_count_name)
+
         # Subclasses can optionally define separate paths to determine the expected count - e.g. using the time window
         #   during standard aggregation. Check this first, and if not provided then fall back to the default paths
         #   for determining the expected count.
-        expr = self._static_expected_count_expr()
+        expr = self._static_expected_count_expr(periodicity)
         if expr is None:
             # For some aggregations, the expected count is a constant so use that if possible.
             # For example, when aggregating 15-minute data over a day, the expected count is always 96.
-            if (n := self.ctx.periodicity.count(self.aggregation_period)) is not None:
+            if (n := periodicity.count(self.aggregation_period)) is not None:
                 expr = pl.lit(n)
             else:
-                expr = self._dynamic_expected_count_expr()
+                expr = self._dynamic_expected_count_expr(periodicity)
 
         return expr.cast(pl.UInt32).alias(expected_count_name)
 
-    def _static_expected_count_expr(self) -> pl.Expr | None:
+    def _static_expected_count_expr(self, periodicity: Period) -> pl.Expr | None:
         """Return a fixed-value expected count expression, or ``None`` to use default logic.
 
         Override in subclasses when the expected count can be determined without inspecting each
         row (e.g., from a time window). The base implementation returns ``None``.
+
+        Args:
+            periodicity: The periodicity of the data.
 
         Returns:
             A Polars literal expression, or ``None``.
         """
         return None
 
-    def _count_between_expr(self, start_expr: pl.Expr, end_expr: pl.Expr, closed: str) -> pl.Expr:
+    @staticmethod
+    def _count_between_expr(start_expr: pl.Expr, end_expr: pl.Expr, closed: str, periodicity: Period) -> pl.Expr:
         """Compute the number of observations of the data periodicity between two timestamp expressions.
 
         Uses arithmetic division for fixed-length periodicities (fast path), and
@@ -246,17 +266,18 @@ class AggregationPipeline(ABC):
             start_expr: Expression for the start of the window.
             end_expr: Expression for the end of the window.
             closed: Polars ``closed`` parameter (``"left"``, ``"right"``, or ``"both"``).
+            periodicity: The periodicity of the data.
 
         Returns:
             A Polars expression for the count of observations.
         """
-        if self.ctx.periodicity.timedelta:
-            micros = self.ctx.periodicity.timedelta // timedelta(microseconds=1)
+        if periodicity_td := periodicity.timedelta:
+            micros = periodicity_td // timedelta(microseconds=1)
             return (end_expr - start_expr).dt.total_microseconds() // micros
         return pl.datetime_ranges(
             start_expr,
             end_expr,
-            interval=self.ctx.periodicity.pl_interval,
+            interval=periodicity.pl_interval,
             closed=closed,  # type: ignore - linter complains string isn't a Literal
         ).list.len()
 
@@ -276,6 +297,12 @@ class AggregationPipeline(ABC):
             raise MissingCriteriaError(
                 f"Unknown missing criteria: {self.missing_criteria}. "
                 f"Available criteria: {list(get_args(MissingCriteria))}"
+            )
+
+        if self.ctx.periodicity is None and criteria in ("percent", "missing"):
+            raise MissingCriteriaError(
+                f"Missing criteria '{criteria}' needs an expected count of values, so can't be used on irregular "
+                f"data. Use 'available' or 'na' instead."
             )
 
         if criteria == "percent":
@@ -355,10 +382,11 @@ class StandardAggregationPipeline(AggregationPipeline):
             raise AggregationPeriodError(
                 f"Non-epoch agnostic aggregation periods are not supported: '{self.aggregation_period}'."
             )
-        if not self.ctx.periodicity.is_subperiod_of(self.aggregation_period):
+        periodicity = self.ctx.periodicity
+        if periodicity is not None and not periodicity.is_subperiod_of(self.aggregation_period):
             raise AggregationPeriodError(
                 f"Incompatible aggregation period '{self.aggregation_period}' with TimeFrame periodicity "
-                f"'{self.ctx.periodicity}'. TimeFrame periodicity must be a subperiod of the aggregation period."
+                f"'{periodicity}'. TimeFrame periodicity must be a subperiod of the aggregation period."
             )
 
     def _validate_time_window(self) -> None:
@@ -368,14 +396,20 @@ class StandardAggregationPipeline(AggregationPipeline):
         agg_td = self.aggregation_period.timedelta
         if agg_td is not None and agg_td < timedelta(days=1):
             raise TimeWindowError("'time_window' is only supported for daily or longer aggregation periods")
-        periodicity_td = self.ctx.periodicity.timedelta
+        periodicity = self.ctx.periodicity
+        if periodicity is None:
+            return
+        periodicity_td = periodicity.timedelta
         if periodicity_td is None or periodicity_td >= timedelta(days=1):
             raise TimeWindowError("'time_window' requires the data periodicity to be sub-daily.")
 
     def _prepare_df(self, df: pl.DataFrame) -> pl.DataFrame:
-        """Pad periods if the aggregation function needs it, then filter rows to the time window if one is set."""
-        if self.agg_func._requires_padding:
-            df = self._pad_periods(df)
+        """Pad periods if the aggregation function needs it, then filter rows to the time window if one is set.
+
+        Irregular data has no time steps to pad.
+        """
+        if self.agg_func.requires_padding and self.ctx.periodicity is not None:
+            df = self._pad_periods(df, self.ctx.periodicity)
         if self.time_window:
             return self.time_window.filter_df(df, self.ctx.time_name)
         return df
@@ -394,12 +428,13 @@ class StandardAggregationPipeline(AggregationPipeline):
         df = pad_time(df, self.ctx.time_name, self.aggregation_period, self.aggregation_time_anchor)
         return df.with_columns(pl.col(f"count_{col}").fill_null(0) for col in self.columns)
 
-    def _pad_periods(self, df: pl.DataFrame) -> pl.DataFrame:
+    def _pad_periods(self, df: pl.DataFrame, periodicity: Period) -> pl.DataFrame:
         """Pad every aggregation period in the data to its full set of time steps, taking into account the potential
         gaps before the first time step and after the last time step.
 
         Args:
             df: The input DataFrame.
+            periodicity: The periodicity of the data.
 
         Returns:
             The time and aggregated columns, with a row for every time step in each period.
@@ -407,7 +442,7 @@ class StandardAggregationPipeline(AggregationPipeline):
         time_name = self.ctx.time_name
         time_anchor = self.ctx.time_anchor
         period = self.aggregation_period.pl_interval
-        step = self.ctx.periodicity.pl_interval
+        step = periodicity.pl_interval
 
         periods = truncate_to_period(df[time_name], self.aggregation_period, time_anchor)
         first, last = periods.min(), periods.max()
@@ -420,9 +455,7 @@ class StandardAggregationPipeline(AggregationPipeline):
         else:
             start, end = first, pl.Series([last]).dt.offset_by(period).dt.offset_by("-" + step)[0]
 
-        return pad_time(
-            df.select(time_name, *self.columns), time_name, self.ctx.periodicity, time_anchor, start=start, end=end
-        )
+        return pad_time(df.select(time_name, *self.columns), time_name, periodicity, time_anchor, start=start, end=end)
 
     def _get_label_closed(self) -> tuple[str, str]:
         """Map TimeAnchor to Polars label/closed semantics.
@@ -445,21 +478,27 @@ class StandardAggregationPipeline(AggregationPipeline):
             label=label,  # type: ignore[arg-type] - Polars Literal is a string
         )
 
-    def _static_expected_count_expr(self) -> pl.Expr | None:
+    def _static_expected_count_expr(self, periodicity: Period) -> pl.Expr | None:
         """Return the time-window expected count when a window is active, otherwise ``None``.
+
+        Args:
+            periodicity: The periodicity of the data.
 
         Returns:
             A Polars literal expression when ``time_window`` is set, or ``None``.
         """
         if self.time_window is not None:
-            return pl.lit(self.time_window.expected_count(self.ctx.periodicity))
+            return pl.lit(self.time_window.expected_count(periodicity))
         return None
 
-    def _dynamic_expected_count_expr(self) -> pl.Expr:
+    def _dynamic_expected_count_expr(self, periodicity: Period) -> pl.Expr:
         """Compute expected count dynamically for variable-length periods (e.g., months, years).
 
         Uses the start and end of each aggregation interval to calculate how many observations
         of the given periodicity fit within it.
+
+        Args:
+            periodicity: The periodicity of the data.
 
         Returns:
             Polars expression for the dynamic expected count.
@@ -473,7 +512,7 @@ class StandardAggregationPipeline(AggregationPipeline):
             end_expr = pl.col(self.ctx.time_name).dt.offset_by(self.aggregation_period.pl_interval)
         # Note: datetime_ranges also works for sub-monthly data, but is avoided there because
         # creating large lists (e.g. aggregating 1us data over a year) would exhaust memory.
-        return self._count_between_expr(start_expr, end_expr, closed)
+        return self._count_between_expr(start_expr, end_expr, closed, periodicity)
 
 
 class RollingAggregationPipeline(AggregationPipeline):
@@ -517,7 +556,7 @@ class RollingAggregationPipeline(AggregationPipeline):
         Returns:
             The time and aggregated columns, padded if needed.
         """
-        if not self.agg_func._requires_padding:
+        if not self.agg_func.requires_padding:
             return df
 
         time_name = self.ctx.time_name
@@ -538,7 +577,7 @@ class RollingAggregationPipeline(AggregationPipeline):
         Returns:
             The aggregated DataFrame with one row per row of the original data.
         """
-        if not self.agg_func._requires_padding:
+        if not self.agg_func.requires_padding:
             return df
         return df.filter(pl.col(self.ctx.time_name).is_in(self.ctx.df[self.ctx.time_name].implode()))
 
@@ -550,30 +589,36 @@ class RollingAggregationPipeline(AggregationPipeline):
     def _validate_rolling(self) -> None:
         """Validate rolling-specific constraints.
 
+        Irregular data has no time steps, so only the calendar-based CENTER rule applies to it.
+
         Raises:
             AggregationPeriodError: If the window size is not a whole number of time steps of the data periodicity.
             AggregationError: If CENTER alignment is used with a calendar-based (variable-length) window, or a
                 window spanning an even number of time steps.
         """
-        if not self.ctx.periodicity.is_subperiod_of(self.aggregation_period):
+        periodicity = self.ctx.periodicity
+        if periodicity is not None and not periodicity.is_subperiod_of(self.aggregation_period):
             raise AggregationPeriodError(
                 f"Rolling window size '{self.aggregation_period}' must be a whole number of time steps of the "
-                f"data periodicity '{self.ctx.periodicity}'."
+                f"data periodicity '{periodicity}'."
             )
         if self.alignment == "center":
             window_td = self.aggregation_period.timedelta
-            periodicity_td = self.ctx.periodicity.timedelta
-            if window_td is None or periodicity_td is None:
+            periodicity_td = None if periodicity is None else periodicity.timedelta
+            if window_td is None or (periodicity is not None and periodicity_td is None):
                 raise AggregationError(
                     "CENTER alignment is not supported for calendar-based window sizes (e.g., months or years), "
                     "because they have variable length and cannot be halved to a fixed offset."
                 )
+            # Irregular data has no time steps to centre on
+            if periodicity_td is None:
+                return
             # A window of an even number of time steps has no single centre time step
             steps = window_td // periodicity_td
             if steps % 2 == 0:
                 raise AggregationError(
                     f"CENTER alignment requires the window to span an odd number of time steps. Window size "
-                    f"'{self.aggregation_period}' spans {steps} time steps of '{self.ctx.periodicity}'."
+                    f"'{self.aggregation_period}' spans {steps} time steps of '{periodicity}'."
                 )
 
     def _get_rolling_params(self) -> tuple[str, str | None]:
@@ -606,8 +651,11 @@ class RollingAggregationPipeline(AggregationPipeline):
             rolling_kwargs["offset"] = offset
         return df.rolling(**rolling_kwargs)
 
-    def _dynamic_expected_count_expr(self) -> pl.Expr:
+    def _dynamic_expected_count_expr(self, periodicity: Period) -> pl.Expr:
         """Compute dynamic expected count for variable-length rolling windows (e.g., monthly).
+
+        Args:
+            periodicity: The periodicity of the data.
 
         Returns:
             Polars expression for the dynamic expected count.
@@ -625,7 +673,7 @@ class RollingAggregationPipeline(AggregationPipeline):
             closed = "left"
         else:
             raise AggregationError("CENTER alignment is not supported for calendar-based window sizes.")
-        return self._count_between_expr(start_expr, end_expr, closed)
+        return self._count_between_expr(start_expr, end_expr, closed, periodicity)
 
 
 @AggregationFunction.register
@@ -687,6 +735,7 @@ class MeanSum(AggregationFunction):
     This will estimate the sum when values are missing according to how many values are expected in the period."""
 
     name = "mean_sum"
+    requires_periodicity = True
 
     def expr(self, ctx: AggregationCtx, columns: list[str]) -> list[pl.Expr]:
         """To calculate the mean sum the expression must return the mean, and be multiplied by the expected
@@ -828,7 +877,8 @@ class Nth(AggregationFunction):
     """An aggregation class to select the value at the nth time step within each aggregation period."""
 
     name = "nth"
-    _requires_padding = True
+    requires_padding = True
+    requires_periodicity = True
 
     def __init__(self, n: int):
         """Initialise Nth aggregation.
@@ -850,27 +900,31 @@ class Nth(AggregationFunction):
 
         Raises:
             AggregationPeriodError: If aggregation_period not defined.
+            AggregationError: If the data is irregular.
 
             AggregationPeriodError: If `n` exceeds the fixed number of periodicity points that fit
                 within the aggregation period, or its time window (e.g. requesting the 25th hour of a day).
         """
         if ctx.aggregation_period is None:
             raise AggregationPeriodError("An aggregation_period must be defined for nth aggregation method.")
+        periodicity = ctx.periodicity
+        if periodicity is None:
+            raise AggregationError("The 'nth' aggregation can't be used on irregular data.")
 
         if ctx.time_window is None:
-            expected_count = ctx.periodicity.count(ctx.aggregation_period)
+            expected_count = periodicity.count(ctx.aggregation_period)
             within = f"aggregation period '{ctx.aggregation_period}'"
         else:
             # The window repeats each day of the aggregation period, so there is only a fixed count for fixed periods
             period_td = ctx.aggregation_period.timedelta
             days = period_td // timedelta(days=1) if period_td is not None else None
-            expected_count = ctx.time_window.expected_count(ctx.periodicity) * days if days is not None else None
+            expected_count = ctx.time_window.expected_count(periodicity) * days if days is not None else None
             within = f"time window {ctx.time_window.start}-{ctx.time_window.end} of aggregation period "
             within += f"'{ctx.aggregation_period}'"
 
         if expected_count is not None and self.n > expected_count:
             raise AggregationPeriodError(
-                f"Cannot select n={self.n}: periodicity '{ctx.periodicity}' fits only {expected_count} points within "
+                f"Cannot select n={self.n}: periodicity '{periodicity}' fits only {expected_count} points within "
                 f"{within}."
             )
 
