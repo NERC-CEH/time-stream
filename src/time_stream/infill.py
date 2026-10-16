@@ -25,7 +25,7 @@ import polars as pl
 from isoperiod import Period
 from scipy.interpolate import Akima1DInterpolator, PchipInterpolator, make_interp_spline
 
-from time_stream.exceptions import ColumnTypeError, InfillError, InfillInsufficientValuesError
+from time_stream.exceptions import InfillError, InfillInsufficientValuesError, PeriodicityError
 from time_stream.operation import Operation
 from time_stream.types import WindowSide
 from time_stream.utils import (
@@ -33,29 +33,11 @@ from time_stream.utils import (
     check_literal_value,
     gap_size_count,
     get_date_filter,
+    join_column_on_time,
     pad_time,
 )
 
 logger = logging.getLogger(__name__)
-
-
-def check_alt_df_time_type(alt_df: pl.DataFrame, df: pl.DataFrame, time_name: str) -> None:
-    """Check that the time column of an alternative DataFrame has the same type as the data being infilled.
-
-    Args:
-        alt_df: The alternative DataFrame.
-        df: The DataFrame being infilled.
-        time_name: The name of the time column in both DataFrames.
-
-    Raises:
-        ColumnTypeError: If the time column types differ.
-    """
-    alt_dtype, dtype = alt_df.schema[time_name], df.schema[time_name]
-    if alt_dtype != dtype:
-        raise ColumnTypeError(
-            f"The alternative data time column type '{alt_dtype}' doesn't match the TimeFrame's time column type "
-            f"'{dtype}'."
-        )
 
 
 @dataclass(frozen=True)
@@ -92,7 +74,7 @@ class InfillMethod(Operation, ABC):
         self,
         df: pl.DataFrame,
         time_name: str,
-        periodicity: Period,
+        periodicity: Period | None,
         infill_column: str,
         observation_interval: datetime | tuple[datetime, datetime | None] | None = None,
         max_gap_size: int | None = None,
@@ -103,14 +85,19 @@ class InfillMethod(Operation, ABC):
             df: The Polars DataFrame containing the time series data to infill
             time_name: Name of the time column in the dataframe
             infill_column: The column to infill data within.
-            periodicity: Periodicity of the time series
+            periodicity: Periodicity of the time series, or None if it is irregular.
             observation_interval: Optional time interval to limit the infilling to. Datetimes must match the time
                 column: without a time zone if it has none, or in UTC if it is in UTC.
             max_gap_size: The maximum size of consecutive null gaps that should be filled. Any gap larger than this
                           will not be infilled and will remain as null.
         Returns:
             The infilled time series
+
+        Raises:
+            PeriodicityError: If the time series is irregular, as it has no time steps to define a gap.
         """
+        if periodicity is None:
+            raise PeriodicityError("Infill needs a periodicity, but the data is irregular.")
         ctx = InfillCtx(df, time_name, periodicity)
         pipeline = InfillMethodPipeline(self, ctx, infill_column, observation_interval, max_gap_size)
         return pipeline.execute()
@@ -396,12 +383,58 @@ class PchipInterpolation(ScipyInterpolation):
         return PchipInterpolator(x_valid, y_valid, **self.scipy_kwargs)
 
 
+class AltDataInfill(InfillMethod, ABC):
+    """Base class for infill methods that use alternative data."""
+
+    def __init__(self, alt_data_column: str, alt_df: pl.DataFrame | None = None):
+        """Initialize an alternative data infill method.
+
+        Args:
+            alt_data_column: The name of the column providing the alternative data.
+            alt_df: The DataFrame containing the alternative data, or None if it is in the DataFrame being infilled.
+        """
+        self.alt_data_column = alt_data_column
+        self.alt_df = alt_df
+
+    def _get_alt_data(self, df: pl.DataFrame, time_name: str) -> tuple[pl.DataFrame, str]:
+        """Make the alternative data column available in the DataFrame, joining it from ``alt_df`` if one is given.
+
+        Args:
+            df: The DataFrame to infill.
+            time_name: The name of the time column.
+
+        Returns:
+            ``df`` with the alternative data, and the name of its column.
+        """
+        alt_df = self.alt_df
+        if alt_df is None:
+            check_columns_in_dataframe(df, self.alt_data_column)
+            return df, self.alt_data_column
+
+        alt_data_column_name = f"__ALT_DATA__{self.alt_data_column}"
+        return join_column_on_time(
+            df, alt_df, self.alt_data_column, time_name, alt_data_column_name
+        ), alt_data_column_name
+
+    def _drop_alt_data(self, df: pl.DataFrame, alt_data_column_name: str) -> pl.DataFrame:
+        """Drop the alternative data column if it was joined from ``alt_df``.
+
+        Args:
+            df: The infilled DataFrame.
+            alt_data_column_name: The name of the alternative data column.
+
+        Returns:
+            ``df`` without any joined alternative data column.
+        """
+        return df if self.alt_df is None else df.drop(alt_data_column_name)
+
+
 @InfillMethod.register
-class AltData(InfillMethod):
-    """
-    Infills missing values using an alternative data source and optional correction factor.
-    The alternative data corresponding to the missing interval is scaled by the correction
-    factor to produce the infilled values.
+class AltData(AltDataInfill):
+    """Infills missing values using an alternative data source and optional correction factor.
+
+    The alternative data corresponding to the missing interval is scaled by the correction factor to produce the
+    infilled values.
     """
 
     name = "alt_data"
@@ -415,9 +448,8 @@ class AltData(InfillMethod):
             alt_df: The DataFrame containing the alternative data. Its time column must have the same type as the
                 TimeFrame's.
         """
-        self.alt_data_column = alt_data_column
+        super().__init__(alt_data_column, alt_df)
         self.correction_factor = correction_factor
-        self.alt_df = alt_df
 
     def _fill(self, df: pl.DataFrame, infill_column: str, ctx: InfillCtx) -> pl.DataFrame:
         """Fill missing values using data from the alternative column.
@@ -430,24 +462,7 @@ class AltData(InfillMethod):
         Returns:
             pl.DataFrame with infilled values.
         """
-        if self.alt_df is None:
-            check_columns_in_dataframe(df, [self.alt_data_column])
-            alt_data_column_name = self.alt_data_column
-        else:
-            time_column_name = ctx.time_name
-            check_columns_in_dataframe(self.alt_df, [time_column_name, self.alt_data_column])
-            check_alt_df_time_type(self.alt_df, df, time_column_name)
-            alt_data_column_name = f"__ALT_DATA__{self.alt_data_column}"
-            alt_df = self.alt_df.select([time_column_name, self.alt_data_column]).rename(
-                {self.alt_data_column: alt_data_column_name}
-            )
-
-            df = df.join(
-                alt_df,
-                on=time_column_name,
-                how="left",
-                suffix="_alt",
-            )
+        df, alt_data_column_name = self._get_alt_data(df, ctx.time_name)
 
         infilled = df.with_columns(
             pl.when(pl.col(infill_column).is_null())
@@ -456,26 +471,19 @@ class AltData(InfillMethod):
             .alias(self._infilled_column_name(infill_column))
         )
 
-        if self.alt_df is not None:
-            infilled = infilled.drop(alt_data_column_name)
-
-        return infilled
+        return self._drop_alt_data(infilled, alt_data_column_name)
 
 
 @InfillMethod.register
-class AltDataDynamic(InfillMethod):
-    """
-    Infills missing values using an alternative data source and a dynamic
-    correction factor derived from surrounding data.
+class AltDataDynamic(AltDataInfill):
+    """Infills missing values using an alternative data source and a dynamic correction factor derived from surrounding
+    data.
 
-    For each contiguous gap in the original dataset, a time window is defined
-    around the gap. A correction factor is computed as the ratio of the sum of
-    the original data to the sum of the alternative data within this window.
-    The alternative data corresponding to the missing interval is scaled by the
-    correction factor to produce the infilled values.
-
-    The method defaults to using data on both sides of the gap.
-    If window_side is specified as "left" or "right", then only data left or right of the gap will be used.
+    For each contiguous gap in the original dataset, a time window is defined around the gap. A correction factor is
+    computed as the ratio of the sum of the original data to the sum of the alternative data within this window. The
+    alternative data corresponding to the missing interval is scaled by the correction factor to produce the infilled
+    values. The method defaults to using data on both sides of the gap. If window_side is specified as "left" or
+    "right", then only data left or right of the gap will be used.
     """
 
     name = "alt_data_dynamic"
@@ -511,8 +519,7 @@ class AltDataDynamic(InfillMethod):
             if max_threshold == 0:
                 raise ValueError("max_threshold must be greater than zero.")
 
-        self.alt_data_column = alt_data_column
-        self.alt_df = alt_df
+        super().__init__(alt_data_column, alt_df)
         self.window_size = window_size
         self.min_threshold = min_threshold
         self.max_threshold = max_threshold
@@ -538,24 +545,7 @@ class AltDataDynamic(InfillMethod):
         time_column_name = ctx.time_name
         window_duration = self._window_duration(ctx)
 
-        # Join original and alternative dataframes if the latter exists
-        if self.alt_df is None:
-            check_columns_in_dataframe(df, [self.alt_data_column])
-            alt_data_column_name = self.alt_data_column
-        else:
-            check_columns_in_dataframe(self.alt_df, [time_column_name, self.alt_data_column])
-            check_alt_df_time_type(self.alt_df, df, time_column_name)
-            alt_data_column_name = f"__ALT_DATA__{self.alt_data_column}"
-            alt_df = self.alt_df.select([time_column_name, self.alt_data_column]).rename(
-                {self.alt_data_column: alt_data_column_name}
-            )
-
-            df = df.join(
-                alt_df,
-                on=time_column_name,
-                how="left",
-                suffix="_alt",
-            )
+        df, alt_data_column_name = self._get_alt_data(df, time_column_name)
 
         # Identify gaps in original dataset
         null_mask = pl.col(infill_column).is_null()
@@ -613,12 +603,8 @@ class AltDataDynamic(InfillMethod):
             .alias(self._infilled_column_name(infill_column))
         )
 
-        # Cleanup
-        if self.alt_df is not None:
-            infilled = infilled.drop(alt_data_column_name)
         infilled = infilled.drop([gap_id_column_name, cf_column_name])
-
-        return infilled
+        return self._drop_alt_data(infilled, alt_data_column_name)
 
     def _window_duration(self, ctx: InfillCtx) -> timedelta:
         """Resolve self.window_size to a timedelta and validate it against the data periodicity.

@@ -13,6 +13,7 @@ from time_stream.exceptions import (
     ColumnNotFoundError,
     ColumnTypeError,
     InfillInsufficientValuesError,
+    PeriodicityError,
     RegistryKeyTypeError,
     UnknownRegistryKeyError,
 )
@@ -112,6 +113,12 @@ class TestInfillMethod:
         """Test InfillMethod.get() with invalid type."""
         with pytest.raises(RegistryKeyTypeError):
             InfillMethod.get(get_input)
+
+    def test_apply_irregular_raises(self) -> None:
+        """Test that apply raises for irregular data, which has no time steps to define a gap."""
+        df = pl.DataFrame({TIME_COLUMN: [datetime(2024, 1, 1), datetime(2024, 1, 5)], "values": [1.0, 2.0]})
+        with pytest.raises(PeriodicityError, match="Infill needs a periodicity, but the data is irregular."):
+            LinearInterpolation().apply(df, TIME_COLUMN, None, "values")
 
 
 class TestInfillMethodPipeline:

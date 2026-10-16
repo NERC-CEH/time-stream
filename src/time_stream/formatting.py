@@ -63,7 +63,7 @@ def format_time_properties(tf: "TimeFrame") -> dict:
         "Resolution": tf.resolution,
         "Offset": tf.offset,
         "Alignment": tf.alignment,
-        "Periodicity": tf.periodicity,
+        "Periodicity": "irregular" if tf.periodicity is None else tf.periodicity,
         "Anchor": tf.time_anchor,
     }
 
@@ -216,7 +216,7 @@ def format_key_value_pairs(key: str, *args) -> str:
     Returns:
         Formatted string with consistent indent, key, colon separator, and values.
     """
-    if key is None:
+    if not key:
         return ""
     values_str = "  ".join([string_preview(value) for value in args])
     return f"    {key} : {values_str}"
