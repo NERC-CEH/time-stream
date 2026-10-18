@@ -725,8 +725,20 @@ class Sum(AggregationFunction):
 
     def expr(self, ctx: AggregationCtx, columns: list[str]) -> list[pl.Expr]:
         """Return the `Polars` expression for calculating the sum in an aggregation period."""
-        # The sum of no values (even nan/null) is 0, so make sure to give null when there are no values
-        return [pl.when(pl.col(col).count() > 0).then(pl.col(col).sum()).alias(f"sum_{col}") for col in columns]
+        # The sum of no values (even nan/null) is 0, so make sure to give null when there are no values.
+        # Polars computes rolling sums with a running total (add the value entering the window, subtract the
+        # one leaving it), so rounding error accumulates along a long series and a window of zeros can come
+        # out as e.g. -4e-16 instead of 0. The sum of n values always lies between n * min and n * max, and
+        # the rolling min and max are exact, so clip the sum to that range: an all-zero window is then
+        # exactly 0 and the error elsewhere is bounded.
+        return [
+            pl.when(pl.col(col).count() > 0)
+            .then(
+                pl.col(col).sum().clip(pl.col(col).min() * pl.col(col).count(), pl.col(col).max() * pl.col(col).count())
+            )
+            .alias(f"sum_{col}")
+            for col in columns
+        ]
 
 
 @AggregationFunction.register
