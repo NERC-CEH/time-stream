@@ -3,6 +3,7 @@ from datetime import datetime, time, timedelta
 from typing import Any, Callable
 from unittest.mock import Mock
 
+import numpy as np
 import polars as pl
 import pytest
 from isoperiod import Period
@@ -2702,6 +2703,26 @@ class TestRollingAggregation:
         assert_frame_equal(
             result, expected_df, check_dtypes=False, check_column_order=False, check_exact=False, abs_tol=0.00001
         )
+
+    def test_rolling_sum_of_zero_window_is_exactly_zero(self) -> None:
+        """A rolling sum over a window containing only zeros is exactly zero, even on a long series where the
+        running total used for rolling sums has accumulated rounding error (GH issue #177)."""
+        n = 96 * 365  # one year of 15-minute data
+        rng = np.random.default_rng(1)
+        rain = np.where(rng.random(n) < 0.1, rng.gamma(0.8, 0.5, n), 0.0).round(2)
+        rain[-96 * 3 :] = 0.0  # the last three days are dry
+        times = pl.datetime_range(
+            datetime(2024, 1, 1), datetime(2024, 1, 1) + timedelta(minutes=15 * (n - 1)), "15m", eager=True
+        )
+        tf = TimeFrame(pl.DataFrame({"time": times, "rainfall": rain}), "time", resolution="PT15M")
+
+        result = tf.rolling_aggregate("PT24H", "sum", "rainfall").df["sum_rainfall"]
+
+        assert (result < 0).sum() == 0
+        assert result.tail(96).to_list() == [0.0] * 96
+        # The clipped sum still matches an exact sum elsewhere
+        expected = [float(rain[max(0, i - 95) : i + 1].sum()) for i in range(n)]
+        assert_series_equal(result, pl.Series("sum_rainfall", expected), abs_tol=1e-9)
 
     def test_rolling_angular_mean(self) -> None:
         """Check angular mean is applied correctly across different angle overlaps (e.g. -180, 360 etc)."""
