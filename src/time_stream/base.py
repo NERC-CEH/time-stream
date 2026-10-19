@@ -567,7 +567,7 @@ class TimeFrame:
         return tf
 
     def remove_flag(
-        self, column_name: str, flag_value: int | str, expr: pl.Expr | pl.Series = pl.lit(True)
+        self, flag_column_name: str, flag_value: int | str, expr: pl.Expr | pl.Series = pl.lit(True)
     ) -> TimeFrame:
         """Return a new TimeFrame with a flag value removed from a flag column, where expression is True.
 
@@ -578,14 +578,14 @@ class TimeFrame:
         For categorical flag columns in list mode, removes all occurrences of the value from the list.
 
         Args:
-            column_name: The name of the flag column.
+            flag_column_name: The name of the flag column.
             flag_value: The flag value to remove.
             expr: Polars expression for which rows to remove the flag from.
 
         Returns:
             A new TimeFrame with the flag removed.
         """
-        flag_column = self.get_flag_column(column_name)
+        flag_column = self.get_flag_column(flag_column_name)
         tf = self.copy()
         tf._df = flag_column.remove_flag(self.df, flag_value, expr)
         return tf
