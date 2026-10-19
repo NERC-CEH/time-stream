@@ -112,7 +112,7 @@ name = "cffi"
 version = "2.1.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "pycparser" },
+    { name = "pycparser", marker = "implementation_name != 'PyPy'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/9e/ef/008a1939e372c06329a3fce4279c02f328488f3526744906eeec3da7ad5f/cffi-2.1.1.tar.gz", hash = "sha256:dd31f52ea1086513bb9df30f8fcee9b8918323ae067a3d5b78bc826a000712be", size = 530807, upload-time = "2026-08-03T21:21:18.939Z" }
 wheels = [
@@ -767,8 +767,12 @@ wheels = [
 
 [[package]]
 name = "isoperiod"
-version = "1.2.0"
-source = { git = "https://github.com/NERC-CEH/isoperiod.git#15bdd02d8884eec1e73f48503d38b77ecac491a6" }
+version = "1.2.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/b4/72/1de30066441f1a3b54a86f88bad08f13893ee42d1a9c20b74c8abddf51df/isoperiod-1.2.1.tar.gz", hash = "sha256:0220912693321f770523d122039dc34ce75aa6a1fc96259e8f4b8b71748349ed", size = 688776, upload-time = "2026-10-19T08:16:02.658Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/62/da/d1fb152c1a8a5d17ae42a7a166a4947de94ebd715c6a4af661faf195ca5d/isoperiod-1.2.1-py3-none-any.whl", hash = "sha256:cae199c4ffd7556a9cda0502e3f2b0b95cdab5dfb18cfd9cb711d98858b33df7", size = 31862, upload-time = "2026-10-19T08:16:01.38Z" },
+]
 
 [[package]]
 name = "jedi"
@@ -1381,7 +1385,7 @@ name = "pexpect"
 version = "4.9.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "ptyprocess" },
+    { name = "ptyprocess", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/42/92/cc564bf6381ff43ce1f4d06852fc19a2f11d180f23dc32d9588bee2f149d/pexpect-4.9.0.tar.gz", hash = "sha256:ee7d41123f3c9911050ea2c2dac107568dc43b2d3b0c7557a33212c398ead30f", size = 166450, upload-time = "2023-11-25T09:07:26.339Z" }
 wheels = [
@@ -2301,7 +2305,7 @@ typecheck = [
 
 [package.metadata]
 requires-dist = [
-    { name = "isoperiod", git = "https://github.com/NERC-CEH/isoperiod.git" },
+    { name = "isoperiod" },
     { name = "numpy", specifier = ">=2.0" },
     { name = "polars", specifier = ">=1.43.2" },
     { name = "scipy", specifier = ">=1.18.0" },
