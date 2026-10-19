@@ -15,16 +15,26 @@ from time_stream.exceptions import (
     CategoricalFlagUnknownError,
     ColumnNotFoundError,
     DuplicateColumnError,
+    DuplicateTimeError,
     FlagSystemNotFoundError,
     MetadataError,
     NullTimeValueError,
     PeriodicityError,
+    ResolutionError,
     TimeMutatedError,
 )
 from time_stream.flags.flag_manager import BitwiseFlagColumn
 from time_stream.flags.flag_system import FlagSystemBase
 from time_stream.time_manager import TimeManager
 from time_stream.types import FlagSystemLiteral, TimeAnchor
+
+# Ad-hoc measurements, recorded to the minute
+IRREGULAR_DF = pl.DataFrame(
+    {
+        "time": [datetime(2024, 1, 3, 10, 15), datetime(2024, 2, 19, 14, 2), datetime(2024, 2, 20, 9, 41)],
+        "value": [1.0, 2.0, 3.0],
+    }
+)
 
 
 class TestTimeFrameConstruction:
@@ -52,6 +62,75 @@ class TestTimeFrameConstruction:
         tf = TimeFrame(df, time_name="time", resolution=Period.of_days(1))
 
         assert tf.df.height == 2
+
+
+class TestIrregularConstruction:
+    @pytest.mark.parametrize(
+        "kwargs,expected_resolution,expected_periodicity",
+        [
+            ({}, Period.of_microseconds(1), None),
+            ({"periodicity": "irregular"}, Period.of_microseconds(1), None),
+            ({"resolution": "PT1M", "periodicity": "irregular"}, Period.of_minutes(1), None),
+            ({"resolution": "PT1M", "periodicity": "IRREGULAR"}, Period.of_minutes(1), None),
+            ({"resolution": "PT1M"}, Period.of_minutes(1), Period.of_minutes(1)),
+            ({"periodicity": "P1D"}, Period.of_microseconds(1), Period.of_days(1)),
+        ],
+        ids=[
+            "defaults",
+            "irregular, no resolution",
+            "irregular with resolution",
+            "irregular upper case",
+            "resolution only",
+            "periodicity only",
+        ],
+    )
+    def test_periodicity(self, kwargs: dict, expected_resolution: Period, expected_periodicity: Period | None) -> None:
+        """Test the resolution and periodicity given by each combination of the two"""
+        tf = TimeFrame(IRREGULAR_DF, "time", **kwargs)
+
+        assert tf.resolution == expected_resolution
+        assert tf.periodicity == expected_periodicity
+        assert tf.is_irregular == (expected_periodicity is None)
+
+    def test_misaligned_rows_raise(self) -> None:
+        """Test that an irregular TimeFrame must still align to its resolution"""
+        with pytest.raises(ResolutionError):
+            TimeFrame(IRREGULAR_DF, "time", resolution="PT1H", periodicity="irregular")
+
+    def test_offset_allowed(self) -> None:
+        """Test that an irregular TimeFrame can have an offset"""
+        df = pl.DataFrame({"time": [datetime(2024, 1, 3, 9), datetime(2024, 2, 19, 9)], "value": [1.0, 2.0]})
+        tf = TimeFrame(df, "time", resolution="P1D", offset="+T9H", periodicity="irregular")
+
+        assert tf.alignment == Period.of_days(1).with_hour_offset(9)
+        assert tf.is_irregular
+
+    def test_duplicates_still_handled(self) -> None:
+        """Test that duplicate times in an irregular TimeFrame are handled by on_duplicates"""
+        df = pl.concat([IRREGULAR_DF, IRREGULAR_DF.head(1)])
+
+        with pytest.raises(DuplicateTimeError):
+            TimeFrame(df, "time", periodicity="irregular")
+
+        tf = TimeFrame(df, "time", periodicity="irregular", on_duplicates="keep_first")
+        assert_frame_equal(tf.df, IRREGULAR_DF)
+
+
+class TestIrregularPadInfill:
+    @pytest.mark.parametrize(
+        "call,expected_error",
+        [
+            (lambda tf: tf.pad(), "Cannot pad irregular data."),
+            (lambda tf: tf.infill("linear", "value"), "Cannot infill irregular data"),
+        ],
+        ids=["pad", "infill"],
+    )
+    def test_raises(self, call: Callable[[TimeFrame], TimeFrame], expected_error: str) -> None:
+        """Test that pad and infill raise on an irregular TimeFrame, as it has no expected time steps"""
+        tf = TimeFrame(IRREGULAR_DF, "time", resolution="PT1M", periodicity="irregular")
+
+        with pytest.raises(PeriodicityError, match=re.escape(expected_error)):
+            call(tf)
 
 
 class TestSortTime:
@@ -684,6 +763,18 @@ class TestTimeSeriesEquality:
         assert self.tf_original._flag_manager == tf_different_time_name._flag_manager
         assert self.tf_original.metadata == tf_different_time_name.metadata
         assert self.tf_original.column_metadata != tf_different_time_name.column_metadata
+
+    def test_irregular_equal(self) -> None:
+        """Test that two irregular TimeFrames compare equal on periodicity."""
+        tf1 = TimeFrame(IRREGULAR_DF, "time", resolution="PT1M", periodicity="irregular")
+        tf2 = TimeFrame(IRREGULAR_DF, "time", resolution="PT1M", periodicity="irregular")
+        assert tf1 == tf2
+
+    def test_irregular_not_equal_to_regular(self) -> None:
+        """Test that an irregular TimeFrame is not equal to a regular one with the same data."""
+        tf_irregular = TimeFrame(IRREGULAR_DF, "time", resolution="PT1M", periodicity="irregular")
+        tf_regular = TimeFrame(IRREGULAR_DF, "time", resolution="PT1M")
+        assert tf_irregular != tf_regular
 
     def test_different_periodicity(self) -> None:
         """Test that TimeSeries objects with different periodicity are not equal."""
@@ -1592,6 +1683,23 @@ class TestWithPeriodicity:
         """A periodicity that is not a string or Period raises an error."""
         with pytest.raises(TypeError):
             self.setup_tf().with_periodicity(123)  # type: ignore[arg-type]
+
+    def test_to_irregular(self) -> None:
+        """A regular TimeFrame can be made irregular."""
+        result = self.setup_tf().with_periodicity("irregular")
+        assert result.periodicity is None
+        assert result.is_irregular
+
+    def test_from_irregular(self) -> None:
+        """An irregular TimeFrame can be given a periodicity its data conforms to."""
+        tf = TimeFrame(IRREGULAR_DF, "time", resolution="PT1M", periodicity="irregular")
+        assert tf.with_periodicity("P1D").periodicity == Period.of_days(1)
+
+    def test_from_irregular_not_met_by_data_raises(self) -> None:
+        """An irregular TimeFrame can't be given a periodicity its data doesn't conform to."""
+        tf = TimeFrame(IRREGULAR_DF, "time", resolution="PT1M", periodicity="irregular")
+        with pytest.raises(PeriodicityError):
+            tf.with_periodicity("P1M")
 
 
 class TestRenameTimeColumnName:

@@ -57,9 +57,10 @@ Here, we will show some basic usage of these time properties.
 Resolution, Offset, Periodicity and Time Anchor
 -----------------------------------------------
 
-Without specifying ``resolution`` or ``periodicity``, the default initialisation sets these properties to
-**1 microsecond**, to account for any set of datetime values.
-The default is for no ``offset``. The ``time_anchor`` is set to **start**:
+Without specifying ``resolution`` or ``periodicity``, the default initialisation sets the ``resolution`` to
+**1 microsecond**, to account for any set of datetime values, and the ``periodicity`` to **irregular** (``None``),
+as there is no expected spacing between values. The default is for no ``offset``. The ``time_anchor`` is set to
+**start**:
 
 .. literalinclude:: ../examples/timeseries_basics.py
    :language: python
@@ -75,8 +76,10 @@ The default is for no ``offset``. The ``time_anchor`` is set to **start**:
    timeseries_basics.show_default_resolution()
 
 
-Although the default of 1 microsecond will account for any datetime values, for more control over certain
-time series functionality it is important to specify the actual ``resolution``, ``offset`` and ``periodicity`` if known.
+Although these defaults will account for any datetime values, much of the time series functionality (such as
+padding and infilling) needs a regular ``periodicity``, so it is important to specify the actual ``resolution``,
+``offset`` and ``periodicity`` if known. Data that really has no expected spacing is covered in the
+:doc:`irregular time series user guide </user_guide/irregular>`.
 These properties can be provided as an ISO 8601 duration string, e.g. **P1D** (1 day) or **PT15M** (15 minutes).
 
 The ``time_anchor`` property can be set to **start**, **end**, or **point**.

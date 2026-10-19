@@ -6,7 +6,7 @@ from unittest.mock import Mock
 import polars as pl
 import pytest
 from isoperiod import Period
-from polars.testing import assert_frame_equal
+from polars.testing import assert_frame_equal, assert_series_equal
 
 from time_stream.aggregation import (
     AggregationCtx,
@@ -79,7 +79,7 @@ def generate_expected_df(
     aggregator: type[AggregationFunction],
     columns: str | list[str],
     values: dict[str, list[Any]],
-    expected_counts: list[int],
+    expected_counts: list[int] | list[None],
     actual_counts: list[int],
     timestamps_of: list[datetime | None] | None = None,
     valid: dict[str, list[bool]] | None = None,
@@ -153,6 +153,26 @@ TS_P1D_2MONTH = generate_time_series(P1D, P1D, 59)  # 2 months (Jan, Feb 2025) o
 TS_P1D_OFF_2MONTH = generate_time_series(P1D, P1D_OFF, 59, offset="+T9H")  # 2 months (Jan, Feb 2025) of 1-day-offset
 TS_P1M_OFF_2YEARS = generate_time_series(P1M, P1M_OFF, 24, offset="+T9H")  # 2 years of 1-month-offset data
 
+# Ad-hoc measurements recorded to the minute, with no periodicity
+TS_IRREGULAR = TimeFrame(
+    df=pl.DataFrame(
+        {
+            "timestamp": [
+                datetime(2025, 1, 1, 10, 15),
+                datetime(2025, 1, 1, 14, 2),
+                datetime(2025, 1, 3, 9, 41),
+                datetime(2025, 1, 3, 16, 20),
+                datetime(2025, 1, 6, 11, 0),
+            ],
+            "value": [1.0, 2.0, 4.0, 6.0, 10.0],
+        }
+    ),
+    time_name="timestamp",
+    resolution="PT1M",
+    periodicity="irregular",
+)
+IRREGULAR_DAYS = [datetime(2025, 1, d) for d in range(1, 7)]
+
 
 class TestStandardAggregationPipeline:
     @staticmethod
@@ -160,6 +180,7 @@ class TestStandardAggregationPipeline:
         ctx = Mock(spec=AggregationCtx)
         ctx.time_name = "time"
         ctx.time_anchor = "start"
+        ctx.periodicity = PT1H
 
         return ctx
 
@@ -3142,3 +3163,157 @@ class TestRollingAggregateMethod:
         input_tf = TS_PT1H_HALF_DAY
         result = input_tf.rolling_aggregate(window_size, "mean", "value", alignment="center")
         assert len(result.df) == len(input_tf.df)
+
+
+class TestIrregularAggregation:
+    """Tests for aggregating an irregular TimeFrame."""
+
+    @pytest.mark.parametrize(
+        "aggregator,values,timestamps_of",
+        [
+            (Mean, [1.5, None, 5.0, None, None, 10.0], None),
+            (Sum, [3.0, None, 10.0, None, None, 10.0], None),
+            (
+                Max,
+                [2.0, None, 6.0, None, None, 10.0],
+                [datetime(2025, 1, 1, 14, 2), None, datetime(2025, 1, 3, 16, 20), None, None, datetime(2025, 1, 6, 11)],
+            ),
+        ],
+        ids=["mean", "sum", "max"],
+    )
+    def test_aggregate(
+        self, aggregator: type[AggregationFunction], values: list, timestamps_of: list[datetime | None] | None
+    ) -> None:
+        """Test that values are grouped by the period they fall in, with empty periods padded."""
+        result = TS_IRREGULAR.aggregate(P1D, aggregator, "value")
+
+        expected_df = generate_expected_df(
+            IRREGULAR_DAYS,
+            aggregator,
+            "value",
+            {"value": values},
+            [None] * 6,
+            [2, 0, 2, 0, 0, 1],
+            timestamps_of,
+            valid={"value": [True, False, True, False, False, True]},
+        )
+        assert_frame_equal(result.df, expected_df, check_dtypes=False, check_column_order=False)
+
+    def test_result_is_regular(self) -> None:
+        """Test that the result is a regular TimeFrame at the aggregation period."""
+        result = TS_IRREGULAR.aggregate(P1D, "mean", "value")
+
+        assert result.resolution == P1D
+        assert result.periodicity == P1D
+        assert not result.is_irregular
+
+    def test_expected_count_is_null(self) -> None:
+        """Test that the expected count column is null, as irregular data has no expected count."""
+        result = TS_IRREGULAR.aggregate(P1D, "mean", "value")
+
+        expected = pl.Series("expected_count_timestamp", [None] * 6, dtype=pl.UInt32)
+        assert_series_equal(result.df["expected_count_timestamp"], expected)
+
+    @pytest.mark.parametrize(
+        "missing_criteria,valid",
+        [
+            (("available", 2), [True, False, True, False, False, False]),
+            (("na", 0), [True, False, True, False, False, True]),
+        ],
+        ids=["available", "na"],
+    )
+    def test_missing_criteria(self, missing_criteria: tuple[MissingCriteria, int], valid: list[bool]) -> None:
+        """Test that missing criteria based on the actual count work."""
+        result = TS_IRREGULAR.aggregate(P1D, "mean", "value", missing_criteria=missing_criteria)
+
+        assert_series_equal(result.df["valid_value"], pl.Series("valid_value", valid))
+
+    @pytest.mark.parametrize("criteria", ["percent", "missing"])
+    def test_expected_count_criteria_raise(self, criteria: MissingCriteria) -> None:
+        """Test that missing criteria based on the expected count raise."""
+        expected_error = f"Missing criteria '{criteria}' needs an expected count of values"
+        with pytest.raises(MissingCriteriaError, match=expected_error):
+            TS_IRREGULAR.aggregate(P1D, "mean", "value", missing_criteria=(criteria, 1))
+
+    @pytest.mark.parametrize("aggregator", [MeanSum(), Nth(n=1)], ids=["mean_sum", "nth"])
+    def test_expected_count_aggregations_raise(self, aggregator: AggregationFunction) -> None:
+        """Test that aggregations needing an expected count raise."""
+        expected_error = f"The '{aggregator.name}' aggregation needs an expected count of values"
+        with pytest.raises(AggregationError, match=expected_error):
+            TS_IRREGULAR.aggregate(P1D, aggregator, "value")
+
+    def test_nth_expr_raises(self) -> None:
+        """Test that Nth raises if given irregular data directly."""
+        ctx = AggregationCtx(
+            df=TS_IRREGULAR.df, time_name="timestamp", time_anchor="start", periodicity=None, aggregation_period=P1D
+        )
+        with pytest.raises(AggregationError, match="The 'nth' aggregation can't be used on irregular data."):
+            Nth(n=1).expr(ctx, ["value"])
+
+    def test_time_window(self) -> None:
+        """Test that a time window filters values by time of day, with a null expected count."""
+        result = TS_IRREGULAR.aggregate(P1D, "mean", "value", time_window=(time(9, 0), time(12, 0)))
+
+        expected_df = generate_expected_df(
+            IRREGULAR_DAYS,
+            Mean,
+            "value",
+            {"value": [1.0, None, 4.0, None, None, 10.0]},
+            [None] * 6,
+            [1, 0, 1, 0, 0, 1],
+            valid={"value": [True, False, True, False, False, True]},
+        )
+        assert_frame_equal(result.df, expected_df, check_dtypes=False, check_column_order=False)
+
+    @pytest.mark.parametrize("aggregation_period", ["irregular", "IRREGULAR"], ids=["lower", "upper"])
+    def test_irregular_aggregation_period_raises(self, aggregation_period: str) -> None:
+        """Test that aggregating to an irregular period is rejected."""
+        with pytest.raises(AggregationPeriodError, match="Cannot aggregate to an irregular period"):
+            TS_PT1H_2DAYS.aggregate(aggregation_period, "mean", "value")
+
+
+class TestIrregularRollingAggregation:
+    """Tests for rolling aggregation of an irregular TimeFrame."""
+
+    TIMESTAMPS = TS_IRREGULAR.df["timestamp"].to_list()
+
+    @pytest.mark.parametrize(
+        "alignment,values,counts",
+        [
+            ("trailing", [1.0, 1.5, 4.0, 5.0, 10.0], [1, 2, 1, 2, 1]),
+            ("leading", [1.5, 2.0, 5.0, 6.0, 10.0], [2, 1, 2, 1, 1]),
+            ("center", [1.5, 1.5, 5.0, 5.0, 10.0], [2, 2, 2, 2, 1]),
+        ],
+        ids=["trailing", "leading", "center"],
+    )
+    def test_rolling_aggregate(self, alignment: RollingAlignment, values: list[float], counts: list[int]) -> None:
+        """Test that a time-based window is applied around each value, with a null expected count."""
+        result = TS_IRREGULAR.rolling_aggregate(P1D, "mean", "value", alignment=alignment)
+
+        expected_df = generate_expected_df(self.TIMESTAMPS, Mean, "value", {"value": values}, [None] * 5, counts)
+        assert_frame_equal(result.df, expected_df, check_dtypes=False, check_column_order=False)
+
+    def test_result_stays_irregular(self) -> None:
+        """Test that the result keeps the input timestamps and temporal properties, and stays irregular."""
+        result = TS_IRREGULAR.rolling_aggregate(P1D, "mean", "value")
+
+        assert result.is_irregular
+        assert result.resolution == TS_IRREGULAR.resolution
+        assert result.df["timestamp"].to_list() == self.TIMESTAMPS
+
+    def test_center_calendar_window_raises(self) -> None:
+        """Test that a calendar-based window still can't be centred."""
+        with pytest.raises(AggregationError, match="CENTER alignment is not supported for calendar-based window"):
+            TS_IRREGULAR.rolling_aggregate(P1M, "mean", "value", alignment="center")
+
+    @pytest.mark.parametrize("criteria", ["percent", "missing"])
+    def test_expected_count_criteria_raise(self, criteria: MissingCriteria) -> None:
+        """Test that missing criteria based on the expected count raise."""
+        with pytest.raises(MissingCriteriaError):
+            TS_IRREGULAR.rolling_aggregate(P1D, "mean", "value", missing_criteria=(criteria, 1))
+
+    @pytest.mark.parametrize("aggregator", [MeanSum(), Nth(n=1)], ids=["mean_sum", "nth"])
+    def test_expected_count_aggregations_raise(self, aggregator: AggregationFunction) -> None:
+        """Test that aggregations needing an expected count raise."""
+        with pytest.raises(AggregationError):
+            TS_IRREGULAR.rolling_aggregate(P1D, aggregator, "value")

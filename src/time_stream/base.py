@@ -35,7 +35,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from datetime import datetime, time
-from typing import Any, Sequence, Type, overload
+from typing import Any, Sequence, Type, get_args, overload
 
 import polars as pl
 from isoperiod import Period
@@ -48,10 +48,12 @@ from time_stream.aggregation import (
 )
 from time_stream.calculations import calculate_min_max_envelope
 from time_stream.exceptions import (
+    AggregationPeriodError,
     ColumnNotFoundError,
     ColumnTypeError,
     DuplicateColumnError,
     MetadataError,
+    PeriodicityError,
 )
 from time_stream.flags.flag_manager import (
     CategoricalSingleFlagColumn,
@@ -69,6 +71,7 @@ from time_stream.types import (
     ClosedInterval,
     DuplicateOption,
     FlagSystemLiteral,
+    Irregular,
     MissingCriteria,
     RollingAlignment,
     TimeAnchor,
@@ -98,8 +101,9 @@ class TimeFrame:
             timeseries, where the individual data points are considered to be at daily resolution
             (``resolution="P1D"``), but are limited to only one data point per year (``periodicity="P1Y"``).
             Accepts an :class:`isoperiod.Period` or ISO-8601 duration string (e.g. ``"PT15M"``, ``"P1D"``, ``"P1Y"``)
-            with an optional offset syntax (e.g. ``"P1D+T9H"``, ``"P1Y+9MT9H"``). If ``None``, it defaults to the period
-            defined by ``resolution + offset``.
+            with an optional offset syntax (e.g. ``"P1D+T9H"``, ``"P1Y+9MT9H"``), or ``"irregular"`` for data with no
+            expected spacing, such as ad-hoc measurements. If ``None``, it defaults to the period defined by
+            ``resolution + offset``, or to ``"irregular"`` if ``resolution`` is also ``None``.
         time_anchor: Defines the window of time over which a given timestamp refers to. In the descriptions below,
             "t" is the time value, "r" stands for a single unit of the resolution of the data:
 
@@ -150,6 +154,15 @@ class TimeFrame:
         >>> tf = TimeFrame(df, "time", resolution="P1D", offset="+T9H", periodicity="P1Y+9MT9H")
         >>> print(f"resolution={tf.resolution} alignment={tf.alignment} periodicity={tf.periodicity}")
         resolution=P1D alignment=P1D+T9H periodicity=P1Y+9MT9H
+
+        An ``"irregular"`` periodicity is for ad-hoc measurements, here recorded to the minute:
+
+        >>> df = pl.DataFrame(
+        ...     {"time": [datetime(2024, 1, 3, 10, 15), datetime(2024, 2, 19, 14, 2), datetime(2024, 2, 20, 9, 41)]}
+        ... )
+        >>> tf = TimeFrame(df, "time", resolution="PT1M", periodicity="irregular")
+        >>> print(f"resolution={tf.resolution} periodicity={tf.periodicity} is_irregular={tf.is_irregular}")
+        resolution=PT1M periodicity=None is_irregular=True
     """
 
     _df: pl.DataFrame
@@ -164,7 +177,7 @@ class TimeFrame:
         time_name: str,
         resolution: Period | str | None = None,
         offset: str | None = None,
-        periodicity: Period | str | None = None,
+        periodicity: Period | Irregular | str | None = None,
         time_anchor: TimeAnchor = "start",
         on_duplicates: DuplicateOption = "error",
         on_misaligned_rows: ValidationErrorOptions = "error",
@@ -268,11 +281,11 @@ class TimeFrame:
         tf.register_flag_system(name, flag_system, flag_type)
         return tf
 
-    def with_periodicity(self, periodicity: str | Period) -> TimeFrame:
+    def with_periodicity(self, periodicity: Irregular | str | Period) -> TimeFrame:
         """Return a new TimeFrame, with a new periodicity registered.
 
         Args:
-            periodicity: The new periodicity
+            periodicity: The new periodicity, or ``"irregular"``.
 
         Returns:
             A new TimeFrame with a new periodicity set.
@@ -359,9 +372,14 @@ class TimeFrame:
         return self._time_manager.alignment
 
     @property
-    def periodicity(self) -> Period:
-        """The periodicity of the timeseries data within the TimeFrame"""
+    def periodicity(self) -> Period | None:
+        """The periodicity of the timeseries data within the TimeFrame, or None if it is irregular"""
         return self._time_manager.periodicity
+
+    @property
+    def is_irregular(self) -> bool:
+        """Whether the TimeFrame is irregular, i.e. has no periodicity"""
+        return self._time_manager.is_irregular
 
     @property
     def time_anchor(self) -> TimeAnchor:
@@ -410,6 +428,7 @@ class TimeFrame:
             Padded TimeFrame
 
         Raises:
+            PeriodicityError: If the TimeFrame is irregular, as it has no time steps to pad.
             TypeError: If ``start`` or ``end`` is not a datetime, or its time zone doesn't match the time column.
         """
         padded_df = pad_time(
@@ -701,7 +720,7 @@ class TimeFrame:
             aggregation_time_anchor: The time anchor for the aggregation result.
             time_window: Optional restriction of which time-of-day observations are included in each
                 aggregation period. Only supported when the aggregation period is daily or longer and the data
-                periodicity is sub-daily.
+                periodicity is sub-daily or irregular.
 
                 Accepts a :class:`TimeWindow` instance, or a ``(start, end, closed[optional])`` tuple, where:
 
@@ -712,8 +731,15 @@ class TimeFrame:
             **kwargs: Parameters specific to the aggregation function.
 
         Returns:
-            A TimeFrame containing the aggregated data.
+            A TimeFrame containing the aggregated data. Aggregating an irregular TimeFrame gives a regular one at the
+            aggregation period, with a null expected count.
+
+        Raises:
+            AggregationPeriodError: If ``aggregation_period`` is ``"irregular"``.
         """
+        if isinstance(aggregation_period, str) and aggregation_period.lower() in get_args(Irregular):
+            raise AggregationPeriodError("Cannot aggregate to an irregular period. Give a Period or ISO-8601 duration.")
+
         # Normalise time_window tuple to a TimeWindow instance
         normalised_time_window = TimeWindow.from_tuple(time_window) if isinstance(time_window, tuple) else time_window
 
@@ -786,15 +812,15 @@ class TimeFrame:
                 - ``LEADING``: window looks forward - ``[t, t + window_size)``.
                   Edge effects appear at the end of the series.
                 - ``CENTER``: window is centered - ``[t - window_size/2, t + window_size/2]``.
-                  Edge effects appear at both ends. The window must span an odd number of time steps.
-                  Not supported for calendar-based window sizes.
+                  Edge effects appear at both ends. For regular data, the window must span an odd number of time
+                  steps. Not supported for calendar-based window sizes.
 
                 Accepts ``'trailing'``, ``'leading'``, or ``'center'``.
             **kwargs: Parameters specific to the aggregation function.
 
         Returns:
             A TimeFrame with the same resolution, periodicity, and time anchor as this TimeFrame,
-            containing the rolling aggregation results.
+            containing the rolling aggregation results. An irregular TimeFrame stays irregular.
         """
         agg_func = AggregationFunction.get(aggregation_function, **kwargs)
         window_size = configure_period_object(window_size)
@@ -824,7 +850,7 @@ class TimeFrame:
             time_name=self.time_name,
             resolution=self.resolution,
             offset=self.offset,
-            periodicity=self.periodicity,
+            periodicity="irregular" if self.periodicity is None else self.periodicity,
             time_anchor=self.time_anchor,
         )
         tf.metadata = self.metadata
@@ -916,7 +942,13 @@ class TimeFrame:
         Returns:
             A TimeFrame containing the infilled data. Missing time steps are padded in, so the result can contain
             more rows than this TimeFrame. Values added by padding are null in all other columns.
+
+        Raises:
+            PeriodicityError: If the TimeFrame is irregular, as it has no time steps to define a gap.
         """
+        if self.periodicity is None:
+            raise PeriodicityError("Cannot infill irregular data, as it has no expected time steps to define a gap.")
+
         # Infilling fills in missing time steps, so work from a padded TimeFrame
         tf_padded = self if self.df.is_empty() else self.pad()
 
