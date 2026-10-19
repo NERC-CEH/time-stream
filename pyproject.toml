@@ -165,6 +165,3 @@ markers = ["slow: Marks slow tests"]
 [tool.uv]
 package = true
 default-groups = ["dev"]
-
-[tool.uv.sources]
-isoperiod = { git = "https://github.com/NERC-CEH/isoperiod.git" }

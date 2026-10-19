@@ -193,8 +193,8 @@ def flagged_infill() -> None:
     # fmt: off
     # [start:flagged_infill]
     # Register a flag system and create a flag column before running infill
-    tf.register_flag_system("INFILL_FLAGS", ["INFILLED"])
-    tf.init_flag_column("INFILL_FLAGS", "flow_flags")
+    tf = tf.with_flag_system("INFILL_FLAGS", ["INFILLED"])
+    tf = tf.with_flag_column("flow_flags", "INFILL_FLAGS")
 
     tf_infill = tf.infill(
         "linear", "flow", max_gap_size=3, flag_params=("flow_flags", "INFILLED")
@@ -214,8 +214,8 @@ def _hourly_frame_with_missing_rows() -> ts.TimeFrame:
         }
     )
     tf = ts.TimeFrame(df, "time", resolution="PT1H", periodicity="PT1H")
-    tf.register_flag_system("INFILL_FLAGS", ["INFILLED"])
-    tf.init_flag_column("INFILL_FLAGS", "flow_flags")
+    tf = tf.with_flag_system("INFILL_FLAGS", ["INFILLED"])
+    tf = tf.with_flag_column("flow_flags", "INFILL_FLAGS")
     return tf
 
 

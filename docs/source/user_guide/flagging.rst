@@ -62,7 +62,7 @@ Flag systems
 A flag system is a user-defined set of named flags. Each flag has a **name** (a human-readable label used as a
 descriptive lookup) and a **value** (the compact representation stored in the DataFrame). **Time-Stream** supports
 three flag system types, each suited to a different annotation pattern. You pick the type via the ``flag_type``
-argument of :meth:`~time_stream.TimeFrame.register_flag_system`, with ``"bitwise"`` as the default. Multiple flag
+argument of :meth:`~time_stream.TimeFrame.with_flag_system`, with ``"bitwise"`` as the default. Multiple flag
 systems can coexist on the same TimeFrame - for example a ``QC_FLAGS`` bitwise system alongside a ``PROVENANCE``
 categorical list system.
 
@@ -77,7 +77,7 @@ categorical list system.
     **When to use:** The default choice. Reach for this when a row may legitimately carry several compatible flags at
     once (e.g. ``MISSING`` + ``INFILLED``) and you want compact storage.
 
-    **Accepted inputs to** ``register_flag_system``:
+    **Accepted inputs to** ``with_flag_system``:
 
     - ``None`` - produces a default system with a single ``FLAGGED`` flag at value ``1``:
 
@@ -139,7 +139,7 @@ categorical list system.
     **When to use:** For "one verdict per row" annotations - e.g. an overall QC rating of ``good``, ``questionable``
     or ``bad``, or a sensor status code column.
 
-    **Accepted inputs to** ``register_flag_system``:
+    **Accepted inputs to** ``with_flag_system``:
 
     - ``list[str]`` with ``flag_type="categorical"`` - each name is used as both the name and the value:
 
@@ -197,7 +197,7 @@ categorical list system.
     **When to use:** When you need multiple flags per row and your values are strings or integer codes - for example,
     a list of provenance labels ("QC'ED", "INTERPOLATED") or numeric status codes (100, 404).
 
-    **Accepted inputs to** ``register_flag_system``: The same forms as ``categorical`` above
+    **Accepted inputs to** ``with_flag_system``: The same forms as ``categorical`` above
     (``dict[str, int]``, ``dict[str, str]``, or ``list[str]``), but with ``flag_type="categorical_list"``. The only
     difference is when this flag system is applied to a flag column, a ``categorical_list`` system will allow
     multiple flags per row.
@@ -218,12 +218,9 @@ A flag column is a column in the TimeFrame that has been registered against a sp
 flags are stored for a given row in your data. Flag columns are what :meth:`~time_stream.TimeFrame.add_flag`,
 :meth:`~time_stream.TimeFrame.remove_flag`, :meth:`~time_stream.TimeFrame.filter_by_flag` methods operate on.
 
-There are two ways to create a flag column:
-
-**1. Initialise a new flag column** using :meth:`~time_stream.TimeFrame.init_flag_column`.
-
-This creates a new column in the DataFrame, populated with a sensible default, and registers it against the given
-flag system. The data type of the resulting column depends on the flag system type:
+Create a flag column with :meth:`~time_stream.TimeFrame.with_flag_column`. If the column doesn't exist yet, it is
+added to the DataFrame and registered against the given flag system. Its data type and starting value depend on the
+flag system type:
 
 - Bitwise: ``Int64``, initialised to ``0``.
 - Categorical single (int values): ``Int32``, initialised to ``null``.
@@ -234,8 +231,8 @@ You can also pre-populate the column with a default flag value:
 
 .. literalinclude:: ../examples/flagging.py
    :language: python
-   :start-after: [start:init_flag_column_prepopulated]
-   :end-before: [end:init_flag_column_prepopulated]
+   :start-after: [start:flag_column_prepopulated]
+   :end-before: [end:flag_column_prepopulated]
    :dedent:
 
 .. jupyter-execute::
@@ -243,37 +240,17 @@ You can also pre-populate the column with a default flag value:
 
    from examples import flagging
 
-   flagging.init_flag_column_prepopulated()
+   flagging.flag_column_prepopulated()
 
-.. note::
-    Normally, you would supply a sensible ``column_name`` so that you can keep track of your flags. However, if you
-    do omit it, the column is given a default name of ``__flag__{flag_system_name}``, with an integer suffix appended
-    if a name collides.
-
-    .. literalinclude:: ../examples/flagging.py
-       :language: python
-       :start-after: [start:init_flag_column_default_name]
-       :end-before: [end:init_flag_column_default_name]
-       :dedent:
-
-    .. jupyter-execute::
-       :hide-code:
-
-       from examples import flagging
-
-       flagging.init_flag_column_default_name()
-
-**2. Register an existing column** using :meth:`~time_stream.TimeFrame.register_flag_column`.
-
-If you already have a column of the right data type containing valid flag values, you can register it without
-modifying the data:
+If the column already exists, it keeps its values, so a column of flag values you already have can be registered
+without modifying the data:
 
 .. code-block:: python
 
-    tf.register_flag_column("temperature_flags", "CORE_FLAGS")
+    tf = tf.with_flag_column("temperature_flags", "CORE_FLAGS")
 
-**Time-Stream** validates that every non-null value in the column is a known flag value for the given flag system,
-and raises an error if any are not recognised.
+Passing ``data`` for an existing column replaces its values. Either way, **Time-Stream** validates that every non-null
+value in the column is a known flag value for the given flag system, and raises an error if any are not recognised.
 
 Adding flags
 ------------
@@ -480,17 +457,17 @@ value is traceable back to the check or method that produced it - no separate bo
 
 .. code-block:: python
 
-    tf.register_flag_system("QC_FLAGS", ["OUT_OF_RANGE", "SPIKE"])
-    tf.init_flag_column("QC_FLAGS", "temperature_qc")
+    tf = tf.with_flag_system("QC_FLAGS", ["OUT_OF_RANGE", "SPIKE"])
+    tf = tf.with_flag_column("temperature_qc", "QC_FLAGS")
 
     # Flag values outside a plausible range
-    tf.qc_check(
+    tf = tf.qc_check(
         "range", "temperature", min_value=-30, max_value=50,
         flag_params=("temperature_qc", "OUT_OF_RANGE"),
     )
 
     # Flag spikes in the same column
-    tf.qc_check(
+    tf = tf.qc_check(
         "spike", "temperature", threshold=10,
         flag_params=("temperature_qc", "SPIKE"),
     )
@@ -501,8 +478,8 @@ See :doc:`quality_control` for the full set of available checks and the boolean-
 
 .. code-block:: python
 
-    tf.register_flag_system("INFILL_FLAGS", ["INFILLED"])
-    tf.init_flag_column("INFILL_FLAGS", "flow_flags")
+    tf = tf.with_flag_system("INFILL_FLAGS", ["INFILLED"])
+    tf = tf.with_flag_column("flow_flags", "INFILL_FLAGS")
 
     tf_infill = tf.infill(
         "linear", "flow", max_gap_size=3,
@@ -550,15 +527,12 @@ API reference
 
 .. autosummary::
 
-    ~time_stream.TimeFrame.register_flag_system
     ~time_stream.TimeFrame.with_flag_system
     ~time_stream.TimeFrame.get_flag_system
-    ~time_stream.TimeFrame.init_flag_column
-    ~time_stream.TimeFrame.register_flag_column
+    ~time_stream.TimeFrame.with_flag_column
     ~time_stream.TimeFrame.get_flag_column
     ~time_stream.TimeFrame.add_flag
     ~time_stream.TimeFrame.remove_flag
     ~time_stream.TimeFrame.filter_by_flag
     ~time_stream.TimeFrame.decode_flag_column
     ~time_stream.TimeFrame.encode_flag_column
-

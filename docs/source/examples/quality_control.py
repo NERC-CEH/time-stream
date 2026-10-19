@@ -9,8 +9,8 @@ import time_stream as ts
 
 def _with_qc_flags(tf: ts.TimeFrame) -> ts.TimeFrame:
     """Register the ``qc`` flag system and an empty ``flag_column`` the checks write into."""
-    tf.register_flag_system("qc", {"FLAGGED": 1})
-    tf.init_flag_column("qc", "flag_column")
+    tf = tf.with_flag_system("qc", {"FLAGGED": 1})
+    tf = tf.with_flag_column("flag_column", "qc")
     return tf
 
 
@@ -48,8 +48,8 @@ def setup_flags() -> None:
     dates = [datetime(2023, 1, 1) + timedelta(hours=i) for i in range(5)]
     tf = ts.TimeFrame(pl.DataFrame({"timestamp": dates, "temperature": [24, 22, 26, 24, 28]}), time_name="timestamp")
     # [start:setup_flags]
-    tf.register_flag_system("qc", {"FLAGGED": 1})
-    tf.init_flag_column("qc", "flag_column")
+    tf = tf.with_flag_system("qc", {"FLAGGED": 1})
+    tf = tf.with_flag_column("flag_column", "qc")
     # [end:setup_flags]
     print(tf.df)
 

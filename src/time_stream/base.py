@@ -263,24 +263,6 @@ class TimeFrame:
         tf._column_metadata.sync()
         return tf
 
-    def with_flag_system(
-        self, name: str, flag_system: FlagSystemType, flag_type: FlagSystemLiteral = "bitwise"
-    ) -> TimeFrame:
-        """Return a new TimeFrame, with a flag system registered.
-
-        Args:
-            name: Short name for the flag system.
-            flag_system: The flag system definition. See ``register_flag_system`` for accepted types.
-            flag_type: Whether to create a ``"bitwise"`` or ``"categorical"`` flag system. Only
-                relevant when ``flag_system`` is a ``dict[str, int]`` or ``list[str]``.
-
-        Returns:
-            A new TimeFrame with the flag system registered.
-        """
-        tf = self.copy()
-        tf.register_flag_system(name, flag_system, flag_type)
-        return tf
-
     def with_periodicity(self, periodicity: Irregular | str | Period) -> TimeFrame:
         """Return a new TimeFrame, with a new periodicity registered.
 
@@ -411,9 +393,15 @@ class TimeFrame:
         """Only the labels for the data columns within the TimeFrame."""
         return [c for c in self.columns if c not in self.flag_columns]
 
-    def sort_time(self) -> None:
-        """Sort the TimeFrame DataFrame by the time column."""
-        self._df = self.df.sort(self.time_name)
+    def sort_time(self) -> TimeFrame:
+        """Return a new TimeFrame with the DataFrame sorted by the time column.
+
+        Returns:
+            A new TimeFrame sorted by time.
+        """
+        tf = self.copy()
+        tf._df = self.df.sort(self.time_name)
+        return tf
 
     def pad(self, start: datetime | None = None, end: datetime | None = None) -> TimeFrame:
         """Pad the time series with missing datetime rows, filling in NULLs for missing values.
@@ -447,16 +435,12 @@ class TimeFrame:
 
         tf = self.copy()
         tf._df = padded_df
-        tf.sort_time()
-        return tf
+        return tf.sort_time()
 
-    def register_flag_system(
-        self,
-        name: str,
-        flag_system: FlagSystemType = None,
-        flag_type: FlagSystemLiteral = "bitwise",
-    ) -> None:
-        """Register a named flag system with the internal flag manager.
+    def with_flag_system(
+        self, name: str, flag_system: FlagSystemType = None, flag_type: FlagSystemLiteral = "bitwise"
+    ) -> TimeFrame:
+        """Return a new TimeFrame, with a flag system registered.
 
         Args:
             name: Short name for the flag system.
@@ -468,8 +452,13 @@ class TimeFrame:
                 as both key and value - an empty list produces the default ``FLAGGED`` flag).
             flag_type: Whether to create a ``"bitwise"`` or ``"categorical"`` flag system. Only
                 relevant when ``flag_system`` is a ``dict[str, int]`` or ``list[str]``.
+
+        Returns:
+            A new TimeFrame with the flag system registered.
         """
-        self._flag_manager.register_flag_system(name, flag_system, flag_type)
+        tf = self.copy()
+        tf._flag_manager.register_flag_system(name, flag_system, flag_type)
+        return tf
 
     def get_flag_system(self, name: str) -> type[FlagSystemBase]:
         """Return a registered flag system.
@@ -482,68 +471,53 @@ class TimeFrame:
         """
         return self._flag_manager.get_flag_system(name)
 
-    def register_flag_column(self, column_name: str, flag_system_name: str) -> None:
-        """Mark the specified existing column as a flag column.
+    def with_flag_column(
+        self,
+        column_name: str,
+        flag_system_name: str,
+        data: int | str | Sequence[int | str] | None = None,
+    ) -> TimeFrame:
+        """Return a new TimeFrame with a column registered as a flag column.
 
-        All non-null values in the column must be valid flag values for the given flag system.
+        If the column doesn't exist, it is created from ``data``, or from the flag system's empty value if ``data`` is
+        not given.
+
+        If the column exists, its values are kept, unless ``data`` is given, which replaces them.
 
         Args:
-            column_name: A column name to mark as a flag column.
+            column_name: Name of the flag column.
             flag_system_name: The name of the registered flag system.
+            data: Value(s) to populate the column with. Can be a scalar or list-like.
+
+        Returns:
+            A new TimeFrame with the flag column registered.
 
         Raises:
+            ColumnTypeError: If ``column_name`` is the time column.
+            FlagSystemError: If ``column_name`` is already registered as a flag column.
             BitwiseFlagUnknownError: If the column contains values with bits not in the bitwise flag system.
             CategoricalFlagUnknownError: If the column contains values not in the categorical flag system.
         """
-        check_columns_in_dataframe(self.df, column_name)
+        if column_name == self.time_name:
+            raise ColumnTypeError(f"The time column '{column_name}' cannot be a flag column.")
         flag_system = self.get_flag_system(flag_system_name)
 
-        flag_system.validate_column(self.df[column_name])
-        self._flag_manager.register_flag_column(column_name, flag_system_name)
+        new_df = self.df
+        if data is not None or column_name not in new_df.columns:
+            col_dtype = flag_system.column_dtype()
+            # A scalar or missing value is broadcast with pl.lit; otherwise it's a sequence so cast to a Series
+            if isinstance(data, (int, str)) or data is None:
+                col_data = pl.lit(flag_system.empty_value() if data is None else data, dtype=col_dtype)
+            else:
+                col_data = pl.Series(data, dtype=col_dtype)
+            new_df = new_df.with_columns(col_data.alias(column_name))
 
-    def init_flag_column(
-        self,
-        flag_system_name: str,
-        column_name: str | None = None,
-        data: int | str | Sequence[int | str] | None = None,
-    ) -> None:
-        """Add a new column to the TimeFrame DataFrame, setting it as a Flag Column.
-
-        For bitwise flag systems, the column is initialised with integer values (default 0).
-        For ``CategoricalSingleFlag`` systems, the column is initialised with null values.
-        For ``CategoricalListFlag`` systems, the column is initialised with empty lists.
-
-        Args:
-            flag_system_name: The name of the registered flag system.
-            column_name: Optional name for the new flag column. If omitted, a name of the
-                    form ``__flag__{flag_system_name}`` is used, with an integer suffix appended if the name
-                    already exists (e.g. ``__flag__CORE_FLAGS__1``).
-            data: The default value(s) to populate the flag column with. Can be a scalar or
-                    list-like. For bitwise systems defaults to ``0``; for categorical systems defaults
-                    to ``None`` (null) in single mode or an empty list in list mode.
-        """
-        flag_sys = self.get_flag_system(flag_system_name)
-        col_dtype = flag_sys.column_dtype()
-
-        # 1. Build column - if it's a scalar or missing, use pl.lit; otherwise it's a sequence so cast to a Series
-        if isinstance(data, (int, str)) or data is None:
-            col_data = pl.lit(flag_sys.empty_value() if data is None else data, dtype=col_dtype)
-        else:
-            col_data = pl.Series(data, dtype=col_dtype)
-
-        # 2. Determine name of flag column
-        if not column_name:
-            column_name = f"__flag__{flag_system_name}"
-            if column_name in self.df.columns:
-                col_suffix = 1
-                while f"{column_name}__{col_suffix}" in self.df.columns:
-                    col_suffix += 1
-                column_name = f"{column_name}__{col_suffix}"
-
-        # 3. Add and register as a flag column
-        self._df = self.df.with_columns(col_data.alias(column_name))
-        self._flag_manager.register_flag_column(column_name, flag_system_name)
-        self._column_metadata.sync()
+        flag_system.validate_column(new_df[column_name])
+        tf = self.copy()
+        tf._df = new_df
+        tf._flag_manager.register_flag_column(column_name, flag_system_name)
+        tf._column_metadata.sync()
+        return tf
 
     def get_flag_column(self, flag_column_name: str) -> FlagColumn:
         """Look up a registered flag column by name.
@@ -562,8 +536,8 @@ class TimeFrame:
         flag_value: int | str,
         expr: pl.Expr | pl.Series = pl.lit(True),
         overwrite: bool = True,
-    ) -> None:
-        """Add flag value to flag column, where expression is True.
+    ) -> TimeFrame:
+        """Return a new TimeFrame with a flag value added to a flag column, where expression is True.
 
         For bitwise flag columns, applies the flag via bitwise OR. ``overwrite`` is not
         applicable for bitwise columns.
@@ -580,15 +554,22 @@ class TimeFrame:
             expr: Polars expression for which rows to add flag to.
             overwrite: Categorical scalar mode only. If ``True`` (default), replaces any
                 existing value. If ``False``, only updates rows whose current value is null.
+
+        Returns:
+            A new TimeFrame with the flag added.
         """
         flag_column = self.get_flag_column(flag_column_name)
+        tf = self.copy()
         if isinstance(flag_column, CategoricalSingleFlagColumn):
-            self._df = flag_column.add_flag(self.df, flag_value, expr, overwrite)
+            tf._df = flag_column.add_flag(self.df, flag_value, expr, overwrite)
         else:
-            self._df = flag_column.add_flag(self.df, flag_value, expr)
+            tf._df = flag_column.add_flag(self.df, flag_value, expr)
+        return tf
 
-    def remove_flag(self, column_name: str, flag_value: int | str, expr: pl.Expr | pl.Series = pl.lit(True)) -> None:
-        """Remove a flag value from a flag column, where expression is True.
+    def remove_flag(
+        self, column_name: str, flag_value: int | str, expr: pl.Expr | pl.Series = pl.lit(True)
+    ) -> TimeFrame:
+        """Return a new TimeFrame with a flag value removed from a flag column, where expression is True.
 
         For bitwise flag columns, clears the flag bit via bitwise AND NOT.
 
@@ -600,9 +581,14 @@ class TimeFrame:
             column_name: The name of the flag column.
             flag_value: The flag value to remove.
             expr: Polars expression for which rows to remove the flag from.
+
+        Returns:
+            A new TimeFrame with the flag removed.
         """
         flag_column = self.get_flag_column(column_name)
-        self._df = flag_column.remove_flag(self.df, flag_value, expr)
+        tf = self.copy()
+        tf._df = flag_column.remove_flag(self.df, flag_value, expr)
+        return tf
 
     def decode_flag_column(self, flag_column_name: str) -> TimeFrame:
         """Decode a flag column from raw values to human-readable flag names.
@@ -910,11 +896,9 @@ class TimeFrame:
             # Return the boolean series, if requested
             return qc_result
         else:
-            # Otherwise, create a copy of the current TimeFrame, and update the dataframe with the QC result
+            # Otherwise, return a new TimeFrame with the QC result flagged
             flag_column_name, flag_value = flag_params
-            tf_result = self.copy()
-            tf_result.add_flag(flag_column_name, flag_value, qc_result)
-            return tf_result
+            return self.add_flag(flag_column_name, flag_value, qc_result)
 
     def infill(
         self,
@@ -972,7 +956,7 @@ class TimeFrame:
             after_is_null = after.is_null() | after.is_nan()
 
             mask = before_is_null.ne(after_is_null)
-            tf_result.add_flag(flag_column_name, flag_value, mask)
+            tf_result = tf_result.add_flag(flag_column_name, flag_value, mask)
 
         return tf_result
 
