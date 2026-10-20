@@ -1,6 +1,8 @@
 .PHONY: help install-hooks type-check type-check-watch ruff qa testall test pdb coverage docs-serve docs-build build bump-patch bump-minor bump-major release clean clean-build clean-pyc clean-test
 
 
+MIN_POLARS := $(shell sed -n 's/^ *"polars>=\([^"]*\)",/\1/p' pyproject.toml)
+
 help:  ## Show available commands
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "%-20s %s\n", $$1, $$2}'
 
@@ -22,11 +24,15 @@ qa:  ## Format, lint, type check, and test
 	uv run ruff check . --fix
 	uv run ruff check --select I --fix .
 	uv run pyright
-	uv run pytest
+	$(MAKE) testall
 
-testall:  ## Run tests for all supported Python versions
+testall:  ## Run tests for all supported Python versions and the oldest supported Polars
+	@echo "==> Testing on Python 3.12"
 	uv run --python=3.12 pytest
+	@echo "==> Testing on Python 3.13"
 	uv run --python=3.13 pytest
+	@echo "==> Testing on the oldest supported Polars ($(MIN_POLARS))"
+	uv run --with "polars==$(MIN_POLARS)" pytest
 
 test:  ## Run tests (pass ARGS="..." for extra arguments)
 	uv run pytest $(ARGS)
@@ -37,13 +43,11 @@ pdb:  ## Run tests dropping into debugger on failure
 coverage:  ## Run tests with HTML coverage report
 	uv run pytest --cov-report=html
 
-
 docs-serve:  ## Serve docs locally with live reload
 	uv run sphinx-autobuild docs/source/ docs/_build/html
 
 docs-build:  ## Build docs
 	$(MAKE) -C docs html
-
 
 build:  ## Build the project
 	rm -rf build dist
@@ -61,8 +65,7 @@ bump-major:  ## Bump major version (x.0.0), commit, and create CHANGELOG stub
 release:  ## Tag and push, then create a GitHub release
 	uv run scripts/release.py
 
-
-clean: clean-build clean-pyc clean-test  ## Remove all build, test, and Python artifacts
+clean: clean-build clean-pyc clean-test clean-docs  ## Remove all build, test, and Python artifacts
 
 clean-build:  ## Remove build artifacts
 	rm -fr build/ dist/ .eggs/
@@ -76,7 +79,11 @@ clean-pyc:  ## Remove Python file artifacts
 	find . -name '__pycache__' -exec rm -fr {} +
 
 clean-test:  ## Remove test and coverage artifacts
-	rm -f .coverage .coverage.*
+	find . -name '.coverage' -exec rm -f {} +
+	find . -name '.coverage.*' -exec rm -f {} +
 	rm -fr htmlcov/ .pytest_cache
+	find . -name '.benchmarks' -exec rm -fr {} +
 
-
+clean-docs: ## Remove old docs builds
+	rm -rf docs/_build
+	rm -rf docs/source/api/_api
