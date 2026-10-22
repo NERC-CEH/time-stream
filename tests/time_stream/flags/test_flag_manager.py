@@ -278,7 +278,7 @@ class TestRegisterFlagColumnValidation:
         ).with_flag_system("qc", {"FLAG_A": 0, "FLAG_B": 1}, flag_type="categorical")
 
         with pytest.raises(CategoricalFlagUnknownError):
-            tf.register_flag_column("qc_flags", "qc")
+            tf.with_flag_column("qc_flags", "qc")
 
     def test_categorical_valid_values_succeed(self) -> None:
         """Test that registering a categorical flag column with only valid values succeeds."""
@@ -292,7 +292,7 @@ class TestRegisterFlagColumnValidation:
             "time",
         ).with_flag_system("qc", {"FLAG_A": 0, "FLAG_B": 1}, flag_type="categorical")
 
-        tf.register_flag_column("qc_flags", "qc")
+        tf = tf.with_flag_column("qc_flags", "qc")
         assert "qc_flags" in tf.flag_columns
 
     def test_categorical_null_values_are_allowed(self) -> None:
@@ -307,7 +307,7 @@ class TestRegisterFlagColumnValidation:
             "time",
         ).with_flag_system("qc", {"FLAG_A": 0, "FLAG_B": 1}, flag_type="categorical")
 
-        tf.register_flag_column("qc_flags", "qc")
+        tf = tf.with_flag_column("qc_flags", "qc")
         assert "qc_flags" in tf.flag_columns
 
     def test_bitwise_valid_combinations_succeed(self) -> None:
@@ -322,7 +322,7 @@ class TestRegisterFlagColumnValidation:
             "time",
         ).with_flag_system("qc", {"FLAG_A": 1, "FLAG_B": 2, "FLAG_C": 4})
 
-        tf.register_flag_column("flags", "qc")
+        tf = tf.with_flag_column("flags", "qc")
         assert "flags" in tf.flag_columns
 
     def test_bitwise_null_values_are_allowed(self) -> None:
@@ -337,7 +337,7 @@ class TestRegisterFlagColumnValidation:
             "time",
         ).with_flag_system("qc", {"FLAG_A": 1, "FLAG_B": 2})
 
-        tf.register_flag_column("flags", "qc")
+        tf = tf.with_flag_column("flags", "qc")
         assert "flags" in tf.flag_columns
 
     def test_bitwise_invalid_values_raise_error(self) -> None:
@@ -353,7 +353,7 @@ class TestRegisterFlagColumnValidation:
         ).with_flag_system("qc", {"FLAG_A": 1, "FLAG_B": 2, "FLAG_C": 4})
 
         with pytest.raises(BitwiseFlagUnknownError):
-            tf.register_flag_column("flags", "qc")
+            tf.with_flag_column("flags", "qc")
 
 
 class TestEqualityFlagManager:

@@ -173,7 +173,7 @@ def setup_tf_with_nulls() -> TimeFrame:
         ),
         "time",
     ).with_flag_system("system1", {"FLAG_A": 1, "FLAG_B": 2, "FLAG_C": 4})
-    tf.register_flag_column("flag_col_1", "system1")
+    tf = tf.with_flag_column("flag_col_1", "system1")
     return tf
 
 
@@ -187,15 +187,23 @@ class TestAddFlag:
             "time",
         ).with_flag_system("system1", {"FLAG_A": 1, "FLAG_B": 2, "FLAG_C": 4})
 
-        tf.init_flag_column("system1", "flag_col_1")
+        tf = tf.with_flag_column("flag_col_1", "system1")
         return tf
+
+    def test_returns_new_timeframe(self) -> None:
+        """Test that a new TimeFrame is returned and the original is unchanged."""
+        tf = self.setup_tf()
+        original = tf.copy(share_df=False)
+        result = tf.add_flag("flag_col_1", 1)
+        assert result is not tf
+        assert tf == original
 
     def test_add_flag_to_flag_column_no_expr(self) -> None:
         """Test that adding a flag to a valid flag column with no expression sets all values in the
         column to that flag"""
         tf = self.setup_tf()
 
-        tf.add_flag("flag_col_1", 1)
+        tf = tf.add_flag("flag_col_1", 1)
         result = tf.df["flag_col_1"]
         expected = pl.Series("flag_col_1", [1, 1, 1])
 
@@ -206,7 +214,7 @@ class TestAddFlag:
         column that match that expression to that flag"""
         tf = self.setup_tf()
 
-        tf.add_flag("flag_col_1", 1, pl.col("value").gt(1))
+        tf = tf.add_flag("flag_col_1", 1, pl.col("value").gt(1))
         result = tf.df["flag_col_1"]
         expected = pl.Series("flag_col_1", [0, 1, 1])
 
@@ -217,7 +225,7 @@ class TestAddFlag:
         sets all values in the column that match that expression to the correct flag value"""
         tf = self.setup_tf()
 
-        tf.add_flag("flag_col_1", "FLAG_C")
+        tf = tf.add_flag("flag_col_1", "FLAG_C")
         result = tf.df["flag_col_1"]
         expected = pl.Series("flag_col_1", [4, 4, 4])
 
@@ -241,7 +249,7 @@ class TestAddFlag:
         """Test that adding a flag twice uses the bitwise math, so doesn't actually add the value twice"""
         tf = self.setup_tf()
 
-        tf.add_flag("flag_col_1", 1)
+        tf = tf.add_flag("flag_col_1", 1)
 
         result = tf.df["flag_col_1"]
         expected = pl.Series("flag_col_1", [1, 1, 1])
@@ -249,7 +257,7 @@ class TestAddFlag:
         assert_series_equal(result, expected)
 
         # adding a second time should leave it as is
-        tf.add_flag("flag_col_1", 1)
+        tf = tf.add_flag("flag_col_1", 1)
 
         result = tf.df["flag_col_1"]
         expected = pl.Series("flag_col_1", [1, 1, 1])
@@ -261,7 +269,7 @@ class TestAddFlag:
         tf = self.setup_tf()
         tf_decoded = tf.decode_flag_column("flag_col_1")
 
-        tf_decoded.add_flag("flag_col_1", "FLAG_A")
+        tf_decoded = tf_decoded.add_flag("flag_col_1", "FLAG_A")
 
         result = tf_decoded.df["flag_col_1"]
         assert result.dtype == pl.List(pl.String)
@@ -279,7 +287,7 @@ class TestAddFlag:
         """Test that adding a flag to a null value treats it as having no flags set"""
         tf = setup_tf_with_nulls()
 
-        tf.add_flag("flag_col_1", "FLAG_A", expr)
+        tf = tf.add_flag("flag_col_1", "FLAG_A", expr)
         result = tf.df["flag_col_1"]
 
         assert_series_equal(result, pl.Series("flag_col_1", expected))
@@ -299,14 +307,22 @@ class TestRemoveFlag:
             "time",
         ).with_flag_system("system1", {"FLAG_A": 1, "FLAG_B": 2, "FLAG_C": 4})
 
-        tf.register_flag_column("flag_col_1", "system1")
+        tf = tf.with_flag_column("flag_col_1", "system1")
         return tf
+
+    def test_returns_new_timeframe(self) -> None:
+        """Test that a new TimeFrame is returned and the original is unchanged."""
+        tf = self.setup_tf()
+        original = tf.copy(share_df=False)
+        result = tf.remove_flag("flag_col_1", 1)
+        assert result is not tf
+        assert tf == original
 
     def test_remove_flag_from_flag_column_no_expr(self) -> None:
         """Test that removing a flag from a valid flag column with no expression works as expected"""
         tf = self.setup_tf()
 
-        tf.remove_flag("flag_col_1", 1)
+        tf = tf.remove_flag("flag_col_1", 1)
         result = tf.df["flag_col_1"]
         expected = pl.Series("flag_col_1", [0, 2, 6])
 
@@ -316,13 +332,13 @@ class TestRemoveFlag:
         """Test that removing a flag twice uses the bitwise math, so doesn't actually remove the value twice"""
         tf = self.setup_tf()
 
-        tf.remove_flag("flag_col_1", 1)
+        tf = tf.remove_flag("flag_col_1", 1)
         result = tf.df["flag_col_1"]
         expected = pl.Series("flag_col_1", [0, 2, 6])
         assert_series_equal(result, expected)
 
         # removing a second time should leave it as is
-        tf.remove_flag("flag_col_1", 1)
+        tf = tf.remove_flag("flag_col_1", 1)
         result = tf.df["flag_col_1"]
         expected = pl.Series("flag_col_1", [0, 2, 6])
         assert_series_equal(result, expected)
@@ -331,7 +347,7 @@ class TestRemoveFlag:
         """Test that removing a flag from a valid flag column with an expression removes flag from only those rows"""
         tf = self.setup_tf()
 
-        tf.remove_flag("flag_col_1", 1, pl.col("value").gt(1))
+        tf = tf.remove_flag("flag_col_1", 1, pl.col("value").gt(1))
         result = tf.df["flag_col_1"]
         expected = pl.Series("flag_col_1", [1, 2, 6])
 
@@ -342,7 +358,7 @@ class TestRemoveFlag:
         expected."""
         tf = self.setup_tf()
 
-        tf.remove_flag("flag_col_1", "FLAG_B")
+        tf = tf.remove_flag("flag_col_1", "FLAG_B")
         result = tf.df["flag_col_1"]
         expected = pl.Series("flag_col_1", [1, 1, 5])
 
@@ -367,7 +383,7 @@ class TestRemoveFlag:
         tf = self.setup_tf()
         tf_decoded = tf.decode_flag_column("flag_col_1")
 
-        tf_decoded.remove_flag("flag_col_1", "FLAG_A")
+        tf_decoded = tf_decoded.remove_flag("flag_col_1", "FLAG_A")
 
         result = tf_decoded.df["flag_col_1"]
         assert result.dtype == pl.List(pl.String)
@@ -385,7 +401,7 @@ class TestRemoveFlag:
         """Test that removing a flag from a null value treats it as having no flags set"""
         tf = setup_tf_with_nulls()
 
-        tf.remove_flag("flag_col_1", "FLAG_A", expr)
+        tf = tf.remove_flag("flag_col_1", "FLAG_A", expr)
         result = tf.df["flag_col_1"]
 
         assert_series_equal(result, pl.Series("flag_col_1", expected))
@@ -404,7 +420,7 @@ class TestDecodeFlagColumn:
             ),
             "time",
         ).with_flag_system("system1", {"FLAG_A": 1, "FLAG_B": 2, "FLAG_C": 4})
-        tf.register_flag_column("flag_col_1", "system1")
+        tf = tf.with_flag_column("flag_col_1", "system1")
         return tf
 
     def test_output_dtype_is_list_string(self) -> None:
