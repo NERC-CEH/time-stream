@@ -1,15 +1,17 @@
 """
 Plotting Module.
 
-Plots the data in a :class:`~time_stream.TimeFrame` with matplotlib. Each value is drawn over the period of time it is
-valid for, with an optional envelope of the maximum and minimum for each time of year (from
-:meth:`~time_stream.TimeFrame.time_of_year_aggregate`), and a strip below the plot marking flagged values.
+Plots the data in a :class:`~time_stream.TimeFrame` with matplotlib.
 
 Metadata keywords read from the TimeFrame:
 
-- Column metadata: ``label`` (name in legends and axis labels), ``units`` (added to the axis label), ``color``
-  (any matplotlib colour) and ``plot_style`` (``"line"``, ``"step"``, ``"bar"`` or ``"scatter"``).
-- TimeFrame metadata: ``title`` (shown at the top left).
+- Column metadata:
+    - ``label`` (name in legends and axis labels)
+    - ``units`` (added to the axis label)
+    - ``color`` (any matplotlib colour)
+    - ``plot_style`` (``"line"``, ``"step"``, ``"bar"`` or ``"scatter"``).
+- TimeFrame metadata:
+    - ``title`` (shown at the top left).
 """
 
 from __future__ import annotations

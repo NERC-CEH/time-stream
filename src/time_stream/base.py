@@ -1109,13 +1109,8 @@ class TimeFrame:
     ) -> Figure:
         """Plot the data in this TimeFrame with matplotlib.
 
-        Each value is drawn over the period it is valid for, following the time anchor: ``start`` and ``end``
-        anchored data as steps, ``point`` data as a line.
-
         Labels, units, colours and styles can be read from the column metadata keys ``label``, ``units``, ``color`` and
         ``plot_style``, and the title from the TimeFrame metadata key ``title``. Arguments take precedence.
-
-        Requires matplotlib: ``pip install "ukceh-time-stream[plot]"``.
 
         Args:
             columns: Column(s) to plot, sharing one panel. A list of lists gives one panel per inner list. If omitted,
