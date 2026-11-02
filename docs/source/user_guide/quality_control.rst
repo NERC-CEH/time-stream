@@ -312,7 +312,7 @@ The result of a QC check can be consumed in one of two ways, selected via the ``
   flag column must already exist (see :doc:`flagging`).
 
 The examples below use the flag-column style. Each sets up a bitwise flag system with a single
-``FLAGGED`` flag and calls :meth:`~time_stream.TimeFrame.init_flag_column` before running the
+``FLAGGED`` flag and calls :meth:`~time_stream.TimeFrame.with_flag_column` before running the
 check:
 
 .. literalinclude:: ../examples/quality_control.py

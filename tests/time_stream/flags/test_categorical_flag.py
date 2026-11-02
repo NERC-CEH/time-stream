@@ -209,28 +209,28 @@ def make_tf() -> TimeFrame:
 def make_int_scalar_tf() -> TimeFrame:
     """Create a TimeFrame with an int categorical single flag system and scalar flag column."""
     tf = make_tf().with_flag_system("qc", {"FLAG_A": 0, "FLAG_B": 1, "FLAG_C": 2}, flag_type="categorical")
-    tf.init_flag_column("qc", "flag_col")
+    tf = tf.with_flag_column("flag_col", "qc")
     return tf
 
 
 def make_str_scalar_tf() -> TimeFrame:
     """Create a TimeFrame with a str categorical single flag system and scalar flag column."""
     tf = make_tf().with_flag_system("met", {"FLAG_A": "A", "FLAG_B": "B", "FLAG_C": "C"})
-    tf.init_flag_column("met", "flag_col")
+    tf = tf.with_flag_column("flag_col", "met")
     return tf
 
 
 def make_int_list_tf() -> TimeFrame:
     """Create a TimeFrame with an int categorical list flag system and list flag column."""
     tf = make_tf().with_flag_system("qc", {"FLAG_A": 0, "FLAG_B": 1, "FLAG_C": 2}, flag_type="categorical_list")
-    tf.init_flag_column("qc", "flag_col")
+    tf = tf.with_flag_column("flag_col", "qc")
     return tf
 
 
 def make_str_list_tf() -> TimeFrame:
     """Create a TimeFrame with a str categorical list flag system and list flag column."""
     tf = make_tf().with_flag_system("met", {"FLAG_A": "A", "FLAG_B": "B"}, flag_type="categorical_list")
-    tf.init_flag_column("met", "flag_col")
+    tf = tf.with_flag_column("flag_col", "met")
     return tf
 
 
@@ -238,7 +238,7 @@ def make_str_list_tf_with_nulls() -> TimeFrame:
     """Create a TimeFrame with a str categorical list flag column holding nulls."""
     df = make_tf().df.with_columns(pl.Series("flag_col", [None, None, ["B"]], dtype=pl.List(pl.String)))
     tf = TimeFrame(df, "time").with_flag_system("met", {"FLAG_A": "A", "FLAG_B": "B"}, flag_type="categorical_list")
-    tf.register_flag_column("flag_col", "met")
+    tf = tf.with_flag_column("flag_col", "met")
     return tf
 
 
@@ -246,19 +246,19 @@ class TestAddFlag:
     def test_int_scalar_all_rows(self) -> None:
         """Test adding an int flag to all rows by name."""
         tf = make_int_scalar_tf()
-        tf.add_flag("flag_col", "FLAG_A")
+        tf = tf.add_flag("flag_col", "FLAG_A")
         assert tf.df["flag_col"].to_list() == [0, 0, 0]
 
     def test_int_scalar_by_value(self) -> None:
         """Test adding an int flag by its integer value."""
         tf = make_int_scalar_tf()
-        tf.add_flag("flag_col", 1)
+        tf = tf.add_flag("flag_col", 1)
         assert tf.df["flag_col"].to_list() == [1, 1, 1]
 
     def test_int_scalar_with_expr(self) -> None:
         """Test that expr limits which rows are updated."""
         tf = make_int_scalar_tf()
-        tf.add_flag("flag_col", "FLAG_B", pl.col("value").gt(15))
+        tf = tf.add_flag("flag_col", "FLAG_B", pl.col("value").gt(15))
         result = tf.df["flag_col"].to_list()
         assert result[0] is None
         assert result[1] == 1
@@ -267,15 +267,15 @@ class TestAddFlag:
     def test_int_scalar_overwrite_true(self) -> None:
         """Test that overwrite=True replaces an existing value."""
         tf = make_int_scalar_tf()
-        tf.add_flag("flag_col", "FLAG_A")
-        tf.add_flag("flag_col", "FLAG_B", overwrite=True)
+        tf = tf.add_flag("flag_col", "FLAG_A")
+        tf = tf.add_flag("flag_col", "FLAG_B", overwrite=True)
         assert tf.df["flag_col"].to_list() == [1, 1, 1]
 
     def test_int_scalar_overwrite_false(self) -> None:
         """Test that overwrite=False skips rows that already have a value."""
         tf = make_int_scalar_tf()
-        tf.add_flag("flag_col", "FLAG_A", pl.col("value").le(20))
-        tf.add_flag("flag_col", "FLAG_B", overwrite=False)
+        tf = tf.add_flag("flag_col", "FLAG_A", pl.col("value").le(20))
+        tf = tf.add_flag("flag_col", "FLAG_B", overwrite=False)
         result = tf.df["flag_col"].to_list()
         assert result[0] == 0  # not overwritten
         assert result[1] == 0  # not overwritten
@@ -296,20 +296,20 @@ class TestAddFlag:
     def test_str_scalar_by_name(self) -> None:
         """Test adding a str flag by its name."""
         tf = make_str_scalar_tf()
-        tf.add_flag("flag_col", "FLAG_A")
+        tf = tf.add_flag("flag_col", "FLAG_A")
         assert tf.df["flag_col"].to_list() == ["A", "A", "A"]
 
     def test_str_scalar_by_value(self) -> None:
         """Test adding a str flag by its value string."""
         tf = make_str_scalar_tf()
-        tf.add_flag("flag_col", "A")
+        tf = tf.add_flag("flag_col", "A")
         assert tf.df["flag_col"].to_list() == ["A", "A", "A"]
 
     def test_str_scalar_overwrite_false(self) -> None:
         """Test that overwrite=False leaves already-set rows unchanged."""
         tf = make_str_scalar_tf()
-        tf.add_flag("flag_col", "FLAG_A", pl.col("value").eq(10))
-        tf.add_flag("flag_col", "FLAG_B", overwrite=False)
+        tf = tf.add_flag("flag_col", "FLAG_A", pl.col("value").eq(10))
+        tf = tf.add_flag("flag_col", "FLAG_B", overwrite=False)
         result = tf.df["flag_col"].to_list()
         assert result[0] == "A"  # already set, not overwritten
         assert result[1] == "B"
@@ -318,27 +318,27 @@ class TestAddFlag:
     def test_int_list_appends_to_list(self) -> None:
         """Test that add_flag appends the value to the list."""
         tf = make_int_list_tf()
-        tf.add_flag("flag_col", "FLAG_A")
+        tf = tf.add_flag("flag_col", "FLAG_A")
         assert tf.df["flag_col"].to_list() == [[0], [0], [0]]
 
     def test_int_list_twice_does_not_duplicate(self) -> None:
         """Test that calling add_flag with the same flag twice does not duplicate it."""
         tf = make_int_list_tf()
-        tf.add_flag("flag_col", "FLAG_A")
-        tf.add_flag("flag_col", "FLAG_A")
+        tf = tf.add_flag("flag_col", "FLAG_A")
+        tf = tf.add_flag("flag_col", "FLAG_A")
         assert tf.df["flag_col"].to_list() == [[0], [0], [0]]
 
     def test_int_list_two_different_flags(self) -> None:
         """Test that adding two different flags appends both."""
         tf = make_int_list_tf()
-        tf.add_flag("flag_col", "FLAG_A")
-        tf.add_flag("flag_col", "FLAG_B")
+        tf = tf.add_flag("flag_col", "FLAG_A")
+        tf = tf.add_flag("flag_col", "FLAG_B")
         assert tf.df["flag_col"].to_list() == [[0, 1], [0, 1], [0, 1]]
 
     def test_int_list_with_expr(self) -> None:
         """Test that expr limits which rows are updated in list mode."""
         tf = make_int_list_tf()
-        tf.add_flag("flag_col", "FLAG_B", pl.col("value").gt(15))
+        tf = tf.add_flag("flag_col", "FLAG_B", pl.col("value").gt(15))
         result = tf.df["flag_col"].to_list()
         assert result[0] == []
         assert result[1] == [1]
@@ -355,7 +355,7 @@ class TestAddFlag:
     def test_str_list_null_values(self, expr: pl.Expr, expected: list) -> None:
         """Test that adding a flag to a null list treats it as having no flags set."""
         tf = make_str_list_tf_with_nulls()
-        tf.add_flag("flag_col", "FLAG_A", expr)
+        tf = tf.add_flag("flag_col", "FLAG_A", expr)
         assert tf.df["flag_col"].to_list() == expected
 
 
@@ -363,15 +363,15 @@ class TestRemoveFlag:
     def test_int_scalar_all_rows(self) -> None:
         """Test that remove_flag sets the value to null on all rows."""
         tf = make_int_scalar_tf()
-        tf.add_flag("flag_col", "FLAG_A")
-        tf.remove_flag("flag_col", "FLAG_A")
+        tf = tf.add_flag("flag_col", "FLAG_A")
+        tf = tf.remove_flag("flag_col", "FLAG_A")
         assert tf.df["flag_col"].is_null().all()
 
     def test_int_scalar_with_expr(self) -> None:
         """Test that expr limits which rows are cleared."""
         tf = make_int_scalar_tf()
-        tf.add_flag("flag_col", "FLAG_A")
-        tf.remove_flag("flag_col", "FLAG_A", pl.col("value").gt(15))
+        tf = tf.add_flag("flag_col", "FLAG_A")
+        tf = tf.remove_flag("flag_col", "FLAG_A", pl.col("value").gt(15))
         result = tf.df["flag_col"].to_list()
         assert result[0] == 0
         assert result[1] is None
@@ -380,24 +380,24 @@ class TestRemoveFlag:
     def test_str_scalar_sets_null(self) -> None:
         """Test that remove_flag sets str values to null."""
         tf = make_str_scalar_tf()
-        tf.add_flag("flag_col", "FLAG_B")
-        tf.remove_flag("flag_col", "FLAG_B")
+        tf = tf.add_flag("flag_col", "FLAG_B")
+        tf = tf.remove_flag("flag_col", "FLAG_B")
         assert tf.df["flag_col"].is_null().all()
 
     def test_int_list_removes_from_list(self) -> None:
         """Test that remove_flag removes the value from the list."""
         tf = make_int_list_tf()
-        tf.add_flag("flag_col", "FLAG_A")
-        tf.add_flag("flag_col", "FLAG_B")
-        tf.remove_flag("flag_col", "FLAG_A")
+        tf = tf.add_flag("flag_col", "FLAG_A")
+        tf = tf.add_flag("flag_col", "FLAG_B")
+        tf = tf.remove_flag("flag_col", "FLAG_A")
         assert tf.df["flag_col"].to_list() == [[1], [1], [1]]
 
     def test_int_list_with_expr(self) -> None:
         """Test that expr limits which rows have the value removed."""
         tf = make_int_list_tf()
-        tf.add_flag("flag_col", "FLAG_A")
-        tf.add_flag("flag_col", "FLAG_B")
-        tf.remove_flag("flag_col", "FLAG_A", pl.col("value").gt(15))
+        tf = tf.add_flag("flag_col", "FLAG_A")
+        tf = tf.add_flag("flag_col", "FLAG_B")
+        tf = tf.remove_flag("flag_col", "FLAG_A", pl.col("value").gt(15))
         result = tf.df["flag_col"].to_list()
         assert result[0] == [0, 1]
         assert result[1] == [1]
@@ -414,22 +414,22 @@ class TestRemoveFlag:
     def test_str_list_null_values(self, expr: pl.Expr, expected: list) -> None:
         """Test that removing a flag from a null list treats it as having no flags set."""
         tf = make_str_list_tf_with_nulls()
-        tf.remove_flag("flag_col", "FLAG_B", expr)
+        tf = tf.remove_flag("flag_col", "FLAG_B", expr)
         assert tf.df["flag_col"].to_list() == expected
 
     def test_int_list_absent_value_is_noop(self) -> None:
         """Test that removing a value not in the list is a no-op."""
         tf = make_int_list_tf()
-        tf.add_flag("flag_col", "FLAG_A")
-        tf.remove_flag("flag_col", "FLAG_B")  # "FLAG_B" was never added
+        tf = tf.add_flag("flag_col", "FLAG_A")
+        tf = tf.remove_flag("flag_col", "FLAG_B")  # "FLAG_B" was never added
         assert tf.df["flag_col"].to_list() == [[0], [0], [0]]
 
     def test_str_list_add_and_remove(self) -> None:
         """Test adding and removing str values in list mode."""
         tf = make_str_list_tf()
-        tf.add_flag("flag_col", "FLAG_A")
-        tf.add_flag("flag_col", "FLAG_B")
-        tf.remove_flag("flag_col", "FLAG_A")
+        tf = tf.add_flag("flag_col", "FLAG_A")
+        tf = tf.add_flag("flag_col", "FLAG_B")
+        tf = tf.remove_flag("flag_col", "FLAG_A")
         assert tf.df["flag_col"].to_list() == [["B"], ["B"], ["B"]]
 
 
@@ -438,8 +438,8 @@ class TestDecodeFlagColumn:
     def setup_int_scalar_tf() -> TimeFrame:
         """Create a TimeFrame with populated int scalar flags for decode tests."""
         tf = make_int_scalar_tf()
-        tf.add_flag("flag_col", "FLAG_A", pl.col("value").eq(10))
-        tf.add_flag("flag_col", "FLAG_B", pl.col("value").eq(20))
+        tf = tf.add_flag("flag_col", "FLAG_A", pl.col("value").eq(10))
+        tf = tf.add_flag("flag_col", "FLAG_B", pl.col("value").eq(20))
         # row 3 (value=30) remains null
         return tf
 
@@ -475,8 +475,8 @@ class TestDecodeFlagColumn:
     def setup_str_scalar_tf() -> TimeFrame:
         """Create a TimeFrame with populated str scalar flags for decode tests."""
         tf = make_str_scalar_tf()
-        tf.add_flag("flag_col", "FLAG_A", pl.col("value").eq(10))
-        tf.add_flag("flag_col", "FLAG_B", pl.col("value").eq(20))
+        tf = tf.add_flag("flag_col", "FLAG_A", pl.col("value").eq(10))
+        tf = tf.add_flag("flag_col", "FLAG_B", pl.col("value").eq(20))
         return tf
 
     def test_str_scalar_dtype_is_utf8(self) -> None:
@@ -493,8 +493,8 @@ class TestDecodeFlagColumn:
     def setup_int_list_tf() -> TimeFrame:
         """Create a TimeFrame with populated int list flags for decode tests."""
         tf = make_int_list_tf()
-        tf.add_flag("flag_col", "FLAG_A")
-        tf.add_flag("flag_col", "FLAG_B", pl.col("value").gt(15))
+        tf = tf.add_flag("flag_col", "FLAG_A")
+        tf = tf.add_flag("flag_col", "FLAG_B", pl.col("value").gt(15))
         return tf
 
     def test_int_list_dtype_is_list_utf8(self) -> None:
@@ -510,8 +510,8 @@ class TestDecodeFlagColumn:
     def test_int_list_add_remove_on_decoded(self) -> None:
         """Test that add_flag and remove_flag work transparently on decoded list columns."""
         tf_dec = self.setup_int_list_tf().decode_flag_column("flag_col")
-        tf_dec.add_flag("flag_col", "FLAG_C", pl.col("value").eq(10))
-        tf_dec.remove_flag("flag_col", "FLAG_A", pl.col("value").eq(10))
+        tf_dec = tf_dec.add_flag("flag_col", "FLAG_C", pl.col("value").eq(10))
+        tf_dec = tf_dec.remove_flag("flag_col", "FLAG_A", pl.col("value").eq(10))
         result = tf_dec.df["flag_col"].to_list()
         assert result[0] == ["FLAG_C"]
 
@@ -587,7 +587,7 @@ class TestRegisterFlagColumnBySystemType:
         tf = make_tf().with_flag_system("qc", {"FLAG_A": 0, "FLAG_B": 1}, flag_type="categorical")
         df = tf.df.with_columns(pl.lit(None, dtype=pl.Int32).alias("my_flags"))
         tf2 = tf.with_df(df)
-        tf2.register_flag_column("my_flags", "qc")
+        tf2 = tf2.with_flag_column("my_flags", "qc")
         assert isinstance(tf2.get_flag_column("my_flags"), CategoricalSingleFlagColumn)
 
     def test_list_flag_system_creates_list_column(self) -> None:
@@ -595,5 +595,5 @@ class TestRegisterFlagColumnBySystemType:
         tf = make_tf().with_flag_system("qc", {"FLAG_A": 0, "FLAG_B": 1}, flag_type="categorical_list")
         df = tf.df.with_columns(pl.Series("my_flags", [[], [], []], dtype=pl.List(pl.Int32)))
         tf2 = tf.with_df(df)
-        tf2.register_flag_column("my_flags", "qc")
+        tf2 = tf2.with_flag_column("my_flags", "qc")
         assert isinstance(tf2.get_flag_column("my_flags"), CategoricalListFlagColumn)

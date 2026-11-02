@@ -311,8 +311,8 @@ class TestFormatTimeframeColumns:
             }
         )
         tf = TimeFrame(df, "timestamp")
-        tf.register_flag_system("qc", {"BAD": 1, "GOOD": 2})
-        tf.register_flag_column("flag1", "qc")
+        tf = tf.with_flag_system("qc", {"BAD": 1, "GOOD": 2})
+        tf = tf.with_flag_column("flag1", "qc")
 
         result = format_timeframe_columns(tf)
 
@@ -370,8 +370,8 @@ class TestTimeframeRepr:
 
     def test_repr_with_flag_systems(self, timeframe: TimeFrame) -> None:
         """Test representation with flag systems."""
-        timeframe.register_flag_system("qc", {"BAD": 1, "GOOD": 2})
-        timeframe.register_flag_column("flag1", "qc")
+        timeframe = timeframe.with_flag_system("qc", {"BAD": 1, "GOOD": 2})
+        timeframe = timeframe.with_flag_column("flag1", "qc")
 
         result = timeframe_repr(timeframe)
 
