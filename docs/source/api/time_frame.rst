@@ -68,9 +68,9 @@ Operations
 
     ~TimeFrame.aggregate
     ~TimeFrame.rolling_aggregate
+    ~TimeFrame.time_of_year_aggregate
     ~TimeFrame.infill
     ~TimeFrame.qc_check
-    ~TimeFrame.calculate_min_max_envelope
 
 Flagging
 --------
