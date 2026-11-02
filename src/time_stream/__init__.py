@@ -8,7 +8,7 @@ if TYPE_CHECKING:
 
 
 try:
-    __version__ = version("time-stream")
+    __version__ = version("ukceh-time-stream")
 except PackageNotFoundError:
     __version__ = "unknown"
 

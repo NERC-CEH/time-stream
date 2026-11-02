@@ -28,13 +28,13 @@ Install options
 
         .. code-block:: bash
 
-            uv add git+https://github.com/NERC-CEH/time-stream.git@main
+            uv add ukceh-time-stream
 
     .. tab-item:: :iconify:`devicon:pypi` pip
 
         .. code-block:: bash
 
-            pip install git+https://github.com/NERC-CEH/time-stream.git@main
+            pip install ukceh-time-stream
 
 Importing
 =========

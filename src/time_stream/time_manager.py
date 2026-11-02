@@ -5,13 +5,14 @@ This module defines and enforces integrity rules for the temporal aspects of a T
 
 - Validates the presence and type of the time column.
 - Ensures datetimes align to the specified resolution (precision).
-- Ensures datetimes conform to the specified periodicity (frequency).
+- Ensures datetimes conform to the specified periodicity (frequency), unless the TimeFrame is irregular.
 - Handles duplicate timestamps according to a chosen strategy.
 - Prevents mutation of time values between DataFrame operations.
 """
 
 import logging
 from copy import copy
+from typing import get_args
 
 import polars as pl
 from isoperiod import Period, PeriodValidationError
@@ -26,12 +27,11 @@ from time_stream.exceptions import (
     ResolutionError,
     TimeMutatedError,
 )
-from time_stream.types import DuplicateOption, TimeAnchor, ValidationErrorOptions
+from time_stream.types import DuplicateOption, Irregular, TimeAnchor, ValidationErrorOptions
 from time_stream.utils import (
     check_alignment,
     check_literal_value,
     check_periodicity,
-    configure_period_object,
     handle_duplicates,
     truncate_to_period,
 )
@@ -46,7 +46,7 @@ class TimeManager:
     _resolution: Period
     _offset: str | None
     _alignment: Period
-    _periodicity: Period
+    _periodicity: Period | None
     _on_duplicates: DuplicateOption
     _on_misaligned_rows: ValidationErrorOptions
     _time_anchor: TimeAnchor
@@ -56,7 +56,7 @@ class TimeManager:
         time_name: str,
         resolution: str | Period | None = None,
         offset: str | None = None,
-        periodicity: str | Period | None = None,
+        periodicity: Irregular | str | Period | None = None,
         on_duplicates: DuplicateOption = "error",
         on_misaligned_rows: ValidationErrorOptions = "error",
         time_anchor: TimeAnchor = "start",
@@ -69,7 +69,7 @@ class TimeManager:
             offset: Offset applied from the natural boundary of ``resolution`` to position the datetime values along the
                     timeline.
             periodicity: Defines the allowed "frequency" of datetimes in your timeseries, i.e., how many datetime
-                         entries are allowed within a given period of time.
+                         entries are allowed within a given period of time. ``"irregular"`` means there is none.
             on_duplicates: What to do if duplicate rows are found in the data.
             on_misaligned_rows: What to do if misaligned rows are found in the data.
             time_anchor: The time anchor to which the date/times conform to.
@@ -82,7 +82,7 @@ class TimeManager:
         self._resolution = self._configure_resolution_property(resolution)
         self._offset = self._configure_offset_property(offset)
         self._alignment = self._configure_alignment_property(self._resolution, self._offset)
-        self._periodicity = self._configure_periodicity_property(periodicity, self._alignment)
+        self._periodicity = self._configure_periodicity_property(periodicity, resolution, self._alignment)
         self._on_duplicates = on_duplicates
         self._on_misaligned_rows = on_misaligned_rows
         self._time_anchor = time_anchor
@@ -104,8 +104,12 @@ class TimeManager:
         return self._alignment
 
     @property
-    def periodicity(self) -> Period:
+    def periodicity(self) -> Period | None:
         return self._periodicity
+
+    @property
+    def is_irregular(self) -> bool:
+        return self._periodicity is None
 
     @property
     def time_anchor(self) -> TimeAnchor:
@@ -172,24 +176,43 @@ class TimeManager:
         return alignment
 
     @staticmethod
-    def _configure_periodicity_property(periodicity: str | Period | None, alignment: Period) -> Period:
+    def _configure_periodicity_property(
+        periodicity: Irregular | str | Period | None, resolution: str | Period | None, alignment: Period
+    ) -> Period | None:
         """Normalise and derive the period properties of ``periodicity``
 
-        Parses string into Period object. If none, default to same Period as the alignment object
-        (i.e., to represent one value per alignment bucket).
+        If none, default to the alignment (one value per alignment bucket), or to irregular if no resolution was
+        given either.
 
         Args:
             periodicity: Defines the allowed "frequency" of datetimes in your timeseries, i.e., how many datetime
                          entries are allowed within a given period of time.
+            resolution: The resolution as given by the caller, before any default is applied.
             alignment: A Period object representing resolution+offset
+
         Returns:
-            Resolution period object
+            Periodicity period object, or None if irregular.
         """
-        # Configure periodicity parameter
         if periodicity is None:
-            # Default to the alignment Period
-            return Period.of_duration(str(alignment))
-        elif isinstance(periodicity, str):
+            return None if resolution is None else Period.of_duration(str(alignment))
+        return TimeManager._parse_periodicity(periodicity)
+
+    @staticmethod
+    def _parse_periodicity(periodicity: Irregular | str | Period) -> Period | None:
+        """Parse a periodicity into a Period object, or None if it is ``"irregular"``.
+
+        Args:
+            periodicity: A Period, an ISO-8601 duration string with optional offset, or ``"irregular"``.
+
+        Returns:
+            Periodicity period object, or None if irregular.
+
+        Raises:
+            TypeError: If ``periodicity`` is not a string or Period.
+        """
+        if isinstance(periodicity, str):
+            if periodicity.lower() in get_args(Irregular):
+                return None
             return Period.of_duration(periodicity)
         elif isinstance(periodicity, Period):
             return periodicity
@@ -248,15 +271,14 @@ class TimeManager:
         """
         if not self.alignment.is_epoch_agnostic():
             raise ResolutionError(f"Non-epoch agnostic resolution is not supported: '{self.alignment}'")
-        if not self.alignment.is_subperiod_of(self.periodicity):
-            raise ResolutionError(
-                f"Alignment '{self.alignment}' must be a subperiod of periodicity '{self.periodicity}'"
-            )
+        periodicity = self.periodicity
+        if periodicity is not None and not self.alignment.is_subperiod_of(periodicity):
+            raise ResolutionError(f"Alignment '{self.alignment}' must be a subperiod of periodicity '{periodicity}'")
         if not check_alignment(dt, self.alignment, self.time_anchor):
             raise ResolutionError(f"Time values are not aligned to resolution[+offset]: {self.alignment}")
 
     def _validate_periodicity(self, dt: pl.Series) -> None:
-        """Validate the periodicity of the time series.
+        """Validate the periodicity of the time series. An irregular time series has no periodicity to check.
 
         Args:
             dt: The datetime series to validate the periodicity of.
@@ -264,10 +286,13 @@ class TimeManager:
         Raises:
             PeriodicityError: If the periodicity isn't epoch agnostic, or the datetimes do not conform to it.
         """
-        if not self.periodicity.is_epoch_agnostic():
-            raise PeriodicityError(f"Non-epoch agnostic periodicity is not supported: '{self.periodicity}'")
-        if not check_periodicity(dt, self.periodicity, self.time_anchor):
-            raise PeriodicityError(f"Time values do not conform to periodicity: {self.periodicity}")
+        periodicity = self.periodicity
+        if periodicity is None:
+            return
+        if not periodicity.is_epoch_agnostic():
+            raise PeriodicityError(f"Non-epoch agnostic periodicity is not supported: '{periodicity}'")
+        if not check_periodicity(dt, periodicity, self.time_anchor):
+            raise PeriodicityError(f"Time values do not conform to periodicity: {periodicity}")
 
     def _validate_time_column(self, df: pl.DataFrame) -> None:
         """Validate that the DataFrame contains the required time column with time data.
@@ -307,17 +332,17 @@ class TimeManager:
                 f"time value on every row."
             )
 
-    def with_periodicity(self, periodicity: str | Period) -> "TimeManager":
+    def with_periodicity(self, periodicity: Irregular | str | Period) -> "TimeManager":
         """Return a copy of this manager with a new periodicity.
 
         Args:
-            periodicity: The new periodicity.
+            periodicity: The new periodicity, or ``"irregular"``.
 
         Returns:
             A new TimeManager.
         """
         new = copy(self)
-        new._periodicity = configure_period_object(periodicity)
+        new._periodicity = self._parse_periodicity(periodicity)
         return new
 
     def with_time_name(self, time_name: str) -> "TimeManager":

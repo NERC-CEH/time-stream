@@ -26,7 +26,7 @@ def tm() -> TimeManager:
 
     tm._resolution = None  # type: ignore[assignment]
     tm._offset = None
-    tm._periodicity = None  # type: ignore[assignment]
+    tm._periodicity = None
     tm._time_anchor = "start"
     tm._time_name = "time"
 
@@ -42,7 +42,7 @@ class TestValidateAlignment:
         """Test that a correct alignment to time series passes the validation."""
         tm._resolution = Period.of_years(1)
         tm._alignment = TimeManager._configure_alignment_property(tm._resolution, tm._offset)
-        tm._periodicity = TimeManager._configure_periodicity_property(None, tm._alignment)
+        tm._periodicity = TimeManager._configure_periodicity_property(None, tm._resolution, tm._alignment)
 
         times = pl.Series([datetime(2020, 1, 1), datetime(2021, 1, 1), datetime(2022, 1, 1)])
         tm._validate_alignment(times)
@@ -51,7 +51,7 @@ class TestValidateAlignment:
         """Test that an incorrect alignment to time series fails the validation."""
         tm._resolution = Period.of_years(1)
         tm._alignment = TimeManager._configure_alignment_property(tm._resolution, tm._offset)
-        tm._periodicity = TimeManager._configure_periodicity_property(None, tm._alignment)
+        tm._periodicity = TimeManager._configure_periodicity_property(None, tm._resolution, tm._alignment)
 
         times = pl.Series([datetime(2020, 1, 1), datetime(2021, 6, 1), datetime(2022, 1, 1)])
 
@@ -65,7 +65,7 @@ class TestValidateAlignment:
         tm._resolution = Period.of_years(1)
         tm._offset = "+T9H"
         tm._alignment = TimeManager._configure_alignment_property(tm._resolution, tm._offset)
-        tm._periodicity = TimeManager._configure_periodicity_property(None, tm._alignment)
+        tm._periodicity = TimeManager._configure_periodicity_property(None, tm._resolution, tm._alignment)
 
         times = pl.Series([datetime(2020, 1, 1, 9), datetime(2021, 1, 1, 9), datetime(2022, 1, 1, 9)])
 
@@ -76,11 +76,33 @@ class TestValidateAlignment:
         tm._resolution = Period.of_years(1)
         tm._offset = "+T9H"
         tm._alignment = TimeManager._configure_alignment_property(tm._resolution, tm._offset)
-        tm._periodicity = TimeManager._configure_periodicity_property(None, tm._alignment)
+        tm._periodicity = TimeManager._configure_periodicity_property(None, tm._resolution, tm._alignment)
 
         times = pl.Series([datetime(2020, 1, 1, 9, 1), datetime(2021, 1, 1, 9), datetime(2022, 1, 1, 9)])
 
         expected_error = "Time values are not aligned to resolution[+offset]: P1Y+T9H"
+
+        with pytest.raises(ResolutionError, match=re.escape(expected_error)):
+            tm._validate_alignment(times)
+
+    def test_irregular_skips_subperiod_rule(self, tm: TimeManager) -> None:
+        """Test that an irregular time series has no periodicity for the alignment to be a subperiod of."""
+        tm._resolution = Period.of_days(1)
+        tm._alignment = TimeManager._configure_alignment_property(tm._resolution, tm._offset)
+        tm._periodicity = None
+
+        times = pl.Series([datetime(2020, 1, 1), datetime(2020, 1, 2), datetime(2020, 3, 17)])
+        tm._validate_alignment(times)
+
+    def test_irregular_alignment_still_checked(self, tm: TimeManager) -> None:
+        """Test that an irregular time series must still align to its resolution."""
+        tm._resolution = Period.of_minutes(1)
+        tm._alignment = TimeManager._configure_alignment_property(tm._resolution, tm._offset)
+        tm._periodicity = None
+
+        times = pl.Series([datetime(2020, 1, 1, 10, 15), datetime(2020, 2, 3, 9, 41, 30)])
+
+        expected_error = "Time values are not aligned to resolution[+offset]: PT1M"
 
         with pytest.raises(ResolutionError, match=re.escape(expected_error)):
             tm._validate_alignment(times)
@@ -128,6 +150,13 @@ class TestValidatePeriodicity:
         expected_error = "Time values do not conform to periodicity: P1Y+3M"
         with pytest.raises(PeriodicityError, match=re.escape(expected_error)):
             tm._validate_periodicity(times)
+
+    def test_irregular_skips_validation(self, tm: TimeManager) -> None:
+        """Test that an irregular time series has no periodicity to validate against."""
+        tm._periodicity = None
+
+        times = pl.Series([datetime(2020, 1, 1), datetime(2020, 1, 1, 0, 0, 0, 1), datetime(2022, 1, 1)])
+        tm._validate_periodicity(times)
 
 
 class TestValidateTimeColumn:
@@ -458,30 +487,61 @@ class TestConfigureAlignmentProperty:
 
 class TestConfigurePeriodicityProperty:
     def test_none_defaults_to_alignment(self) -> None:
-        """None periodicity defaults to the alignment period."""
+        """None periodicity defaults to the alignment period when a resolution is given."""
         alignment = Period.of_minutes(15)
-        result = TimeManager._configure_periodicity_property(None, alignment)
+        result = TimeManager._configure_periodicity_property(None, "PT15M", alignment)
         assert result == alignment
+
+    def test_none_without_resolution_is_irregular(self) -> None:
+        """None periodicity is irregular when no resolution is given either."""
+        result = TimeManager._configure_periodicity_property(None, None, Period.of_microseconds(1))
+        assert result is None
+
+    @pytest.mark.parametrize("periodicity", ["irregular", "IRREGULAR", "Irregular"], ids=["lower", "upper", "title"])
+    @pytest.mark.parametrize("resolution", [None, "PT1M"], ids=["no resolution", "resolution"])
+    def test_irregular(self, periodicity: str, resolution: str | None) -> None:
+        """The irregular token gives no periodicity, whatever the case and resolution."""
+        result = TimeManager._configure_periodicity_property(periodicity, resolution, Period.of_minutes(1))
+        assert result is None
 
     def test_string_parsed(self) -> None:
         """A valid duration string is parsed into a Period."""
         alignment = Period.of_days(1)
-        result = TimeManager._configure_periodicity_property("P1Y+9MT9H", alignment)
+        result = TimeManager._configure_periodicity_property("P1Y+9MT9H", "P1D", alignment)
         assert result == Period.of_years(1).with_month_offset(9).with_hour_offset(9)
+
+    def test_string_parsed_without_resolution(self) -> None:
+        """A given periodicity is used even when no resolution is given."""
+        result = TimeManager._configure_periodicity_property("P1D", None, Period.of_microseconds(1))
+        assert result == Period.of_days(1)
 
     def test_period_passthrough(self) -> None:
         """A Period object is returned as-is."""
         alignment = Period.of_days(1)
         period = Period.of_years(1)
-        assert TimeManager._configure_periodicity_property(period, alignment) is period
+        assert TimeManager._configure_periodicity_property(period, "P1D", alignment) is period
 
     def test_invalid_periodicity_type_raises(self) -> None:
         with pytest.raises(TypeError):
-            TimeManager._configure_periodicity_property(123, Period.of_days(1))  # type: ignore
+            TimeManager._configure_periodicity_property(123, "P1D", Period.of_days(1))  # type: ignore
 
     def test_invalid_periodicity_string_raises(self) -> None:
         with pytest.raises(PeriodParsingError):
-            TimeManager._configure_periodicity_property("NOT_A_PERIOD", Period.of_days(1))
+            TimeManager._configure_periodicity_property("NOT_A_PERIOD", "P1D", Period.of_days(1))
+
+
+class TestWithPeriodicity:
+    def test_to_irregular(self) -> None:
+        """A regular manager can be made irregular."""
+        tm = TimeManager(time_name="time", resolution="P1D").with_periodicity("irregular")
+        assert tm.periodicity is None
+        assert tm.is_irregular
+
+    def test_from_irregular(self) -> None:
+        """An irregular manager can be given a periodicity."""
+        tm = TimeManager(time_name="time", resolution="P1D", periodicity="irregular").with_periodicity("P1M")
+        assert tm.periodicity == Period.of_months(1)
+        assert not tm.is_irregular
 
 
 class TestLiteralValidation:
@@ -521,7 +581,7 @@ class TestConfigureProperties:
         resolution = TimeManager._configure_resolution_property("PT15M")
         offset = TimeManager._configure_offset_property(None)
         alignment = TimeManager._configure_alignment_property(resolution, offset)
-        periodicity = TimeManager._configure_periodicity_property(None, alignment)
+        periodicity = TimeManager._configure_periodicity_property(None, "PT15M", alignment)
 
         assert resolution == Period.of_minutes(15)
         assert offset is None
@@ -532,7 +592,7 @@ class TestConfigureProperties:
         resolution = TimeManager._configure_resolution_property("P1D")
         offset = TimeManager._configure_offset_property("+T9H")
         alignment = TimeManager._configure_alignment_property(resolution, offset)
-        periodicity = TimeManager._configure_periodicity_property(None, alignment)
+        periodicity = TimeManager._configure_periodicity_property(None, "P1D", alignment)
 
         assert resolution == Period.of_days(1)
         assert offset == "+T9H"
@@ -543,7 +603,7 @@ class TestConfigureProperties:
         resolution = TimeManager._configure_resolution_property("P1D")
         offset = TimeManager._configure_offset_property(None)
         alignment = TimeManager._configure_alignment_property(resolution, offset)
-        periodicity = TimeManager._configure_periodicity_property("P1Y+9MT9H", alignment)
+        periodicity = TimeManager._configure_periodicity_property("P1Y+9MT9H", "P1D", alignment)
 
         assert resolution == Period.of_days(1)
         assert offset is None
@@ -554,12 +614,12 @@ class TestConfigureProperties:
         resolution = TimeManager._configure_resolution_property(None)
         offset = TimeManager._configure_offset_property(None)
         alignment = TimeManager._configure_alignment_property(resolution, offset)
-        periodicity = TimeManager._configure_periodicity_property(None, alignment)
+        periodicity = TimeManager._configure_periodicity_property(None, None, alignment)
 
         assert resolution == Period.of_microseconds(1)
         assert offset is None
         assert alignment == Period.of_microseconds(1)
-        assert periodicity == Period.of_microseconds(1)
+        assert periodicity is None
 
 
 invalid_resolution_test_cases = (

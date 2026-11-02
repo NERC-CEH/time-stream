@@ -6,7 +6,7 @@ import numpy as np
 import polars as pl
 
 import time_stream as ts
-from examples._helpers import flow_15min
+from examples.helpers import flow_15min
 
 
 def min_max_example() -> None:

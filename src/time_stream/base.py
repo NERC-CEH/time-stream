@@ -35,7 +35,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from datetime import datetime, time
-from typing import TYPE_CHECKING, Any, Sequence, Type, overload
+from typing import TYPE_CHECKING, Any, Sequence, Type, get_args, overload
 
 import polars as pl
 from isoperiod import Period
@@ -48,10 +48,12 @@ from time_stream.aggregation import (
     TimeOfYearAggregationPipeline,
 )
 from time_stream.exceptions import (
+    AggregationPeriodError,
     ColumnNotFoundError,
     ColumnTypeError,
     DuplicateColumnError,
     MetadataError,
+    PeriodicityError,
 )
 from time_stream.flags.flag_manager import (
     CategoricalSingleFlagColumn,
@@ -69,6 +71,7 @@ from time_stream.types import (
     ClosedInterval,
     DuplicateOption,
     FlagSystemLiteral,
+    Irregular,
     LeapDayOption,
     MissingCriteria,
     PlotStyle,
@@ -103,8 +106,9 @@ class TimeFrame:
             timeseries, where the individual data points are considered to be at daily resolution
             (``resolution="P1D"``), but are limited to only one data point per year (``periodicity="P1Y"``).
             Accepts an :class:`isoperiod.Period` or ISO-8601 duration string (e.g. ``"PT15M"``, ``"P1D"``, ``"P1Y"``)
-            with an optional offset syntax (e.g. ``"P1D+T9H"``, ``"P1Y+9MT9H"``). If ``None``, it defaults to the period
-            defined by ``resolution + offset``.
+            with an optional offset syntax (e.g. ``"P1D+T9H"``, ``"P1Y+9MT9H"``), or ``"irregular"`` for data with no
+            expected spacing, such as ad-hoc measurements. If ``None``, it defaults to the period defined by
+            ``resolution + offset``, or to ``"irregular"`` if ``resolution`` is also ``None``.
         time_anchor: Defines the window of time over which a given timestamp refers to. In the descriptions below,
             "t" is the time value, "r" stands for a single unit of the resolution of the data:
 
@@ -155,6 +159,15 @@ class TimeFrame:
         >>> tf = TimeFrame(df, "time", resolution="P1D", offset="+T9H", periodicity="P1Y+9MT9H")
         >>> print(f"resolution={tf.resolution} alignment={tf.alignment} periodicity={tf.periodicity}")
         resolution=P1D alignment=P1D+T9H periodicity=P1Y+9MT9H
+
+        An ``"irregular"`` periodicity is for ad-hoc measurements, here recorded to the minute:
+
+        >>> df = pl.DataFrame(
+        ...     {"time": [datetime(2024, 1, 3, 10, 15), datetime(2024, 2, 19, 14, 2), datetime(2024, 2, 20, 9, 41)]}
+        ... )
+        >>> tf = TimeFrame(df, "time", resolution="PT1M", periodicity="irregular")
+        >>> print(f"resolution={tf.resolution} periodicity={tf.periodicity} is_irregular={tf.is_irregular}")
+        resolution=PT1M periodicity=None is_irregular=True
     """
 
     _df: pl.DataFrame
@@ -169,7 +182,7 @@ class TimeFrame:
         time_name: str,
         resolution: Period | str | None = None,
         offset: str | None = None,
-        periodicity: Period | str | None = None,
+        periodicity: Period | Irregular | str | None = None,
         time_anchor: TimeAnchor = "start",
         on_duplicates: DuplicateOption = "error",
         on_misaligned_rows: ValidationErrorOptions = "error",
@@ -255,29 +268,11 @@ class TimeFrame:
         tf._column_metadata.sync()
         return tf
 
-    def with_flag_system(
-        self, name: str, flag_system: FlagSystemType, flag_type: FlagSystemLiteral = "bitwise"
-    ) -> TimeFrame:
-        """Return a new TimeFrame, with a flag system registered.
-
-        Args:
-            name: Short name for the flag system.
-            flag_system: The flag system definition. See ``register_flag_system`` for accepted types.
-            flag_type: Whether to create a ``"bitwise"`` or ``"categorical"`` flag system. Only
-                relevant when ``flag_system`` is a ``dict[str, int]`` or ``list[str]``.
-
-        Returns:
-            A new TimeFrame with the flag system registered.
-        """
-        tf = self.copy()
-        tf.register_flag_system(name, flag_system, flag_type)
-        return tf
-
-    def with_periodicity(self, periodicity: str | Period) -> TimeFrame:
+    def with_periodicity(self, periodicity: Irregular | str | Period) -> TimeFrame:
         """Return a new TimeFrame, with a new periodicity registered.
 
         Args:
-            periodicity: The new periodicity
+            periodicity: The new periodicity, or ``"irregular"``.
 
         Returns:
             A new TimeFrame with a new periodicity set.
@@ -364,9 +359,14 @@ class TimeFrame:
         return self._time_manager.alignment
 
     @property
-    def periodicity(self) -> Period:
-        """The periodicity of the timeseries data within the TimeFrame"""
+    def periodicity(self) -> Period | None:
+        """The periodicity of the timeseries data within the TimeFrame, or None if it is irregular"""
         return self._time_manager.periodicity
+
+    @property
+    def is_irregular(self) -> bool:
+        """Whether the TimeFrame is irregular, i.e. has no periodicity"""
+        return self._time_manager.is_irregular
 
     @property
     def time_anchor(self) -> TimeAnchor:
@@ -398,9 +398,15 @@ class TimeFrame:
         """Only the labels for the data columns within the TimeFrame."""
         return [c for c in self.columns if c not in self.flag_columns]
 
-    def sort_time(self) -> None:
-        """Sort the TimeFrame DataFrame by the time column."""
-        self._df = self.df.sort(self.time_name)
+    def sort_time(self) -> TimeFrame:
+        """Return a new TimeFrame with the DataFrame sorted by the time column.
+
+        Returns:
+            A new TimeFrame sorted by time.
+        """
+        tf = self.copy()
+        tf._df = self.df.sort(self.time_name)
+        return tf
 
     def pad(self, start: datetime | None = None, end: datetime | None = None) -> TimeFrame:
         """Pad the time series with missing datetime rows, filling in NULLs for missing values.
@@ -415,6 +421,7 @@ class TimeFrame:
             Padded TimeFrame
 
         Raises:
+            PeriodicityError: If the TimeFrame is irregular, as it has no time steps to pad.
             TypeError: If ``start`` or ``end`` is not a datetime, or its time zone doesn't match the time column.
         """
         padded_df = pad_time(
@@ -433,16 +440,12 @@ class TimeFrame:
 
         tf = self.copy()
         tf._df = padded_df
-        tf.sort_time()
-        return tf
+        return tf.sort_time()
 
-    def register_flag_system(
-        self,
-        name: str,
-        flag_system: FlagSystemType = None,
-        flag_type: FlagSystemLiteral = "bitwise",
-    ) -> None:
-        """Register a named flag system with the internal flag manager.
+    def with_flag_system(
+        self, name: str, flag_system: FlagSystemType = None, flag_type: FlagSystemLiteral = "bitwise"
+    ) -> TimeFrame:
+        """Return a new TimeFrame, with a flag system registered.
 
         Args:
             name: Short name for the flag system.
@@ -454,8 +457,13 @@ class TimeFrame:
                 as both key and value - an empty list produces the default ``FLAGGED`` flag).
             flag_type: Whether to create a ``"bitwise"`` or ``"categorical"`` flag system. Only
                 relevant when ``flag_system`` is a ``dict[str, int]`` or ``list[str]``.
+
+        Returns:
+            A new TimeFrame with the flag system registered.
         """
-        self._flag_manager.register_flag_system(name, flag_system, flag_type)
+        tf = self.copy()
+        tf._flag_manager.register_flag_system(name, flag_system, flag_type)
+        return tf
 
     def get_flag_system(self, name: str) -> type[FlagSystemBase]:
         """Return a registered flag system.
@@ -468,68 +476,53 @@ class TimeFrame:
         """
         return self._flag_manager.get_flag_system(name)
 
-    def register_flag_column(self, column_name: str, flag_system_name: str) -> None:
-        """Mark the specified existing column as a flag column.
+    def with_flag_column(
+        self,
+        column_name: str,
+        flag_system_name: str,
+        data: int | str | Sequence[int | str] | None = None,
+    ) -> TimeFrame:
+        """Return a new TimeFrame with a column registered as a flag column.
 
-        All non-null values in the column must be valid flag values for the given flag system.
+        If the column doesn't exist, it is created from ``data``, or from the flag system's empty value if ``data`` is
+        not given.
+
+        If the column exists, its values are kept, unless ``data`` is given, which replaces them.
 
         Args:
-            column_name: A column name to mark as a flag column.
+            column_name: Name of the flag column.
             flag_system_name: The name of the registered flag system.
+            data: Value(s) to populate the column with. Can be a scalar or list-like.
+
+        Returns:
+            A new TimeFrame with the flag column registered.
 
         Raises:
+            ColumnTypeError: If ``column_name`` is the time column.
+            FlagSystemError: If ``column_name`` is already registered as a flag column.
             BitwiseFlagUnknownError: If the column contains values with bits not in the bitwise flag system.
             CategoricalFlagUnknownError: If the column contains values not in the categorical flag system.
         """
-        check_columns_in_dataframe(self.df, column_name)
+        if column_name == self.time_name:
+            raise ColumnTypeError(f"The time column '{column_name}' cannot be a flag column.")
         flag_system = self.get_flag_system(flag_system_name)
 
-        flag_system.validate_column(self.df[column_name])
-        self._flag_manager.register_flag_column(column_name, flag_system_name)
+        new_df = self.df
+        if data is not None or column_name not in new_df.columns:
+            col_dtype = flag_system.column_dtype()
+            # A scalar or missing value is broadcast with pl.lit; otherwise it's a sequence so cast to a Series
+            if isinstance(data, (int, str)) or data is None:
+                col_data = pl.lit(flag_system.empty_value() if data is None else data, dtype=col_dtype)
+            else:
+                col_data = pl.Series(data, dtype=col_dtype)
+            new_df = new_df.with_columns(col_data.alias(column_name))
 
-    def init_flag_column(
-        self,
-        flag_system_name: str,
-        column_name: str | None = None,
-        data: int | str | Sequence[int | str] | None = None,
-    ) -> None:
-        """Add a new column to the TimeFrame DataFrame, setting it as a Flag Column.
-
-        For bitwise flag systems, the column is initialised with integer values (default 0).
-        For ``CategoricalSingleFlag`` systems, the column is initialised with null values.
-        For ``CategoricalListFlag`` systems, the column is initialised with empty lists.
-
-        Args:
-            flag_system_name: The name of the registered flag system.
-            column_name: Optional name for the new flag column. If omitted, a name of the
-                    form ``__flag__{flag_system_name}`` is used, with an integer suffix appended if the name
-                    already exists (e.g. ``__flag__CORE_FLAGS__1``).
-            data: The default value(s) to populate the flag column with. Can be a scalar or
-                    list-like. For bitwise systems defaults to ``0``; for categorical systems defaults
-                    to ``None`` (null) in single mode or an empty list in list mode.
-        """
-        flag_sys = self.get_flag_system(flag_system_name)
-        col_dtype = flag_sys.column_dtype()
-
-        # 1. Build column - if it's a scalar or missing, use pl.lit; otherwise it's a sequence so cast to a Series
-        if isinstance(data, (int, str)) or data is None:
-            col_data = pl.lit(flag_sys.empty_value() if data is None else data, dtype=col_dtype)
-        else:
-            col_data = pl.Series(data, dtype=col_dtype)
-
-        # 2. Determine name of flag column
-        if not column_name:
-            column_name = f"__flag__{flag_system_name}"
-            if column_name in self.df.columns:
-                col_suffix = 1
-                while f"{column_name}__{col_suffix}" in self.df.columns:
-                    col_suffix += 1
-                column_name = f"{column_name}__{col_suffix}"
-
-        # 3. Add and register as a flag column
-        self._df = self.df.with_columns(col_data.alias(column_name))
-        self._flag_manager.register_flag_column(column_name, flag_system_name)
-        self._column_metadata.sync()
+        flag_system.validate_column(new_df[column_name])
+        tf = self.copy()
+        tf._df = new_df
+        tf._flag_manager.register_flag_column(column_name, flag_system_name)
+        tf._column_metadata.sync()
+        return tf
 
     def get_flag_column(self, flag_column_name: str) -> FlagColumn:
         """Look up a registered flag column by name.
@@ -548,8 +541,8 @@ class TimeFrame:
         flag_value: int | str,
         expr: pl.Expr | pl.Series = pl.lit(True),
         overwrite: bool = True,
-    ) -> None:
-        """Add flag value to flag column, where expression is True.
+    ) -> TimeFrame:
+        """Return a new TimeFrame with a flag value added to a flag column, where expression is True.
 
         For bitwise flag columns, applies the flag via bitwise OR. ``overwrite`` is not
         applicable for bitwise columns.
@@ -566,15 +559,22 @@ class TimeFrame:
             expr: Polars expression for which rows to add flag to.
             overwrite: Categorical scalar mode only. If ``True`` (default), replaces any
                 existing value. If ``False``, only updates rows whose current value is null.
+
+        Returns:
+            A new TimeFrame with the flag added.
         """
         flag_column = self.get_flag_column(flag_column_name)
+        tf = self.copy()
         if isinstance(flag_column, CategoricalSingleFlagColumn):
-            self._df = flag_column.add_flag(self.df, flag_value, expr, overwrite)
+            tf._df = flag_column.add_flag(self.df, flag_value, expr, overwrite)
         else:
-            self._df = flag_column.add_flag(self.df, flag_value, expr)
+            tf._df = flag_column.add_flag(self.df, flag_value, expr)
+        return tf
 
-    def remove_flag(self, column_name: str, flag_value: int | str, expr: pl.Expr | pl.Series = pl.lit(True)) -> None:
-        """Remove a flag value from a flag column, where expression is True.
+    def remove_flag(
+        self, flag_column_name: str, flag_value: int | str, expr: pl.Expr | pl.Series = pl.lit(True)
+    ) -> TimeFrame:
+        """Return a new TimeFrame with a flag value removed from a flag column, where expression is True.
 
         For bitwise flag columns, clears the flag bit via bitwise AND NOT.
 
@@ -583,12 +583,17 @@ class TimeFrame:
         For categorical flag columns in list mode, removes all occurrences of the value from the list.
 
         Args:
-            column_name: The name of the flag column.
+            flag_column_name: The name of the flag column.
             flag_value: The flag value to remove.
             expr: Polars expression for which rows to remove the flag from.
+
+        Returns:
+            A new TimeFrame with the flag removed.
         """
-        flag_column = self.get_flag_column(column_name)
-        self._df = flag_column.remove_flag(self.df, flag_value, expr)
+        flag_column = self.get_flag_column(flag_column_name)
+        tf = self.copy()
+        tf._df = flag_column.remove_flag(self.df, flag_value, expr)
+        return tf
 
     def decode_flag_column(self, flag_column_name: str) -> TimeFrame:
         """Decode a flag column from raw values to human-readable flag names.
@@ -706,7 +711,7 @@ class TimeFrame:
             aggregation_time_anchor: The time anchor for the aggregation result.
             time_window: Optional restriction of which time-of-day observations are included in each
                 aggregation period. Only supported when the aggregation period is daily or longer and the data
-                periodicity is sub-daily.
+                periodicity is sub-daily or irregular.
 
                 Accepts a :class:`TimeWindow` instance, or a ``(start, end, closed[optional])`` tuple, where:
 
@@ -717,8 +722,15 @@ class TimeFrame:
             **kwargs: Parameters specific to the aggregation function.
 
         Returns:
-            A TimeFrame containing the aggregated data.
+            A TimeFrame containing the aggregated data. Aggregating an irregular TimeFrame gives a regular one at the
+            aggregation period, with a null expected count.
+
+        Raises:
+            AggregationPeriodError: If ``aggregation_period`` is ``"irregular"``.
         """
+        if isinstance(aggregation_period, str) and aggregation_period.lower() in get_args(Irregular):
+            raise AggregationPeriodError("Cannot aggregate to an irregular period. Give a Period or ISO-8601 duration.")
+
         # Normalise time_window tuple to a TimeWindow instance
         normalised_time_window = TimeWindow.from_tuple(time_window) if isinstance(time_window, tuple) else time_window
 
@@ -791,15 +803,15 @@ class TimeFrame:
                 - ``LEADING``: window looks forward - ``[t, t + window_size)``.
                   Edge effects appear at the end of the series.
                 - ``CENTER``: window is centered - ``[t - window_size/2, t + window_size/2]``.
-                  Edge effects appear at both ends. The window must span an odd number of time steps.
-                  Not supported for calendar-based window sizes.
+                  Edge effects appear at both ends. For regular data, the window must span an odd number of time
+                  steps. Not supported for calendar-based window sizes.
 
                 Accepts ``'trailing'``, ``'leading'``, or ``'center'``.
             **kwargs: Parameters specific to the aggregation function.
 
         Returns:
             A TimeFrame with the same resolution, periodicity, and time anchor as this TimeFrame,
-            containing the rolling aggregation results.
+            containing the rolling aggregation results. An irregular TimeFrame stays irregular.
         """
         agg_func = AggregationFunction.get(aggregation_function, **kwargs)
         window_size = configure_period_object(window_size)
@@ -829,7 +841,7 @@ class TimeFrame:
             time_name=self.time_name,
             resolution=self.resolution,
             offset=self.offset,
-            periodicity=self.periodicity,
+            periodicity="irregular" if self.periodicity is None else self.periodicity,
             time_anchor=self.time_anchor,
         )
         tf.metadata = self.metadata
@@ -855,7 +867,8 @@ class TimeFrame:
         Args:
             aggregation_function: The aggregation function to apply. Functions that need whole aggregation periods
                 (``mean_sum``, ``nth``) are not supported.
-            columns: The column(s) to aggregate. If omitted, will use all data columns.
+            columns: The column(s) to aggregate. If omitted, will use all data columns, including the results of any
+                earlier call, so pass this when chaining.
             missing_criteria: How much data each time of year needs, as in :meth:`aggregate`. The expected count is
                 the number of time steps the time of year covers across the reference interval, so e.g.
                 ``("percent", 80)`` needs values for 80% of them.
@@ -874,8 +887,8 @@ class TimeFrame:
         Returns:
             The TimeFrame with the aggregation results added, named as in :meth:`aggregate`: the results,
             ``count_<column>`` (values found), ``expected_count_<time>`` (time steps covered) and ``valid_<column>``
-            (whether ``missing_criteria`` is met). Calls can be chained to add more results; the ``count_``,
-            ``expected_count_`` and ``valid_`` columns then describe the last call.
+            (whether ``missing_criteria`` is met). Calls can be chained to add more results, passing ``columns`` to
+            each; the ``count_``, ``expected_count_`` and ``valid_`` columns then describe the last call.
 
         Raises:
             AggregationPeriodError: If the aggregation period does not fit evenly into a year or isn't a whole number
@@ -964,11 +977,9 @@ class TimeFrame:
             # Return the boolean series, if requested
             return qc_result
         else:
-            # Otherwise, create a copy of the current TimeFrame, and update the dataframe with the QC result
+            # Otherwise, return a new TimeFrame with the QC result flagged
             flag_column_name, flag_value = flag_params
-            tf_result = self.copy()
-            tf_result.add_flag(flag_column_name, flag_value, qc_result)
-            return tf_result
+            return self.add_flag(flag_column_name, flag_value, qc_result)
 
     def infill(
         self,
@@ -996,7 +1007,13 @@ class TimeFrame:
         Returns:
             A TimeFrame containing the infilled data. Missing time steps are padded in, so the result can contain
             more rows than this TimeFrame. Values added by padding are null in all other columns.
+
+        Raises:
+            PeriodicityError: If the TimeFrame is irregular, as it has no time steps to define a gap.
         """
+        if self.periodicity is None:
+            raise PeriodicityError("Cannot infill irregular data, as it has no expected time steps to define a gap.")
+
         # Infilling fills in missing time steps, so work from a padded TimeFrame
         tf_padded = self if self.df.is_empty() else self.pad()
 
@@ -1020,7 +1037,7 @@ class TimeFrame:
             after_is_null = after.is_null() | after.is_nan()
 
             mask = before_is_null.ne(after_is_null)
-            tf_result.add_flag(flag_column_name, flag_value, mask)
+            tf_result = tf_result.add_flag(flag_column_name, flag_value, mask)
 
         return tf_result
 

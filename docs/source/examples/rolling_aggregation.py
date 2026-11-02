@@ -5,7 +5,7 @@ from datetime import datetime
 import polars as pl
 
 import time_stream as ts
-from examples._helpers import rainfall_15min, sample_frame
+from examples.helpers import rainfall_15min, sample_frame
 
 
 def rolling_mean_example() -> None:

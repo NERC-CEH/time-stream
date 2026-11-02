@@ -14,7 +14,10 @@ from isoperiod import Period
 
 from time_stream.exceptions import (
     ColumnNotFoundError,
+    ColumnTypeError,
+    DuplicateColumnError,
     DuplicateValueError,
+    PeriodicityError,
     TimeWindowError,
     UnhandledEnumError,
 )
@@ -104,7 +107,7 @@ class TimeWindow:
             )
         )
 
-    def expected_count(self, periodicity: Period) -> int:
+    def expected_count(self, periodicity: Period | None) -> int:
         """Count the number of observations expected within this window for a given periodicity.
 
         Adjusts the counts for the closed boundaries:
@@ -113,11 +116,17 @@ class TimeWindow:
         - ``LEFT`` and ``RIGHT`` leave the count unchanged.
 
         Args:
-            periodicity: The Period object from which the timedelta is used for the calculation.
+            periodicity: The Period object from which the timedelta is used for the calculation, or None if irregular.
 
         Returns:
             The expected number of observations within the window for the given periodicity.
+
+        Raises:
+            PeriodicityError: If the periodicity is irregular, as no observations are expected.
+            ValueError: If the periodicity is month-based.
         """
+        if periodicity is None:
+            raise PeriodicityError("Cannot compute expected count for irregular data.")
         td = periodicity.timedelta
         if td is None:
             raise ValueError("Cannot compute expected count for a month-based period (no fixed timedelta).")
@@ -213,7 +222,7 @@ def truncate_to_period(date_times: pl.Series, period: Period, time_anchor: TimeA
 def pad_time(
     df: pl.DataFrame,
     time_name: str,
-    periodicity: Period,
+    periodicity: Period | None,
     time_anchor: TimeAnchor = "start",
     start: datetime | None = None,
     end: datetime | None = None,
@@ -236,7 +245,7 @@ def pad_time(
     Args:
         df: The DataFrame to pad.
         time_name: The name of the time column to pad.
-        periodicity: The periodicity of the time series.
+        periodicity: The periodicity of the time series, or None if irregular.
         time_anchor: The time anchor to which the date/times conform to.
         start: The starting datetime value to pad time values from (inclusive), truncated to the periodicity. If not
             provided then the beginning of the dataframe will be used.
@@ -247,9 +256,12 @@ def pad_time(
         pl.DataFrame of padded data
 
     Raises:
+        PeriodicityError: If the periodicity is irregular, as there are no time steps to pad.
         TypeError: If ``start`` or ``end`` is not a datetime, or its time zone doesn't match the time column.
 
     """
+    if periodicity is None:
+        raise PeriodicityError("Cannot pad irregular data.")
     for name, value in (("start", start), ("end", end)):
         if value is not None and not isinstance(value, datetime):
             raise TypeError(f"'{name}' must be a datetime. Got: '{type(value)}'")
@@ -376,6 +388,53 @@ def check_columns_in_dataframe(df: pl.DataFrame, columns: str | Iterable[str]) -
         raise ColumnNotFoundError(f"Columns not found in dataframe: {invalid_columns}")
 
 
+def check_time_column_types_match(df: pl.DataFrame, other: pl.DataFrame, time_name: str) -> None:
+    """Check that the time columns of two DataFrames have the same type, so they can be joined on time.
+
+    Args:
+        df: The DataFrame being joined onto.
+        other: The DataFrame being joined.
+        time_name: The name of the time column in both DataFrames.
+
+    Raises:
+        ColumnTypeError: If the time column types differ.
+    """
+    other_dtype, dtype = other.schema[time_name], df.schema[time_name]
+    if other_dtype != dtype:
+        raise ColumnTypeError(
+            f"The joined DataFrame's time column type '{other_dtype}' doesn't match the TimeFrame's time column type "
+            f"'{dtype}'."
+        )
+
+
+def join_column_on_time(
+    df: pl.DataFrame, other: pl.DataFrame, column: str, time_name: str, joined_column: str
+) -> pl.DataFrame:
+    """Join a column from another DataFrame onto a DataFrame, matching on time.
+
+    Args:
+        df: The DataFrame to join onto.
+        other: The DataFrame holding the column.
+        column: The name of the column in ``other``.
+        time_name: The name of the time column in both DataFrames.
+        joined_column: The name to give the column in ``df``.
+
+    Returns:
+        ``df`` with the joined column, null where ``other`` has no value.
+
+    Raises:
+        ColumnNotFoundError: If the column, or the time column, is missing from ``other``.
+        ColumnTypeError: If the time column types differ.
+        DuplicateColumnError: If ``joined_column`` is already in ``df``.
+    """
+    check_columns_in_dataframe(other, [time_name, column])
+    check_time_column_types_match(df, other, time_name)
+    if joined_column in df.columns:
+        raise DuplicateColumnError(f"Cannot join column '{column}' as '{joined_column}': that column already exists.")
+    other = other.select([time_name, column]).rename({column: joined_column})
+    return df.join(other, on=time_name, how="left")
+
+
 def check_literal_value(value: Any, literal: Any, name: str) -> None:
     """Checks that a value is one of the options allowed by a ``Literal`` type alias.
 
@@ -486,7 +545,7 @@ def check_alignment(date_times: pl.Series, alignment: Period, time_anchor: TimeA
     return date_times.equals(truncate_to_period(date_times, alignment, time_anchor))
 
 
-def check_periodicity(date_times: pl.Series, periodicity: Period, time_anchor: TimeAnchor) -> bool:
+def check_periodicity(date_times: pl.Series, periodicity: Period | None, time_anchor: TimeAnchor) -> bool:
     """Check that a Series of date/time values conforms to given periodicity.
 
     Periodicity defines the allowed "frequency" of the datetimes, i.e., how many datetimes
@@ -494,12 +553,14 @@ def check_periodicity(date_times: pl.Series, periodicity: Period, time_anchor: T
 
     Args:
        date_times: A Series of date/times to be tested.
-       periodicity: The periodicity period that the date/times are checked against.
+       periodicity: The periodicity period that the date/times are checked against, or None if irregular.
        time_anchor: The time anchor to which the date/times should conform to.
 
     Returns:
-       True if the Series conforms to the periodicity.
+       True if the Series conforms to the periodicity. Always True if irregular.
     """
+    if periodicity is None:
+        return True
     # Check how many unique values are in the truncated times. It should equal the length of the original
     # time-series if all time values map to single periodicity
     return truncate_to_period(date_times, periodicity, time_anchor).n_unique() == date_times.len()

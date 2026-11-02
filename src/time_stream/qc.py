@@ -144,19 +144,28 @@ class ComparisonCheck(QCCheck):
                 check_time_zone(value, ctx.df.schema[column], "compare_to")
 
         operator_map = {
-            ">": pl.col(column) > compare_to,
-            ">=": pl.col(column) >= compare_to,
-            "<": pl.col(column) < compare_to,
-            "<=": pl.col(column) <= compare_to,
-            "==": pl.col(column) == compare_to,
-            "!=": pl.col(column) != compare_to,
-            "is_in": pl.col(column).is_in(compare_to if isinstance(compare_to, list) else [compare_to]),
+            ">": pl.Expr.gt,
+            ">=": pl.Expr.ge,
+            "<": pl.Expr.lt,
+            "<=": pl.Expr.le,
+            "==": pl.Expr.eq,
+            "!=": pl.Expr.ne,
+            "is_in": pl.Expr.is_in,
         }
 
         if self.operator not in operator_map:
             raise QcUnknownOperatorError(f"Invalid operator '{self.operator}'. Use: {', '.join(operator_map.keys())}")
 
-        operator_expr = operator_map[self.operator]
+        if self.operator == "is_in":
+            # is_in needs the values in the column's type, e.g. ints against a float column
+            dtype = ctx.df.schema[column]
+            values = compare_to if isinstance(compare_to, list) else [compare_to]
+            try:
+                compare_to = pl.Series("", values, dtype=dtype, strict=True).to_list()
+            except Exception as e:
+                raise TypeError(f"compare_to is incompatible with column '{column}' of type {dtype}: {e}") from e
+
+        operator_expr = operator_map[self.operator](pl.col(column), compare_to)
         if self.flag_na:
             is_na = pl.col(column).is_null()
             if ctx.df.schema[column].is_float():
