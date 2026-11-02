@@ -1,7 +1,7 @@
 """Examples for the "Rolling aggregation" user guide page."""
 
 import time_stream as ts
-from examples._helpers import sample_frame
+from examples.helpers import sample_frame
 
 
 def rolling_mean_example() -> None:

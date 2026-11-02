@@ -6,7 +6,7 @@ import numpy as np
 import polars as pl
 
 import time_stream as ts
-from examples._helpers import sample_frame
+from examples.helpers import sample_frame
 
 
 def min_max_example() -> None:

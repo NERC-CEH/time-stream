@@ -8,7 +8,13 @@ import pytest
 from isoperiod import Period
 from polars.testing import assert_frame_equal, assert_series_equal
 
-from time_stream.exceptions import ColumnNotFoundError, TimeWindowError
+from time_stream.exceptions import (
+    ColumnNotFoundError,
+    ColumnTypeError,
+    DuplicateColumnError,
+    PeriodicityError,
+    TimeWindowError,
+)
 from time_stream.types import ClosedInterval, TimeAnchor
 from time_stream.utils import (
     TimeWindow,
@@ -19,6 +25,7 @@ from time_stream.utils import (
     check_periodicity,
     check_time_zone,
     get_date_filter,
+    join_column_on_time,
     pad_time,
     truncate_to_period,
 )
@@ -1147,6 +1154,12 @@ class TestPadTime:
         result = pad_time(df_to_pad, "time", periodicity, start=start_date, end=end_date)
         assert_frame_equal(expected_df, result)
 
+    def test_irregular_raises(self) -> None:
+        """Test that irregular data can't be padded, as it has no time steps"""
+        df = pl.DataFrame({"time": [datetime(2020, 1, 1), datetime(2020, 3, 17)]})
+        with pytest.raises(PeriodicityError, match="Cannot pad irregular data"):
+            pad_time(df, "time", None)
+
 
 class TestCheckAlignment:
     def _check_success(self, _: str, times: list, resolution: Period, time_anchor: TimeAnchor) -> None:
@@ -2224,6 +2237,11 @@ class TestCheckPeriodicity:
         """Test that a microsecond based time series that doesn't conform to the given periodicity fails the check."""
         self._check_failure(name, times, periodicity, time_anchor)
 
+    def test_irregular(self) -> None:
+        """Test that irregular data always conforms, as it has no periodicity"""
+        times = pl.Series("time", [datetime(2020, 1, 1), datetime(2020, 1, 1, 0, 0, 0, 1), datetime(2022, 1, 1)])
+        assert check_periodicity(times, None, "start")
+
 
 class TestCheckLiteralValue:
     @pytest.mark.parametrize("value", ["start", "end", "point"])
@@ -2374,3 +2392,41 @@ class TestTimeWindow:
         tw = TimeWindow(start=time(10, 0), end=time(12, 0), closed=closed)
         result = tw.filter_df(df, "timestamp")
         assert result["value"].to_list() == expected_values
+
+    def test_expected_count_irregular_raises(self) -> None:
+        """expected_count raises for irregular data, as no observations are expected."""
+        tw = TimeWindow(start=time(10, 30), end=time(14, 0))
+        with pytest.raises(PeriodicityError, match="Cannot compute expected count for irregular data"):
+            tw.expected_count(None)
+
+
+class TestJoinColumnOnTime:
+    df = pl.DataFrame({"time": [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)], "a": [1, 2, 3]})
+    other = pl.DataFrame({"time": [datetime(2024, 1, 2), datetime(2024, 1, 3)], "b": [20, 30], "c": [0, 0]})
+
+    def test_column_joined(self) -> None:
+        """Test that a column is joined on time under the name given, null where the other DataFrame has no value."""
+        result = join_column_on_time(self.df, self.other, "b", "time", "b_joined")
+
+        expected = self.df.with_columns(pl.Series("b_joined", [None, 20, 30]))
+        assert_frame_equal(result, expected)
+
+    @pytest.mark.parametrize("joined_column", ["a", "time"], ids=["data column", "time column"])
+    def test_joined_column_clash_raises(self, joined_column: str) -> None:
+        """Test that a joined column name already in the DataFrame raises."""
+        with pytest.raises(DuplicateColumnError, match="already exists"):
+            join_column_on_time(self.df, self.other, "b", "time", joined_column)
+
+    @pytest.mark.parametrize(
+        "other,column", [(other, "missing"), (other.drop("time"), "b")], ids=["data column", "time column"]
+    )
+    def test_missing_column_raises(self, other: pl.DataFrame, column: str) -> None:
+        """Test that a column missing from the other DataFrame raises."""
+        with pytest.raises(ColumnNotFoundError):
+            join_column_on_time(self.df, other, column, "time", "joined")
+
+    def test_time_type_mismatch_raises(self) -> None:
+        """Test that joining on time columns of different types raises."""
+        other = self.other.with_columns(pl.col("time").cast(pl.Date))
+        with pytest.raises(ColumnTypeError, match="time column type"):
+            join_column_on_time(self.df, other, "b", "time", "b_joined")
