@@ -17,7 +17,7 @@ The TimeFrame :meth:`~time_stream.TimeFrame.plot` method needs matplotlib, which
 
 .. code-block:: bash
 
-   pip install "time-stream[plot]"
+   pip install "ukceh-time-stream[plot]"
 
 .. note::
 

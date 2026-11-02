@@ -1114,7 +1114,7 @@ class TimeFrame:
         Labels, units, colours and styles can be read from the column metadata keys ``label``, ``units``, ``color`` and
         ``plot_style``, and the title from the TimeFrame metadata key ``title``. Arguments take precedence.
 
-        Requires matplotlib: ``pip install "time-stream[plot]"``.
+        Requires matplotlib: ``pip install "ukceh-time-stream[plot]"``.
 
         Args:
             columns: Column(s) to plot, sharing one panel. A list of lists gives one panel per inner list. If omitted,
@@ -1154,7 +1154,7 @@ class TimeFrame:
         except ModuleNotFoundError as err:
             if err.name != "matplotlib":
                 raise
-            raise ImportError('Plotting requires matplotlib: pip install "time-stream[plot]"') from err
+            raise ImportError('Plotting requires matplotlib: pip install "ukceh-time-stream[plot]"') from err
 
         return plot_timeframe(
             self,

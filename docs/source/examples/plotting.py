@@ -5,7 +5,7 @@ from datetime import date, datetime
 import polars as pl
 
 import time_stream as ts
-from examples._helpers import DATA
+from examples.helpers import DATA
 
 
 def _weather() -> pl.DataFrame:
@@ -116,12 +116,12 @@ def flags_plot() -> None:
     spikes = {date(2019, 3, 12): 14.0, date(2019, 7, 21): -12.0, date(2019, 11, 5): 15.0}
     tf = tf.with_df(tf.df.with_columns(pl.col("temperature") + pl.col("time").replace_strict(spikes, default=0.0)))
     # [start:flags_plot]
-    tf.register_flag_system("QC", {"SUSPECT": 1, "MISSING": 2})
-    tf.init_flag_column("QC", "temperature_flags")
+    tf = tf.with_flag_system("QC", {"SUSPECT": 1, "MISSING": 2})
+    tf = tf.with_flag_column("temperature_flags", "QC")
 
     # Flag spikes as suspect, and missing values as missing
     tf = tf.qc_check("spike", "temperature", threshold=6, flag_params=("temperature_flags", "SUSPECT"))
-    tf.add_flag("temperature_flags", "MISSING", pl.col("temperature").is_null())
+    tf = tf.add_flag("temperature_flags", "MISSING", pl.col("temperature").is_null())
 
     tf.plot("temperature", start=datetime(2019, 1, 1), end=datetime(2019, 12, 31), flags="temperature_flags")
     # [end:flags_plot]

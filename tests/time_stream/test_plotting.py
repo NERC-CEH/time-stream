@@ -17,7 +17,7 @@ from numpy.testing import assert_array_equal
 from polars.testing import assert_frame_equal
 
 from time_stream.base import TimeFrame
-from time_stream.exceptions import BitwiseFlagUnknownError, ColumnNotFoundError, ColumnTypeError
+from time_stream.exceptions import AggregationError, BitwiseFlagUnknownError, ColumnNotFoundError, ColumnTypeError
 from time_stream.plotting import (
     FLAG_NONE,
     LOWER_FILL,
@@ -79,12 +79,11 @@ def _two_years() -> TimeFrame:
 def _flagged() -> TimeFrame:
     """The five-day TimeFrame with a bitwise flag column."""
     tf = TimeFrame(FIVE_DAYS, "time", resolution="P1D")
-    tf.register_flag_system("QC", {"CORRECTED": 1, "ESTIMATED": 2, "SUSPECT": 4})
-    tf.init_flag_column("QC", "flow_flags")
-    tf.add_flag("flow_flags", "CORRECTED", pl.col("time") <= datetime(2024, 1, 2))
-    tf.add_flag("flow_flags", "SUSPECT", pl.col("time") == datetime(2024, 1, 2))
-    tf.add_flag("flow_flags", "ESTIMATED", pl.col("time") == datetime(2024, 1, 4))
-    return tf
+    tf = tf.with_flag_system("QC", {"CORRECTED": 1, "ESTIMATED": 2, "SUSPECT": 4})
+    tf = tf.with_flag_column("flow_flags", "QC")
+    tf = tf.add_flag("flow_flags", "CORRECTED", pl.col("time") <= datetime(2024, 1, 2))
+    tf = tf.add_flag("flow_flags", "SUSPECT", pl.col("time") == datetime(2024, 1, 2))
+    return tf.add_flag("flow_flags", "ESTIMATED", pl.col("time") == datetime(2024, 1, 4))
 
 
 @pytest.fixture(autouse=True)
@@ -150,8 +149,9 @@ class TestPlotStyle:
             ({"resolution": "P1D", "time_anchor": "end"}, "step"),
             ({"resolution": "P1D", "time_anchor": "point"}, "line"),
             ({"resolution": "P1D", "periodicity": "P1Y"}, "scatter"),
+            ({"resolution": "P1D", "periodicity": "irregular"}, "scatter"),
         ],
-        ids=["start", "end", "point", "sparse"],
+        ids=["start", "end", "point", "sparse", "irregular"],
     )
     def test_default(self, kwargs: dict, expected: str) -> None:
         """The default follows the temporal properties."""
@@ -263,9 +263,9 @@ class TestWindow:
         assert_frame_equal(actual, expected)
 
     def test_irregular_not_padded(self) -> None:
-        """Data without a resolution is not padded."""
+        """Irregular data has no expected time steps, so is not padded."""
         df = pl.DataFrame({"time": [datetime(2024, 1, 1), datetime(2024, 1, 5)], "flow": [1.0, 2.0]})
-        tf = TimeFrame(df, "time")
+        tf = TimeFrame(df, "time", periodicity="irregular")
         assert_frame_equal(_window(tf, ["flow"], None, None), df)
 
     def test_empty(self) -> None:
@@ -599,8 +599,7 @@ class TestPlot:
 
     def test_several_flag_columns(self) -> None:
         """Every flag column gets a row, and the key names the column."""
-        tf = _flagged()
-        tf.init_flag_column("QC", "other_flags")
+        tf = _flagged().with_flag_column("other_flags", "QC")
         fig = tf.plot("flow", flags={"flow_flags": ["SUSPECT"], "other_flags": ["CORRECTED"]})
         assert [label.get_text() for label in fig.axes[-1].get_yticklabels()] == ["flow_flags", "other_flags"]
         key = [text.get_text() for text in fig.legends[0].get_texts()]
@@ -612,6 +611,13 @@ class TestPlot:
         tf.column_metadata["flow"]["color"] = "#123456"
         fig = tf.plot("flow")
         assert fig.axes[0].lines[0].get_color() == "#123456"
+
+    def test_envelope_irregular(self) -> None:
+        """Irregular data has no times of year to compare against, so an envelope raises."""
+        df = pl.DataFrame({"time": [datetime(2023, 1, 1), datetime(2024, 3, 5)], "flow": [1.0, 2.0]})
+        tf = TimeFrame(df, "time", resolution="P1D", periodicity="irregular")
+        with pytest.raises(AggregationError, match="irregular"):
+            tf.plot("flow", envelope=True)
 
     def test_log_y(self) -> None:
         """The y axis can be logarithmic."""
@@ -661,5 +667,5 @@ class TestPlot:
         """Without matplotlib, plotting raises a helpful ImportError."""
         monkeypatch.delitem(sys.modules, "time_stream.plotting")
         monkeypatch.setitem(sys.modules, "matplotlib", None)
-        with pytest.raises(ImportError, match="time-stream\\[plot\\]"):
+        with pytest.raises(ImportError, match="ukceh-time-stream\\[plot\\]"):
             self.setup_tf().plot("flow")

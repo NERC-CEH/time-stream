@@ -213,8 +213,8 @@ def _plot_style(tf: TimeFrame, column: str, plot_style: PlotStyle | dict[str, Pl
 def _default_style(tf: TimeFrame) -> PlotStyle:
     """The default style for a TimeFrame, from its temporal properties.
 
-    Sparse data (periodicity coarser than the alignment) is drawn as points, instantaneous data as a line, and data
-    valid over a period as steps across that period.
+    Irregular data, and sparse data (periodicity coarser than the alignment), is drawn as points, instantaneous data as
+    a line, and data valid over a period as steps across that period.
 
     Args:
         tf: The TimeFrame being plotted.
@@ -222,7 +222,7 @@ def _default_style(tf: TimeFrame) -> PlotStyle:
     Returns:
         The plot style.
     """
-    if tf.periodicity != tf.alignment:
+    if tf.is_irregular or tf.periodicity != tf.alignment:
         return "scatter"
     if tf.time_anchor == "point":
         return "line"
@@ -299,7 +299,7 @@ def _member_name(members: Mapping[str, Any], member: Any) -> str:
 def _window(tf: TimeFrame, columns: list[str], start: datetime | None, end: datetime | None) -> pl.DataFrame:
     """The rows to plot, padded with nulls for any missing time steps.
 
-    Data at the default microsecond resolution has no regular time step, so is not padded.
+    Irregular data has no expected time steps, so is not padded.
 
     Args:
         tf: The TimeFrame being plotted.
@@ -320,9 +320,9 @@ def _window(tf: TimeFrame, columns: list[str], start: datetime | None, end: date
     if end is not None:
         df = df.filter(time <= end)
 
-    regular = tf.periodicity != Period.of_microseconds(1)
-    if regular and (not df.is_empty() or (start is not None and end is not None)):
-        df = pad_time(df, tf.time_name, tf.periodicity, tf.time_anchor, start, end)
+    periodicity = tf.periodicity
+    if periodicity is not None and (not df.is_empty() or (start is not None and end is not None)):
+        df = pad_time(df, tf.time_name, periodicity, tf.time_anchor, start, end)
 
     if df.is_empty():
         raise ValueError("No data to plot in the time window.")
@@ -435,7 +435,7 @@ def _time_of_year_statistics(
         return pl.DataFrame(), None
 
     tf_statistics = tf.select(columns)
-    if tf.periodicity != Period.of_microseconds(1):
+    if not tf.is_irregular:
         tf_statistics = tf_statistics.pad(start, end)
     if envelope_columns:
         tf_statistics = tf_statistics.time_of_year_aggregate(
