@@ -40,7 +40,7 @@ Let's take our example 15-minute river flow data that contains a few short outag
 
 **Input:**
 
-15-minute river flow timeseries, including some missing data.
+An example 15-minute river flow dataset, from 10 January 2024 to the end of 2025, including some missing data.
 
 .. jupyter-execute::
    :hide-code:
@@ -413,8 +413,9 @@ In both cases, you can also apply a ``correction_factor`` to the alternative dat
 Infilling from a separate DataFrame
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Let's say you have a primary dataset with missing "flow" values, and a separate ``alt_df`` with "alt_data" that
-can be used to infill these gaps.
+Let's say you have a primary dataset with missing "flow" values, and a separate ``alt_df`` holding a second example
+flow dataset, which can be used to infill these gaps. The second dataset runs about a quarter higher, so a
+``correction_factor`` of 0.8 scales it down.
 
 **Input:**
 
