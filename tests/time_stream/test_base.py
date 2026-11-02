@@ -14,17 +14,29 @@ from time_stream.exceptions import (
     BitwiseFlagUnknownError,
     CategoricalFlagUnknownError,
     ColumnNotFoundError,
+    ColumnTypeError,
     DuplicateColumnError,
+    DuplicateTimeError,
+    FlagSystemError,
     FlagSystemNotFoundError,
     MetadataError,
     NullTimeValueError,
     PeriodicityError,
+    ResolutionError,
     TimeMutatedError,
 )
 from time_stream.flags.flag_manager import BitwiseFlagColumn
 from time_stream.flags.flag_system import FlagSystemBase
 from time_stream.time_manager import TimeManager
 from time_stream.types import FlagSystemLiteral, TimeAnchor
+
+# Ad-hoc measurements, recorded to the minute
+IRREGULAR_DF = pl.DataFrame(
+    {
+        "time": [datetime(2024, 1, 3, 10, 15), datetime(2024, 2, 19, 14, 2), datetime(2024, 2, 20, 9, 41)],
+        "value": [1.0, 2.0, 3.0],
+    }
+)
 
 
 class TestTimeFrameConstruction:
@@ -54,6 +66,75 @@ class TestTimeFrameConstruction:
         assert tf.df.height == 2
 
 
+class TestIrregularConstruction:
+    @pytest.mark.parametrize(
+        "kwargs,expected_resolution,expected_periodicity",
+        [
+            ({}, Period.of_microseconds(1), None),
+            ({"periodicity": "irregular"}, Period.of_microseconds(1), None),
+            ({"resolution": "PT1M", "periodicity": "irregular"}, Period.of_minutes(1), None),
+            ({"resolution": "PT1M", "periodicity": "IRREGULAR"}, Period.of_minutes(1), None),
+            ({"resolution": "PT1M"}, Period.of_minutes(1), Period.of_minutes(1)),
+            ({"periodicity": "P1D"}, Period.of_microseconds(1), Period.of_days(1)),
+        ],
+        ids=[
+            "defaults",
+            "irregular, no resolution",
+            "irregular with resolution",
+            "irregular upper case",
+            "resolution only",
+            "periodicity only",
+        ],
+    )
+    def test_periodicity(self, kwargs: dict, expected_resolution: Period, expected_periodicity: Period | None) -> None:
+        """Test the resolution and periodicity given by each combination of the two"""
+        tf = TimeFrame(IRREGULAR_DF, "time", **kwargs)
+
+        assert tf.resolution == expected_resolution
+        assert tf.periodicity == expected_periodicity
+        assert tf.is_irregular == (expected_periodicity is None)
+
+    def test_misaligned_rows_raise(self) -> None:
+        """Test that an irregular TimeFrame must still align to its resolution"""
+        with pytest.raises(ResolutionError):
+            TimeFrame(IRREGULAR_DF, "time", resolution="PT1H", periodicity="irregular")
+
+    def test_offset_allowed(self) -> None:
+        """Test that an irregular TimeFrame can have an offset"""
+        df = pl.DataFrame({"time": [datetime(2024, 1, 3, 9), datetime(2024, 2, 19, 9)], "value": [1.0, 2.0]})
+        tf = TimeFrame(df, "time", resolution="P1D", offset="+T9H", periodicity="irregular")
+
+        assert tf.alignment == Period.of_days(1).with_hour_offset(9)
+        assert tf.is_irregular
+
+    def test_duplicates_still_handled(self) -> None:
+        """Test that duplicate times in an irregular TimeFrame are handled by on_duplicates"""
+        df = pl.concat([IRREGULAR_DF, IRREGULAR_DF.head(1)])
+
+        with pytest.raises(DuplicateTimeError):
+            TimeFrame(df, "time", periodicity="irregular")
+
+        tf = TimeFrame(df, "time", periodicity="irregular", on_duplicates="keep_first")
+        assert_frame_equal(tf.df, IRREGULAR_DF)
+
+
+class TestIrregularPadInfill:
+    @pytest.mark.parametrize(
+        "call,expected_error",
+        [
+            (lambda tf: tf.pad(), "Cannot pad irregular data."),
+            (lambda tf: tf.infill("linear", "value"), "Cannot infill irregular data"),
+        ],
+        ids=["pad", "infill"],
+    )
+    def test_raises(self, call: Callable[[TimeFrame], TimeFrame], expected_error: str) -> None:
+        """Test that pad and infill raise on an irregular TimeFrame, as it has no expected time steps"""
+        tf = TimeFrame(IRREGULAR_DF, "time", resolution="PT1M", periodicity="irregular")
+
+        with pytest.raises(PeriodicityError, match=re.escape(expected_error)):
+            call(tf)
+
+
 class TestSortTime:
     def test_sort_random_dates(self) -> None:
         """Test that random dates are sorted appropriately"""
@@ -61,7 +142,7 @@ class TestSortTime:
         expected = pl.Series("time", [date(1967, 12, 25), date(1990, 1, 1), date(2019, 5, 8), date(2059, 8, 12)])
 
         tf = TimeFrame(pl.DataFrame({"time": times}), time_name="time")
-        tf.sort_time()
+        tf = tf.sort_time()
         assert_series_equal(tf.df["time"], expected)
 
     def test_sort_sorted_dates(self) -> None:
@@ -70,7 +151,7 @@ class TestSortTime:
         expected = pl.Series("time", times)
 
         tf = TimeFrame(pl.DataFrame({"time": times}), time_name="time")
-        tf.sort_time()
+        tf = tf.sort_time()
         assert_series_equal(tf.df["time"], expected)
 
     def test_sort_times(self) -> None:
@@ -92,8 +173,16 @@ class TestSortTime:
             ],
         )
         tf = TimeFrame(pl.DataFrame({"time": times}), time_name="time")
-        tf.sort_time()
+        tf = tf.sort_time()
         assert_series_equal(tf.df["time"], expected)
+
+    def test_returns_new_timeframe(self) -> None:
+        """Test that a new TimeFrame is returned and the original is unchanged."""
+        tf = TimeFrame(pl.DataFrame({"time": [date(1990, 1, 1), date(2019, 5, 8)]}), time_name="time")
+        original = tf.copy(share_df=False)
+        result = tf.sort_time()
+        assert result is not tf
+        assert tf == original
 
 
 class TestSelectColumns:
@@ -184,7 +273,7 @@ class TestSelectColumns:
     def test_select_column_does_not_auto_include_flags(self) -> None:
         """Flag columns are not automatically included when selecting a data column."""
         tf = TimeFrame(self.df, time_name="time").with_flag_system("system", {"A": 1, "B": 2, "C": 4})
-        tf.init_flag_column("system", "flag_col")
+        tf = tf.with_flag_column("flag_col", "system")
 
         result = tf.select(["col1"])
         assert "flag_col" not in result.df.columns
@@ -193,7 +282,7 @@ class TestSelectColumns:
     def test_select_column_with_explicit_flag_column(self) -> None:
         """Flag columns are preserved when explicitly included in select."""
         tf = TimeFrame(self.df, time_name="time").with_flag_system("system", {"A": 1, "B": 2, "C": 4})
-        tf.init_flag_column("system", "flag_col")
+        tf = tf.with_flag_column("flag_col", "system")
 
         result = tf.select(["col1", "flag_col"])
         assert "flag_col" in result.df.columns
@@ -202,13 +291,13 @@ class TestSelectColumns:
     def test_select_keeps_decoded_flag_column_decoded(self) -> None:
         """A decoded flag column is still decoded after selecting, so flags can still be added to it"""
         tf = TimeFrame(self.df, time_name="time").with_flag_system("system", {"A": 1, "B": 2, "C": 4})
-        tf.init_flag_column("system", "flag_col")
+        tf = tf.with_flag_column("flag_col", "system")
         decoded = tf.decode_flag_column("flag_col")
 
         result = decoded.select(["col1", "flag_col"])
 
         assert result.get_flag_column("flag_col").is_decoded
-        result.add_flag("flag_col", "A")
+        result = result.add_flag("flag_col", "A")
         expected = pl.Series("flag_col", [["A"], ["A"], ["A"]], dtype=pl.List(pl.String))
         assert_series_equal(result.df["flag_col"], expected)
 
@@ -449,7 +538,7 @@ class TestMetadata:
         assert tf.metadata == {"site": "A", "info": {"network": "FDRI"}}
 
 
-class TestInitFlagColumn:
+class TestWithFlagColumn:
     @staticmethod
     def setup_tf() -> tuple[TimeFrame, type[FlagSystemBase]]:
         df = pl.DataFrame(
@@ -460,108 +549,108 @@ class TestInitFlagColumn:
             }
         )
         tf = TimeFrame(df=df, time_name="time")
-        tf.register_flag_system("quality_control", {"OUT_OF_RANGE": 1, "SPIKE": 2, "LOW_BATTERY": 4})
+        tf = tf.with_flag_system("quality_control", {"OUT_OF_RANGE": 1, "SPIKE": 2, "LOW_BATTERY": 4})
         flag_system = tf.get_flag_system("quality_control")
 
         return tf, flag_system
 
-    def test_init_flag_column_success(self) -> None:
+    def test_new_column_registered(self) -> None:
         """Test initialising a flag column with a valid flag system."""
         tf, flag_system = self.setup_tf()
 
         # Shouldn't have any flag columns to start with
         assert tf._flag_manager._flag_columns == {}
 
-        tf.init_flag_column("quality_control", "flag_column")
+        tf = tf.with_flag_column("flag_column", "quality_control")
         assert tf._flag_manager._flag_columns == {"flag_column": BitwiseFlagColumn("flag_column", flag_system)}  # type: ignore[arg-type]
 
         assert "flag_column" in tf.flag_columns
 
-    def test_init_column_adds_to_metadata(self) -> None:
+    def test_new_column_adds_to_metadata(self) -> None:
         """Test that a new flag column gets added to the column metadata dict."""
         tf, flag_system = self.setup_tf()
-        tf.init_flag_column("quality_control", "flag_column")
+        tf = tf.with_flag_column("flag_column", "quality_control")
         expected = {"time": {}, "value": {}, "existing_flags": {}, "flag_column": {}}
         assert tf.column_metadata == expected
 
-    def test_init_flag_column_with_single_value(self) -> None:
+    def test_new_column_with_single_value(self) -> None:
         """Test initialising a flag column with a valid flag system and a non-default single value"""
         tf, flag_system = self.setup_tf()
 
         # Shouldn't have any flag columns to start with
         assert tf._flag_manager._flag_columns == {}
 
-        tf.init_flag_column("quality_control", "flag_column", 1)
+        tf = tf.with_flag_column("flag_column", "quality_control", 1)
         expected_values = pl.Series("flag_column", [1, 1, 1], dtype=pl.Int64)
         assert_series_equal(tf.df["flag_column"], expected_values)
 
-    def test_init_flag_column_with_list_value(self) -> None:
+    def test_new_column_with_list_value(self) -> None:
         """Test initialising a flag column with a valid flag system and a non-default list of values"""
         tf, flag_system = self.setup_tf()
 
         # Shouldn't have any flag columns to start with
         assert tf._flag_manager._flag_columns == {}
 
-        tf.init_flag_column("quality_control", "flag_column", [1, 2, 4])
+        tf = tf.with_flag_column("flag_column", "quality_control", [1, 2, 4])
         expected_values = pl.Series("flag_column", [1, 2, 4], dtype=pl.Int64)
         assert_series_equal(tf.df["flag_column"], expected_values)
 
-    def test_with_no_flag_column_name(self) -> None:
-        """Test that a default flag column name is used if not provided."""
+    def test_existing_column_keeps_values(self) -> None:
+        """Test that an existing column keeps its values when registered without data."""
         tf, flag_system = self.setup_tf()
+        tf = tf.with_flag_column("existing_flags", "quality_control")
 
-        # Shouldn't have any flag columns to start with
-        assert tf._flag_manager._flag_columns == {}
+        assert tf.flag_columns == ["existing_flags"]
+        assert_series_equal(tf.df["existing_flags"], pl.Series("existing_flags", [0, 1, 2]))
 
-        tf.init_flag_column("quality_control")
-        default_name = "__flag__quality_control"
-
-        assert tf._flag_manager._flag_columns == {default_name: BitwiseFlagColumn(default_name, flag_system)}  # type: ignore[arg-type]
-
-        assert default_name in tf.flag_columns
-
-    def test_init_no_column_name_adds_to_metadata(self) -> None:
-        """Test that a new flag column gets added to the column metadata dict."""
+    def test_existing_column_replaced_by_data(self) -> None:
+        """Test that data replaces the values of an existing column."""
         tf, flag_system = self.setup_tf()
+        tf = tf.with_flag_column("existing_flags", "quality_control", [4, 2, 1])
 
-        tf.init_flag_column("quality_control")
-        expected = {"time": {}, "value": {}, "existing_flags": {}, "__flag__quality_control": {}}
-        assert tf.column_metadata == expected
+        assert tf.flag_columns == ["existing_flags"]
+        assert_series_equal(tf.df["existing_flags"], pl.Series("existing_flags", [4, 2, 1]))
 
-    def test_auto_name_collision_avoidance(self) -> None:
-        """Test that a numeric suffix is appended when the auto-generated name already exists."""
-        tf, flag_system = self.setup_tf()
+    @pytest.mark.parametrize("data", [8, [1, 2, 8]], ids=["scalar", "list"])
+    def test_invalid_data_raises(self, data: int | list[int]) -> None:
+        """Test that data with values not in the flag system raises an error."""
+        tf, _ = self.setup_tf()
+        with pytest.raises(BitwiseFlagUnknownError):
+            tf.with_flag_column("flag_column", "quality_control", data)
 
-        tf.init_flag_column("quality_control")
-        tf.init_flag_column("quality_control")
+    def test_time_column_raises(self) -> None:
+        """Test that the time column cannot be a flag column."""
+        tf, _ = self.setup_tf()
+        with pytest.raises(ColumnTypeError):
+            tf.with_flag_column("time", "quality_control", 0)
 
-        assert "__flag__quality_control" in tf.flag_columns
-        assert "__flag__quality_control__1" in tf.flag_columns
+    def test_already_registered_raises(self) -> None:
+        """Test that registering a flag column twice raises an error."""
+        tf, _ = self.setup_tf()
+        tf = tf.with_flag_column("flag_column", "quality_control")
+        with pytest.raises(FlagSystemError):
+            tf.with_flag_column("flag_column", "quality_control")
 
-    def test_auto_name_collision_avoidance_multiple(self) -> None:
-        """Test that the numeric suffix increments correctly across multiple collisions."""
-        tf, flag_system = self.setup_tf()
-
-        tf.init_flag_column("quality_control")
-        tf.init_flag_column("quality_control")
-        tf.init_flag_column("quality_control")
-
-        assert "__flag__quality_control" in tf.flag_columns
-        assert "__flag__quality_control__1" in tf.flag_columns
-        assert "__flag__quality_control__2" in tf.flag_columns
-
-    def test_init_flag_column_default_dtype_and_values(self) -> None:
+    def test_new_column_default_dtype_and_values(self) -> None:
         """Test that the default bitwise column is Int64 initialised with zeros."""
         tf, _ = self.setup_tf()
-        tf.init_flag_column("quality_control", "flag_column")
+        tf = tf.with_flag_column("flag_column", "quality_control")
         expected = pl.Series("flag_column", [0, 0, 0], dtype=pl.Int64)
         assert_series_equal(tf.df["flag_column"], expected)
 
-    def test_init_flag_column_invalid_system_raises(self) -> None:
+    def test_invalid_system_raises(self) -> None:
         """Test that an unknown flag system name raises FlagSystemNotFoundError."""
         tf, _ = self.setup_tf()
         with pytest.raises(FlagSystemNotFoundError):
-            tf.init_flag_column("no_such_system", "flag_column")
+            tf.with_flag_column("flag_column", "no_such_system")
+
+    def test_returns_new_timeframe(self) -> None:
+        """Test that a new TimeFrame is returned and the original is unchanged."""
+        tf, _ = self.setup_tf()
+        original = tf.copy(share_df=False)
+        result = tf.with_flag_column("flag_column", "quality_control")
+        assert result is not tf
+        assert tf == original
 
 
 class TestTimeSeriesEquality:
@@ -684,6 +773,18 @@ class TestTimeSeriesEquality:
         assert self.tf_original._flag_manager == tf_different_time_name._flag_manager
         assert self.tf_original.metadata == tf_different_time_name.metadata
         assert self.tf_original.column_metadata != tf_different_time_name.column_metadata
+
+    def test_irregular_equal(self) -> None:
+        """Test that two irregular TimeFrames compare equal on periodicity."""
+        tf1 = TimeFrame(IRREGULAR_DF, "time", resolution="PT1M", periodicity="irregular")
+        tf2 = TimeFrame(IRREGULAR_DF, "time", resolution="PT1M", periodicity="irregular")
+        assert tf1 == tf2
+
+    def test_irregular_not_equal_to_regular(self) -> None:
+        """Test that an irregular TimeFrame is not equal to a regular one with the same data."""
+        tf_irregular = TimeFrame(IRREGULAR_DF, "time", resolution="PT1M", periodicity="irregular")
+        tf_regular = TimeFrame(IRREGULAR_DF, "time", resolution="PT1M")
+        assert tf_irregular != tf_regular
 
     def test_different_periodicity(self) -> None:
         """Test that TimeSeries objects with different periodicity are not equal."""
@@ -869,7 +970,7 @@ class TestAggregate:
         expected_df = pl.DataFrame(
             {
                 "timestamp": [datetime(2025, 1, 1, 0, 0, 0), datetime(2025, 1, 2, 0, 0, 0)],
-                "percentile_value": [22, 46],
+                "percentile_95_value": [22, 46],
                 "count_value": [24, 24],
                 "expected_count_timestamp": [24, 24],
                 "valid_value": [True, True],
@@ -891,50 +992,6 @@ class TestAggregate:
             getattr(tf, method)(123, "mean", "value")
 
 
-class TestCalculateMinMaxEnvelope:
-    def test_calculate_min_max_envelope(self) -> None:
-        period = Period.of_days(1)
-        df = pl.DataFrame(
-            {
-                "timestamp": [
-                    datetime(2020, 1, 1),
-                    datetime(2020, 1, 2),
-                    datetime(2020, 1, 3),
-                    datetime(2021, 1, 1),
-                    datetime(2021, 1, 2),
-                    datetime(2021, 1, 3),
-                    datetime(2021, 1, 4),
-                    datetime(2022, 1, 5),
-                ],
-                "value": [1, 2, 3, 4, 5, 6, 7, 8],
-            }
-        )
-
-        expected_df = pl.DataFrame(
-            {
-                "timestamp": [
-                    datetime(2020, 1, 1),
-                    datetime(2020, 1, 2),
-                    datetime(2020, 1, 3),
-                    datetime(2021, 1, 1),
-                    datetime(2021, 1, 2),
-                    datetime(2021, 1, 3),
-                    datetime(2021, 1, 4),
-                    datetime(2022, 1, 5),
-                ],
-                "value": [1, 2, 3, 4, 5, 6, 7, 8],
-                "value_min": [1, 2, 3, 1, 2, 3, 7, 8],
-                "value_max": [4, 5, 6, 4, 5, 6, 7, 8],
-            }
-        )
-
-        tf = TimeFrame(df=df, time_name="timestamp", resolution=period, periodicity=period)
-
-        actual_tf = tf.calculate_min_max_envelope()
-
-        assert_frame_equal(expected_df, actual_tf.df, check_column_order=False)
-
-
 class TestFilterByFlag:
     @staticmethod
     def setup_bitwise_tf() -> TimeFrame:
@@ -953,10 +1010,10 @@ class TestFilterByFlag:
             ),
             "time",
         ).with_flag_system("qc", {"FLAG_A": 1, "FLAG_B": 2, "FLAG_C": 4})
-        tf.init_flag_column("qc", "flag_col")
-        tf.add_flag("flag_col", "FLAG_A", pl.col("value").is_in([20, 40]))
-        tf.add_flag("flag_col", "FLAG_B", pl.col("value").is_in([30, 40]))
-        tf.add_flag("flag_col", "FLAG_C", pl.col("value") == 50)
+        tf = tf.with_flag_column("flag_col", "qc")
+        tf = tf.add_flag("flag_col", "FLAG_A", pl.col("value").is_in([20, 40]))
+        tf = tf.add_flag("flag_col", "FLAG_B", pl.col("value").is_in([30, 40]))
+        tf = tf.add_flag("flag_col", "FLAG_C", pl.col("value") == 50)
         return tf
 
     @staticmethod
@@ -976,10 +1033,10 @@ class TestFilterByFlag:
             ),
             "time",
         ).with_flag_system("qc", {"FLAG_A": 0, "FLAG_B": 1, "FLAG_C": 2}, flag_type="categorical")
-        tf.init_flag_column("qc", "cat_flag")
-        tf.add_flag("cat_flag", "FLAG_A", pl.col("value").is_in([20, 50]))
-        tf.add_flag("cat_flag", "FLAG_B", pl.col("value") == 30)
-        tf.add_flag("cat_flag", "FLAG_C", pl.col("value") == 40)
+        tf = tf.with_flag_column("cat_flag", "qc")
+        tf = tf.add_flag("cat_flag", "FLAG_A", pl.col("value").is_in([20, 50]))
+        tf = tf.add_flag("cat_flag", "FLAG_B", pl.col("value") == 30)
+        tf = tf.add_flag("cat_flag", "FLAG_C", pl.col("value") == 40)
         return tf
 
     @staticmethod
@@ -999,10 +1056,10 @@ class TestFilterByFlag:
             ),
             "time",
         ).with_flag_system("qc", {"FLAG_A": 0, "FLAG_B": 1, "FLAG_C": 2}, flag_type="categorical_list")
-        tf.init_flag_column("qc", "list_flag")
-        tf.add_flag("list_flag", "FLAG_A", pl.col("value").is_in([20, 40]))
-        tf.add_flag("list_flag", "FLAG_B", pl.col("value").is_in([30, 40]))
-        tf.add_flag("list_flag", "FLAG_C", pl.col("value") == 50)
+        tf = tf.with_flag_column("list_flag", "qc")
+        tf = tf.add_flag("list_flag", "FLAG_A", pl.col("value").is_in([20, 40]))
+        tf = tf.add_flag("list_flag", "FLAG_B", pl.col("value").is_in([30, 40]))
+        tf = tf.add_flag("list_flag", "FLAG_C", pl.col("value") == 50)
         return tf
 
     def test_bitwise_include_single_flag_by_name(self) -> None:
@@ -1139,8 +1196,8 @@ class TestQCCheckWithFlagParams:
             }
         )
         tf = TimeFrame(df=df, time_name="time")
-        tf.register_flag_system("flags", {"FLAG_A": 1, "FLAG_B": 2})
-        tf.init_flag_column("flags", "flag_col")
+        tf = tf.with_flag_system("flags", {"FLAG_A": 1, "FLAG_B": 2})
+        tf = tf.with_flag_column("flag_col", "flags")
         return tf
 
     def test_no_flag_params_returns_series(self) -> None:
@@ -1183,8 +1240,8 @@ class TestQCCheckWithFlagParams:
             }
         )
         tf = TimeFrame(df=df, time_name="time")
-        tf.register_flag_system("flags", {"FLAG_A": 0, "FLAG_B": 1}, flag_type="categorical")
-        tf.init_flag_column("flags", "flag_col")
+        tf = tf.with_flag_system("flags", {"FLAG_A": 0, "FLAG_B": 1}, flag_type="categorical")
+        tf = tf.with_flag_column("flag_col", "flags")
         result = tf.qc_check(
             "range", "value", flag_params=("flag_col", "FLAG_B"), min_value=0.0, max_value=10.0, within=False
         )
@@ -1205,8 +1262,8 @@ class TestInfillWithFlagParams:
             }
         )
         tf = TimeFrame(df=df, time_name="time", resolution=Period.of_days(1), periodicity=Period.of_days(1))
-        tf.register_flag_system("flags", {"FLAG_A": 1, "FLAG_B": 2})
-        tf.init_flag_column("flags", "flag_col")
+        tf = tf.with_flag_system("flags", {"FLAG_A": 1, "FLAG_B": 2})
+        tf = tf.with_flag_column("flag_col", "flags")
         return tf
 
     def test_without_flag_params_no_flags_set(self) -> None:
@@ -1232,8 +1289,8 @@ class TestInfillWithFlagParams:
             }
         )
         tf = TimeFrame(df=df, time_name="time", resolution=Period.of_days(1), periodicity=Period.of_days(1))
-        tf.register_flag_system("flags", {"FLAG_A": 1, "FLAG_B": 2})
-        tf.init_flag_column("flags", "flag_col")
+        tf = tf.with_flag_system("flags", {"FLAG_A": 1, "FLAG_B": 2})
+        tf = tf.with_flag_column("flag_col", "flags")
         # max_gap_size=1: only the single-row gap (index 1) gets filled and flagged
         result = tf.infill("linear", "value", max_gap_size=1, flag_params=("flag_col", "FLAG_A"))
         expected = pl.Series("flag_col", [0, 1, 0, 0, 0, 0, 0], dtype=pl.Int64)
@@ -1248,8 +1305,8 @@ class TestInfillWithFlagParams:
             }
         )
         tf = TimeFrame(df=df, time_name="time", resolution=Period.of_days(1), periodicity=Period.of_days(1))
-        tf.register_flag_system("flags", {"FLAG_A": 1, "FLAG_B": 2})
-        tf.init_flag_column("flags", "flag_col")
+        tf = tf.with_flag_system("flags", {"FLAG_A": 1, "FLAG_B": 2})
+        tf = tf.with_flag_column("flag_col", "flags")
         result = tf.infill("linear", "value", flag_params=("flag_col", "FLAG_A"))
         expected = pl.Series("flag_col", [0, 0, 0], dtype=pl.Int64)
         assert_series_equal(result.df["flag_col"], expected)
@@ -1307,7 +1364,7 @@ class TestInfillWithMissingRows:
     def test_metadata_and_flag_systems_preserved(self) -> None:
         """Metadata and registered flag systems carry over to the padded result."""
         tf = self.setup_tf().with_metadata({"site": "test"}).with_column_metadata({"value": {"units": "m"}})
-        tf.register_flag_system("flags", {"FLAG_A": 1})
+        tf = tf.with_flag_system("flags", {"FLAG_A": 1})
         result = tf.infill("linear", "value")
         assert result.metadata == {"site": "test"}
         assert result.column_metadata["value"] == {"units": "m"}
@@ -1322,8 +1379,8 @@ class TestInfillWithMissingRows:
             }
         )
         tf = TimeFrame(df=df, time_name="time", resolution=Period.of_hours(1), periodicity=Period.of_hours(1))
-        tf.register_flag_system("flags", {"FLAG_A": 1})
-        tf.init_flag_column("flags", "flag_col")
+        tf = tf.with_flag_system("flags", {"FLAG_A": 1})
+        tf = tf.with_flag_column("flag_col", "flags")
         result = tf.infill("linear", "value", flag_params=("flag_col", "FLAG_A"))
         assert result.df.filter(pl.col("time") == datetime(2024, 1, 1, 1))["flag_col"].item() == 1
 
@@ -1352,8 +1409,8 @@ class TestInfillWithMissingRows:
     def test_padded_rows_flagged(self) -> None:
         """Rows added by padding are infilled and flagged."""
         tf = self.setup_tf()
-        tf.register_flag_system("flags", {"FLAG_A": 1})
-        tf.init_flag_column("flags", "flag_col")
+        tf = tf.with_flag_system("flags", {"FLAG_A": 1})
+        tf = tf.with_flag_column("flag_col", "flags")
         result = tf.infill("linear", "value", flag_params=("flag_col", "FLAG_A"))
         expected = pl.Series("flag_col", [0, 1, 1, 0, 0], dtype=pl.Int64)
         assert_series_equal(result.df["flag_col"], expected)
@@ -1414,9 +1471,9 @@ class TestPadFlagColumns:
             }
         )
         tf = TimeFrame(df=df, time_name="time", resolution=Period.of_hours(1), periodicity=Period.of_hours(1))
-        tf.register_flag_system("flags", flag_system, flag_type)
-        tf.init_flag_column("flags", "flag_col")
-        tf.add_flag("flag_col", next(iter(flag_system)), pl.col("time") == datetime(2024, 1, 1, 0))
+        tf = tf.with_flag_system("flags", flag_system, flag_type)
+        tf = tf.with_flag_column("flag_col", "flags")
+        tf = tf.add_flag("flag_col", next(iter(flag_system)), pl.col("time") == datetime(2024, 1, 1, 0))
         return tf
 
     def test_bitwise_padded_rows_set_to_zero(self) -> None:
@@ -1453,8 +1510,8 @@ class TestPadFlagColumns:
             }
         )
         tf = TimeFrame(df=df, time_name="time", resolution=Period.of_hours(1), periodicity=Period.of_hours(1))
-        tf.register_flag_system("flags", {"FLAG_A": 1})
-        tf.register_flag_column("flag_col", "flags")
+        tf = tf.with_flag_system("flags", {"FLAG_A": 1})
+        tf = tf.with_flag_column("flag_col", "flags")
         expected = pl.Series("flag_col", [None, 0, 1], dtype=pl.Int64)
         assert_series_equal(tf.pad().df["flag_col"], expected)
 
@@ -1474,8 +1531,8 @@ class TestCopy:
             on_misaligned_rows="resolve",
             time_anchor="end",
         )
-        tf.register_flag_system("qc", {"FLAG_A": 1})
-        tf.init_flag_column("qc", "flags")
+        tf = tf.with_flag_system("qc", {"FLAG_A": 1})
+        tf = tf.with_flag_column("flags", "qc")
         return tf.with_metadata({"site": "x"}).with_column_metadata({"value": {"units": "m"}})
 
     def test_copy_equals_original(self) -> None:
@@ -1593,6 +1650,23 @@ class TestWithPeriodicity:
         with pytest.raises(TypeError):
             self.setup_tf().with_periodicity(123)  # type: ignore[arg-type]
 
+    def test_to_irregular(self) -> None:
+        """A regular TimeFrame can be made irregular."""
+        result = self.setup_tf().with_periodicity("irregular")
+        assert result.periodicity is None
+        assert result.is_irregular
+
+    def test_from_irregular(self) -> None:
+        """An irregular TimeFrame can be given a periodicity its data conforms to."""
+        tf = TimeFrame(IRREGULAR_DF, "time", resolution="PT1M", periodicity="irregular")
+        assert tf.with_periodicity("P1D").periodicity == Period.of_days(1)
+
+    def test_from_irregular_not_met_by_data_raises(self) -> None:
+        """An irregular TimeFrame can't be given a periodicity its data doesn't conform to."""
+        tf = TimeFrame(IRREGULAR_DF, "time", resolution="PT1M", periodicity="irregular")
+        with pytest.raises(PeriodicityError):
+            tf.with_periodicity("P1M")
+
 
 class TestRenameTimeColumnName:
     """Tests for TimeFrame.rename_time_column() with new_time_column name."""
@@ -1643,11 +1717,11 @@ class TestRenameTimeColumnName:
             tf.rename_time_column("value")
 
     def test_new_time_name_is_empty(self) -> None:
-        "Raise error if new_time_name is empty"
+        """Raise error if new_time_name is empty"""
         with pytest.raises(ValueError):
             self.setup_tf().rename_time_column("")
 
-    def test_new_time_name_is_None(self) -> None:
-        "Raise error if new_time_name is None"
+    def test_new_time_name_is_none(self) -> None:
+        """Raise error if new_time_name is None"""
         with pytest.raises(TypeError):
             self.setup_tf().rename_time_column()  # type: ignore[arg-type]

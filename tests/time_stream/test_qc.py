@@ -16,8 +16,8 @@ from time_stream.types import ClosedInterval
 class MockQC(QCCheck):
     name = "Mock"
 
-    def expr(self, _ctx: QcCtx, _column: str) -> pl.Expr:
-        return pl.col(_column)
+    def expr(self, ctx: QcCtx, column: str) -> pl.Expr:
+        return pl.col(column)
 
 
 class TestQCCheck:
@@ -168,6 +168,26 @@ class TestComparisonCheck:
         check = ComparisonCheck(5, operator, flag_na=True)
         result = check.apply(df, "time", "value")
         assert_series_equal(result, pl.Series([True, True]))
+
+    @pytest.mark.parametrize(
+        "compare_to,expected",
+        [
+            ([5, 30], [True, False, False, True]),
+            (10, [False, True, False, False]),
+        ],
+        ids=["int list", "int scalar"],
+    )
+    def test_is_in_int_on_float_column(self, compare_to: int | list, expected: list) -> None:
+        """Test that is_in accepts integer values against a float column."""
+        check = ComparisonCheck(compare_to, "is_in")
+        result = check.apply(self.tf.df, self.tf.time_name, "value_a")
+        assert_series_equal(result, pl.Series(expected))
+
+    def test_is_in_incompatible_values(self) -> None:
+        """Test that is_in raises if the values can't be cast to the column type."""
+        check = ComparisonCheck(["a"], "is_in")
+        with pytest.raises(TypeError):
+            check.apply(self.tf.df, self.tf.time_name, "value_a")
 
     def test_flag_na_integer_column(self) -> None:
         """Test that flag_na flags null in a column type that has no NaN."""

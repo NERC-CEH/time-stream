@@ -201,7 +201,7 @@ Choose how values inside each window are summarised. Pass a **string** correspon
 ^^^^^^^^^^^^^^^^
 :class:`time_stream.aggregation.AngularMean`
 
-    **What it does:** Averages all angles (measured in degrees) in each period. 
+    **What it does:** Averages all angles (measured in degrees) in each period.
                       Results are in the range 0 to 360 degrees.
 
     **When to use:** Useful for variables like wind direction (``"wd"``), where the average represents
@@ -283,7 +283,8 @@ Choose how values inside each window are summarised. Pass a **string** correspon
     **Additional args:**
         ``p``: The percentile value to be calculated, provided as an integer parameter from 0 to 100 (inclusive).
 
-    **Example usage:** ``tf_agg = tf.aggregate("P1D", "percentile", "flow", p=95)``
+    **Example usage:** ``tf_agg = tf.aggregate("P1D", "percentile", "flow", p=95)``, giving a
+    ``percentile_95_flow`` column.
 
 ``pot``
 ^^^^^^^
@@ -331,7 +332,7 @@ Choose how values inside each window are summarised. Pass a **string** correspon
     for a set of values.
 
     **When to use:** Useful for quality control checks. A smaller standard deviation value indicates less variation
-    from the mean value. If this is applied to a variable where it is expected that values will not change 
+    from the mean value. If this is applied to a variable where it is expected that values will not change
     significantly across the time period, then a high standard deviation indicates a chance there is an issue with the
     data.
 
@@ -458,6 +459,14 @@ rolling aggregation preserves the original resolution and timestamps.
 
 See :doc:`rolling_aggregation` for a full guide including alignment options and worked examples.
 
+Time of year aggregation
+------------------------
+
+Most aggregation functions can also be applied as a "time of year" aggregation via
+:meth:`~time_stream.TimeFrame.time_of_year_aggregate`.
+
+See :doc:`time_of_year_aggregation` for a full guide and worked examples.
+
 API reference
 =============
 
@@ -466,3 +475,10 @@ API reference
     ~time_stream.aggregation
     ~time_stream.TimeFrame.aggregate
     ~time_stream.TimeFrame.rolling_aggregate
+    ~time_stream.TimeFrame.time_of_year_aggregate
+
+.. toctree::
+    :hidden:
+
+    rolling_aggregation
+    time_of_year_aggregation

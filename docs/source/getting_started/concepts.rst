@@ -120,7 +120,8 @@ timestamp positions.
 **Why it matters:**
 
 - Ensures valid, aligned timestamps; all timestamps must **snap to this grid**.
-- Defines the default ``periodicity``. 1 value expected for each "tick".
+- Defines the default ``periodicity``. 1 value expected for each "tick". If no ``resolution`` is given either, the
+  default ``periodicity`` is irregular.
 
 Periodicity
 -----------
@@ -145,6 +146,31 @@ i.e. how many data points are allowed within a given period of time.
 - Provides the **expected sampling frequency** - ensures a 15-minute series really has maximum of 96 points/day.
 - Allows **missing value detection**
 - Allows **robust aggregation** - defines the windows into which multiple values are grouped.
+
+Resolution vs periodicity
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The two are easy to confuse, and are often the same:
+
+- **Resolution** is about each timestamp: the grid it must sit on, i.e. how precisely it is recorded, and with the
+  ``time_anchor``, the span of time its value covers.
+- **Periodicity** is about the series: how many values are allowed in a period, and so how many are expected.
+
+For example, an annual maximum series can have a daily resolution (``P1D``), because each maximum happened on a
+particular day, but yearly periodicity (``P1Y``), because there is one value per year.
+
+Irregular
+~~~~~~~~~
+
+Ad-hoc measurements, such as manual river gaugings or water quality spot measurements, are taken on random days at
+random times. There is no expected spacing between them, so no periodicity. Set ``periodicity="irregular"`` for this
+data.
+
+- ``resolution`` still applies, e.g. ``PT1M`` for gaugings timed to the minute.
+- There is no **expected sampling frequency**, so there is nothing to pad, infill, or count as missing.
+- Values can still be **aggregated** into regular periods.
+
+See more details and examples here: :doc:`irregular time series user guide </user_guide/irregular>`
 
 Time Anchor
 -----------

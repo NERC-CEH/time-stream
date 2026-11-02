@@ -311,8 +311,8 @@ class TestFormatTimeframeColumns:
             }
         )
         tf = TimeFrame(df, "timestamp")
-        tf.register_flag_system("qc", {"BAD": 1, "GOOD": 2})
-        tf.register_flag_column("flag1", "qc")
+        tf = tf.with_flag_system("qc", {"BAD": 1, "GOOD": 2})
+        tf = tf.with_flag_column("flag1", "qc")
 
         result = format_timeframe_columns(tf)
 
@@ -347,7 +347,7 @@ class TestTimeframeRepr:
             "    Resolution  : PT0.000001S\n"
             "    Offset      : None\n"
             "    Alignment   : PT0.000001S\n"
-            "    Periodicity : PT0.000001S\n"
+            "    Periodicity : irregular\n"
             "    Anchor      : start\n"
             "Columns:\n"
             "    col1        : Int64  40.00 B  [10, ..., 50]\n"
@@ -370,8 +370,8 @@ class TestTimeframeRepr:
 
     def test_repr_with_flag_systems(self, timeframe: TimeFrame) -> None:
         """Test representation with flag systems."""
-        timeframe.register_flag_system("qc", {"BAD": 1, "GOOD": 2})
-        timeframe.register_flag_column("flag1", "qc")
+        timeframe = timeframe.with_flag_system("qc", {"BAD": 1, "GOOD": 2})
+        timeframe = timeframe.with_flag_column("flag1", "qc")
 
         result = timeframe_repr(timeframe)
 
@@ -383,7 +383,7 @@ class TestTimeframeRepr:
             "    Resolution  : PT0.000001S\n"
             "    Offset      : None\n"
             "    Alignment   : PT0.000001S\n"
-            "    Periodicity : PT0.000001S\n"
+            "    Periodicity : irregular\n"
             "    Anchor      : start\n"
             "Columns:\n"
             "    col1        : Int64  40.00 B  [10, ..., 50]\n"
@@ -419,7 +419,7 @@ class TestTimeframeRepr:
             "    Resolution  : PT0.000001S\n"
             "    Offset      : None\n"
             "    Alignment   : PT0.000001S\n"
-            "    Periodicity : PT0.000001S\n"
+            "    Periodicity : irregular\n"
             "    Anchor      : start\n"
             "Columns:\n"
             "    col1        : Int64  40.00 B  [10, ..., 50]\n"

@@ -5,7 +5,7 @@ from datetime import time
 import polars as pl
 
 import time_stream as ts
-from examples._helpers import sample_frame
+from examples.helpers import sample_frame
 
 
 def sample_data() -> None:

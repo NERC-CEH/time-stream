@@ -1,4 +1,5 @@
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![PyPI](https://img.shields.io/pypi/v/ukceh-time-stream.svg)](https://pypi.org/project/ukceh-time-stream/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/NERC-CEH/time-stream/blob/main/LICENSE)
 ![Language](https://img.shields.io/github/languages/top/NERC-CEH/time-stream)
 [![tests badge](https://github.com/NERC-CEH/time-stream/actions/workflows/pipeline.yml/badge.svg)](https://github.com/NERC-CEH/time-stream/actions)
 [![Docs](https://img.shields.io/badge/docs-%F0%9F%93%9A%20online-blue)](https://nerc-ceh.github.io/time-stream)
@@ -18,9 +19,30 @@ with special attention to:
 - Quality control checks and infilling of missing data
 - A flexible flagging system
 
+## Installation
+
+```bash
+pip install ukceh-time-stream
+```
+
+or with [uv](https://docs.astral.sh/uv/):
+
+```bash
+uv add ukceh-time-stream
+```
+
+The package is imported as `time_stream`:
+
+```python
+import time_stream as ts
+```
+
+See the [documentation](https://nerc-ceh.github.io/time-stream/) for a quick start, user guides and the full API
+reference.
+
 ## License
 
-This project is licensed under the [MIT license](LICENSE).
+This project is licensed under the [MIT license](https://github.com/NERC-CEH/time-stream/blob/main/LICENSE).
 
 ## Contributing
 
@@ -33,7 +55,7 @@ Contributions are welcome. Please feel free to submit a Pull Request.
 5. Open a Pull Request
 
 Please make sure your code passes all tests and follows the coding style before submitting a PR.
-See **developer setup** below, and [`CONTRIBUTING.md`](CONTRIBUTING.md), for more information.
+See **developer setup** below, and [`CONTRIBUTING.md`](https://github.com/NERC-CEH/time-stream/blob/main/CONTRIBUTING.md), for more information.
 
 ## Developer Setup
 
@@ -102,59 +124,21 @@ This will set this repo up to use the git hooks in the `.githooks/` directory.
 The hook runs `ruff format --check` and `ruff check` to prevent commits that are not formatted correctly or have errors.
 The hook intentionally does not alter the files, but informs the user which command to run.
 
-## Installing time-stream
+### Using an unreleased version in another project
 
-time-stream is not yet published on PyPI, so to use it within your project you can do one of two things:
-
-1. Clone the time-stream repository to a location next to your project's repository. Then, you can install
-    time-stream using a relative path.
-
-    When you install a package in editable mode, any changes to the source code are immediately
-    available to any projects using the package.
-
-    **Using uv directly**
-    ```commandline
-    uv add --editable /path/to/time-stream
-    ```
-
-    **In your project's pyproject.toml**
-    ```toml
-    [project]
-    dependencies = [
-        "time-stream"
-    ]
-    [tool.uv.sources]
-    time-stream = { path = "/path/to/time-stream", editable = true }
-    ```
-
-    Now when changes have been made to time-stream, you can just do a `git pull` in your cloned directory to get the
-    changes, and they will be automatically available in your package.
-
-2. Use the time-stream git url
-
-    **Using uv directly**
-    ```commandline
-    uv add git+https://github.com/NERC-CEH/time-stream.git
-    ```
-
-    **In your project's pyproject.toml**
-    ```toml
-    [project]
-    dependencies = [
-        "time-stream"
-    ]
-    [tool.uv.sources]
-    time-stream = { git = "https://github.com/NERC-CEH/time-stream.git" }
-    ```
-
-### Installing with pip
-
-time-stream depends on [`isoperiod`](https://github.com/NERC-CEH/isoperiod), which is not yet on PyPI. uv picks it up
-from time-stream's own configuration, but pip does not, so install `isoperiod` from git alongside time-stream:
+To use time-stream from a branch, or from a local clone you are editing, rather than a release on PyPI:
 
 ```commandline
-pip install git+https://github.com/NERC-CEH/isoperiod.git git+https://github.com/NERC-CEH/time-stream.git
+uv add git+https://github.com/NERC-CEH/time-stream.git@develop
+uv add --editable /path/to/time-stream
 ```
+
+With `--editable`, changes to the clone are immediately available to the project using it.
+
+## Releasing
+
+Merging to `main` with a new version in `pyproject.toml` tags the release, creates a GitHub release from
+`CHANGELOG/<version>.md`, and publishes the package to [PyPI](https://pypi.org/project/ukceh-time-stream/).
 
 ## Documentation
 
@@ -171,6 +155,6 @@ documentation at http://localhost:8000 and rebuilds it as you edit.
 
 ## Citation
 
-If you use this software, please cite it using the metadata in [`CITATION.cff`](./CITATION.cff).
+If you use this software, please cite it using the metadata in [`CITATION.cff`](https://github.com/NERC-CEH/time-stream/blob/main/CITATION.cff).
 
 Built with [Cookiecutter](https://github.com/cookiecutter/cookiecutter) and the [NERC-CEH/fdri-cookiecutter-pypackage](https://github.com/NERC-CEH/fdri-cookiecutter-pypackage) template.

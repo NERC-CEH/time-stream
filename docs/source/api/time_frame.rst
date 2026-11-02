@@ -45,7 +45,6 @@ Builders
     ~TimeFrame.with_periodicity
     ~TimeFrame.with_metadata
     ~TimeFrame.with_column_metadata
-    ~TimeFrame.with_flag_system
 
 General
 -------
@@ -68,9 +67,9 @@ Operations
 
     ~TimeFrame.aggregate
     ~TimeFrame.rolling_aggregate
+    ~TimeFrame.time_of_year_aggregate
     ~TimeFrame.infill
     ~TimeFrame.qc_check
-    ~TimeFrame.calculate_min_max_envelope
 
 Flagging
 --------
@@ -79,10 +78,9 @@ Flagging
     :nosignatures:
     :toctree: _api/
 
-    ~TimeFrame.register_flag_system
+    ~TimeFrame.with_flag_system
     ~TimeFrame.get_flag_system
-    ~TimeFrame.register_flag_column
-    ~TimeFrame.init_flag_column
+    ~TimeFrame.with_flag_column
     ~TimeFrame.get_flag_column
     ~TimeFrame.add_flag
     ~TimeFrame.remove_flag
