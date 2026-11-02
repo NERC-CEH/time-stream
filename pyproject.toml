@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "time-stream"
+name = "ukceh-time-stream"
 version = "4.0.0"
 description = "Time-Stream: Time Series Toolkit for Rapid Environmental Analysis and Monitoring"
 readme = "README.md"
@@ -27,6 +27,7 @@ maintainers = [
     { name = "Richard Smith", email = "ricsmi@ceh.ac.uk" },
     { name = "Simon Stanley", email = "simsta@ceh.ac.uk" },
 ]
+keywords = ["timeseries", "polars", "hydrology", "environmental", "aggregation", "quality-control"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Science/Research",
@@ -92,6 +93,9 @@ bugs = "https://github.com/NERC-CEH/time-stream/issues"
 changelog = "https://github.com/NERC-CEH/time-stream/releases"
 documentation = "https://nerc-ceh.github.io/time-stream/"
 homepage = "https://github.com/NERC-CEH/time-stream"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/time_stream"]
 
 [tool.pyright]
 venvPath = "."
