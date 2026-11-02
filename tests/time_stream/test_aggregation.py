@@ -3480,9 +3480,11 @@ class TestTimeOfYearAggregate:
     def test_flag_columns_kept(self) -> None:
         """Flag columns and their flag system are kept."""
         tf = TimeFrame(_two_years([(1, 1)]), "timestamp", resolution="P1D")
-        tf.register_flag_system("QC", {"SUSPECT": 1})
-        tf.init_flag_column("QC", "value_flags")
-        tf.add_flag("value_flags", "SUSPECT", pl.col("value") > 1)
+        tf = (
+            tf.with_flag_system("QC", {"SUSPECT": 1})
+            .with_flag_column("value_flags", "QC")
+            .add_flag("value_flags", "SUSPECT", pl.col("value") > 1)
+        )
 
         result = tf.time_of_year_aggregate("max", "value")
 
