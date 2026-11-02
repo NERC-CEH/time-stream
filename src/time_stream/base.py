@@ -1100,6 +1100,7 @@ class TimeFrame:
         long_term_mean: bool | str | Sequence[str] = False,
         reference_interval: tuple[datetime | None, datetime | None] | None = None,
         flags: str | Sequence[str] | dict[str, Sequence[int | str]] | None = None,
+        flag_colors: dict[str, Any] | None = None,
         show_missing: bool = False,
         title: str | None = None,
         log_y: bool = False,
@@ -1139,7 +1140,10 @@ class TimeFrame:
                 from. ``None`` for either uses all data in the TimeFrame - not just the window being plotted.
             flags: Flag column(s) to show in a strip below the plot, with every value coloured by its most severe flag.
                 A mapping of flag column to flags shows only those flags, ordered from the least to the most severe;
-                otherwise the flag system's order is used.
+                otherwise the flag system's order is used. A flag column's ``label`` metadata, if set, names its row.
+            flag_colors: Colours for flags in the strip, as a mapping of flag name to any matplotlib colour, e.g.
+                ``{"SUSPECT": "tab:orange", "MISSING": "tab:red"}``. Flags not given keep a grey scale that darkens
+                with severity.
             show_missing: Whether to shade the background where values are missing.
             title: Title at the top left. If omitted, the ``title`` TimeFrame metadata.
             log_y: Whether to use a logarithmic y axis.
@@ -1168,6 +1172,7 @@ class TimeFrame:
             long_term_mean=long_term_mean,
             reference_interval=reference_interval,
             flags=flags,
+            flag_colors=flag_colors,
             show_missing=show_missing,
             title=title,
             log_y=log_y,

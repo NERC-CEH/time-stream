@@ -597,6 +597,43 @@ class TestPlot:
         key = [text.get_text() for text in fig.legends[0].get_texts()]
         assert key == ["None", "CORRECTED", "ESTIMATED", "SUSPECT"]
 
+    def test_flag_colors(self) -> None:
+        """Flag colours can be given by flag name; others keep the grey scale."""
+        fig = _flagged().plot("flow", flags="flow_flags", flag_colors={"SUSPECT": "#ff0000"})
+        colors = {_face(c) for c in fig.axes[-1].collections}
+        assert "#ff0000" in colors
+        key = {
+            text.get_text(): to_hex(patch.get_facecolor())
+            for text, patch in zip(fig.legends[0].get_texts(), fig.legends[0].get_patches())
+        }
+        assert key["SUSPECT"] == "#ff0000"
+        assert key["CORRECTED"] not in ("#ff0000", FLAG_NONE)
+
+    def test_flag_colors_unknown_flag(self) -> None:
+        """Colours for flags that are not shown raise."""
+        with pytest.raises(ValueError, match="'flag_colors' names flags that are not shown: \\['REMOVED'\\]"):
+            _flagged().plot("flow", flags="flow_flags", flag_colors={"REMOVED": "#ff0000"})
+
+    def test_flag_label_metadata(self) -> None:
+        """A flag column's label metadata names its row and prefixes its key entries."""
+        tf = _flagged().with_flag_column("other_flags", "QC")
+        tf.column_metadata["flow_flags"] = {"label": "Flow QC"}
+        fig = tf.plot("flow", flags={"flow_flags": ["SUSPECT"], "other_flags": ["CORRECTED"]})
+        assert [label.get_text() for label in fig.axes[-1].get_yticklabels()] == ["Flow QC", "other_flags"]
+        key = [text.get_text() for text in fig.legends[0].get_texts()]
+        assert key == ["None", "Flow QC: SUSPECT", "other_flags: CORRECTED"]
+
+    def test_several_flag_columns_shared_colors(self) -> None:
+        """With one colour per flag across columns, the key names each flag once."""
+        tf = _flagged().with_flag_column("other_flags", "QC")
+        fig = tf.plot(
+            "flow",
+            flags={"flow_flags": ["CORRECTED", "SUSPECT"], "other_flags": ["CORRECTED", "SUSPECT"]},
+            flag_colors={"CORRECTED": "#0000ff", "SUSPECT": "#ff0000"},
+        )
+        key = [text.get_text() for text in fig.legends[0].get_texts()]
+        assert key == ["None", "CORRECTED", "SUSPECT"]
+
     def test_several_flag_columns(self) -> None:
         """Every flag column gets a row, and the key names the column."""
         tf = _flagged().with_flag_column("other_flags", "QC")
@@ -623,6 +660,39 @@ class TestPlot:
         """The y axis can be logarithmic."""
         fig = self.setup_tf().plot("level", log_y=True)
         assert fig.axes[0].get_yscale() == "log"
+
+    @pytest.mark.parametrize(
+        "values,major,minor",
+        [
+            ([0.05, 0.5, 5.0, 50.0], ["0.1", "1", "10"], []),
+            ([3.0, 4.0, 5.0, 6.0], [], ["3", "4", "5", "6", "7"]),
+        ],
+        ids=["several decades", "under a decade"],
+    )
+    def test_log_y_labels(self, values: list[float], major: list[str], minor: list[str]) -> None:
+        """Log axes are labelled with plain numbers, and minor ticks only when the axis spans under a decade."""
+        df = pl.DataFrame({"time": [datetime(2024, 1, d) for d in range(1, len(values) + 1)], "flow": values})
+        fig = TimeFrame(df, "time", resolution="P1D").plot("flow", log_y=True)
+        fig.canvas.draw()
+        ax = fig.axes[0]
+        bottom, top = ax.get_ylim()
+
+        def visible(labels: list[Any]) -> list[str]:
+            return sorted(
+                {label.get_text() for label in labels if label.get_text() and bottom <= label.get_position()[1] <= top},
+                key=float,
+            )
+
+        assert visible(ax.get_yticklabels()) == major
+        assert visible(ax.get_yticklabels(minor=True)) == minor
+
+    @pytest.mark.parametrize("plot_style,margin", [("scatter", True), ("step", False)], ids=["scatter", "step"])
+    def test_time_axis_margin(self, plot_style: Any, margin: bool) -> None:
+        """Points get a margin so the first and last aren't cut off by the axes; steps fill the axes."""
+        fig = self.setup_tf().plot("level", datetime(2024, 1, 1), datetime(2024, 1, 4), plot_style=plot_style)
+        x_start, x_end = fig.axes[0].get_xlim()
+        first, last = _num(datetime(2024, 1, 1), datetime(2024, 1, 5))
+        assert (x_start < first and x_end > last) == margin
 
     @pytest.mark.parametrize(
         "start,end,initials",

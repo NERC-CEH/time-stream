@@ -24,7 +24,7 @@ import numpy as np
 import polars as pl
 from isoperiod import Period
 from matplotlib.artist import Artist
-from matplotlib.colors import to_rgb
+from matplotlib.colors import to_hex, to_rgb
 from matplotlib.patches import Patch
 from matplotlib.ticker import AutoMinorLocator, FuncFormatter, MaxNLocator, NullFormatter
 
@@ -73,6 +73,7 @@ def plot_timeframe(
     long_term_mean: bool | str | Sequence[str] = False,
     reference_interval: tuple[datetime | None, datetime | None] | None = None,
     flags: str | Sequence[str] | dict[str, Sequence[int | str]] | None = None,
+    flag_colors: dict[str, Any] | None = None,
     show_missing: bool = False,
     title: str | None = None,
     log_y: bool = False,
@@ -90,6 +91,10 @@ def plot_timeframe(
     envelope_columns = _selected(envelope, plotted, "envelope")
     mean_columns = _selected(long_term_mean, plotted, "long_term_mean")
     flag_levels = _flag_levels(tf, flags)
+    shown_flags = {flag for levels in flag_levels.values() for flag in levels}
+    unknown_flags = sorted(set(flag_colors or {}) - shown_flags)
+    if unknown_flags:
+        raise ValueError(f"'flag_colors' names flags that are not shown: {unknown_flags}")
 
     bounds = [("start", start), ("end", end), *(("reference_interval", value) for value in reference_interval or ())]
     for name, value in bounds:
@@ -133,13 +138,17 @@ def plot_timeframe(
             legend.setdefault(label, handle)
 
     if flag_levels:
-        flag_key = _draw_flag_strip(axes[-1], tf, window, starts, ends, flag_levels)
+        flag_key = _draw_flag_strip(axes[-1], tf, window, starts, ends, flag_levels, flag_colors or {})
         fig.legend(flag_key.values(), flag_key.keys(), loc="outside right lower", frameon=False, title="Flags")
 
     if len(legend) > 1:
         fig.legend(legend.values(), legend.keys(), loc="outside right upper", frameon=False)
 
     x_start, x_end = float(np.nanmin(starts)), float(np.nanmax(ends))
+    if "scatter" in styles.values():
+        # Points at the first and last times would otherwise sit half outside the axes
+        margin = 0.02 * (x_end - x_start)
+        x_start, x_end = x_start - margin, x_end + margin
     _format_time_axis(axes[-1], x_start, x_end)
 
     axes[0].set_title(title or tf.metadata.get(TITLE) or "", loc="left", fontsize="x-large")
@@ -680,11 +689,27 @@ def _draw_panel(
     ax.set_ylabel(_y_label(tf, panel))
     ax.tick_params(axis="y", which="both", right=True, labelright=True)
     if log_y:
-        # Plain numbers (0.5, 1, 10) rather than powers of ten
-        ax.yaxis.set_major_formatter(FuncFormatter(lambda value, _: f"{value:g}"))
+        _format_log_axis(ax)
     else:
         ax.yaxis.set_minor_locator(AutoMinorLocator())
     return legend
+
+
+def _format_log_axis(ax: Axes) -> None:
+    """Label a logarithmic y axis with plain numbers (0.5, 1, 10) rather than powers of ten.
+
+    Minor ticks are labelled only when the axis spans less than a decade, as matplotlib does by default.
+
+    Args:
+        ax: The axes to format.
+    """
+
+    def minor_label(value: float, _: int) -> str:
+        bottom, top = ax.get_ylim()
+        return f"{value:g}" if np.log10(top / bottom) < 1 else ""
+
+    ax.yaxis.set_major_formatter(FuncFormatter(lambda value, _: f"{value:g}"))
+    ax.yaxis.set_minor_formatter(FuncFormatter(minor_label))
 
 
 def _flag_colors(count: int) -> list[tuple[float, ...]]:
@@ -725,8 +750,12 @@ def _draw_flag_strip(
     starts: np.ndarray,
     ends: np.ndarray,
     flag_levels: dict[str, list[str]],
+    flag_colors: dict[str, Any],
 ) -> dict[str, Artist]:
     """Draw a strip with a row per flag column, each value coloured by its most severe flag.
+
+    The key names each flag once when every flag has one colour and every colour one flag; otherwise each entry is
+    prefixed with its flag column's label.
 
     Args:
         ax: The axes to draw on.
@@ -735,15 +764,16 @@ def _draw_flag_strip(
         starts: Interval starts.
         ends: Interval ends.
         flag_levels: Flag names for each flag column, from the least to the most severe.
+        flag_colors: Colours for flags by name; others are on a grey scale of severity.
 
     Returns:
         The colour key, by label.
     """
-    key: dict[str, Artist] = {"None": Patch(color=FLAG_NONE)}
-    multiple = len(flag_levels) > 1
+    key_entries: list[tuple[str, str, Any]] = []
 
     for row, (name, flags) in enumerate(flag_levels.items()):
-        colors = [FLAG_NONE, *_flag_colors(len(flags))]
+        greys = _flag_colors(len(flags))
+        colors = [FLAG_NONE, *(flag_colors.get(flag, grey) for flag, grey in zip(flags, greys))]
         levels = _flag_level(window, tf.get_flag_column(name), flags)
         run_levels, run_starts, run_ends = _runs(starts, ends, levels)
         for level in np.unique(run_levels):
@@ -752,8 +782,19 @@ def _draw_flag_strip(
             color = colors[level]
             # The edge keeps runs shorter than a pixel visible
             ax.broken_barh(spans, (row - 0.4, 0.8), facecolors=color, edgecolors=color, linewidth=0.5)
-        for flag, color in zip(flags, colors[1:]):
-            key[f"{_label(tf, name)}: {flag}" if multiple else flag] = Patch(color=color)
+        key_entries.extend((_label(tf, name), flag, color) for flag, color in zip(flags, colors[1:]))
+
+    colors_by_flag: dict[str, set[str]] = {}
+    flags_by_color: dict[str, set[str]] = {}
+    for _, flag, color in key_entries:
+        colors_by_flag.setdefault(flag, set()).add(to_hex(color))
+        flags_by_color.setdefault(to_hex(color), set()).add(flag)
+    one_to_one = all(len(c) == 1 for c in colors_by_flag.values()) and all(len(f) == 1 for f in flags_by_color.values())
+
+    key: dict[str, Artist] = {"None": Patch(color=FLAG_NONE)}
+    for label, flag, color in key_entries:
+        name = flag if len(flag_levels) == 1 or one_to_one else f"{label}: {flag}"
+        key.setdefault(name, Patch(color=color))
 
     ax.set_yticks(range(len(flag_levels)), [_label(tf, name) for name in flag_levels])
     ax.set_ylim(len(flag_levels) - 0.5, -0.5)

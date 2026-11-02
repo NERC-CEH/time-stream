@@ -170,6 +170,44 @@ missing.
 
    plotting.panels_plot()
 
+Plotting a result alongside the data
+------------------------------------
+
+To compare a column with something calculated from it, add the result as another column and plot both in one panel.
+Here, daily temperature with its 7-day rolling mean from :doc:`rolling_aggregation`:
+
+.. literalinclude:: ../examples/plotting.py
+    :language: python
+    :start-after: [start:rolling_mean_plot]
+    :end-before: [end:rolling_mean_plot]
+    :dedent:
+
+.. jupyter-execute::
+   :hide-code:
+
+   from examples import plotting
+
+   plotting.rolling_mean_plot()
+
+Irregular data
+==============
+
+:doc:`Irregular <irregular>` data, such as river flow gaugings taken by hand, has no expected time steps, so it is
+drawn as points rather than steps or lines:
+
+.. literalinclude:: ../examples/plotting.py
+    :language: python
+    :start-after: [start:irregular_plot]
+    :end-before: [end:irregular_plot]
+    :dedent:
+
+.. jupyter-execute::
+   :hide-code:
+
+   from examples import plotting
+
+   plotting.irregular_plot()
+
 Flags
 =====
 
@@ -196,6 +234,50 @@ are flagged as missing:
    from examples import plotting
 
    plotting.flags_plot()
+
+Flag colours, labels and several flag columns
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``flag_colors`` sets the colour of flags by name, as any matplotlib colours. Flags not given keep the grey scale.
+
+Each row of the strip is named by its flag column's ``label`` metadata, if set, or else its column name. With several
+flag columns, the key names each flag once when every flag has one colour, as here; otherwise each entry starts with
+its row's label.
+
+Here, both temperature and precipitation are checked, with short labels for the strip:
+
+.. literalinclude:: ../examples/plotting.py
+    :language: python
+    :start-after: [start:flags_multiple_plot]
+    :end-before: [end:flags_multiple_plot]
+    :dedent:
+
+.. jupyter-execute::
+   :hide-code:
+
+   from examples import plotting
+
+   plotting.flags_multiple_plot()
+
+Customising the figure
+======================
+
+:meth:`~time_stream.TimeFrame.plot` returns an ordinary matplotlib ``Figure``, so you can add to it, restyle it, or
+save it with ``fig.savefig("plot.png")``. Its panels are ``fig.axes``, from top to bottom, and the time axis takes
+ordinary datetimes. Here, lines mark freezing point and the hottest day of the year:
+
+.. literalinclude:: ../examples/plotting.py
+    :language: python
+    :start-after: [start:customise_plot]
+    :end-before: [end:customise_plot]
+    :dedent:
+
+.. jupyter-execute::
+   :hide-code:
+
+   from examples import plotting
+
+   plotting.customise_plot()
 
 Other options
 =============

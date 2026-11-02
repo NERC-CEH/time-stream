@@ -1,35 +1,13 @@
 """Examples for the "Irregular time series" user guide page."""
 
-from datetime import datetime
-
-import polars as pl
-
 import time_stream as ts
+from examples.helpers import gaugings
 from time_stream.exceptions import AggregationError, MissingCriteriaError, PeriodicityError
-
-
-def _gaugings() -> pl.DataFrame:
-    """River flow gaugings, taken by hand on random days at random times."""
-    return pl.DataFrame(
-        {
-            "time": [
-                datetime(2024, 1, 9, 10, 15),
-                datetime(2024, 1, 23, 14, 2),
-                datetime(2024, 2, 20, 9, 41),
-                datetime(2024, 3, 5, 11, 30),
-                datetime(2024, 3, 19, 15, 47),
-                datetime(2024, 5, 14, 10, 5),
-                datetime(2024, 6, 11, 13, 20),
-                datetime(2024, 8, 27, 9, 55),
-            ],
-            "flow": [3.42, 2.98, 4.11, 3.76, 3.05, 1.92, 1.47, 0.88],
-        }
-    )
 
 
 def create_irregular() -> None:
     """An irregular TimeFrame of gaugings recorded to the minute."""
-    df = _gaugings()
+    df = gaugings()
     # [start:create_irregular]
     tf = ts.TimeFrame(df, "time", resolution="PT1M", periodicity="irregular")
 
@@ -40,7 +18,7 @@ def create_irregular() -> None:
 
 def aggregate_irregular() -> None:
     """Monthly mean of the gaugings: the result is a regular TimeFrame."""
-    tf = ts.TimeFrame(_gaugings(), "time", resolution="PT1M", periodicity="irregular")
+    tf = ts.TimeFrame(gaugings(), "time", resolution="PT1M", periodicity="irregular")
     # [start:aggregate_irregular]
     tf_monthly = tf.aggregate("P1M", "mean", "flow")
 
@@ -51,7 +29,7 @@ def aggregate_irregular() -> None:
 
 def aggregate_available_criteria() -> None:
     """Monthly mean, only valid where at least 2 gaugings were taken."""
-    tf = ts.TimeFrame(_gaugings(), "time", resolution="PT1M", periodicity="irregular")
+    tf = ts.TimeFrame(gaugings(), "time", resolution="PT1M", periodicity="irregular")
     # [start:aggregate_available_criteria]
     tf_monthly = tf.aggregate("P1M", "mean", "flow", missing_criteria=("available", 2))
 
@@ -61,7 +39,7 @@ def aggregate_available_criteria() -> None:
 
 def rolling_irregular() -> None:
     """Trailing 60-day mean at each gauging: the result stays irregular."""
-    tf = ts.TimeFrame(_gaugings(), "time", resolution="PT1M", periodicity="irregular")
+    tf = ts.TimeFrame(gaugings(), "time", resolution="PT1M", periodicity="irregular")
     # [start:rolling_irregular]
     tf_rolling = tf.rolling_aggregate("P60D", "mean", "flow")
 
@@ -72,7 +50,7 @@ def rolling_irregular() -> None:
 
 def unsupported_operations() -> None:
     """The operations that need an expected time step raise an error."""
-    tf = ts.TimeFrame(_gaugings(), "time", resolution="PT1M", periodicity="irregular")
+    tf = ts.TimeFrame(gaugings(), "time", resolution="PT1M", periodicity="irregular")
     # [start:unsupported_operations]
     try:
         tf.pad()

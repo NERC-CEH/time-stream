@@ -38,3 +38,22 @@ def secondary_flow_15min() -> pl.DataFrame:
 def rainfall_15min() -> pl.DataFrame:
     """An example 15-minute rainfall dataset (mm), from 2015 to 2025, with gaps."""
     return pl.read_parquet(DATA / "example_rainfall_15min.parquet")
+
+
+def gaugings() -> pl.DataFrame:
+    """River flow gaugings, taken by hand on random days at random times."""
+    return pl.DataFrame(
+        {
+            "time": [
+                datetime(2024, 1, 9, 10, 15),
+                datetime(2024, 1, 23, 14, 2),
+                datetime(2024, 2, 20, 9, 41),
+                datetime(2024, 3, 5, 11, 30),
+                datetime(2024, 3, 19, 15, 47),
+                datetime(2024, 5, 14, 10, 5),
+                datetime(2024, 6, 11, 13, 20),
+                datetime(2024, 8, 27, 9, 55),
+            ],
+            "flow": [3.42, 2.98, 4.11, 3.76, 3.05, 1.92, 1.47, 0.88],
+        }
+    )
