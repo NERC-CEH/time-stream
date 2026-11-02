@@ -4,10 +4,11 @@ build-backend = "hatchling.build"
 
 [project]
 name = "ukceh-time-stream"
-version = "4.0.0"
+version = "4.0.1"
 description = "Time-Stream: Time Series Toolkit for Rapid Environmental Analysis and Monitoring"
 readme = "README.md"
 authors = [
+    { name = "Richard Smith", email = "ricsmi@ceh.ac.uk" },
     { name = "Oladimeji Awe", email = "olaawe@ceh.ac.uk" },
     { name = "Lewis Chambers", email = "lewcha@ceh.ac.uk" },
     { name = "Leanne Durkan", email = "leadur@ceh.ac.uk" },
@@ -15,16 +16,15 @@ authors = [
     { name = "Samantha Hewkin", email = "samhew@ceh.ac.uk" },
     { name = "Josh Holland", email = "joshol@ceh.ac.uk" },
     { name = "Nathan Shaw", email = "natsha@ceh.ac.uk" },
-    { name = "Richard Smith", email = "ricsmi@ceh.ac.uk" },
     { name = "Simon Stanley", email = "simsta@ceh.ac.uk" },
     { name = "Oliver Swain", email = "os@ceh.ac.uk" },
 ]
 maintainers = [
+    { name = "Richard Smith", email = "ricsmi@ceh.ac.uk" },
     { name = "Leanne Durkan", email = "leadur@ceh.ac.uk" },
     { name = "Dom Ginger", email = "domgin@ceh.ac.uk" },
     { name = "Samantha Hewkin", email = "samhew@ceh.ac.uk" },
     { name = "Nathan Shaw", email = "natsha@ceh.ac.uk" },
-    { name = "Richard Smith", email = "ricsmi@ceh.ac.uk" },
     { name = "Simon Stanley", email = "simsta@ceh.ac.uk" },
 ]
 keywords = ["timeseries", "polars", "hydrology", "environmental", "aggregation", "quality-control"]
