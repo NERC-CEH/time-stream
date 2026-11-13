@@ -1574,6 +1574,33 @@ class TestCopy:
         copied.column_metadata.update({"value": {"units": "ft"}})
         assert tf.column_metadata["value"] == {"units": "m"}
 
+    def test_flag_systems_shared(self) -> None:
+        """The copy shares the original's flag system classes but has its own flag columns."""
+        tf = self.setup_tf()
+        copied = tf.copy()
+        assert copied.get_flag_system("qc") is tf.get_flag_system("qc")
+        assert copied.get_flag_column("flags") is not tf.get_flag_column("flags")
+
+    @pytest.mark.parametrize("change_copy", [True, False], ids=["change copy", "change original"])
+    def test_flag_changes_independent(self, change_copy: bool) -> None:
+        """New flag systems, flag columns, added flags and decoding on one frame don't affect the other."""
+        tf = self.setup_tf()
+        copied = tf.copy()
+        changed, unchanged = (copied, tf) if change_copy else (tf, copied)
+        expected_df = unchanged.df.clone()
+
+        changed.with_flag_system("extra", ["X", "Y"], flag_type="categorical").with_flag_column(
+            "extra_flags", "extra"
+        ).add_flag("extra_flags", "X").add_flag("flags", "FLAG_A").decode_flag_column("flags")
+        changed._flag_manager.register_flag_system("in_place", {"Z": 1})
+        changed._flag_manager.register_flag_column("value", "in_place")
+        changed._flag_manager.flag_columns["flags"].is_decoded = True
+
+        assert list(unchanged.flag_systems) == ["qc"]
+        assert list(unchanged.flag_columns) == ["flags"]
+        assert unchanged.get_flag_column("flags").is_decoded is False
+        assert_frame_equal(unchanged.df, expected_df)
+
     def test_does_not_revalidate(self) -> None:
         """copy() does not re-run time validation, since the original TimeFrame is already valid."""
         tf = self.setup_tf()

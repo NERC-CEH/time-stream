@@ -856,7 +856,10 @@ class FlagManager:
             raise ColumnNotFoundError(f"No such flag column: '{name}'.")
 
     def copy(self, columns: Iterable[str] | None = None) -> "FlagManager":
-        """Create a deep copy of this ``FlagManager``, duplicating all registered systems and columns.
+        """Create a copy of this ``FlagManager`` with its own registries of flag systems and flag columns.
+
+        Flag system classes never change once registered, so the copy shares them with this manager.
+        Flag columns are new objects.
 
         Args:
             columns: If given, only flag columns with these names are copied. All flag systems are copied
@@ -866,9 +869,7 @@ class FlagManager:
             A new ``FlagManager`` with the same flag systems, flag columns, and ``is_decoded`` state.
         """
         out = FlagManager()
-
-        for name, flag_system in self._flag_systems.items():
-            out.register_flag_system(name, flag_system.to_dict(), flag_type=flag_system.flag_type)
+        out._flag_systems = dict(self._flag_systems)
 
         for name, flag_column in self._flag_columns.items():
             if columns is not None and name not in columns:
