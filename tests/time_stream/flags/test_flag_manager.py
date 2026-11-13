@@ -220,48 +220,74 @@ class TestCopy:
         flag_manager.register_flag_column(name="flag_col_2", flag_system_name="system2")
         return flag_manager
 
-    def assert_copy(self, flag_manager_copy: FlagManager) -> None:
-        flag_manager = self.setup_flag_manager()
-
-        # Check we have a different object but with the same contents
+    @staticmethod
+    def assert_copy(flag_manager: FlagManager, flag_manager_copy: FlagManager) -> None:
+        # A different object with the same contents
         assert flag_manager_copy == flag_manager
         assert flag_manager_copy is not flag_manager
+        assert flag_manager_copy.flag_systems is not flag_manager.flag_systems
+        assert flag_manager_copy.flag_columns is not flag_manager.flag_columns
 
+        # Flag system classes are shared
         for name, system in flag_manager.flag_systems.items():
-            copy_system = flag_manager_copy.flag_systems[name]
+            assert flag_manager_copy.flag_systems[name] is system
 
-            # Systems should be a different object
-            assert system is not copy_system
-
-            # But should have the same data
-            assert system == copy_system
-
+        # Flag columns are new objects, bound to the shared flag system classes
         for name, flag_column in flag_manager.flag_columns.items():
             copy_flag_column = flag_manager_copy.flag_columns[name]
+            assert copy_flag_column is not flag_column
             assert copy_flag_column.name == flag_column.name
-
-        # Test that the copy created is independent of the original
-        # Change the original
-        flag_manager.register_flag_system("new_system", {"A": 1})
-        flag_manager.register_flag_column(name="new_flags", flag_system_name="new_system")
-
-        # Copy should not see the new entries
-        assert "new_sys" not in flag_manager_copy.flag_systems
-        assert "new_flags" not in flag_manager_copy.flag_columns
+            assert copy_flag_column.flag_system is flag_column.flag_system
 
     def test_copy(self) -> None:
         """Test that the copy method copies the full structure of the flag manager object."""
         flag_manager = self.setup_flag_manager()
-        flag_manager_copy = flag_manager.copy()
-
-        self.assert_copy(flag_manager_copy)
+        self.assert_copy(flag_manager, flag_manager.copy())
 
     def test_standard_lib_copy(self) -> None:
         """Test that the standard library copy module works as expected."""
         flag_manager = self.setup_flag_manager()
+        self.assert_copy(flag_manager, copy.copy(flag_manager))
 
-        flag_manager_copy = copy.copy(flag_manager)
-        self.assert_copy(flag_manager_copy)
+    def test_columns_filter(self) -> None:
+        """Test that only the named flag columns are copied, but all flag systems are."""
+        flag_manager = self.setup_flag_manager()
+        flag_manager_copy = flag_manager.copy(columns=["flag_col_2"])
+        assert list(flag_manager_copy.flag_columns) == ["flag_col_2"]
+        assert flag_manager_copy.flag_systems == flag_manager.flag_systems
+
+    def test_is_decoded_copied(self) -> None:
+        """Test that the is_decoded state of each flag column is carried over to the copy."""
+        flag_manager = self.setup_flag_manager()
+        flag_manager.flag_columns["flag_col_1"].is_decoded = True
+        flag_manager_copy = flag_manager.copy()
+        assert flag_manager_copy.flag_columns["flag_col_1"].is_decoded is True
+        assert flag_manager_copy.flag_columns["flag_col_2"].is_decoded is False
+
+    @pytest.mark.parametrize("change_copy", [True, False], ids=["change copy", "change original"])
+    def test_register_independent(self, change_copy: bool) -> None:
+        """Test that registering a flag system or column on one manager does not affect the other."""
+        flag_manager = self.setup_flag_manager()
+        flag_manager_copy = flag_manager.copy()
+        changed, unchanged = (flag_manager_copy, flag_manager) if change_copy else (flag_manager, flag_manager_copy)
+
+        changed.register_flag_system("new_system", {"A": 1})
+        changed.register_flag_column(name="new_flags", flag_system_name="new_system")
+        changed.register_flag_column(name="more_flags", flag_system_name="system1")
+
+        assert list(unchanged.flag_systems) == ["system1", "system2"]
+        assert list(unchanged.flag_columns) == ["flag_col_1", "flag_col_2"]
+
+    @pytest.mark.parametrize("change_copy", [True, False], ids=["change copy", "change original"])
+    def test_is_decoded_independent(self, change_copy: bool) -> None:
+        """Test that changing is_decoded on one manager's flag column does not affect the other."""
+        flag_manager = self.setup_flag_manager()
+        flag_manager_copy = flag_manager.copy()
+        changed, unchanged = (flag_manager_copy, flag_manager) if change_copy else (flag_manager, flag_manager_copy)
+
+        changed.flag_columns["flag_col_1"].is_decoded = True
+
+        assert unchanged.flag_columns["flag_col_1"].is_decoded is False
 
 
 class TestRegisterFlagColumnValidation:
