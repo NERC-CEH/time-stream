@@ -52,7 +52,7 @@ and then in Time-Stream:
 
 .. _example_input_data_agg:
 
-15-minute river flow timeseries, including some missing data.
+An example 15-minute river flow dataset, from 10 January 2024 to the end of 2025, including some missing data.
 
 .. jupyter-execute::
    :hide-code:

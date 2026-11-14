@@ -2499,6 +2499,11 @@ dependencies = [
     { name = "scipy" },
 ]
 
+[package.optional-dependencies]
+plot = [
+    { name = "matplotlib" },
+]
+
 [package.dev-dependencies]
 dev = [
     { name = "jupyter-sphinx" },
@@ -2556,10 +2561,12 @@ typecheck = [
 [package.metadata]
 requires-dist = [
     { name = "isoperiod" },
+    { name = "matplotlib", marker = "extra == 'plot'", specifier = ">=3.11.1" },
     { name = "numpy", specifier = ">=2.0" },
     { name = "polars", specifier = ">=1.43.2" },
     { name = "scipy", specifier = ">=1.18.0" },
 ]
+provides-extras = ["plot"]
 
 [package.metadata.requires-dev]
 dev = [

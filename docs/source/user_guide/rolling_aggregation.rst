@@ -75,6 +75,22 @@ Using the :ref:`15-minute flow example data <example_input_data_agg>`:
 
    rolling_aggregation.rolling_mean_example()
 
+Rolling totals are common for rainfall, e.g. the total over the previous 24 hours at each 15-minute time step. Using
+an example 15-minute rainfall dataset, the 24-hour total builds up through a storm:
+
+.. literalinclude:: ../examples/rolling_aggregation.py
+    :language: python
+    :start-after: [start:rolling_rainfall_total_example]
+    :end-before: [end:rolling_rainfall_total_example]
+    :dedent:
+
+.. jupyter-execute::
+   :hide-code:
+
+   from examples import rolling_aggregation
+
+   rolling_aggregation.rolling_rainfall_total_example()
+
 There are some specific parameters that are provided to the rolling aggregation method, explained below.
 
 .. note::
